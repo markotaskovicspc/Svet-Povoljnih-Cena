@@ -31,6 +31,12 @@ export const REPORT_DESTINATIONS: readonly ReportDestination[] = [
     allowed: ["ADS"],
   },
   {
+    href: "/admin/erp/3d-ar",
+    title: "3D i AR",
+    description: "Otvaranje i korišćenje modela, AR pokušaji, kampanje i A/B test poruka.",
+    allowed: ["ADS"],
+  },
+  {
     href: "/admin/erp/neobjavljeni-artikli",
     title: "QA objave",
     description:

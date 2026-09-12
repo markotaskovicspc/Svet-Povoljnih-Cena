@@ -1,9 +1,11 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { androidArIntent, androidChromeArIntent, arPlatform } from "@/lib/product-ar";
+import { trackProductAr } from "@/lib/analytics/product-ar-client";
 import type { ProductArAsset } from "@/types";
 
 export default function ArLauncher({ asset, productPath }: { asset: ProductArAsset; productPath: string }) {
+  const slug = productPath.split("/").pop()!;
   const anchor = useRef<HTMLAnchorElement>(null);
   const attempted = useRef(false);
   const [device] = useState(() => {
@@ -13,6 +15,14 @@ export default function ArLauncher({ asset, productPath }: { asset: ProductArAss
       ? `${new URL(asset.usdzUrl, location.origin).href}#allowsContentScaling=0`
       : androidArIntent(asset, location.href) };
   });
+  useEffect(() => {
+    const landed = () => {
+      if (new URLSearchParams(location.search).get("ar_entry") === "qr" && device.platform !== "desktop") trackProductAr(slug, "ar_qr_landed", "qr");
+      if (device.fallback) trackProductAr(slug, "ar_failed", "qr");
+    };
+    landed(); window.addEventListener("spc-cookie-consent", landed);
+    return () => window.removeEventListener("spc-cookie-consent", landed);
+  }, [slug, device]);
   useEffect(() => {
     if (attempted.current || !device.supported || new URLSearchParams(location.search).has("manual")) return;
     attempted.current = true;
@@ -31,7 +41,7 @@ export default function ArLauncher({ asset, productPath }: { asset: ProductArAss
         <p className="mt-2">Otvorite ovaj link u Chrome-u i proverite da li su Google Play usluge za AR i Google aplikacija ažurirane. Telefon mora podržavati ARCore. Zatim ponovo dodirnite „Pokreni AR”.</p>
         <a className="mt-2 inline-block underline" href="https://play.google.com/store/apps/details?id=com.google.ar.core">Proveri Google Play usluge za AR</a>
       </div> : <p className="mb-5 text-sm text-ink-600">Ako se AR ne otvori automatski, dodirnite „Pokreni AR”. Kada telefon zatraži pristup kameri, dozvolite ga i usmerite kameru ka podu.</p>}
-      <a ref={anchor} rel={device.platform === "ios" ? "ar" : undefined} href={device.href}
+      <a ref={anchor} onClick={() => trackProductAr(slug, "ar_attempted", "qr")} rel={device.platform === "ios" ? "ar" : undefined} href={device.href}
         className="flex min-h-14 items-center justify-center rounded-full bg-ink-900 px-6 font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-4">
         {/* eslint-disable-next-line @next/next/no-img-element -- required by Safari's AR link contract */}
         <img src={asset.posterUrl} alt="" className="sr-only" />Pokreni AR

@@ -3048,6 +3048,7 @@ model MobileTab {
 }
 
 enum AnalyticsEventType {
+  PRODUCT_AR
   PAGE_VIEW
   PRODUCT_VIEW
   ADD_TO_CART

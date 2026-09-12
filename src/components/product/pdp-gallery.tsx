@@ -32,7 +32,7 @@ import {
   isRenderableMediaUrl,
 } from "@/lib/media";
 import { useIsWished, useWishlist } from "@/lib/hooks/use-wishlist";
-import { ProductArEntryControls } from "./product-ar-entry-controls";
+import { ProductArEntryControls, ProductThreeDEntry } from "./product-ar-entry-controls";
 import { prepareProductAr, scheduleProductArWarmup } from "@/lib/product-ar-loader";
 import { PdpPictograms } from "@/components/product/pdp-pictograms";
 import { resolveStorefrontPictograms } from "@/lib/storefront-pictograms";
@@ -304,7 +304,7 @@ export function PdpGallery({ product, badges, arAsset: initialArAsset }: PdpGall
                 ) : s.kind === "model" ? (
                   !isDesktop && activeIndex === index ? <div className="relative h-full w-full">
                     <Image src={s.asset.url} alt={s.asset.alt ?? product.name} fill loading="eager" sizes="100vw" className="object-contain pb-22" />
-                    <div className="absolute inset-0"><ProductArViewer asset={s.arAsset} fallbackUrl={posterUrl} /></div>
+                    <div className="absolute inset-0"><ProductArViewer asset={s.arAsset} slug={product.slug} fallbackUrl={posterUrl} onPhotos={() => goTo(slides.findIndex(item => item.kind === "image"))} /></div>
                   </div> :
                     <Image src={s.asset.url} alt={s.asset.alt ?? product.name} fill loading="lazy" sizes="100vw" className="object-contain" />
                 ) : s.kind === "video" ? (
@@ -326,6 +326,7 @@ export function PdpGallery({ product, badges, arAsset: initialArAsset }: PdpGall
               </div>
             ))}
           </div>
+          {arAsset && slide.kind === "image" && <ProductThreeDEntry slug={product.slug} onView3d={() => goTo(slides.findIndex(item => item.kind === "model"))} />}
           {slide.kind !== "model" && (badges || featurePictograms.length) ? (
             <div className="pointer-events-none absolute top-0 left-0 flex max-w-[70%] flex-col items-start gap-1">
               {badges}
@@ -339,6 +340,10 @@ export function PdpGallery({ product, badges, arAsset: initialArAsset }: PdpGall
             placement="corner"
             className="absolute right-3 bottom-3 z-10"
           />
+          {slide.kind === "model" && <>
+            <button type="button" aria-label="Prethodna slika" onClick={() => goTo(activeIndex - 1)} className="absolute top-1/2 left-3 z-10 flex size-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 shadow-sm"><ChevronLeft className="size-5" /></button>
+            <button type="button" aria-label="Sledeća slika" onClick={() => goTo(activeIndex + 1)} className="absolute top-1/2 right-3 z-10 flex size-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 shadow-sm"><ChevronRight className="size-5" /></button>
+          </>}
           {slides.length > 1 ? (
             <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center gap-1.5">
               {slides.map((_, index) => (
@@ -420,7 +425,7 @@ export function PdpGallery({ product, badges, arAsset: initialArAsset }: PdpGall
                 ) : s.kind === "model" ? (
                   isDesktop && activeIndex === index ? <div className="relative h-full w-full">
                     <Image src={s.asset.url} alt={s.asset.alt ?? product.name} fill loading="eager" sizes="50vw" className="object-contain pb-22" />
-                    <div className="absolute inset-0"><ProductArViewer asset={s.arAsset} fallbackUrl={posterUrl} /></div>
+                    <div className="absolute inset-0"><ProductArViewer asset={s.arAsset} slug={product.slug} fallbackUrl={posterUrl} onPhotos={() => goTo(slides.findIndex(item => item.kind === "image"))} /></div>
                   </div> :
                     <Image src={s.asset.url} alt={s.asset.alt ?? product.name} fill loading="lazy" sizes="50vw" className="object-contain" />
                 ) : s.kind === "video" ? (
@@ -447,6 +452,7 @@ export function PdpGallery({ product, badges, arAsset: initialArAsset }: PdpGall
             ))}
           </div>
 
+          {arAsset && slide.kind === "image" && <ProductThreeDEntry slug={product.slug} onView3d={() => goTo(slides.findIndex(item => item.kind === "model"))} />}
           {slide.kind !== "model" && (badges || featurePictograms.length) ? (
             <div className="pointer-events-none absolute top-0 left-0 flex max-w-[70%] flex-col items-start gap-1">
               {badges}
@@ -501,7 +507,8 @@ export function PdpGallery({ product, badges, arAsset: initialArAsset }: PdpGall
             </>
           ) : null}
         </div>
-        {arAsset && slide.kind === "image" && <ProductArEntryControls asset={arAsset} onView3d={() => goTo(slides.findIndex((item) => item.kind === "model"))} />}
+        {arAsset && <ProductArEntryControls asset={arAsset} slug={product.slug} />}
+
       </div>
 
       {/* Thumb strip */}

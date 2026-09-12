@@ -20,6 +20,7 @@ const OPS_CONTENT_MODULES = new Set(["mp-cene"]);
 const ADS_MODULES = new Set([
   "newsletter-kampanje",
   "posete-konverzije",
+  "3d-ar",
 ]);
 
 const SHARED_MODULES = new Set([

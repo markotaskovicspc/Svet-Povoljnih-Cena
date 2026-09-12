@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { AnalyticsEventType } from "@prisma/client";
+import { productArMetadataSchema } from "@/lib/analytics/product-ar-events";
+import { getProductArAsset } from "@/lib/product-ar";
 import { db } from "@/lib/db";
 import {
   checkRateLimitForRequest,
@@ -11,6 +13,7 @@ import {
 } from "@/lib/analytics/tracking-consent";
 
 const PUBLIC_EVENT_TYPES = new Set<AnalyticsEventType>([
+  "PRODUCT_AR",
   "PAGE_VIEW",
   "PRODUCT_VIEW",
   "ADD_TO_CART",
@@ -79,9 +82,20 @@ export async function POST(request: Request) {
     );
   }
 
-  const productId =
+  let productId =
     typeof body?.productId === "string" && body.productId ? body.productId : null;
-  if (productId) {
+  let arMetadata: ReturnType<typeof productArMetadataSchema.parse> | undefined;
+  if (type === "PRODUCT_AR") {
+    const parsed = productArMetadataSchema.safeParse(body?.metadata);
+    if (!parsed.success || !getProductArAsset(parsed.data.slug)) {
+      return NextResponse.json({ ok: false, error: "Neispravan 3D/AR događaj." }, { status: 400 });
+    }
+    arMetadata = parsed.data;
+    const product = await db.product.findUnique({ where: { slug: arMetadata.slug }, select: { id: true } });
+    if (!product || (productId && productId !== product.id)) return NextResponse.json({ ok: false }, { status: 400 });
+    productId = product.id;
+  }
+  if (productId && !arMetadata) {
     const exists = await db.product.count({ where: { id: productId } });
     if (!exists) {
       return NextResponse.json({ ok: false, error: "Artikal ne postoji." }, { status: 400 });
@@ -91,6 +105,7 @@ export async function POST(request: Request) {
   expiresAt.setMonth(expiresAt.getMonth() + 13);
   const event = await db.analyticsEvent.create({
     data: {
+      ...(arMetadata ? { id: `ar:${arMetadata.eventId}` } : {}),
       type,
       anonymousId,
       sessionId:
@@ -100,15 +115,20 @@ export async function POST(request: Request) {
       quantity,
       value,
       consentVersion,
-      metadata:
+      metadata: arMetadata ?? (
         body?.metadata &&
         typeof body.metadata === "object" &&
         !Array.isArray(body.metadata)
           ? body.metadata
-          : undefined,
+          : undefined),
       expiresAt,
     },
     select: { id: true },
+  }).catch((error: unknown) => {
+    if (arMetadata && error && typeof error === "object" && "code" in error && error.code === "P2002") {
+      return { id: `ar:${arMetadata.eventId}` };
+    }
+    throw error;
   });
   return NextResponse.json(
     { ok: true, id: event.id },

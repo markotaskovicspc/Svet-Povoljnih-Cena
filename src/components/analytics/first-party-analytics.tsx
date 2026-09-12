@@ -1,4 +1,5 @@
 "use client";
+import { captureCampaign } from "@/lib/analytics/campaign-attribution";
 
 import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
@@ -97,7 +98,7 @@ export function getConsentedAnalyticsContext(): ConsentedAnalyticsContext | unde
 }
 
 export function recordFirstPartyEvent(input: {
-  type: "PAGE_VIEW" | "PRODUCT_VIEW" | "ADD_TO_CART" | "CHECKOUT_STARTED";
+  type: "PAGE_VIEW" | "PRODUCT_VIEW" | "ADD_TO_CART" | "CHECKOUT_STARTED" | "PRODUCT_AR";
   path?: string;
   productId?: string;
   quantity?: number;
@@ -106,6 +107,7 @@ export function recordFirstPartyEvent(input: {
 }) {
   if (typeof window === "undefined" || !hasAnalyticsConsent()) return false;
   try {
+    if (input.type === "PAGE_VIEW") captureCampaign();
     const payload = JSON.stringify({
       ...input,
       path: input.path ?? `${window.location.pathname}${window.location.search}`,
@@ -114,11 +116,11 @@ export function recordFirstPartyEvent(input: {
       consentVersion: CONSENT_VERSION,
     });
     if (navigator.sendBeacon) {
-      navigator.sendBeacon(
+      const queued = navigator.sendBeacon(
         "/api/analytics/events",
         new Blob([payload], { type: "application/json" }),
       );
-      return true;
+      if (queued) return true;
     }
     void fetch("/api/analytics/events", {
       method: "POST",

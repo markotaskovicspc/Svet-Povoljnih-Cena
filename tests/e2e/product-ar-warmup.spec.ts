@@ -28,9 +28,9 @@ test("photo finishes first; prepared model opens without another model transfer"
     expect(await page.evaluate(() => !!customElements.get("model-viewer"))).toBe(false);
   } finally { releasePhoto(); }
   await expect(page.locator("[data-ar-warm-ready]")).toHaveCount(1, { timeout: 45000 });
-  await expect(page.getByRole("button", { name: "Otvori 3D pregled" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Pogledaj iz svih uglova · 3D" })).toBeVisible();
   await expect(page.locator("model-viewer")).toHaveCount(0);
-  await page.getByRole("button", { name: "Otvori 3D pregled" }).click();
+  await page.getByRole("button", { name: "Pogledaj iz svih uglova · 3D" }).click();
   await expect.poll(() => page.locator("model-viewer").evaluate((el) => (el as HTMLElement & { loaded: boolean }).loaded)).toBe(true);
   await expect(page.locator("model-viewer")).toHaveCount(1);
   expect(requests).toBe(1);
@@ -42,7 +42,7 @@ test("click during preparation never leaves two viewers", async ({ page }) => {
   await page.route("**/vendor/model-viewer/4.2.0/model-viewer.min.js*", async route => { await gate; await route.continue(); });
   await visit(page);
   await expect(page.locator('script[src*="/vendor/model-viewer/"]')).toHaveCount(1, { timeout: 30000 });
-  await page.getByRole("button", { name: "Otvori 3D pregled" }).click();
+  await page.getByRole("button", { name: "Pogledaj iz svih uglova · 3D" }).click();
   releaseRuntime();
   await expect.poll(() => page.locator("model-viewer").evaluate(el => (el as HTMLElement & { loaded: boolean }).loaded), { timeout: 45000 }).toBe(true);
   await expect(page.locator("model-viewer")).toHaveCount(1);
@@ -56,7 +56,7 @@ test("background failure does not poison the user's later attempt", async ({ pag
   await expect.poll(() => failed, { timeout: 30000 }).toBe(true);
   await expect(page.locator("[data-ar-warmup]")).toHaveCount(0);
   await page.unroute("**/x-desk-210027/*.glb");
-  await page.getByRole("button", { name: "Otvori 3D pregled" }).click();
+  await page.getByRole("button", { name: "Pogledaj iz svih uglova · 3D" }).click();
   await expect.poll(() => page.locator("model-viewer").evaluate(el => (el as HTMLElement & { loaded: boolean }).loaded), { timeout: 45000 }).toBe(true);
 });
 
@@ -78,8 +78,8 @@ test("AR and 3D buttons wait until their click handlers are ready", async ({ pag
   const gate = new Promise<void>(resolve => { releaseScripts = resolve; });
   await page.route("**/_next/static/**/*.js*", async route => { await gate; await route.continue(); });
   await page.goto(path, { waitUntil: "commit" });
-  const view3d = page.getByRole("button", { name: "Otvori 3D pregled" });
-  const ar = page.getByRole("button", { name: "Pogledaj u svojoj sobi", exact: true });
+  const view3d = page.getByRole("button", { name: "Pogledaj iz svih uglova · 3D" });
+  const ar = page.getByRole("button", { name: /^(Vidi u svojoj sobi|Proveri kako se uklapa)$/ });
   try {
     await expect(view3d).toBeVisible();
     await expect(view3d).toBeDisabled();

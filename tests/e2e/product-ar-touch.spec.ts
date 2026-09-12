@@ -7,10 +7,10 @@ async function openModel(page: Page) {
   // Keep the unrelated timed signup popup from covering the gesture coordinates.
   await page.addInitScript(() => localStorage.setItem("svet-akcija:first-purchase-cta-closed-until", String(Date.now() + 86_400_000)));
   await page.goto("/p/100010-9ce68e", { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("button", { name: "Otvori 3D pregled" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Pogledaj iz svih uglova · 3D" })).toBeEnabled();
   const consent = page.getByRole("button", { name: "Samo nužni", exact: true });
   if (await consent.isVisible()) await consent.click();
-  await page.getByRole("button", { name: "Otvori 3D pregled" }).click();
+  await page.getByRole("button", { name: "Pogledaj iz svih uglova · 3D" }).click();
   await expect.poll(() => page.locator("model-viewer").evaluate(el => (el as HTMLElement & { loaded: boolean }).loaded), { timeout: 45_000 }).toBe(true);
   await page.locator("model-viewer").scrollIntoViewIfNeeded();
 }
@@ -44,7 +44,7 @@ test("rotation works under labels, beside controls, and along the bottom without
       await page.getByRole("button", { name: "Prikaži 3D preko celog ekrana" }).click();
       await expect.poll(() => viewer.evaluate(el => (el as HTMLElement & { loaded: boolean }).loaded)).toBe(true);
     }
-    for (const [fx, fy] of [[.06, .08], [.92, .7], [.92, .86], [.06, .76], [.06, .95]]) {
+    for (const [fx, fy] of [[.06, expanded ? .08 : .2], [.92, .7], [.92, .86], [.06, .76], [.06, .95]]) {
       const box = (await viewer.boundingBox())!;
       const x = box.x + box.width * fx, y = box.y + box.height * fy;
       const hit = await page.evaluate(({ x, y }) => { const el = document.elementFromPoint(x, y); return { model: !!el?.closest("model-viewer"), html: el?.outerHTML.slice(0, 400) }; }, { x, y });
@@ -63,7 +63,7 @@ test("rotation works under labels, beside controls, and along the bottom without
 test("vertical phone scroll works when starting over the badge and beside the AR controls", async ({ page, isMobile, browserName }) => {
   test.skip(!isMobile || browserName !== "chromium", "Mobile native scrolling");
   await openModel(page);
-  for (const [fx, fy] of [[.06, .08], [.92, .7]]) {
+  for (const [fx, fy] of [[.06, .2], [.92, .7]]) {
     await page.locator("[data-product-ar-viewer]").evaluate(el => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 180));
     const box = (await page.locator("model-viewer").boundingBox())!;
     const before = await page.evaluate(() => window.scrollY);

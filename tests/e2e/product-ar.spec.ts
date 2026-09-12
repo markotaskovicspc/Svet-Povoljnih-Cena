@@ -7,9 +7,10 @@ test.skip(process.env.E2E_LIVE_CATALOG !== "1", "Read-only catalog opt-in requir
 
 test.beforeEach(async ({ page }) => {
   // These exercise explicit, on-demand loading. Eligible idle warmup has its own suite.
+  await page.addInitScript(() => localStorage.setItem("svet-akcija:first-purchase-cta-closed-until", String(Date.now() + 86400000)));
   await page.addInitScript(() => Object.defineProperty(navigator, "connection", { configurable: true, value: { saveData: true, effectiveType: "4g" } }));
   await page.goto(productPath, { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("button", { name: "Otvori 3D pregled" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Pogledaj iz svih uglova · 3D" })).toBeEnabled();
   const consent = page.getByRole("button", { name: "Samo nužni", exact: true });
   if (await consent.isVisible()) await consent.click();
 });
@@ -20,16 +21,15 @@ async function loaded(page: import("@playwright/test").Page) {
 }
 
 test("photo loads first; 3D loads only on request and keeps textures, rotation, and accessible QR", async ({ page, isMobile }) => {
-  await expect(page.getByRole("button", { name: "Otvori 3D pregled" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Pogledaj iz svih uglova · 3D" })).toBeVisible();
   await expect(page.locator("model-viewer")).toHaveCount(0);
   expect(await page.evaluate(() => !!customElements.get("model-viewer"))).toBe(false);
   expect(await page.evaluate(() => performance.getEntriesByType("resource").filter(r => /\.(glb|usdz)([?#]|$)/.test(r.name)).length)).toBe(0);
   if (!isMobile) await expect(page.getByRole("tab", { name: "Slika 1", exact: true })).toHaveAttribute("aria-selected", "true");
-  await page.getByRole("button", { name: "Otvori 3D pregled" }).click();
+  await page.getByRole("button", { name: "Pogledaj iz svih uglova · 3D" }).click();
   await loaded(page);
   const viewer = page.locator("model-viewer");
-  await expect(viewer).toHaveAttribute("ios-src", /x-desk-v3\.usdz$/);
-  await expect(viewer).toHaveAttribute("ar-scale", "fixed");
+  await expect(viewer).not.toHaveAttribute("ar");
   await expect.poll(() => viewer.evaluate((el) => {
     const model = (el as unknown as { model: { materials: Array<{ pbrMetallicRoughness: { baseColorTexture: { texture: unknown } } }> } }).model;
     return model.materials.some(material => !!material.pbrMetallicRoughness.baseColorTexture?.texture);
@@ -45,14 +45,14 @@ test("photo loads first; 3D loads only on request and keeps textures, rotation, 
     await page.mouse.up();
     await expect.poll(orbit).not.toBe(before);
     await expect(page.getByRole("tab", { name: "3D pregled", exact: true })).toHaveAttribute("aria-selected", "true");
-    await page.getByRole("button", { name: "Pogledaj u svojoj sobi", exact: true }).click();
+    await page.getByRole("button", { name: /^(Vidi u svojoj sobi|Proveri kako se uklapa)$/ }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
     await expect(dialog.locator("svg[role=img]")).toBeVisible();
-    await expect(dialog.locator("a")).toHaveAttribute("href", new URL("/ar/100010-9ce68e", /localhost|127\.0\.0\.1/.test(new URL(page.url()).hostname) ? process.env.NEXT_PUBLIC_AR_PREVIEW_ORIGIN || page.url() : page.url()).toString());
+    await expect(dialog.locator("a")).toHaveAttribute("href", new URL("/ar/100010-9ce68e?ar_entry=qr", /localhost|127\.0\.0\.1/.test(new URL(page.url()).hostname) ? process.env.NEXT_PUBLIC_AR_PREVIEW_ORIGIN || page.url() : page.url()).toString());
     await page.keyboard.press("Escape");
     await expect(dialog).not.toBeVisible();
-    await expect(page.getByRole("button", { name: "Pogledaj u svojoj sobi", exact: true })).toBeFocused();
+    await expect(page.getByRole("button", { name: /^(Vidi u svojoj sobi|Proveri kako se uklapa)$/ })).toBeFocused();
     await page.getByRole("button", { name: "Sledeća slika", exact: true }).click();
   } else {
     await page.getByRole("button", { name: "Prikaži sliku 2", exact: true }).filter({ visible: true }).click();
@@ -65,7 +65,7 @@ test("photo loads first; 3D loads only on request and keeps textures, rotation, 
 test("failed model offers photo fallback and retry", async ({ page }) => {
   test.setTimeout(120000);
   await page.route("**/x-desk-210027/*.glb", route => route.abort());
-  await page.getByRole("button", { name: "Otvori 3D pregled" }).click();
+  await page.getByRole("button", { name: "Pogledaj iz svih uglova · 3D" }).click();
   await expect(page.getByRole("button", { name: "Pokušaj ponovo", exact: true })).toBeVisible({ timeout: 45000 });
   await expect(page.locator("[data-product-ar-viewer] > img")).toBeVisible();
   await page.unroute("**/x-desk-210027/*.glb");
@@ -83,7 +83,7 @@ test("3D activation downloads the model while the runtime loads, with one model 
   const modelRequests: string[] = [];
   page.on("request", request => { if (request.url().endsWith("x-desk-v3.glb")) modelRequests.push(request.url()); });
   try {
-    await page.getByRole("button", { name: "Otvori 3D pregled" }).click();
+    await page.getByRole("button", { name: "Pogledaj iz svih uglova · 3D" }).click();
     await expect.poll(() => modelRequests.length).toBe(1);
     expect(await page.evaluate(() => !!customElements.get("model-viewer"))).toBe(false);
   } finally { releaseRuntime(); }
@@ -93,7 +93,7 @@ test("3D activation downloads the model while the runtime loads, with one model 
 
 test("runtime download failure can be retried", async ({ page }) => {
   await page.route("**/vendor/model-viewer/4.2.0/model-viewer.min.js*", route => route.abort());
-  await page.getByRole("button", { name: "Otvori 3D pregled" }).click();
+  await page.getByRole("button", { name: "Pogledaj iz svih uglova · 3D" }).click();
   await expect(page.getByRole("button", { name: "Pokušaj ponovo", exact: true })).toBeVisible();
   await page.unroute("**/vendor/model-viewer/4.2.0/model-viewer.min.js*");
   await page.getByRole("button", { name: "Pokušaj ponovo", exact: true }).click();
@@ -104,15 +104,15 @@ test("gray variant has no local AR model", async ({ page }) => {
   await page.goto("/p/100010-ec1aa0", { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   await expect(page.locator("model-viewer")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Pogledaj u svojoj sobi", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^(Vidi u svojoj sobi|Proveri kako se uklapa)$/ })).toHaveCount(0);
 });
 
 test("Android viewer launches AR-only without the library's native 3D fallback", async ({ page, isMobile }) => {
   test.skip(!isMobile, "Android launch contract");
   await page.goto(productPath + "?ar=1", { waitUntil: "domcontentloaded" });
-  await page.getByRole("button", { name: "Otvori 3D pregled" }).click();
+  await page.getByRole("button", { name: "Pogledaj iz svih uglova · 3D" }).click();
   await loaded(page);
-  await expect(page.getByText("Dodirnite dugme da postavite proizvod u sobu.")).toBeVisible();
+  await expect(page.locator("[data-product-ar-entry]")).toBeVisible();
   await page.evaluate(() => {
     const click = HTMLAnchorElement.prototype.click;
     HTMLAnchorElement.prototype.click = function() {
@@ -123,7 +123,7 @@ test("Android viewer launches AR-only without the library's native 3D fallback",
   await page.locator("model-viewer").evaluate(el => {
     (el as unknown as { activateAR: () => Promise<void> }).activateAR = () => { throw new Error("Must not use ar_preferred"); };
   });
-  await page.getByRole("button", { name: "Pogledaj u svojoj sobi", exact: true }).click();
+  await page.getByRole("button", { name: /^(Vidi u svojoj sobi|Proveri kako se uklapa)$/ }).click();
   const href = await page.locator("html").getAttribute("data-viewer-ar-href");
   expect(href).toContain("mode=ar_only");
   expect(href).toContain("package=com.google.ar.core;");
@@ -143,32 +143,29 @@ test("iPhone launch keeps the dedicated USDZ asset", async ({ browser, isMobile,
     await page.goto(productPath + "?ar=1", { waitUntil: "domcontentloaded" });
     const consent = page.getByRole("button", { name: "Samo nužni", exact: true });
     if (await consent.isVisible()) await consent.click();
-    await page.getByRole("button", { name: "Otvori 3D pregled" }).click();
+    await page.getByRole("button", { name: "Pogledaj iz svih uglova · 3D" }).click();
     await loaded(page);
-    await page.locator("model-viewer").evaluate(el => {
-      Object.defineProperty(el, "canActivateAR", { configurable: true, get: () => true });
-      (el as unknown as { activateAR: () => Promise<void> }).activateAR = () => {
-        el.setAttribute("data-test-ios-launch", el.getAttribute("ios-src") || "missing");
-        return Promise.resolve();
-      };
+    await page.evaluate(() => {
+      const supports = DOMTokenList.prototype.supports;
+      DOMTokenList.prototype.supports = function(token) { return token === "ar" || supports.call(this, token); };
+      HTMLAnchorElement.prototype.click = function() { document.documentElement.dataset.iosLaunch = this.href; };
     });
-    await page.getByRole("button", { name: "Pogledaj u svojoj sobi", exact: true }).click();
-    await expect(page.locator("model-viewer")).toHaveAttribute("data-test-ios-launch", getProductArAsset("100010-9ce68e")!.usdzUrl);
+    await page.getByRole("button", { name: /^(Vidi u svojoj sobi|Proveri kako se uklapa)$/ }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-ios-launch", getProductArAsset("100010-9ce68e")!.usdzUrl + "#allowsContentScaling=0");
     await expect(page.getByRole("dialog")).toHaveCount(0);
   } finally { await context.close(); }
 });
 
 
 test("full screen contains one viewer and prevents rotation underneath the model", async ({ page }) => {
-  await page.getByRole("button", { name: "Otvori 3D pregled" }).click();
+  await page.getByRole("button", { name: "Pogledaj iz svih uglova · 3D" }).click();
   await loaded(page);
   await page.getByRole("button", { name: "Prikaži 3D preko celog ekrana" }).click();
   const dialog = page.getByRole("dialog", { name: "3D prikaz preko celog ekrana" });
   await expect(dialog).toBeVisible();
   await loaded(page);
-  const box = (await dialog.boundingBox())!;
-  expect(box.width).toBeGreaterThanOrEqual(page.viewportSize()!.width - 2);
-  expect(box.height).toBeGreaterThanOrEqual(page.viewportSize()!.height - 2);
+  await expect.poll(async () => (await dialog.boundingBox())!.width).toBeGreaterThanOrEqual(page.viewportSize()!.width - 2);
+  await expect.poll(async () => (await dialog.boundingBox())!.height).toBeGreaterThanOrEqual(page.viewportSize()!.height - 2);
   const viewer = page.locator("model-viewer");
   await expect(viewer).toHaveAttribute("disable-pan", "");
   await viewer.evaluate(el => {
@@ -185,20 +182,20 @@ test("full screen contains one viewer and prevents rotation underneath the model
 
 
 test("photo AR button opens QR or native AR without downloading the web model", async ({ page, isMobile }) => {
-  await expect(page.getByRole("button", { name: "Otvori 3D pregled" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Pogledaj iz svih uglova · 3D" })).toBeVisible();
   if (isMobile) await page.evaluate(() => {
     HTMLAnchorElement.prototype.click = function() { document.documentElement.dataset.photoArHref = this.href; };
   });
-  await page.getByRole("button", { name: "Pogledaj u svojoj sobi", exact: true }).click();
+  await page.getByRole("button", { name: /^(Vidi u svojoj sobi|Proveri kako se uklapa)$/ }).click();
   if (isMobile) {
     await expect(page.locator("html")).toHaveAttribute("data-photo-ar-href", /intent:.*mode=ar_only/);
   } else {
     const dialog = page.getByRole("dialog");
     await expect(dialog.locator("svg[role=img]")).toBeVisible();
-    await expect(dialog.locator("a")).toHaveAttribute("href", /\/ar\/100010-9ce68e$/);
+    await expect(dialog.locator("a")).toHaveAttribute("href", /\/ar\/100010-9ce68e\?ar_entry=qr$/);
     await page.keyboard.press("Escape");
     await expect(dialog).not.toBeVisible();
-    await expect(page.getByRole("button", { name: "Pogledaj u svojoj sobi", exact: true })).toBeFocused();
+    await expect(page.getByRole("button", { name: /^(Vidi u svojoj sobi|Proveri kako se uklapa)$/ })).toBeFocused();
   }
   await expect(page.locator("model-viewer")).toHaveCount(0);
   expect(await page.evaluate(() => !!customElements.get("model-viewer"))).toBe(false);

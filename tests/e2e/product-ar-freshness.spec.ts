@@ -24,7 +24,7 @@ test("an open gallery refreshes its model after returning to the tab", async ({ 
   const consent = page.getByRole("button", { name: "Samo nužni", exact: true });
   if (await consent.isVisible()) await consent.click();
   await expect.poll(() => checks).toBe(1);
-  await page.getByRole("button", { name: "Otvori 3D pregled" }).click();
+  await page.getByRole("button", { name: "Pogledaj iz svih uglova · 3D" }).click();
   const viewer = page.locator("model-viewer");
   await expect.poll(() => viewer.evaluate(el => (el as HTMLElement & { loaded: boolean }).loaded), { timeout: 45_000 }).toBe(true);
   revision = 1;
@@ -45,6 +45,6 @@ test("an open gallery refreshes its model after returning to the tab", async ({ 
     window.dispatchEvent(new Event("focus"));
   });
   await expect(viewer).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Otvori 3D pregled" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Pogledaj u svojoj sobi", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Pogledaj iz svih uglova · 3D" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^(Vidi u svojoj sobi|Proveri kako se uklapa)$/ })).toHaveCount(0);
 });

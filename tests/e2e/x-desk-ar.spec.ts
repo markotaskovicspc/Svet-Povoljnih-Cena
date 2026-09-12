@@ -13,8 +13,8 @@ test("CUBE chair has only photos and its old AR links are disabled", async ({ pa
   });
   await page.goto("/p/100010-6b45ec?ar=1", { waitUntil: "networkidle" });
   await expect(page.getByRole("heading", { level: 1 })).toContainText("CUBE");
-  await expect(page.getByRole("button", { name: "Otvori 3D pregled" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Pogledaj u svojoj sobi", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Pogledaj iz svih uglova · 3D" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^(Vidi u svojoj sobi|Proveri kako se uklapa)$/ })).toHaveCount(0);
   await expect(page.locator("model-viewer")).toHaveCount(0);
   expect(mediaRequests).toEqual([]);
   const manifest = await request.get("/api/product-ar/100010-6b45ec");
@@ -24,22 +24,22 @@ test("CUBE chair has only photos and its old AR links are disabled", async ({ pa
 });
 
 test("X DESK retains its photo first, loads the small textured model, and supports full screen", async ({ page, isMobile }) => {
+  await page.addInitScript(() => localStorage.setItem("svet-akcija:first-purchase-cta-closed-until", String(Date.now() + 86400000)));
   await page.addInitScript(() => Object.defineProperty(navigator, "connection", { configurable: true, value: { saveData: true, effectiveType: "4g" } }));
   await page.goto(`/p/${slug}`, { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("button", { name: "Otvori 3D pregled" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Pogledaj iz svih uglova · 3D" })).toBeEnabled();
   const consent = page.getByRole("button", { name: "Samo nužni", exact: true });
   if (await consent.isVisible()) await consent.click();
   await expect(page.getByRole("heading", { level: 1 })).toContainText("X DESK");
   await expect(page.locator("model-viewer")).toHaveCount(0);
   expect(await page.evaluate(() => performance.getEntriesByType("resource").filter(r => /\.(glb|usdz)([?#]|$)/.test(r.name)).length)).toBe(0);
-  await page.getByRole("button", { name: "Otvori 3D pregled" }).click();
+  await page.getByRole("button", { name: "Pogledaj iz svih uglova · 3D" }).click();
   const viewer = page.locator("model-viewer");
   await expect(viewer).toHaveCount(1);
   await expect.poll(() => viewer.evaluate(el => (el as HTMLElement & { loaded: boolean }).loaded), { timeout: 45000 }).toBe(true);
   // React assigns declared custom-element properties directly, without an HTML attribute.
   await expect(viewer).toHaveJSProperty("src", asset.glbUrl);
-  await expect(viewer).toHaveAttribute("ios-src", asset.usdzUrl);
-  await expect(viewer).toHaveAttribute("ar-scale", "fixed");
+  await expect(viewer).not.toHaveAttribute("ar");
   await expect(viewer).toHaveAttribute("max-camera-orbit", "auto 85deg auto");
   const dimensions = await viewer.evaluate(el => (el as unknown as { getDimensions(): { x: number; y: number; z: number } }).getDimensions());
   expect(dimensions.x).toBeCloseTo(.70, 3);
@@ -51,8 +51,8 @@ test("X DESK retains its photo first, loads the small textured model, and suppor
   await expect(viewer).toHaveCount(1);
   await page.getByRole("button", { name: "Zatvori prikaz preko celog ekrana" }).click();
   if (!isMobile) {
-    await page.getByRole("button", { name: "Pogledaj u svojoj sobi", exact: true }).click();
-    await expect(page.getByRole("dialog").locator("a")).toHaveAttribute("href", new RegExp(`/ar/${slug}$`));
+    await page.getByRole("button", { name: /^(Vidi u svojoj sobi|Proveri kako se uklapa)$/ }).click();
+    await expect(page.getByRole("dialog").locator("a")).toHaveAttribute("href", new RegExp(`/ar/${slug}\\?ar_entry=qr$`));
   }
 });
 
