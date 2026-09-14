@@ -22,7 +22,13 @@ export const MYGLS_RECOVERABLE_STATUS_CODES = [
   "51",
   "52",
   "86",
+  "99",
 ] as const;
+
+/** Notification carries no physical progress (StatusInfo is a notification subtype). */
+export function isMyGlsNotification(code: string | number | null | undefined) {
+  return code != null && String(code).trim().replace(/^0+(?=\d)/, "") === "99";
+}
 
 type StoredMyGlsShipmentStatus = {
   provider?: string | null;
@@ -82,6 +88,8 @@ export function inferMyGlsShipmentStatus(
 ): ShipmentStatus {
   const codeText = code == null ? "" : String(code).trim();
   const normalizedCode = codeText.replace(/^0+(?=\d)/, "");
+  // The event consumer records this as information without applying CREATED.
+  if (isMyGlsNotification(code)) return "CREATED";
   const direct = DIRECT_STATUS[normalizedCode];
   if (direct) return direct;
 
@@ -113,6 +121,7 @@ export function effectiveMyGlsShipmentStatus(
     shipment.provider !== "MYGLS" ||
     shipment.status !== "FAILED" ||
     !shipment.labelObjectKey ||
+    isMyGlsNotification(shipment.providerStatusCode) ||
     shipment.syncError != null ||
     !MYGLS_RECOVERABLE_STATUS_CODES.includes(
       shipment.providerStatusCode as (typeof MYGLS_RECOVERABLE_STATUS_CODES)[number],

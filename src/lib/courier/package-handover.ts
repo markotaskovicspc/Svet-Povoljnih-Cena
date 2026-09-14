@@ -5,7 +5,7 @@ export type PackageHandoverReport = {
   pickedUpPackages: number;
   recordedAt: string;
   note: string;
-  source: "ADMIN" | "USER_REPORT";
+  source: "ADMIN" | "USER_REPORT" | "MYGLS";
 };
 
 export function readPackageHandoverReport(raw: unknown): PackageHandoverReport | null {
@@ -20,7 +20,7 @@ export function readPackageHandoverReport(raw: unknown): PackageHandoverReport |
     report.pickedUpPackages > report.expectedPackages ||
     typeof report.recordedAt !== "string" || !Number.isFinite(Date.parse(report.recordedAt)) ||
     typeof report.note !== "string" || !report.note.trim() ||
-    !["ADMIN", "USER_REPORT"].includes(report.source)
+    !["ADMIN", "USER_REPORT", "MYGLS"].includes(report.source)
   ) return null;
   return report;
 }

@@ -14,9 +14,12 @@ import { MyGlsClient, decompressMyGlsJson } from "./client";
 import { MYGLS_PROVIDER, requireMyGlsEnabled } from "./config";
 import {
   MYGLS_RECOVERABLE_STATUS_CODES,
+  isMyGlsNotification,
   normalizeMyGlsStatusResponses,
 } from "./status";
 import { parcelNumberList } from "./shipments";
+import { buildMyGlsHandover } from "./handover";
+import { persistMyGlsHandover } from "./handover.server";
 import type {
   MyGlsDeliveryPoint,
   MyGlsLocation,
@@ -210,7 +213,7 @@ export async function syncMyGlsShipmentStatuses(limit = 100) {
   }
 }
 
-export async function syncMyGlsShipmentById(shipmentId: string) {
+export async function syncMyGlsShipmentById(shipmentId: string, options: { notify?: boolean } = {}) {
   const shipment = await db.shipment.findUnique({
     where: { id: shipmentId },
     select: {
@@ -221,6 +224,7 @@ export async function syncMyGlsShipmentById(shipmentId: string) {
       status: true,
       syncError: true,
       labelObjectKey: true,
+      packageCount: true,
     },
   });
   if (!shipment?.trackingNo || shipment.provider !== MYGLS_PROVIDER) {
@@ -236,6 +240,10 @@ export async function syncMyGlsShipmentById(shipmentId: string) {
       ? await client.getParcelListStatuses({ parcelNumberList: numbers })
       : await client.getParcelStatuses({ parcelNumber: numbers[0]! });
   const events = normalizeMyGlsStatusResponses(raw, numbers);
+  if (numbers.length !== shipment.packageCount) throw new Error("MyGLS nema sačuvane brojeve svih paketa.");
+  const handover = numbers.length > 1
+    ? await persistMyGlsHandover(shipment.id, buildMyGlsHandover(numbers, events))
+    : null;
   const results = [];
 
   for (const event of events) {
@@ -253,7 +261,8 @@ export async function syncMyGlsShipmentById(shipmentId: string) {
     });
     if (result) {
       results.push(result);
-      if (result.eventCreated && result.stateApplied) {
+      if (options.notify !== false && result.eventCreated && result.stateApplied &&
+        (!handover || handover.pickedUpPackages === handover.expectedPackages)) {
         await notifyShipmentSideEffects(
           result.orderId,
           result.status,
@@ -264,7 +273,7 @@ export async function syncMyGlsShipmentById(shipmentId: string) {
     }
   }
 
-  const latestEvent = [...events].sort(
+  const latestEvent = events.filter(event => !isMyGlsNotification(event.providerStatusCode)).sort(
     (left, right) =>
       (left.occurredAt?.getTime() ?? 0) -
       (right.occurredAt?.getTime() ?? 0),

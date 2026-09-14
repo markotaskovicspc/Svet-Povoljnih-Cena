@@ -4,9 +4,16 @@ import {
   inferMyGlsShipmentStatus,
   normalizeMyGlsStatusResponses,
   parseMyGlsStatusDate,
+  isMyGlsNotification,
 } from "@/lib/mygls/status";
 
 describe("MyGLS status mapping", () => {
+  it("identifies notification 99 without inventing physical progress or failure", () => {
+    expect(isMyGlsNotification("099")).toBe(true);
+    expect(isMyGlsNotification("86")).toBe(false);
+    expect(inferMyGlsShipmentStatus("99", "Notification")).toBe("CREATED");
+    expect(effectiveMyGlsShipmentStatus({ provider: "MYGLS", status: "FAILED", providerStatusCode: "99", labelObjectKey: "label.pdf", syncError: null })).toBe("FAILED");
+  });
   it.each([
     ["51", "Data sent"],
     ["52", "COD data sent"],

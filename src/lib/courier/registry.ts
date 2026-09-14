@@ -12,6 +12,7 @@ import { db } from "@/lib/db";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
 import { isXExpressRecipientRedirect } from "@/lib/x-express/status";
+import { isMyGlsNotification } from "@/lib/mygls/status";
 import {
   announceXExpressShipment,
   createXExpressShipmentForOrder,
@@ -529,6 +530,21 @@ export async function applyShipmentEvent(
       where: { id: shipment.id },
       select: { rawCreateResponse: true, status: true, lastStatusEventAt: true },
     });
+    if (appliedProvider === MYGLS_PROVIDER && isMyGlsNotification(event.providerStatusCode)) {
+      const duplicate = event.providerEventId
+        ? await tx.shipmentEvent.findUnique({ where: { providerEventId: event.providerEventId }, select: { id: true } })
+        : await tx.shipmentEvent.findFirst({ where: { shipmentId: shipment.id, providerStatusCode: event.providerStatusCode, occurredAt }, select: { id: true } });
+      if (!duplicate) {
+        await tx.shipmentEvent.create({ data: {
+          shipmentId: shipment.id, status: current.status,
+          providerStatusCode: event.providerStatusCode, providerEventId: event.providerEventId ?? null,
+          message, raw: event.raw as Prisma.InputJsonValue | undefined, occurredAt,
+        } });
+        eventCreated = true;
+      }
+      // In particular, do not move lastStatusEventAt past a real pickup scan.
+      return;
+    }
     if (
       appliedProvider === X_EXPRESS_PROVIDER &&
       isXExpressRecipientRedirect(event.providerStatusCode)
