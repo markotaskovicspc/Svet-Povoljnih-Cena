@@ -1,5 +1,10 @@
 import type { OrderStatus, ShipmentStatus } from "@prisma/client";
 
+// This is a recipient instruction, not proof of pickup or delivery.
+export function isXExpressRecipientRedirect(code: string | null | undefined) {
+  return code?.trim().toUpperCase() === "RCP_DLV_TO_PUDO";
+}
+
 function normalize(value: string) {
   return value
     .toLowerCase()
@@ -18,6 +23,7 @@ export function inferXExpressShipmentStatus(
     normalizedCode === "REQUEST_RECEIVED" ||
     normalizedCode === "REGISTERED" ||
     normalizedCode === "ANNOUNCED" ||
+    isXExpressRecipientRedirect(normalizedCode) ||
     normalizedCode === "PCK_ASGN_MISS" ||
     normalizedCode === "PCK_ASGN_OVERLOAD"
   ) {

@@ -11,6 +11,7 @@ import {
 import { db } from "@/lib/db";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
+import { isXExpressRecipientRedirect } from "@/lib/x-express/status";
 import {
   announceXExpressShipment,
   createXExpressShipmentForOrder,
@@ -525,8 +526,56 @@ export async function applyShipmentEvent(
   await db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT "id" FROM "Shipment" WHERE "id" = ${shipment.id} FOR UPDATE`;
     const current = await tx.shipment.findUniqueOrThrow({
-      where: { id: shipment.id }, select: { rawCreateResponse: true },
+      where: { id: shipment.id },
+      select: { rawCreateResponse: true, status: true, lastStatusEventAt: true },
     });
+    if (
+      appliedProvider === X_EXPRESS_PROVIDER &&
+      isXExpressRecipientRedirect(event.providerStatusCode)
+    ) {
+      // A recipient can redirect before the warehouse has printed the label,
+      // or after pickup. Record the instruction without changing physical
+      // progress, booking markers, reservations or customer notifications.
+      const duplicate = event.providerEventId
+        ? await tx.shipmentEvent.findUnique({
+            where: { providerEventId: event.providerEventId },
+            select: { id: true },
+          })
+        : await tx.shipmentEvent.findFirst({
+            where: {
+              shipmentId: shipment.id,
+              providerStatusCode: event.providerStatusCode,
+              occurredAt,
+            },
+            select: { id: true },
+          });
+      if (duplicate) return;
+      await tx.shipmentEvent.create({
+        data: {
+          shipmentId: shipment.id,
+          status: current.status,
+          providerStatusCode: event.providerStatusCode,
+          providerEventId: event.providerEventId ?? null,
+          message: "Primalac je zatražio preusmeravanje na PUDO.",
+          raw: event.raw as Prisma.InputJsonValue | undefined,
+          occurredAt,
+        },
+      });
+      eventCreated = true;
+      // Do not advance lastStatusEventAt: a delayed physical tracking event
+      // must still apply even if it predates this recipient instruction.
+      if (!current.lastStatusEventAt || current.lastStatusEventAt <= occurredAt) {
+        await tx.shipment.updateMany({
+          where: { id: shipment.id },
+          data: {
+            providerStatusCode: event.providerStatusCode,
+            lastStatusSyncAt: new Date(),
+            syncError: null,
+          },
+        });
+      }
+      return;
+    }
     const handoverReport = incompletePackageHandover(current.rawCreateResponse);
     // An order-level courier event cannot resolve a reported missing package.
     if (handoverReport && newOrderStatus === "ISPORUCENO") appliedOrderStatus = "U_ISPORUCI";

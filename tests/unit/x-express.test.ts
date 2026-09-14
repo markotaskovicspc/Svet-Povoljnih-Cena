@@ -499,6 +499,8 @@ describe("X Express codes, label and webhook envelope", () => {
   });
 
   it("maps official pickup, delivery, PUDO, return and failure statuses", () => {
+    expect(inferXExpressShipmentStatus("RCP_DLV_TO_PUDO", null)).toBe("CREATED");
+    expect(inferXExpressShipmentStatus("RCP_DLV_TO_PUDO", "Usluga - Primalac preusmerio na PUDO")).toBe("CREATED");
     expect(inferXExpressShipmentStatus("REQUEST_RECEIVED", "Kreiran zahtev")).toBe(
       "CREATED",
     );
