@@ -9,6 +9,7 @@ import {
 } from "@/lib/admin/erp";
 import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
 import { gridTextValue, gridValueMatchesFilter } from "@/lib/admin/grid-query";
+import { toExcelAdminDate } from "@/lib/admin/grid-export";
 import { resolveReportPeriod } from "@/lib/admin/report-period";
 
 const textValue = gridTextValue;
@@ -173,7 +174,7 @@ export async function GET(
     ),
   }));
   for (const row of rows) {
-    worksheet.addRow(
+    const excelRow = worksheet.addRow(
       Object.fromEntries(
         exportColumns.map((column) => [
           column.key,
@@ -181,6 +182,15 @@ export async function GET(
         ]),
       ),
     );
+    exportColumns.forEach((column, index) => {
+      const value = row.values[column.key];
+      if (column.type !== "date" || typeof value !== "string") return;
+      const date = toExcelAdminDate(value);
+      if (!date) return;
+      const cell = excelRow.getCell(index + 1);
+      cell.value = date;
+      cell.numFmt = value.includes("T") ? "dd.mm.yyyy hh:mm" : "dd.mm.yyyy";
+    });
   }
   worksheet.autoFilter = {
     from: { row: 1, column: 1 },
