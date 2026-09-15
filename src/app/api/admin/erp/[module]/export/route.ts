@@ -143,11 +143,19 @@ export async function GET(
       knownColumns.has(sort.columnKey) &&
       (sort.direction === "asc" || sort.direction === "desc"),
   );
+  const searchColumns = knownColumns.has(requestedSearchColumn)
+    ? [requestedSearchColumn]
+    : exportColumns.map((column) => column.key);
+  if (
+    slug === "preuzimanja" &&
+    (!knownColumns.has(requestedSearchColumn) || requestedSearchColumn === "number") &&
+    !searchColumns.includes("courierNumbers")
+  ) {
+    searchColumns.push("courierNumbers");
+  }
   const rows = filterAndSortRows(
     erpModule.rows,
-    knownColumns.has(requestedSearchColumn)
-      ? [requestedSearchColumn]
-      : exportColumns.map((column) => column.key),
+    searchColumns,
     search.get("q") ?? "",
     filters,
     sorting,

@@ -44,6 +44,15 @@ export async function GET(
   const searchColumns = knownColumns.has(requestedSearchColumn)
     ? [requestedSearchColumn]
     : columns;
+  // Courier references also identify pickup batches, including in saved views
+  // created before the courier-number column existed.
+  if (
+    slug === "preuzimanja" &&
+    (!knownColumns.has(requestedSearchColumn) || requestedSearchColumn === "number") &&
+    !searchColumns.includes("courierNumbers")
+  ) {
+    searchColumns.push("courierNumbers");
+  }
   const filters = parseGridArray<AdminGridFilter>(search.get("filters")).filter(
     (filter) =>
       filter &&

@@ -669,6 +669,7 @@ export const operationalErpModules: ErpModule[] = [
         },
       ),
       text("number", "Broj naloga"),
+      text("courierNumbers", "Brojevi naloga / pošiljki kurira"),
       text("provider", "Kurirska služba"),
       date("createdAt", "Datum naloga"),
       number("packages", "Broj redova"),
@@ -1992,17 +1993,46 @@ async function pickupRows(take: number): Promise<ErpRow[]> {
           courierPickedUpAt: true,
           orderId: true,
           orderItemId: true,
+          purpose: true,
+          reclamationId: true,
         },
       },
     },
   });
   const shipments = await db.shipment.findMany({
-    where: { orderId: { in: [...new Set(rows.flatMap(row => row.lines.map(line => line.orderId)))] }, purpose: "ORDER_DELIVERY" },
-    select: { orderId: true, provider: true, rawCreateResponse: true },
+    where: { orderId: { in: [...new Set(rows.flatMap(row => row.lines.map(line => line.orderId)))] } },
+    select: {
+      orderId: true, provider: true, rawCreateResponse: true,
+      purpose: true, reclamationId: true, providerOrderId: true,
+      providerShipmentId: true, trackingNo: true, providerParcelNumbers: true,
+    },
   });
+  const shipmentsByOrder = new Map<string, typeof shipments>();
+  for (const shipment of shipments) {
+    const group = shipmentsByOrder.get(shipment.orderId) ?? [];
+    group.push(shipment);
+    shipmentsByOrder.set(shipment.orderId, group);
+  }
   return rows.map((row) => {
+    const matchingShipments = [...new Set(row.lines.flatMap(line =>
+      (shipmentsByOrder.get(line.orderId) ?? []).filter(shipment => {
+        if (shipment.provider !== row.provider || shipment.purpose !== line.purpose) return false;
+        if (line.purpose !== "ORDER_DELIVERY") {
+          return Boolean(line.reclamationId) && shipment.reclamationId === line.reclamationId;
+        }
+        const assignment = readShipmentAssignment(shipment.rawCreateResponse);
+        return !assignment || !line.orderItemId || assignment.orderItemIds.includes(line.orderItemId);
+      }),
+    ))];
+    const courierNumbers = [...new Set(matchingShipments.flatMap(shipment => [
+      shipment.providerOrderId,
+      shipment.providerShipmentId,
+      shipment.trackingNo,
+      ...(Array.isArray(shipment.providerParcelNumbers) ? shipment.providerParcelNumbers : []),
+    ]).filter((value): value is string => typeof value === "string" && Boolean(value.trim()))
+      .map(value => value.trim()))].join(", ");
     const handoverProgress = pickupBatchHandoverProgress(row.lines.map(line => {
-      const shipment = shipments.find(item => item.orderId === line.orderId && item.provider === row.provider &&
+      const shipment = matchingShipments.find(item => item.orderId === line.orderId && item.purpose === line.purpose && item.reclamationId === line.reclamationId &&
         incompletePackageHandover(item.rawCreateResponse) &&
         (!line.orderItemId || readShipmentAssignment(item.rawCreateResponse)?.orderItemIds.includes(line.orderItemId)));
       return { ...line, handoverReport: incompletePackageHandover(shipment?.rawCreateResponse) };
@@ -2011,6 +2041,7 @@ async function pickupRows(take: number): Promise<ErpRow[]> {
       id: row.id,
       values: {
         number: row.number,
+        courierNumbers,
         provider:
           row.provider === "MYGLS"
             ? "MyGLS"

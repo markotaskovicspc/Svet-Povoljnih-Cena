@@ -27,6 +27,7 @@ describe("ERP module 13 pickup batches", () => {
     expect(definition?.columns.map((column) => column.label)).toEqual([
       "Status",
       "Broj naloga",
+      "Brojevi naloga / pošiljki kurira",
       "Kurirska služba",
       "Datum naloga",
       "Broj redova",
