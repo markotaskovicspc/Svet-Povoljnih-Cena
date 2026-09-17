@@ -247,7 +247,7 @@ async function deferPackageAction(
         ok: true as const,
         entityId: parsed.data.lineId,
         diff: result,
-        message: "GLS paket je odložen, rezervacija je sačuvana i kupac je obavešten.",
+        message: "GLS adresnica je otkazana, paket je odložen, rezervacija je sačuvana i kupac je obavešten.",
       };
     },
   )(formData);
@@ -748,6 +748,14 @@ export default async function PickupBatchPage({
                 ranija adresnica obrisana i zamenjena. Obrisana adresnica nije
                 aktivna pošiljka i ne štampa se iz ovog naloga.
               </p>
+              {batch.status === "BOOKED" ? (
+                <p className="mt-1 leading-6">
+                  Ako se posle kreiranja adresnica utvrdi da paket ipak nije
+                  spreman, izaberite „Otkaži GLS paket“. Sistem neposredno pre
+                  otkazivanja proverava GLS status i dozvoljava ga samo dok
+                  kurir nije preuzeo taj paket.
+                </p>
+              ) : null}
             </div>
           ) : null}
           <div className="mb-4 rounded-lg border border-border px-3 py-3 text-sm text-ink-700">
@@ -980,8 +988,8 @@ export default async function PickupBatchPage({
                                       <AdminActionForm action={deferPackageAction} className="mt-2">
                                         <input type="hidden" name="batchId" value={batch.id} />
                                         <input type="hidden" name="lineId" value={row.lineId} />
-                                        <SubmitButton size="xs" variant="destructive" pendingLabel="Provera i odlaganje…" confirm={`Odložiti samo GLS paket ${row.providerParcelNumber}? Artikal ostaje rezervisan, otkupnina tekuće isporuke biće umanjena i kupac obavešten.`}>
-                                          Odloži paket
+                                        <SubmitButton size="xs" variant="destructive" pendingLabel="Provera statusa i otkazivanje…" confirm={`Otkazati već kreiranu GLS adresnicu za paket ${row.providerParcelNumber}? Otkazivanje je moguće samo dok kurir nije preuzeo paket. Artikal ostaje rezervisan, otkupnina tekuće isporuke biće umanjena i kupac obavešten.`}>
+                                          Otkaži GLS paket
                                         </SubmitButton>
                                       </AdminActionForm>
                                     ) : null}

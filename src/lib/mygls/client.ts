@@ -57,16 +57,42 @@ export class MyGlsClient {
     });
   }
 
-  deleteLabels(parcelIdList: number[]) {
-    return this.parcel<MyGlsDeleteLabelsResponse>("DeleteLabels", { ParcelIdList: parcelIdList });
+  async deleteLabels(parcelIdList: number[]) {
+    const response = await this.parcel<MyGlsDeleteLabelsResponse>(
+      "DeleteLabels",
+      { ParcelIdList: parcelIdList },
+    );
+    const deleted = new Set(
+      (response.SuccessfullyDeletedList ?? []).flatMap((item) => [
+        Number(item.ParcelId),
+        ...(item.SubParcelIdList ?? []).map(Number),
+      ]).filter(Number.isFinite),
+    );
+    const missing = parcelIdList.filter((parcelId) => !deleted.has(parcelId));
+    if (missing.length) {
+      throw new MyGlsProviderError(
+        `MyGLS nije potvrdio otkazivanje ${missing.length} adresnica.`,
+        undefined,
+        redactMyGlsSecrets(response),
+      );
+    }
+    return response;
   }
 
-  modifyCOD(args: { parcelId?: number; parcelNumber?: number; codAmount: number }) {
-    return this.parcel<MyGlsModifyCODResponse>("ModifyCOD", {
+  async modifyCOD(args: { parcelId?: number; parcelNumber?: number; codAmount: number }) {
+    const response = await this.parcel<MyGlsModifyCODResponse>("ModifyCOD", {
       ParcelId: args.parcelId ?? null,
       ParcelNumber: args.parcelNumber ?? null,
       CODAmount: args.codAmount,
     });
+    if (response.Successful !== true) {
+      throw new MyGlsProviderError(
+        "MyGLS nije potvrdio izmenu otkupnine.",
+        undefined,
+        redactMyGlsSecrets(response),
+      );
+    }
+    return response;
   }
 
   getParcelList(args: {

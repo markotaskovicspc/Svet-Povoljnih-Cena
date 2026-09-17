@@ -67,6 +67,12 @@ const server = createServer(async (request, response) => {
         })),
       });
     }
+    if (method[2] === "ModifyCOD") {
+      return json(response, 200, {
+        ModifyCODError: [],
+        Successful: true,
+      });
+    }
 
     return json(response, 200, {});
   } catch (error) {
