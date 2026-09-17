@@ -143,10 +143,10 @@ describe("all transactional Resend send flows", () => {
     expect(input.html).toContain("Test proizvod");
     expect(input.html).toContain("/documents/garantni-list-logo.jpeg");
     expect(input.html).toContain("Porudžbina je primljena");
-    expect(input.html).toContain("Dokumenta u prilogu");
-    expect(input.html).toContain("Garantni list je popunjen");
-    expect(input.html).toContain("Garantni list - garancija 1 (jedna) godina");
-    expect(input.html).toContain("Predračun sa pregledom cena i PDV-a");
+    expect(input.html).not.toContain("Dokumenta u prilogu");
+    expect(input.html).not.toContain("Garantni list je popunjen");
+    expect(input.html).not.toContain("Garantni list - garancija 1 (jedna) godina");
+    expect(input.html).not.toContain("Predračun sa pregledom cena i PDV-a");
     expect(input.html).toContain("Plaćeno");
     expect(input.html).not.toContain("Svet Akcija");
     expect(input.html).toContain("/reklamacije/prijava?order=");
@@ -323,8 +323,9 @@ describe("all transactional Resend send flows", () => {
     expect(input.html).toContain("Kupac d.o.o.");
     expect(input.html).toContain("109876543");
     expect(input.html).toContain("Podaci za uplatu");
-    expect(input.html).toContain("265-3310310005375-34");
-    expect(input.html).toContain("Obrazac za odustanak od kupovine");
+    expect(input.html).toContain("340-0001000283004-51");
+    expect(input.html).toContain("Erste Bank a.d. Novi Sad");
+    expect(input.html).not.toContain("Obrazac za odustanak od kupovine");
     expect(input.html).not.toContain("Pogledaj porudžbinu");
     expect(input.attachments).toHaveLength(3);
     expect(
@@ -367,7 +368,7 @@ describe("all transactional Resend send flows", () => {
     const input = mocks.trackedDispatch.mock.calls[0]?.[0];
     expect(input.html).not.toContain("Predračun sa pregledom cena i PDV-a");
     expect(input.html).not.toContain("Obrazac za odustanak od kupovine");
-    expect(input.html).toContain("Garantni list - garancija");
+    expect(input.html).not.toContain("Garantni list - garancija");
     expect(input.attachments).toHaveLength(1);
     expect(input.metadata).toMatchObject({
       attachmentCount: 1,

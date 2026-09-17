@@ -57,9 +57,6 @@ export interface OrderConfirmationProps {
   order: Order;
   baseUrl?: string;
   accessToken?: string;
-  includesPurchaseDocuments?: boolean;
-  includesWithdrawalForm?: boolean;
-  guaranteeTermText?: string;
   previewMode?: boolean;
 }
 
@@ -67,9 +64,6 @@ export function OrderConfirmation({
   order,
   baseUrl = "https://www.svetpovoljnihcena.rs",
   accessToken,
-  includesPurchaseDocuments = true,
-  includesWithdrawalForm = true,
-  guaranteeTermText,
   previewMode = false,
 }: OrderConfirmationProps) {
   const buyer = resolveDocumentBuyerAddress(
@@ -308,46 +302,6 @@ export function OrderConfirmation({
         </>
       ) : null}
 
-      {includesPurchaseDocuments || guaranteeTermText ? (
-        <>
-          <EmailDivider />
-          <EmailSectionHeading>Dokumenta u prilogu</EmailSectionHeading>
-          <table
-            role="presentation"
-            cellPadding={0}
-            cellSpacing={0}
-            width="100%"
-            style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}
-          >
-            <tbody>
-              {includesPurchaseDocuments ? (
-                <>
-                  <AttachmentRow label="Predračun sa pregledom cena i PDV-a" />
-                  {includesWithdrawalForm ? (
-                    <AttachmentRow label="Obrazac za odustanak od kupovine" />
-                  ) : null}
-                </>
-              ) : null}
-              {guaranteeTermText ? (
-                <AttachmentRow label={`Garantni list - garancija ${guaranteeTermText}`} />
-              ) : null}
-            </tbody>
-          </table>
-        </>
-      ) : null}
-
-      {guaranteeTermText ? (
-        <>
-          <EmailDivider />
-          <EmailNotice>
-            <strong>Garantni list je popunjen.</strong>
-            <br />
-            Sačuvajte ga zajedno sa računom. Sadrži proizvode iz porudžbine na
-            koje se odnosi garancija.
-          </EmailNotice>
-        </>
-      ) : null}
-
       {previewMode ? null : (
         <>
           <EmailDivider />
@@ -449,33 +403,6 @@ function DetailRow({ label, value }: { label: string; value: string }) {
       <td style={{ padding: "6px 0", color: INK, fontWeight: 600, lineHeight: 1.45 }}>
         {value}
       </td>
-    </tr>
-  );
-}
-
-function AttachmentRow({ label }: { label: string }) {
-  return (
-    <tr>
-      <td style={{ width: 46, padding: "5px 10px 5px 0", verticalAlign: "top" }}>
-        <span
-          style={{
-            display: "inline-block",
-            width: 36,
-            height: 22,
-            borderRadius: 4,
-            backgroundColor: BLUE,
-            color: "#FFFFFF",
-            fontSize: 9,
-            fontWeight: 800,
-            lineHeight: "22px",
-            letterSpacing: "0.04em",
-            textAlign: "center",
-          }}
-        >
-          PDF
-        </span>
-      </td>
-      <td style={{ padding: "7px 0", color: INK, lineHeight: 1.45 }}>{label}</td>
     </tr>
   );
 }

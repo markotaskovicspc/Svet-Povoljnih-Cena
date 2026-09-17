@@ -6,8 +6,32 @@ import {
   parseMyGlsStatusDate,
   isMyGlsNotification,
 } from "@/lib/mygls/status";
+import { myGlsShipmentStatusSyncWhere } from "@/lib/mygls/sync";
 
 describe("MyGLS status mapping", () => {
+  it("keeps recent delivered and failed shipments eligible for delayed return discovery", () => {
+    const now = new Date("2026-09-17T10:00:00.000Z");
+    const where = myGlsShipmentStatusSyncWhere(now);
+
+    expect(where).toMatchObject({
+      provider: "MYGLS",
+      service: "COURIER_SMALL",
+      trackingNo: { not: null },
+    });
+    expect(where.OR).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ status: "DELIVERED" }),
+        expect.objectContaining({
+          status: "FAILED",
+          syncError: null,
+          labelObjectKey: { not: null },
+        }),
+      ]),
+    );
+    expect(JSON.stringify(where)).toContain("2026-09-17T04:00:00.000Z");
+    expect(JSON.stringify(where)).toContain("2026-05-20T10:00:00.000Z");
+  });
+
   it("identifies notification 99 without inventing physical progress or failure", () => {
     expect(isMyGlsNotification("099")).toBe(true);
     expect(isMyGlsNotification("86")).toBe(false);

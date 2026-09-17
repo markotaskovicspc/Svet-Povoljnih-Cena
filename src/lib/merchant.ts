@@ -29,7 +29,7 @@ export const MERCHANT_LEGAL_INFO = {
   supportHours:
     publicValue(process.env.NEXT_PUBLIC_MERCHANT_SUPPORT_HOURS) ??
     "Ponedeljak–subota, 08:00–20:00",
-  bankAccount: "265-3310310005375-34",
-  bankName: "Raiffeisen banka",
+  bankAccount: "340-0001000283004-51",
+  bankName: "Erste Bank a.d. Novi Sad",
   pdvNote: "PDV je uključen u cenu.",
 } as const;

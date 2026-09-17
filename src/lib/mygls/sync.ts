@@ -13,7 +13,6 @@ import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { MyGlsClient, decompressMyGlsJson } from "./client";
 import { MYGLS_PROVIDER, requireMyGlsEnabled } from "./config";
 import {
-  MYGLS_RECOVERABLE_STATUS_CODES,
   isMyGlsNotification,
   normalizeMyGlsStatusResponses,
 } from "./status";
@@ -24,6 +23,57 @@ import type {
   MyGlsDeliveryPoint,
   MyGlsLocation,
 } from "./types";
+
+const TERMINAL_STATUS_RECHECK_INTERVAL_MS = 6 * 60 * 60 * 1_000;
+const RETURN_DISCOVERY_WINDOW_MS = 120 * 24 * 60 * 60 * 1_000;
+
+/**
+ * MyGLS returns a status history, and a parcel can receive a return event only
+ * after an earlier delivery exception or even after a recorded delivery.
+ * Recheck recent terminal-looking shipments so those later events are not
+ * permanently missed while keeping old history out of the polling queue.
+ */
+export function myGlsShipmentStatusSyncWhere(
+  now = new Date(),
+): Prisma.ShipmentWhereInput {
+  const recheckBefore = new Date(
+    now.getTime() - TERMINAL_STATUS_RECHECK_INTERVAL_MS,
+  );
+  const returnWindowStart = new Date(
+    now.getTime() - RETURN_DISCOVERY_WINDOW_MS,
+  );
+  const staleSync: Prisma.ShipmentWhereInput = {
+    OR: [
+      { lastStatusSyncAt: null },
+      { lastStatusSyncAt: { lt: recheckBefore } },
+    ],
+  };
+  const recentShipment: Prisma.ShipmentWhereInput = {
+    OR: [
+      { deliveredAt: { gte: returnWindowStart } },
+      { deliveredAt: null, createdAt: { gte: returnWindowStart } },
+    ],
+  };
+
+  return {
+    provider: MYGLS_PROVIDER,
+    service: "COURIER_SMALL",
+    trackingNo: { not: null },
+    OR: [
+      { status: { notIn: ["DELIVERED", "RETURNED", "FAILED"] } },
+      {
+        status: "FAILED",
+        syncError: null,
+        labelObjectKey: { not: null },
+        AND: [recentShipment, staleSync],
+      },
+      {
+        status: "DELIVERED",
+        AND: [recentShipment, staleSync],
+      },
+    ],
+  };
+}
 
 export async function syncMyGlsMasterData() {
   requireMyGlsEnabled();
@@ -149,22 +199,7 @@ export async function syncMyGlsShipmentStatuses(limit = 100) {
 
   try {
     const shipments = await db.shipment.findMany({
-      where: {
-        provider: MYGLS_PROVIDER,
-        service: "COURIER_SMALL",
-        trackingNo: { not: null },
-        OR: [
-          { status: { notIn: ["DELIVERED", "RETURNED", "FAILED"] } },
-          {
-            status: "FAILED",
-            providerStatusCode: {
-              in: [...MYGLS_RECOVERABLE_STATUS_CODES],
-            },
-            syncError: null,
-            labelObjectKey: { not: null },
-          },
-        ],
-      },
+      where: myGlsShipmentStatusSyncWhere(),
       orderBy: [{ lastStatusSyncAt: "asc" }, { updatedAt: "asc" }],
       take: Math.max(1, Math.min(limit, 500)),
       select: { id: true },

@@ -24,7 +24,6 @@ import { getEmailConfig } from "./config";
 import { buildInvoicePdf, buildWithdrawalFormPdf } from "./pdf";
 import {
   buildGuaranteePdf,
-  GUARANTEE_TERM_TEXT,
   guaranteeItemsForOrder,
 } from "./guarantee-pdf";
 import { trackedDispatch } from "./tracking";
@@ -68,9 +67,6 @@ export async function sendOrderConfirmation(args: {
       order: args.order,
       baseUrl: cfg.baseUrl,
       accessToken: args.accessToken,
-      includesPurchaseDocuments: args.attachInvoice !== false,
-      includesWithdrawalForm: args.attachInvoice !== false,
-      guaranteeTermText: guaranteeItems.length ? GUARANTEE_TERM_TEXT : undefined,
       previewMode: args.previewMode,
     }),
   );
