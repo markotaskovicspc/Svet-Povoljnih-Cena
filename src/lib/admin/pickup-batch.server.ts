@@ -65,6 +65,7 @@ import {
   fulfillmentPaymentReadiness,
   isCashOnDeliveryPaymentMethod,
 } from "@/lib/payments/fulfillment-readiness";
+import { loadOrderForEmail, sendPartialDelivery } from "@/lib/email";
 
 type Transaction = Prisma.TransactionClient;
 
@@ -207,8 +208,221 @@ export async function savePickupPackage(
       widthCm: pkg.widthCm,
       depthCm: pkg.depthCm,
       heightCm: pkg.heightCm,
+      warehouseReadyAt: null,
+      warehouseReadyById: null,
     },
   });
+}
+
+export async function setPickupPackageReady(
+  batchId: string,
+  lineId: string,
+  ready: boolean,
+  actorId: string,
+) {
+  return db.$transaction(async (tx) => {
+    await lockBatch(tx, batchId);
+    const line = await tx.pickupBatchLine.findFirst({
+      where: { id: lineId, batchId },
+      include: { batch: true },
+    });
+    if (!line) throw new Error("Paket nije pronađen u ovom nalogu.");
+    assertEditableBatch(line.batch);
+    if (line.deferredAt) throw new Error("Odloženi paket prvo vratite u picking nalog.");
+    if (
+      ready &&
+      [line.weightKg, line.widthCm, line.depthCm, line.heightCm].some(
+        (value) => value == null || Number(value) <= 0,
+      )
+    ) {
+      throw new Error("Pre potvrde spremnosti unesite kompletne mere paketa.");
+    }
+    return tx.pickupBatchLine.update({
+      where: { id: line.id },
+      data: {
+        warehouseReadyAt: ready ? new Date() : null,
+        warehouseReadyById: ready ? actorId : null,
+      },
+    });
+  }, TRANSACTION_OPTIONS);
+}
+
+export async function confirmAllPickupPackagesReady(
+  batchId: string,
+  actorId: string,
+) {
+  return db.$transaction(async (tx) => {
+    await lockBatch(tx, batchId);
+    const batch = await tx.pickupBatch.findUnique({
+      where: { id: batchId },
+      include: { lines: { where: { deferredAt: null } } },
+    });
+    assertEditableBatch(batch);
+    if (!batch.lines.length) throw new Error("Nalog nema aktivnih paketa.");
+    const incomplete = batch.lines.filter((line) =>
+      [line.weightKg, line.widthCm, line.depthCm, line.heightCm].some(
+        (value) => value == null || Number(value) <= 0,
+      ),
+    );
+    if (incomplete.length) {
+      throw new Error(
+        `${incomplete.length} paketa nema kompletne mere. Prvo ih izmerite ili odložite.`,
+      );
+    }
+    const result = await tx.pickupBatchLine.updateMany({
+      where: { batchId, deferredAt: null },
+      data: { warehouseReadyAt: new Date(), warehouseReadyById: actorId },
+    });
+    return { readyCount: result.count };
+  }, TRANSACTION_OPTIONS);
+}
+
+export async function deferPickupPackageBeforeBooking(
+  batchId: string,
+  lineId: string,
+  actorId: string,
+) {
+  return db.$transaction(async (tx) => {
+    await lockBatch(tx, batchId);
+    const line = await tx.pickupBatchLine.findFirst({
+      where: { id: lineId, batchId },
+      include: {
+        batch: true,
+        order: { select: { status: true } },
+        orderItem: {
+          select: {
+            unitPriceSale: true,
+            assemblyPrice: true,
+            withAssembly: true,
+          },
+        },
+      },
+    });
+    if (!line) throw new Error("Paket nije pronađen u ovom nalogu.");
+    assertEditableBatch(line.batch);
+    if (line.purpose !== "ORDER_DELIVERY") {
+      throw new Error("Pre slanja se trenutno mogu odložiti samo paketi porudžbina.");
+    }
+    if (line.shipmentId || line.providerParcelId) {
+      throw new Error("Za ovaj paket već postoji kurirska adresnica.");
+    }
+    if (line.deferredAt) return line;
+    const packageValue = line.orderItem
+      ? Number(line.orderItem.unitPriceSale) +
+        (line.orderItem.withAssembly
+          ? Number(line.orderItem.assemblyPrice ?? 0)
+          : 0)
+      : 0;
+    const deferred = await tx.pickupBatchLine.update({
+      where: { id: line.id },
+      data: {
+        deferredAt: new Date(),
+        deferredById: actorId,
+        packageValue: new Prisma.Decimal(packageValue),
+        warehouseReadyAt: null,
+        warehouseReadyById: null,
+      },
+    });
+    await tx.orderStatusEvent.create({
+      data: {
+        orderId: line.orderId,
+        status: line.order.status,
+        actorId,
+        note: `Paket #${line.packageNo} nije spreman i odložen je pre slanja kuriru; rezervacija ostaje aktivna.`,
+      },
+    });
+    return deferred;
+  }, TRANSACTION_OPTIONS);
+}
+
+export async function rescheduleDeferredPickupPackage(
+  lineId: string,
+  actorId: string,
+) {
+  const source = await db.pickupBatchLine.findUnique({
+    where: { id: lineId },
+    include: {
+      batch: true,
+      order: { select: { number: true, status: true, cancelledAt: true } },
+    },
+  });
+  if (!source?.deferredAt || source.shipmentId || source.providerParcelId) {
+    throw new Error("Paket nije odložen pre slanja kuriru.");
+  }
+  if (source.rescheduledAt) throw new Error("Paket je već ponovo zakazan.");
+  if (source.order.cancelledAt || source.order.status === "OTKAZANO") {
+    throw new Error("Otkazana porudžbina ne može ponovo da se zakaže.");
+  }
+  if (
+    source.batch.status === "DRAFT" &&
+    !source.batch.labelsCreationStartedAt &&
+    !source.batch.labelsCreatedAt
+  ) {
+    const restored = await db.pickupBatchLine.update({
+      where: { id: source.id },
+      data: { deferredAt: null, deferredById: null },
+    });
+    return {
+      batchId: source.batch.id,
+      batchNumber: source.batch.number,
+      lineId: restored.id,
+      restored: true,
+    };
+  }
+  const provider = normalizeProvider(source.batch.provider);
+  if (!provider) throw new Error("Kurirska služba odloženog paketa nije poznata.");
+  const batch =
+    (await db.pickupBatch.findFirst({
+      where: {
+        provider,
+        status: "DRAFT",
+        labelsCreationStartedAt: null,
+        labelsCreatedAt: null,
+      },
+      orderBy: { createdAt: "desc" },
+    })) ?? (await createPickupBatch(provider));
+  const now = new Date();
+  const created = await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "PickupBatchLine" WHERE "id" = ${source.id} FOR UPDATE`;
+    const fresh = await tx.pickupBatchLine.findUniqueOrThrow({ where: { id: source.id } });
+    if (fresh.rescheduledAt) throw new Error("Paket je već ponovo zakazan.");
+    const line = await tx.pickupBatchLine.create({
+      data: {
+        batchId: batch.id,
+        orderId: source.orderId,
+        orderItemId: source.orderItemId,
+        purpose: source.purpose,
+        lineGroupKey: `order:${source.orderId}:${provider}:deferred:${source.id}`,
+        quantity: 1,
+        packageNo: 1,
+        weightKg: source.weightKg,
+        widthCm: source.widthCm,
+        depthCm: source.depthCm,
+        heightCm: source.heightCm,
+        packageValue: source.packageValue,
+        deferredFromLineId: source.id,
+      },
+    });
+    await tx.pickupBatchLine.update({
+      where: { id: source.id },
+      data: { rescheduledAt: now },
+    });
+    await tx.orderStatusEvent.create({
+      data: {
+        orderId: source.orderId,
+        status: source.order.status,
+        actorId,
+        note: `Nespreman paket dodat je u novi picking nalog ${batch.number}; rezervacija je ostala aktivna.`,
+      },
+    });
+    return line;
+  }, TRANSACTION_OPTIONS);
+  return {
+    batchId: batch.id,
+    batchNumber: batch.number,
+    lineId: created.id,
+    restored: false,
+  };
 }
 
 export async function loadEligibleOrders(
@@ -915,11 +1129,61 @@ export async function postPickupBatches(batchIds: string[], actorId: string) {
   let announced = 0;
   for (const batchId of uniqueIds) {
     const result = await postPickupBatch(batchId, actorId);
+    await notifyDeferredPackagesAfterPosting(batchId);
     posted += 1;
     shipmentCount += result.shipmentCount;
     if (result.phase === "ANNOUNCED") announced += 1;
   }
   return { posted, shipmentCount, labelsPrepared: 0, announced };
+}
+
+async function notifyDeferredPackagesAfterPosting(batchId: string) {
+  const lines = await db.pickupBatchLine.findMany({
+    where: {
+      batchId,
+      purpose: "ORDER_DELIVERY",
+      deferredAt: { not: null },
+      rescheduledAt: null,
+    },
+    include: {
+      batch: { select: { provider: true } },
+      orderItem: { select: { name: true, sku: true } },
+    },
+  });
+  for (const line of lines) {
+    try {
+      const [loaded, shipment] = await Promise.all([
+        loadOrderForEmail(line.orderId),
+        db.shipment.findFirst({
+          where: {
+            orderId: line.orderId,
+            purpose: "ORDER_DELIVERY",
+            provider: line.batch.provider,
+            status: { not: "FAILED" },
+          },
+          orderBy: { createdAt: "desc" },
+          select: { codAmount: true, rawCreateResponse: true },
+        }),
+      ]);
+      if (!loaded?.recipient) continue;
+      const remainingCod = Number(
+        shipment?.codAmount ??
+          readShipmentAssignment(shipment?.rawCreateResponse)?.codAmount ??
+          0,
+      );
+      await sendPartialDelivery({
+        order: loaded.order,
+        to: loaded.recipient,
+        itemName: line.orderItem?.name ?? "Artikal",
+        sku: line.orderItem?.sku ?? "—",
+        packageValue: Number(line.packageValue ?? 0),
+        remainingCod,
+        pickupBatchLineId: line.id,
+      });
+    } catch (error) {
+      console.error("[email] deferred pickup notification failed", error);
+    }
+  }
 }
 
 export async function recreateMyGlsLabelsForPickupBatch(
@@ -957,6 +1221,7 @@ export async function recreateMyGlsLabelsForPickupBatch(
             orderItemId: true,
             reclamationId: true,
             purpose: true,
+            deferredAt: true,
           },
         },
       },
@@ -1055,6 +1320,7 @@ export async function recreateMyGlsLabelsForPickupBatch(
 }
 
 async function postPickupBatch(batchId: string, actorId: string) {
+  await assertActivePickupPackagesReady(batchId);
   const summary = await db.pickupBatch.findUnique({
     where: { id: batchId },
     select: {
@@ -1232,6 +1498,39 @@ async function postPickupBatch(batchId: string, actorId: string) {
   }
 }
 
+async function assertActivePickupPackagesReady(batchId: string) {
+  const batch = await db.pickupBatch.findUnique({
+    where: { id: batchId },
+    select: {
+      labelsCreationStartedAt: true,
+      labelsCreatedAt: true,
+      _count: {
+        select: {
+          lines: { where: { deferredAt: null } },
+        },
+      },
+      lines: {
+        where: { deferredAt: null, warehouseReadyAt: null },
+        select: { id: true },
+      },
+    },
+  });
+  if (!batch) throw new Error("Nalog za preuzimanje ne postoji.");
+  const activeCount = batch._count.lines;
+  const unreadyCount = batch.lines.length;
+  if (!activeCount) {
+    throw new Error("Nalog nema aktivnih paketa za slanje kuriru.");
+  }
+  // Historical/retry batches already sent package data to the provider before
+  // readiness tracking existed. Never strand their idempotent recovery path.
+  if (batch.labelsCreationStartedAt || batch.labelsCreatedAt) return;
+  if (unreadyCount) {
+    throw new Error(
+      `${unreadyCount} aktivnih paketa nije potvrđeno kao spremno. Potvrdite ih ili odložite pre slanja kuriru.`,
+    );
+  }
+}
+
 async function createXExpressLabelsForPickupBatch(
   batchId: string,
   actorId: string,
@@ -1241,7 +1540,10 @@ async function createXExpressLabelsForPickupBatch(
     where: { id: batchId },
     select: {
       labelsCreatedAt: true,
-      lines: { select: { lineGroupKey: true } },
+      lines: {
+        where: { deferredAt: null },
+        select: { lineGroupKey: true },
+      },
     },
   });
   if (existing?.labelsCreatedAt) {
@@ -1294,6 +1596,10 @@ async function createXExpressLabelsForPickupBatch(
     if (!workGroups.length) {
       throw new Error("Nalog nema nijedan paket za X Express adresnicu.");
     }
+    assertFetchedPickupPackagesReady(
+      batch.lines,
+      Boolean(batch.labelsCreationStartedAt || batch.labelsCreatedAt),
+    );
     await assertPickupGroupsPaymentReady(workGroups);
     for (const group of workGroups) {
       requireCompleteXExpressPackages(
@@ -1365,11 +1671,16 @@ async function createXExpressLabelsForPickupBatch(
                 packages,
                 provider: "X_EXPRESS",
                 orderItemIds: orderItemIdsForGroup(group),
-                codAmount: await pickupAssignmentCodAmount(
-                  group.orderId,
-                  "X_EXPRESS",
-                  orderItemIdsForGroup(group),
-                ),
+                assignmentKey: group.lineGroupKey,
+                codAmount: group.lines.every((line) => Boolean(line.deferredFromLineId))
+                  ? await deferredPackageCodAmount(group.orderId, group.lines)
+                  : await pickupAssignmentCodAmountAfterDeferrals(
+                      batch.id,
+                      group.lineGroupKey,
+                      group.orderId,
+                      "X_EXPRESS",
+                      orderItemIdsForGroup(group),
+                    ),
                 announceXExpress: false,
               });
       } catch (error) {
@@ -1444,7 +1755,10 @@ async function createMyGlsLabelsForPickupBatch(
     select: {
       labelsCreationStartedAt: true,
       labelsCreatedAt: true,
-      lines: { select: { lineGroupKey: true } },
+      lines: {
+        where: { deferredAt: null },
+        select: { lineGroupKey: true },
+      },
     },
   });
   if (existing?.labelsCreatedAt) {
@@ -1509,6 +1823,10 @@ async function createMyGlsLabelsForPickupBatch(
     if (!workGroups.length) {
       throw new Error("Nalog nema nijedan paket za MyGLS adresnicu.");
     }
+    assertFetchedPickupPackagesReady(
+      batch.lines,
+      Boolean(batch.labelsCreationStartedAt || batch.labelsCreatedAt),
+    );
     await assertPickupGroupsPaymentReady(workGroups);
 
     const workPlans: Array<{
@@ -1535,7 +1853,9 @@ async function createMyGlsLabelsForPickupBatch(
           ? 0
           : group.lines.every((line) => Boolean(line.deferredFromLineId))
             ? await deferredPackageCodAmount(group.orderId, group.lines)
-            : await pickupAssignmentCodAmount(
+            : await pickupAssignmentCodAmountAfterDeferrals(
+                batch.id,
+                group.lineGroupKey,
                 group.orderId,
                 "MYGLS",
                 orderItemIds,
@@ -1713,6 +2033,7 @@ export async function confirmMyGlsPickupAnnouncement(
             purpose: true,
             reclamationId: true,
             orderItemId: true,
+            deferredAt: true,
           },
         },
       },
@@ -1989,6 +2310,8 @@ type PickupWorkLine = {
   purpose: ShipmentPurpose;
   deferredFromLineId?: string | null;
   packageValue?: unknown;
+  deferredAt?: Date | null;
+  warehouseReadyAt?: Date | null;
 };
 
 type PickupWorkGroup<T extends PickupWorkLine = PickupWorkLine> = {
@@ -2002,6 +2325,7 @@ type PickupWorkGroup<T extends PickupWorkLine = PickupWorkLine> = {
 function pickupWorkGroups<T extends PickupWorkLine>(lines: readonly T[]) {
   const groups = new Map<string, PickupWorkGroup<T>>();
   for (const line of lines) {
+    if (line.deferredAt) continue;
     const current = groups.get(line.lineGroupKey);
     if (current) {
       if (
@@ -2027,6 +2351,21 @@ function pickupWorkGroups<T extends PickupWorkLine>(lines: readonly T[]) {
   return [...groups.values()];
 }
 
+function assertFetchedPickupPackagesReady(
+  lines: readonly PickupWorkLine[],
+  allowLegacyRecovery: boolean,
+) {
+  if (allowLegacyRecovery) return;
+  const unready = lines.filter(
+    (line) => !line.deferredAt && !line.warehouseReadyAt,
+  );
+  if (unready.length) {
+    throw new Error(
+      `${unready.length} aktivnih paketa nije potvrđeno kao spremno. Slanje kuriru je zaustavljeno pre API poziva.`,
+    );
+  }
+}
+
 async function deferredPackageCodAmount(
   orderId: string,
   lines: readonly PickupWorkLine[],
@@ -2044,6 +2383,35 @@ async function deferredPackageCodAmount(
         0,
       ) * 100,
     ) / 100
+  );
+}
+
+async function pickupAssignmentCodAmountAfterDeferrals(
+  batchId: string,
+  lineGroupKey: string,
+  orderId: string,
+  provider: SmallParcelProvider,
+  assignedOrderItemIds: readonly string[],
+) {
+  const fullAssignmentCod = await pickupAssignmentCodAmount(
+    orderId,
+    provider,
+    assignedOrderItemIds,
+  );
+  if (!fullAssignmentCod) return 0;
+  const deferred = await db.pickupBatchLine.aggregate({
+    where: {
+      batchId,
+      lineGroupKey,
+      orderId,
+      deferredAt: { not: null },
+    },
+    _sum: { packageValue: true },
+  });
+  const deferredValue = Number(deferred._sum.packageValue ?? 0);
+  return Math.max(
+    0,
+    Math.round((fullAssignmentCod - deferredValue) * 100) / 100,
   );
 }
 
@@ -2126,7 +2494,8 @@ function samePickupAssignment(raw: unknown, group: PickupWorkGroup) {
   const itemIds = orderItemIdsForGroup(group);
   if (!itemIds.length) return false;
   const assignment = readShipmentAssignment(raw);
-  return assignment == null || sameShipmentAssignment(raw, itemIds);
+  return assignment == null ||
+    sameShipmentAssignment(raw, itemIds, assignment.assignmentKey ? group.lineGroupKey : undefined);
 }
 
 function courierRouteItem(item: {

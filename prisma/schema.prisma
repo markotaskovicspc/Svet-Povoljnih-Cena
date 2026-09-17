@@ -2846,6 +2846,10 @@ model PickupBatchLine {
   /// Every package in one lineGroupKey is updated together.
   courierPickedUpAt        DateTime?
   courierPickedUpById      String?
+  /// Explicit warehouse confirmation before any provider labels are created.
+  /// A future barcode scan writes the same fields.
+  warehouseReadyAt         DateTime?
+  warehouseReadyById       String?
   /// Exact provider identity for this physical package. New MyGLS labels use
   /// one provider parcel per sold unit so cancellation never relies on array
   /// position or a PDF label order.
@@ -2884,6 +2888,7 @@ model PickupBatchLine {
   @@index([shipmentId])
   @@index([providerParcelNumber])
   @@index([deferredAt, rescheduledAt])
+  @@index([batchId, deferredAt, warehouseReadyAt])
   @@index([deferredFromLineId])
 }
 

@@ -220,7 +220,19 @@ describe("X Express shipment persistence", () => {
       },
     });
     batchId = batch.id;
-    await expect(postPickupBatches([batch.id], "integration-test")).resolves.toEqual({
+    await expect(
+      postPickupBatches([batch.id], "integration-test"),
+    ).rejects.toThrow("nije potvrđeno kao spremno");
+    await db.pickupBatchLine.updateMany({
+      where: { batchId: batch.id },
+      data: {
+        warehouseReadyAt: new Date(),
+        warehouseReadyById: "integration-test",
+      },
+    });
+    await expect(
+      postPickupBatches([batch.id], "integration-test"),
+    ).resolves.toEqual({
       posted: 1,
       shipmentCount: 1,
       labelsPrepared: 0,

@@ -12,11 +12,15 @@ import type { AdminActionState } from "@/lib/admin/action-state";
 import { requireAdminAction, withAdminState } from "@/lib/admin";
 import {
   deletePickupBatches,
+  confirmAllPickupPackagesReady,
+  deferPickupPackageBeforeBooking,
   getPickupPostingAvailability,
   loadEligibleOrders,
   postPickupBatches,
   removePickupGroupFromBatch,
+  rescheduleDeferredPickupPackage,
   savePickupPackage,
+  setPickupPackageReady,
 } from "@/lib/admin/pickup-batch.server";
 import {
   deferMyGlsPickupPackage,
@@ -46,6 +50,9 @@ const batchSchema = z.object({ batchId: z.string().min(1) });
 const packageLineSchema = z.object({
   batchId: z.string().min(1),
   lineId: z.string().min(1),
+});
+const packageReadySchema = packageLineSchema.extend({
+  ready: z.enum(["1", "0"]),
 });
 const removeGroupSchema = batchSchema.extend({ lineGroupKey: z.string().min(1) });
 const packageSchema = batchSchema.extend({
@@ -280,6 +287,127 @@ async function reschedulePackageAction(
   )(formData);
 }
 
+async function setPackageReadyAction(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+  return withAdminState(
+    {
+      allowed: ["OPS"],
+      action: "pickup-batch.package.ready",
+      entity: "PickupBatchLine",
+    },
+    async (actorId, actionData: FormData) => {
+      const parsed = packageReadySchema.safeParse(
+        Object.fromEntries(actionData.entries()),
+      );
+      if (!parsed.success) {
+        return { ok: false as const, error: "Paket nije izabran." };
+      }
+      await setPickupPackageReady(
+        parsed.data.batchId,
+        parsed.data.lineId,
+        parsed.data.ready === "1",
+        actorId,
+      );
+      revalidatePickupPaths(parsed.data.batchId);
+      return {
+        ok: true as const,
+        entityId: parsed.data.lineId,
+        message:
+          parsed.data.ready === "1"
+            ? "Paket je potvrđen kao spreman."
+            : "Paket je vraćen na proveru.",
+      };
+    },
+  )(formData);
+}
+
+async function confirmAllReadyAction(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+  return withAdminState(
+    {
+      allowed: ["OPS"],
+      action: "pickup-batch.packages.ready-all",
+      entity: "PickupBatch",
+    },
+    async (actorId, actionData: FormData) => {
+      const parsed = batchSchema.safeParse(Object.fromEntries(actionData.entries()));
+      if (!parsed.success) return { ok: false as const, error: "Nalog nije izabran." };
+      const result = await confirmAllPickupPackagesReady(parsed.data.batchId, actorId);
+      revalidatePickupPaths(parsed.data.batchId);
+      return {
+        ok: true as const,
+        entityId: parsed.data.batchId,
+        diff: result,
+        message: `Potvrđeno je ${result.readyCount} spremnih paketa.`,
+      };
+    },
+  )(formData);
+}
+
+async function deferBeforeBookingAction(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+  return withAdminState(
+    {
+      allowed: ["OPS"],
+      action: "pickup-batch.package.defer-before-booking",
+      entity: "PickupBatchLine",
+    },
+    async (actorId, actionData: FormData) => {
+      const parsed = packageLineSchema.safeParse(Object.fromEntries(actionData.entries()));
+      if (!parsed.success) return { ok: false as const, error: "Paket nije izabran." };
+      await deferPickupPackageBeforeBooking(
+        parsed.data.batchId,
+        parsed.data.lineId,
+        actorId,
+      );
+      revalidatePickupPaths(parsed.data.batchId);
+      return {
+        ok: true as const,
+        entityId: parsed.data.lineId,
+        message: "Nespreman paket je odložen; rezervacija porudžbine ostaje aktivna.",
+      };
+    },
+  )(formData);
+}
+
+async function rescheduleBeforeBookingAction(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+  return withAdminState(
+    {
+      allowed: ["OPS"],
+      action: "pickup-batch.package.restore-before-booking",
+      entity: "PickupBatchLine",
+    },
+    async (actorId, actionData: FormData) => {
+      const parsed = packageLineSchema.safeParse(Object.fromEntries(actionData.entries()));
+      if (!parsed.success) return { ok: false as const, error: "Paket nije izabran." };
+      const result = await rescheduleDeferredPickupPackage(parsed.data.lineId, actorId);
+      revalidatePickupPaths(parsed.data.batchId);
+      revalidatePath(`/admin/erp/preuzimanja/${result.batchId}`);
+      return {
+        ok: true as const,
+        entityId: parsed.data.lineId,
+        diff: result,
+        message: result.restored
+          ? "Paket je vraćen u aktivni picking nalog."
+          : `Paket je dodat u novi picking nalog ${result.batchNumber}.`,
+      };
+    },
+  )(formData);
+}
+
 export default async function PickupBatchPage({
   params,
   searchParams,
@@ -382,7 +510,16 @@ export default async function PickupBatchPage({
         }),
     );
   const pickingGroups = aggregatePickupGroups(rows);
-  const handoverProgress = pickupBatchHandoverProgress(rows);
+  const activeRows = rows.filter((row) => !row.deferredAt);
+  const readinessGateEnabled =
+    !batch.labelsCreationStartedAt && !batch.labelsCreatedAt;
+  const readyPackageCount = readinessGateEnabled
+    ? activeRows.filter((row) => row.warehouseReadyAt).length
+    : activeRows.length;
+  const unreadyPackageCount = readinessGateEnabled
+    ? activeRows.length - readyPackageCount
+    : 0;
+  const handoverProgress = pickupBatchHandoverProgress(activeRows);
   const handoverStatus = pickupBatchDisplayStatus(
     batch.status,
     handoverProgress,
@@ -400,8 +537,8 @@ export default async function PickupBatchPage({
         pickedUpPackages: handoverProgress.totalPackages,
       }
     : handoverProgress;
-  const completePackageCount = rows.filter((row) => row.measurementsComplete).length;
-  const invalidPackageCount = rows.filter((row) =>
+  const completePackageCount = activeRows.filter((row) => row.measurementsComplete).length;
+  const invalidPackageCount = activeRows.filter((row) =>
     myGls
       ? hasKnownMyGlsHardLimitViolation(row)
       : hasKnownXExpressHardLimitViolation(row),
@@ -414,13 +551,15 @@ export default async function PickupBatchPage({
   const previousPostingIssue = batch.labelsCreationStartedAt
     ? batch.configurationIssue
     : null;
-  const postingBlockReason = unreadyReplacementCount
+  const postingBlockReason = unreadyPackageCount
+    ? `${unreadyPackageCount} aktivnih paketa nije potvrđeno kao spremno. Potvrdite ih ili odložite pre slanja kuriru.`
+    : unreadyReplacementCount
     ? `${unreadyReplacementCount} zamena još nema status magacina „Spremno“. Otvorite reklamaciju i završite pripremu pre knjiženja.`
     : pickupPostingBlockReason({
         configurationIssue: null,
         providerReason: posting.reason,
         provider: posting.provider,
-        rowCount: rows.length,
+        rowCount: activeRows.length,
         completePackageCount,
         invalidPackageCount,
       });
@@ -430,7 +569,7 @@ export default async function PickupBatchPage({
     <>
       <PageHeader
         title={`Nalog za preuzimanje ${batch.number}`}
-        description={`${handoverStatus} · ${pickingGroups.length} picking grupa · ${rows.length} paketa`}
+        description={`${handoverStatus} · ${pickingGroups.length} picking grupa · ${activeRows.length} aktivnih paketa${rows.length !== activeRows.length ? ` · ${rows.length - activeRows.length} odloženo` : ""}`}
         crumbs={[
           { href: "/admin", label: "Admin" },
           { href: "/admin/erp", label: "ERP" },
@@ -507,6 +646,17 @@ export default async function PickupBatchPage({
                 Obriši
               </SubmitButton>
             </AdminActionForm>
+            <AdminActionForm action={confirmAllReadyAction}>
+              <input type="hidden" name="batchId" value={batch.id} />
+              <SubmitButton
+                variant="outline"
+                disabled={!editable || !activeRows.length || unreadyPackageCount === 0}
+                pendingLabel="Potvrđivanje…"
+                confirm={`Potvrđujete da je svih ${activeRows.length} aktivnih paketa fizički spremno za predaju kuriru?`}
+              >
+                Sve je spremno
+              </SubmitButton>
+            </AdminActionForm>
             <AdminActionForm
               action={postAction}
               successPopupUrl={`/admin/erp/preuzimanja/${batch.id}/stampa?section=labels`}
@@ -517,10 +667,11 @@ export default async function PickupBatchPage({
                 variant="outline"
                 disabled={
                   !canPost ||
-                  !rows.length ||
+                  !activeRows.length ||
                   !posting.available ||
+                  unreadyPackageCount > 0 ||
                   unreadyReplacementCount > 0 ||
-                  completePackageCount !== rows.length ||
+                  completePackageCount !== activeRows.length ||
                   invalidPackageCount > 0
                 }
                 pendingLabel="Slanje kuriru…"
@@ -590,7 +741,7 @@ export default async function PickupBatchPage({
           {myGls && batch.labelsCreatedAt ? (
             <div className="mb-4 rounded-lg border border-success/25 bg-success/10 px-3 py-3 text-sm text-success">
               <p className="font-semibold">
-                Aktivne GLS adresnice u ovom nalogu: {rows.length} ({rows.length} paketa).
+                Aktivne GLS adresnice u ovom nalogu: {activeRows.length} ({activeRows.length} paketa).
               </p>
               <p className="mt-1 leading-6">
                 MyGLS portal može prikazati veći istorijski zbir ako je neka
@@ -604,10 +755,17 @@ export default async function PickupBatchPage({
               {myGls ? "Redosled za MyGLS" : "Redosled za X Express"}
             </p>
             <p className="mt-1 leading-6">
-              1. Učitajte porudžbine i proverite stvarne mere. 2. Kliknite
-              „Kreiraj adresnice i pošalji“. 3. Sistem prvo proverava sve
-              pošiljke, zatim kreira adresnice i proknjižava nalog. 4. Otvorite
+              1. Učitajte porudžbine i proverite stvarne mere. 2. Magacioner potvrđuje
+              spremne pakete ili odlaže one koji nedostaju. 3. Kliknite
+              „Kreiraj adresnice i pošalji“. Sistem blokira slanje ako neki aktivan
+              paket nije potvrđen. 4. Otvorite
               „Kurirske adresnice“, odštampajte ih i zalepite na pakete.
+            </p>
+            <p className="mt-2 font-medium">
+              Spremno: {readyPackageCount}/{activeRows.length} aktivnih paketa
+              {rows.length !== activeRows.length
+                ? ` · odloženo: ${rows.length - activeRows.length}`
+                : ""}
             </p>
           </div>
           {showCourierHandoverStatus ? (
@@ -699,7 +857,7 @@ export default async function PickupBatchPage({
                     <th className="px-3 py-3">Izvor</th>
                     <th className="px-3 py-3">Artikli za picking</th>
                     <th className="px-3 py-3 text-right">Paketa</th>
-                    <th className="px-3 py-3">Stvarne mere paketa</th>
+                    <th className="px-3 py-3">Mere i spremnost paketa</th>
                     {showCourierHandoverStatus ? (
                       <th className="px-3 py-3 text-center">Status kurira</th>
                     ) : null}
@@ -764,7 +922,11 @@ export default async function PickupBatchPage({
                         {group.rows.length}
                       </td>
                       <td className="px-3 py-3">
-                        <details open={group.rows.some((row) => !row.measurementsComplete)}>
+                        <details open={group.rows.some((row) =>
+                          !row.measurementsComplete ||
+                          (!row.deferredAt && !row.warehouseReadyAt) ||
+                          (Boolean(row.deferredAt) && !row.rescheduledAt)
+                        )}>
                           <summary className="cursor-pointer font-medium">
                             {group.completePackageCount}/{group.rows.length} kompletno
                           </summary>
@@ -801,12 +963,12 @@ export default async function PickupBatchPage({
                                           ? "Preuzeo kurir"
                                           : row.providerParcelNumber
                                             ? "Čeka preuzimanje"
-                                            : "Čeka GLS adresnicu"}
+                                            : "Čeka kurirsku adresnicu"}
                                     </p>
                                     {row.cancellationError ? (
                                       <p className="mt-1 text-xs text-danger">{row.cancellationError}</p>
                                     ) : null}
-                                    {myGls && row.deferredAt && !row.rescheduledAt ? (
+                                    {myGls && row.deferredAt && row.shipmentId && !row.rescheduledAt ? (
                                       <AdminActionForm action={reschedulePackageAction} className="mt-2">
                                         <input type="hidden" name="batchId" value={batch.id} />
                                         <input type="hidden" name="lineId" value={row.lineId} />
@@ -825,6 +987,42 @@ export default async function PickupBatchPage({
                                     ) : null}
                                   </div>
                                 )}
+                                {!row.deferredAt && (editable || row.warehouseReadyAt) ? (
+                                  <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-muted-bg/60 p-2">
+                                    <span className={row.warehouseReadyAt ? "text-xs font-semibold text-success" : "text-xs font-semibold text-warning"}>
+                                      {row.warehouseReadyAt
+                                        ? `Magacin potvrdio spremnost · ${formatDateTime(row.warehouseReadyAt)}`
+                                        : "Nije potvrđeno da je paket spreman"}
+                                    </span>
+                                    {editable ? (
+                                      <AdminActionForm action={setPackageReadyAction}>
+                                        <input type="hidden" name="batchId" value={batch.id} />
+                                        <input type="hidden" name="lineId" value={row.lineId} />
+                                        <input type="hidden" name="ready" value={row.warehouseReadyAt ? "0" : "1"} />
+                                        <SubmitButton size="xs" variant="outline" pendingLabel="Čuvanje…" disabled={!row.measurementsComplete}>
+                                          {row.warehouseReadyAt ? "Vrati na proveru" : "Paket je spreman"}
+                                        </SubmitButton>
+                                      </AdminActionForm>
+                                    ) : null}
+                                    {editable && row.purpose === "ORDER_DELIVERY" ? (
+                                      <AdminActionForm action={deferBeforeBookingAction}>
+                                        <input type="hidden" name="batchId" value={batch.id} />
+                                        <input type="hidden" name="lineId" value={row.lineId} />
+                                        <SubmitButton size="xs" variant="destructive" pendingLabel="Odlaganje…" confirm="Ovaj paket nije spreman. Odložiti ga iz trenutne isporuke, ali sačuvati rezervaciju artikla za kasnije zakazivanje?">
+                                          Nije spreman — odloži
+                                        </SubmitButton>
+                                      </AdminActionForm>
+                                    ) : null}
+                                  </div>
+                                ) : row.deferredAt && !row.shipmentId && !row.rescheduledAt ? (
+                                  <AdminActionForm action={rescheduleBeforeBookingAction} className="mt-2">
+                                    <input type="hidden" name="batchId" value={batch.id} />
+                                    <input type="hidden" name="lineId" value={row.lineId} />
+                                    <SubmitButton size="xs" pendingLabel="Vraćanje…" confirm="Vratiti odloženi paket u aktivni picking? Pre slanja će ponovo morati da bude potvrđen kao spreman.">
+                                      Vrati u picking
+                                    </SubmitButton>
+                                  </AdminActionForm>
+                                ) : null}
                                 {myGls && hasKnownMyGlsHardLimitViolation(row) ? (
                                   <p className="mt-1 text-xs text-warning">
                                     Stvarne mere prelaze MyGLS granicu od 40 kg ili 200 cm. Ispravite mere pre kreiranja adresnice.
@@ -945,6 +1143,9 @@ function pickupLineRow(line: {
   cancellationError: string | null;
   deferredAt: Date | null;
   rescheduledAt: Date | null;
+  shipmentId: string | null;
+  warehouseReadyAt: Date | null;
+  warehouseReadyById: string | null;
   order: { id: string; number: string };
   reclamation: {
     number: string;
@@ -1036,6 +1237,9 @@ function pickupLineRow(line: {
     cancellationError: line.cancellationError,
     deferredAt: line.deferredAt,
     rescheduledAt: line.rescheduledAt,
+    shipmentId: line.shipmentId,
+    warehouseReadyAt: line.warehouseReadyAt,
+    warehouseReadyById: line.warehouseReadyById,
     courierStatus: line.providerStatusCode ?? courier?.status ?? null,
     courierStatusLabel: line.providerStatusLabel ?? courier?.label ?? null,
     courierStatusAt: line.providerStatusAt ?? courier?.statusAt ?? null,

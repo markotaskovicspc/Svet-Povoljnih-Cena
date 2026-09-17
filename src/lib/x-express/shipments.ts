@@ -46,6 +46,7 @@ export async function createXExpressShipmentForOrder(
     codAmount?: number;
     packageMasses?: number[];
     supplierFulfillmentId?: string;
+    assignmentKey?: string;
     pickupOverride?: XExpressConfig["pickup"];
   } = {},
 ) {
@@ -156,6 +157,7 @@ export async function createXExpressShipmentForOrder(
         sameShipmentAssignment(
           shipment.rawCreateResponse,
           assignmentOrderItemIds,
+          options.assignmentKey,
         )),
   );
   assertFulfillmentPaymentReady({
@@ -268,6 +270,7 @@ export async function createXExpressShipmentForOrder(
       orderItemIds: assignmentOrderItemIds,
       codAmount,
       supplierFulfillmentId: options.supplierFulfillmentId,
+      assignmentKey: options.assignmentKey,
     });
     const data = {
       provider: X_EXPRESS_PROVIDER,
@@ -345,6 +348,7 @@ export async function createXExpressShipmentForOrder(
       orderItemIds: assignmentOrderItemIds,
       codAmount,
       supplierFulfillmentId: options.supplierFulfillmentId,
+      assignmentKey: options.assignmentKey,
     });
     throw err;
   }
@@ -589,11 +593,13 @@ async function persistFailedShipment(args: {
   orderItemIds: string[];
   codAmount: number;
   supplierFulfillmentId?: string;
+  assignmentKey?: string;
 }) {
   const rawCreateResponse = withShipmentAssignment(args.raw, {
     orderItemIds: args.orderItemIds,
     codAmount: args.codAmount,
     supplierFulfillmentId: args.supplierFulfillmentId,
+    assignmentKey: args.assignmentKey,
   });
   const event = {
     status: "FAILED" as const,

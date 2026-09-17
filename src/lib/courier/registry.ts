@@ -352,6 +352,7 @@ async function processShipmentForOrder(
       orderItemIds: requestedOrderItemIds,
       codAmount: options.codAmount,
       supplierFulfillmentId: supplierFulfillment?.id,
+      assignmentKey: options.assignmentKey,
       pickupOverride:
         supplierPickup?.provider === "X_EXPRESS" ? supplierPickup.pickup : undefined,
     });
@@ -857,12 +858,17 @@ async function reconcilePickupBatchesFromShipment(
             orderItemId: true,
             reclamationId: true,
             purpose: true,
+            deferredAt: true,
           },
         },
       },
     });
     if (!batch) continue;
+    const shipmentAssignment = readShipmentAssignment(
+      shipment.rawCreateResponse,
+    );
     const matchingLines = batch.lines.filter((line) => {
+      if (line.deferredAt) return false;
       if (shipment.purpose === "RECLAMATION_REPLACEMENT") {
         return Boolean(
           shipment.reclamationId &&
@@ -875,7 +881,8 @@ async function reconcilePickupBatchesFromShipment(
         line.purpose === "ORDER_DELIVERY" &&
         line.orderId === shipment.orderId &&
         line.lineGroupKey ===
-          `order:${shipment.orderId}:${shipment.provider}`
+          (shipmentAssignment?.assignmentKey ??
+            `order:${shipment.orderId}:${shipment.provider}`)
       );
     });
     if (!matchingLines.length) continue;
@@ -886,13 +893,13 @@ async function reconcilePickupBatchesFromShipment(
           line.orderItemId ? [line.orderItemId] : [],
         ),
       );
-      const assignment = readShipmentAssignment(shipment.rawCreateResponse);
       if (
-        assignment &&
+        shipmentAssignment &&
         (!groupItemIds.length ||
           !sameShipmentAssignment(
             shipment.rawCreateResponse,
             groupItemIds,
+            shipmentAssignment.assignmentKey,
           ))
       ) {
         continue;
@@ -907,6 +914,7 @@ async function reconcilePickupBatchesFromShipment(
         batchId: batch.id,
         lineGroupKey: { in: groupKeys },
         courierPickedUpAt: null,
+        deferredAt: null,
       },
       data: {
         courierPickedUpAt: shipment.occurredAt,
@@ -914,7 +922,7 @@ async function reconcilePickupBatchesFromShipment(
       },
     });
     const remainingPackages = await tx.pickupBatchLine.count({
-      where: { batchId: batch.id, courierPickedUpAt: null },
+      where: { batchId: batch.id, courierPickedUpAt: null, deferredAt: null },
     });
     await tx.pickupBatch.updateMany({
       where: { id: batch.id, status: { in: ["BOOKED", "PICKED_UP"] } },
