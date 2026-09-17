@@ -9,6 +9,11 @@ import {
   CityAutocomplete,
   type CityAutocompletePlace,
 } from "@/components/forms/city-autocomplete";
+import {
+  HOUSE_NUMBER_ERROR,
+  isValidHouseNumber,
+  normalizeHouseNumber,
+} from "@/lib/address/house-number";
 
 /**
  * Step 2 — Shipping data.
@@ -274,9 +279,10 @@ function AddressFieldset({
         </>
       ) : (
         <Field
-          label="Adresa"
+          label="Ulica"
           required
-          className="col-span-2 lg:col-span-2"
+          className="col-span-1 lg:col-span-5"
+          placeholder="Naziv ulice"
           error={showError("street")}
           {...register(`${prefix}.street` as const, {
             required: "Obavezno polje",
@@ -284,6 +290,20 @@ function AddressFieldset({
           })}
         />
       )}
+      <Field
+        label="Kućni broj"
+        required
+        className={cn(xExpressAddressEnabled && "order-2", "lg:col-span-1")}
+        placeholder="12A ili bb"
+        autoComplete="address-line2"
+        maxLength={20}
+        error={showError("houseNumber")}
+        {...register(`${prefix}.houseNumber` as const, {
+          required: "Obavezno polje",
+          setValueAs: normalizeHouseNumber,
+          validate: (value) => isValidHouseNumber(value) || HOUSE_NUMBER_ERROR,
+        })}
+      />
       {/*
        * City + postal-code linked autocomplete (spec §32–35):
        * after ≥3 chars the user sees a list of Serbian places + postal
@@ -370,7 +390,10 @@ function AddressFieldset({
       <Field
         label="Poštanski broj"
         required
-        className={cn(xExpressAddressEnabled && "order-1", "lg:col-span-2")}
+        className={cn(
+          xExpressAddressEnabled && "order-1",
+          xExpressAddressEnabled ? "lg:col-span-1" : "lg:col-span-2",
+        )}
         placeholder="11000"
         inputMode="numeric"
         error={showError("postalCode")}
@@ -458,7 +481,7 @@ function XExpressStreetAutocomplete({
   return (
     <div className={cn("relative flex flex-col gap-1 lg:gap-1", className)}>
       <label htmlFor={inputId} className="text-xs font-medium text-ink-700">
-        Adresa<span className="text-action ml-0.5">*</span>
+        Ulica<span className="text-action ml-0.5">*</span>
       </label>
       <input
         id={inputId}
@@ -476,7 +499,7 @@ function XExpressStreetAutocomplete({
         aria-autocomplete="list"
         aria-invalid={Boolean(error) || undefined}
         aria-describedby={error ? `${inputId}-err` : undefined}
-        placeholder={townId ? "Ulica i broj" : "Prvo izaberite mesto"}
+        placeholder={townId ? "Izaberite ulicu" : "Prvo izaberite mesto"}
         className={cn(
           "ring-border/60 focus-visible:ring-walnut/40 bg-canvas h-10 w-full rounded-xl px-3 text-base text-ink-900 ring-1 transition placeholder:text-ink-300 md:h-11 md:text-sm lg:h-10",
           "focus-visible:ring-2 focus-visible:outline-none",

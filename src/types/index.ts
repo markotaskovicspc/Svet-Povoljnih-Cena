@@ -293,6 +293,7 @@ export interface Address {
   lastName: string;
   phone: string;
   street: string;
+  houseNumber?: string | null;
   city: CityName;
   postalCode: string;
   xExpressTownId?: number | null;

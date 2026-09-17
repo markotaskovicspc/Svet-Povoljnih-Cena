@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { splitStreetAndHouseNumber } from "@/lib/address/house-number";
 
 export const metadata: Metadata = {
   title: "Adrese",
@@ -41,6 +42,7 @@ function addressInputFromForm(formData: FormData): AddressInput | null {
     lastName: requiredText(formData.get("lastName")),
     phone: requiredText(formData.get("phone")),
     street: requiredText(formData.get("street")),
+    houseNumber: requiredText(formData.get("houseNumber")),
     city: requiredText(formData.get("city")),
     postalCode: requiredText(formData.get("postalCode")),
     xExpressTownId: optionalNumber(formData.get("xExpressTownId")),
@@ -92,13 +94,18 @@ async function setDefaultAddressAction(formData: FormData) {
 
   const existing = await getAddress(user.id, id);
   if (!existing) return;
+  const addressParts = splitStreetAndHouseNumber(
+    existing.street,
+    existing.houseNumber,
+  );
 
   await updateAddress(user.id, id, {
     label: existing.label ?? undefined,
     firstName: existing.firstName,
     lastName: existing.lastName,
     phone: existing.phone,
-    street: existing.street,
+    street: addressParts.street,
+    houseNumber: addressParts.houseNumber ?? "",
     city: existing.city,
     postalCode: existing.postalCode,
     xExpressTownId: existing.xExpressTownId ?? undefined,
@@ -155,7 +162,17 @@ export default async function AccountAddressesPage({
               <Field name="lastName" label="Prezime" autoComplete="family-name" required />
             </div>
             <Field name="phone" label="Telefon" autoComplete="tel" required />
-            <Field name="street" label="Ulica i broj" autoComplete="street-address" required />
+            <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_140px]">
+              <Field name="street" label="Ulica" autoComplete="address-line1" required />
+              <Field
+                name="houseNumber"
+                label="Kućni broj"
+                autoComplete="address-line2"
+                placeholder="12A ili bb"
+                maxLength={20}
+                required
+              />
+            </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field name="postalCode" label="Poštanski broj" inputMode="numeric" maxLength={5} required />
               <Field name="city" label="Grad" autoComplete="address-level2" required />

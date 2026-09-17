@@ -231,6 +231,7 @@ export async function createXExpressShipmentForOrder(
       recipientName,
       townId,
       street: order.shipStreet,
+      houseNumber: order.shipHouseNumber,
       officialStreetName: officialStreet?.name,
     });
     const addressCheck = await client.checkAddress(addressCheckPayload);

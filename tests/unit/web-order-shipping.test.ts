@@ -31,7 +31,8 @@ describe("WEB order shipping contact editing", () => {
         postalCode: "16000",
       }),
     ).toEqual({
-      street: "29. Novembra 11",
+      street: "29. Novembra (11)",
+      houseNumber: "11",
       city: "Leskovac",
       postalCode: "16000",
     });

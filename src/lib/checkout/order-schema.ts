@@ -1,5 +1,10 @@
 import { z } from "zod";
 import { missingBusinessAddressFields } from "./business-policy";
+import {
+  HOUSE_NUMBER_ERROR,
+  isValidHouseNumber,
+  normalizeHouseNumber,
+} from "@/lib/address/house-number";
 
 const lineSchema = z.object({
   sku: z.string().min(1),
@@ -14,6 +19,10 @@ const addressSchema = z
     lastName: z.string().min(2),
     phone: z.string().min(8).max(32),
     street: z.string().min(3),
+    houseNumber: z.preprocess(
+      normalizeHouseNumber,
+      z.string().max(20).refine(isValidHouseNumber, HOUSE_NUMBER_ERROR),
+    ),
     city: z.string().min(2),
     postalCode: z.string().regex(/^\d{5}$/),
     xExpressTownId: z.coerce.number().int().positive().optional().nullable(),

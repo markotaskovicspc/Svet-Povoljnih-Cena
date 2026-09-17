@@ -4,6 +4,11 @@
  * Will be reused server-side in Phase 3 when the create-order route handler lands.
  */
 import { z } from "zod";
+import {
+  HOUSE_NUMBER_ERROR,
+  isValidHouseNumber,
+  normalizeHouseNumber,
+} from "@/lib/address/house-number";
 
 /** Serbian mobile number: digits only, 9-10 chars, must start with 06. */
 const phoneRegex = /^06\d{7,8}$/;
@@ -30,6 +35,10 @@ const baseAddress = z.object({
     .string({ message: "Obavezno polje" })
     .trim()
     .min(3, "Adresa je prekratka"),
+  houseNumber: z.preprocess(
+    normalizeHouseNumber,
+    z.string().max(20).refine(isValidHouseNumber, HOUSE_NUMBER_ERROR),
+  ),
   city: z
     .string({ message: "Obavezno polje" })
     .trim()

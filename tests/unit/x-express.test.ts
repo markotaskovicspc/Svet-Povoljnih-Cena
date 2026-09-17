@@ -83,7 +83,8 @@ const order = {
   shipFirstName: "Petar",
   shipLastName: "Petrović",
   shipPhone: "064/222-33-44",
-  shipStreet: "Bulevar oslobođenja 10A",
+  shipStreet: "Bulevar oslobođenja (10A)",
+  shipHouseNumber: "10A",
   shipCompanyName: null,
   notes: "Pozvati pre isporuke",
   guestEmail: "petar@example.invalid",
@@ -165,8 +166,8 @@ describe("X Express official API contract", () => {
       Name: "Petar Petrović",
       TownId: 791113,
       StreetName: "Bulevar oslobođenja",
-      StreetNumber: "10A",
-      Description: null,
+      StreetNumber: "10",
+      Description: "Kućni broj (10A)",
     });
   });
 
@@ -210,7 +211,7 @@ describe("X Express official API contract", () => {
     expect(payload.Waypoints[1]?.Address).toMatchObject({
       TownId: 791113,
       StreetName: "Bulevar oslobođenja",
-      StreetNumber: "10A",
+      StreetNumber: "10",
     });
     expect(payload.Waypoints[2]?.Address).not.toHaveProperty("Latitude");
     expect(payload.Options).toEqual([
@@ -387,7 +388,7 @@ describe("X Express official API contract", () => {
     expect(payload.Recipient.Name).toBe("Kupac i partner maloprodaja");
     expect(payload.Content).toBe("LED 10 5W i zidna lampa");
     expect(payload.Waypoints[1]?.Address.Description).toBe(
-      "Isporuka webshop porudžbine",
+      "Isporuka - kućni broj (10A)",
     );
     expect(JSON.stringify(payload)).not.toContain("Pozvati");
     expect(payload.Options?.[0]?.Data.Address).toBe(
@@ -447,7 +448,7 @@ describe("X Express official API contract", () => {
       sentCreatePayload.Waypoints.find(
         (waypoint) => waypoint.WaypointType === "DELIVERY",
       )?.Address.Description,
-    ).toBe("Isporuka webshop porudžbine");
+    ).toBe("Isporuka - kućni broj (10A)");
     expect(JSON.stringify(sentCreatePayload)).not.toContain(
       "Pozvati pre isporuke",
     );
@@ -617,7 +618,7 @@ describe("X Express codes, label and webhook envelope", () => {
     expect(html).not.toContain("DC magacin");
     expect(html).not.toContain("381641234567");
     expect(html).toContain("Petrović enterijer DOO");
-    expect(html).toContain("Bulevar oslobođenja 10A");
+    expect(html).toContain("Bulevar oslobođenja (10A)");
     expect(html).not.toContain("Naknadno promenjena adresa 99");
     expect(html).toContain("BG-ZE-4");
     expect(html).toContain("1/2");

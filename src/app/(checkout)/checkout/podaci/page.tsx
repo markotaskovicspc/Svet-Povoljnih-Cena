@@ -16,6 +16,7 @@ import {
 import type { LoginErrorCode } from "@/app/(account)/nalog/prijava/form";
 import type { RegistrationErrorCode } from "@/app/(account)/nalog/registracija/form";
 import { isFirstPurchaseDiscountEligible } from "@/lib/checkout/first-purchase.server";
+import { splitStreetAndHouseNumber } from "@/lib/address/house-number";
 
 export const metadata: Metadata = {
   title: "Završetak porudžbine",
@@ -49,6 +50,12 @@ export default async function CheckoutPodaciPage({
     isCustomer ? isFirstPurchaseDiscountEligible(user.id) : false,
   ]);
   const defaultAddress = addresses[0];
+  const defaultAddressParts = defaultAddress
+    ? splitStreetAndHouseNumber(
+        defaultAddress.street,
+        defaultAddress.houseNumber,
+      )
+    : null;
   const accountFullName = [account?.firstName, account?.lastName]
     .filter(Boolean)
     .join(" ");
@@ -121,7 +128,10 @@ export default async function CheckoutPodaciPage({
                         firstName: defaultAddress.firstName,
                         lastName: defaultAddress.lastName,
                         phone: defaultAddress.phone,
-                        street: defaultAddress.street,
+                        street:
+                          defaultAddressParts?.street ?? defaultAddress.street,
+                        houseNumber:
+                          defaultAddressParts?.houseNumber ?? "",
                         city: defaultAddress.city,
                         postalCode: defaultAddress.postalCode,
                         xExpressTownId:

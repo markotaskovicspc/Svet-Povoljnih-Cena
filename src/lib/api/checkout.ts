@@ -48,6 +48,7 @@ import { checkoutBusinessIdentityMatchesOrder } from "@/lib/checkout/business-po
 import { isFirstPurchaseDiscountEligible } from "@/lib/checkout/first-purchase.server";
 import { resolveDocumentBuyerAddress } from "@/lib/document-buyer";
 import type { CreateOrderInput } from "@/lib/checkout/order-schema";
+import { formatStreetAddress } from "@/lib/address/house-number";
 export { createOrderSchema } from "@/lib/checkout/order-schema";
 export type { CreateOrderInput } from "@/lib/checkout/order-schema";
 
@@ -218,6 +219,7 @@ async function saveLatestCheckoutAddress(
     lastName: string;
     phone: string;
     street: string;
+    houseNumber: string;
     city: string;
     postalCode: string;
     xExpressTownId?: number | null;
@@ -634,6 +636,10 @@ export async function createOrder(
 
   const ship = input.shipping;
   const bill = input.billingSameAsShipping ? null : (input.billing ?? null);
+  const shipStreet = formatStreetAddress(ship.street, ship.houseNumber);
+  const billStreet = bill
+    ? formatStreetAddress(bill.street, bill.houseNumber)
+    : null;
   const shipIsBusiness =
     ship.liceType === "pravno" ||
     (!ship.liceType && Boolean(ship.companyName || ship.pib));
@@ -711,7 +717,7 @@ export async function createOrder(
     firstName: ship.firstName,
     lastName: ship.lastName,
     phone: ship.phone,
-    street: ship.street,
+    street: shipStreet,
     city: xExpressTown?.name ?? ship.city,
     postalCode: xExpressTown?.postalCode ?? ship.postalCode,
     country: ship.country,
@@ -723,7 +729,7 @@ export async function createOrder(
         firstName: bill.firstName,
         lastName: bill.lastName,
         phone: bill.phone,
-        street: bill.street,
+        street: billStreet!,
         city: bill.city,
         postalCode: bill.postalCode,
         country: bill.country,
@@ -760,7 +766,8 @@ export async function createOrder(
             firstName: ship.firstName,
             lastName: ship.lastName,
             phone: ship.phone,
-            street: ship.street,
+            street: shipStreet,
+            houseNumber: ship.houseNumber,
             city: xExpressTown?.name ?? ship.city,
             postalCode: xExpressTown?.postalCode ?? ship.postalCode,
             xExpressTownId: xExpressTown?.id ?? null,
@@ -830,7 +837,8 @@ export async function createOrder(
           shipFirstName: ship.firstName,
           shipLastName: ship.lastName,
           shipPhone: ship.phone,
-          shipStreet: ship.street,
+          shipStreet,
+          shipHouseNumber: ship.houseNumber,
           shipCity: xExpressTown?.name ?? ship.city,
           shipPostalCode: xExpressTown?.postalCode ?? ship.postalCode,
           shipXExpressTownId: xExpressTown?.id ?? null,
@@ -846,7 +854,8 @@ export async function createOrder(
           billingSameAsShipping: input.billingSameAsShipping,
           billFirstName: bill?.firstName ?? null,
           billLastName: bill?.lastName ?? null,
-          billStreet: bill?.street ?? null,
+          billStreet,
+          billHouseNumber: bill?.houseNumber ?? null,
           billCity: bill?.city ?? null,
           billPostalCode: bill?.postalCode ?? null,
           billXExpressTownId: bill?.xExpressTownId ?? null,
@@ -889,7 +898,8 @@ export async function createOrder(
         firstName: ship.firstName,
         lastName: ship.lastName,
         phone: ship.phone,
-        street: ship.street,
+        street: shipStreet,
+        houseNumber: ship.houseNumber,
         city: xExpressTown?.name ?? ship.city,
         postalCode: xExpressTown?.postalCode ?? ship.postalCode,
         xExpressTownId: xExpressTown?.id ?? null,

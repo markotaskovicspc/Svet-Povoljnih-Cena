@@ -71,6 +71,7 @@ export type XExpressLabelData = {
     phone: string;
     streetName: string;
     streetNumber: string;
+    originalHouseNumber?: string;
     city: string;
     postalCode: string;
   };
@@ -92,6 +93,9 @@ export function buildXExpressLabelData(args: {
     throw new Error("X Express API zahtev nema pickup i delivery podatke za etiketu.");
   }
   const codAmount = args.payload.Options?.find((option) => option.OptionTypeId === 2)?.Data.Amount ?? 0;
+  const originalHouseNumber = delivery.Address.Description?.match(
+    /kućni broj \(([^)]+)\)/iu,
+  )?.[1];
   return {
     version: 1,
     source: "X_EXPRESS_API_PAYLOAD",
@@ -110,6 +114,7 @@ export function buildXExpressLabelData(args: {
       phone: args.payload.Recipient.Phone,
       streetName: delivery.Address.StreetName,
       streetNumber: delivery.Address.StreetNumber,
+      ...(originalHouseNumber ? { originalHouseNumber } : {}),
       city: args.deliveryCity,
       postalCode: args.deliveryPostalCode,
     },
@@ -268,7 +273,9 @@ function renderLabel(
     ? `${sender.streetName} ${sender.streetNumber}, ${joinPostalCity(sender.postalCode, sender.city)}`
     : MERCHANT_LEGAL_INFO.shortAddress;
   const recipientAddress = recipient
-    ? `${recipient.streetName} ${recipient.streetNumber}`
+    ? recipient.originalHouseNumber
+      ? `${recipient.streetName} (${recipient.originalHouseNumber})`
+      : `${recipient.streetName} ${recipient.streetNumber}`
     : order.shipStreet;
   const recipientPostalCity = recipient
     ? joinPostalCity(recipient.postalCode, recipient.city)

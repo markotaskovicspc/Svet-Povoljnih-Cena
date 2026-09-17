@@ -1,6 +1,12 @@
 import "server-only";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import {
+  HOUSE_NUMBER_ERROR,
+  formatStreetAddress,
+  isValidHouseNumber,
+  normalizeHouseNumber,
+} from "@/lib/address/house-number";
 
 /**
  * Address book CRUD for `/nalog/adrese`.
@@ -14,6 +20,10 @@ export const addressSchema = z.object({
   lastName: z.string().trim().min(2).max(80),
   phone: z.string().trim().min(8).max(32),
   street: z.string().trim().min(3).max(200),
+  houseNumber: z.preprocess(
+    normalizeHouseNumber,
+    z.string().max(20).refine(isValidHouseNumber, HOUSE_NUMBER_ERROR),
+  ),
   city: z.string().trim().min(2).max(80),
   postalCode: z.string().trim().regex(/^\d{5}$/),
   xExpressTownId: z.coerce.number().int().positive().optional().nullable(),
@@ -39,6 +49,7 @@ export async function getAddress(userId: string, id: string) {
 
 export async function createAddress(userId: string, input: AddressInput) {
   const data = addressSchema.parse(input);
+  data.street = formatStreetAddress(data.street, data.houseNumber);
   return db.$transaction(async (tx) => {
     if (data.isDefault) {
       await tx.address.updateMany({ where: { userId }, data: { isDefault: false } });
@@ -52,6 +63,7 @@ export async function createAddress(userId: string, input: AddressInput) {
 
 export async function updateAddress(userId: string, id: string, input: AddressInput) {
   const data = addressSchema.parse(input);
+  data.street = formatStreetAddress(data.street, data.houseNumber);
   return db.$transaction(async (tx) => {
     const existing = await tx.address.findFirst({ where: { id, userId }, select: { id: true } });
     if (!existing) throw new Error("ADDRESS_NOT_FOUND");

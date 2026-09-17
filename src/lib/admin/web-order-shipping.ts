@@ -1,4 +1,8 @@
 import { effectiveMyGlsShipmentStatus } from "@/lib/mygls/status";
+import {
+  formatStreetAddress,
+  splitStreetAndHouseNumber,
+} from "@/lib/address/house-number";
 
 export type WebOrderShippingEditShipment = {
   id: string;
@@ -33,6 +37,7 @@ export type WebOrderShippingEditPlan =
 
 export type WebOrderShippingAddressInput = {
   street: string;
+  houseNumber: string;
   city: string;
   postalCode: string;
 };
@@ -66,12 +71,26 @@ export function normalizeWebOrderShippingAddress(input: {
   postalCode: unknown;
 }): WebOrderShippingAddressInput {
   const street = requiredText(input.street, "Ulica i broj", 3, 200);
+  const addressParts = splitStreetAndHouseNumber(street);
+  if (!addressParts.houseNumber) {
+    throw new Error(
+      "Ulica i broj moraju sadržati važeći kućni broj (npr. 12A, 12/3 ili bb).",
+    );
+  }
   const city = requiredText(input.city, "Grad / mesto", 2, 80);
   const postalCode = normalizedText(input.postalCode);
   if (!/^\d{5}$/.test(postalCode)) {
     throw new Error("Poštanski broj mora imati 5 cifara.");
   }
-  return { street, city, postalCode };
+  return {
+    street: formatStreetAddress(
+      addressParts.street,
+      addressParts.houseNumber,
+    ),
+    houseNumber: addressParts.houseNumber,
+    city,
+    postalCode,
+  };
 }
 
 export function normalizeWebOrderShippingPhone(value: unknown) {

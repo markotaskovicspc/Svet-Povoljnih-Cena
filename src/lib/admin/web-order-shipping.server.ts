@@ -96,6 +96,7 @@ export async function updateWebOrderShippingContact(
       cancelledAt: true,
       stockRestoredAt: true,
       shipStreet: true,
+      shipHouseNumber: true,
       shipCity: true,
       shipPostalCode: true,
       shipPhone: true,
@@ -264,6 +265,7 @@ export async function updateWebOrderShippingContact(
         input.mode === "ADDRESS"
           ? {
               shipStreet: normalizedAddress!.street,
+              shipHouseNumber: normalizedAddress!.houseNumber,
               shipCity: normalizedAddress!.city,
               shipPostalCode: normalizedAddress!.postalCode,
               shipXExpressTownId: xExpressAddress?.townId ?? null,

@@ -12,6 +12,7 @@ import type {
   XExpressAddressCheckPayload,
   XExpressCreateOrderPayload,
 } from "./types";
+import { courierAddressParts } from "@/lib/address/house-number";
 
 type OrderForPayload = {
   total: Prisma.Decimal | number | bigint;
@@ -20,6 +21,7 @@ type OrderForPayload = {
   shipLastName: string;
   shipPhone: string;
   shipStreet: string;
+  shipHouseNumber?: string | null;
   shipCompanyName?: string | null;
   notes?: string | null;
   guestEmail?: string | null;
@@ -91,19 +93,29 @@ export function buildXExpressAddressCheckPayload(args: {
   recipientName: string;
   townId: number;
   street: string;
+  houseNumber?: string | null;
   officialStreetName?: string | null;
 }): XExpressAddressCheckPayload {
-  const split = splitXExpressStreet(args.street);
+  const split = courierAddressParts(args.street, args.houseNumber);
+  if (!split) {
+    throw new XExpressConfigError(
+      "Adresa isporuke mora sadržati važeći kućni broj za X Express.",
+    );
+  }
   return {
     Name: providerName(args.recipientName, 50, "Kupac"),
     TownId: args.townId,
     StreetName: providerName(
-      args.officialStreetName || split.streetName,
+      args.officialStreetName || split.street,
       50,
       "Nepoznata ulica",
     ),
-    StreetNumber: split.streetNumber,
-    Description: null,
+    StreetNumber: split.providerHouseNumber,
+    Description: providerDescription(
+      `Kućni broj (${split.originalHouseNumber})`,
+      50,
+      "Kućni broj",
+    ),
   };
 }
 
@@ -160,20 +172,32 @@ export function buildXExpressCreateOrderPayload(args: {
       "Preuzimanje robe",
     ),
   };
-  const deliveryStreet = splitXExpressStreet(order.shipStreet);
+  const deliveryStreet = courierAddressParts(
+    order.shipStreet,
+    order.shipHouseNumber,
+  );
+  if (!deliveryStreet) {
+    throw new XExpressConfigError(
+      "Adresa isporuke mora sadržati važeći kućni broj za X Express.",
+    );
+  }
   const deliveryAddress: XExpressAddress = {
     Name: recipientName,
     TownId: args.townId,
     StreetName: providerName(
-      args.officialStreetName || deliveryStreet.streetName,
+      args.officialStreetName || deliveryStreet.street,
       50,
       "Nepoznata ulica",
     ),
-    StreetNumber: deliveryStreet.streetNumber,
+    StreetNumber: deliveryStreet.providerHouseNumber,
     // X Express treats Address.Description as part of the address. Customer
     // notes stay on the order and our local label so they cannot invalidate
     // the provider waybill address.
-    Description: "Isporuka webshop porudžbine",
+    Description: providerDescription(
+      `Isporuka - kućni broj (${deliveryStreet.originalHouseNumber})`,
+      50,
+      "Isporuka webshop porudžbine",
+    ),
   };
   const content = providerContent(
     order.items.map((item) => item.name).filter(Boolean).join(", ") ||

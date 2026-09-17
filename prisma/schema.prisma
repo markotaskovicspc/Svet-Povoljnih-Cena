@@ -152,6 +152,7 @@ model Address {
   lastName         String
   phone            String
   street           String
+  houseNumber      String?
   city             String
   postalCode       String
   xExpressTownId   Int?
@@ -1311,6 +1312,7 @@ model Order {
   shipLastName               String
   shipPhone                  String
   shipStreet                 String
+  shipHouseNumber            String?
   shipCity                   String
   shipPostalCode             String
   shipXExpressTownId         Int?
@@ -1327,6 +1329,7 @@ model Order {
   billFirstName              String?
   billLastName               String?
   billStreet                 String?
+  billHouseNumber            String?
   billCity                   String?
   billPostalCode             String?
   billXExpressTownId         Int?

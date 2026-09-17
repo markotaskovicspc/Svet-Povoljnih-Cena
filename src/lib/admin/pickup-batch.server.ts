@@ -42,8 +42,8 @@ import {
 } from "@/lib/x-express/config";
 import {
   normalizeXExpressPhone,
-  splitXExpressStreet,
 } from "@/lib/x-express/payload";
+import { courierAddressParts } from "@/lib/address/house-number";
 import { announceXExpressShipment } from "@/lib/x-express/shipments";
 import {
   isPickupBatchEditable,
@@ -1269,6 +1269,7 @@ async function createXExpressLabelsForPickupBatch(
                 number: true,
                 shipPhone: true,
                 shipStreet: true,
+                shipHouseNumber: true,
               },
             },
             reclamation: {
@@ -1314,7 +1315,9 @@ async function createXExpressLabelsForPickupBatch(
       }
       try {
         normalizeXExpressPhone(order.shipPhone);
-        splitXExpressStreet(order.shipStreet);
+        if (!courierAddressParts(order.shipStreet, order.shipHouseNumber)) {
+          throw new Error("Adresa nema važeći kućni broj.");
+        }
       } catch (error) {
         throw pickupGroupError(order.number, error);
       }

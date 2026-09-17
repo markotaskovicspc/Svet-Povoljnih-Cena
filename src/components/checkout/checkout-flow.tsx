@@ -58,6 +58,10 @@ import type { CustomerAuthFormAction } from "@/components/account/customer-auth-
 import type { LoginErrorCode } from "@/app/(account)/nalog/prijava/form";
 import type { RegistrationErrorCode } from "@/app/(account)/nalog/registracija/form";
 import { shouldRestoreBusinessBuyerType } from "@/lib/checkout/business-policy";
+import {
+  formatStreetAddress,
+  splitStreetAndHouseNumber,
+} from "@/lib/address/house-number";
 
 export interface CheckoutAddress {
   liceType: "fizicko" | "pravno";
@@ -66,6 +70,7 @@ export interface CheckoutAddress {
   email: string;
   phone: string;
   street: string;
+  houseNumber: string;
   city: string;
   postalCode: string;
   xExpressTownId?: number | null;
@@ -210,6 +215,7 @@ export function CheckoutFlow({
         email: "",
         phone: "",
         street: "",
+        houseNumber: "",
         city: "",
         postalCode: "",
         xExpressTownId: null,
@@ -451,7 +457,7 @@ export function CheckoutFlow({
   useEffect(() => {
     const remembered = readRememberedCheckout();
     const parsedName = splitFullName(initialCustomer?.name);
-    const source: Partial<CheckoutAddress> = {
+    const mergedSource: Partial<CheckoutAddress> = {
       ...remembered?.shipping,
       ...initialCustomer?.address,
       email:
@@ -466,6 +472,15 @@ export function CheckoutFlow({
         initialCustomer?.address?.lastName ??
         remembered?.shipping?.lastName ??
         parsedName.lastName,
+    };
+    const parsedAddress = splitStreetAndHouseNumber(
+      mergedSource.street ?? "",
+      mergedSource.houseNumber,
+    );
+    const source: Partial<CheckoutAddress> = {
+      ...mergedSource,
+      street: parsedAddress.street || mergedSource.street,
+      houseNumber: parsedAddress.houseNumber ?? mergedSource.houseNumber,
     };
 
     (Object.entries(source) as Array<[keyof CheckoutAddress, unknown]>).forEach(
@@ -979,7 +994,10 @@ function ReviewStep({
           <p className="break-words text-sm text-ink-700">
             {data.shipping.firstName} {data.shipping.lastName}
             <br />
-            {data.shipping.street}, {data.shipping.postalCode}{" "}
+            {formatStreetAddress(
+              data.shipping.street,
+              data.shipping.houseNumber,
+            )}, {data.shipping.postalCode}{" "}
             {data.shipping.city}
             <br />
             {data.shipping.email} · {data.shipping.phone}
@@ -1155,6 +1173,7 @@ function rememberCheckoutFields(data: CheckoutFormData) {
     email: data.shipping.email,
     phone: data.shipping.phone,
     street: data.shipping.street,
+    houseNumber: data.shipping.houseNumber,
     city: data.shipping.city,
     postalCode: data.shipping.postalCode,
     xExpressTownId:
@@ -1191,6 +1210,7 @@ function addressFieldNames(
     `${prefix}.email`,
     `${prefix}.phone`,
     `${prefix}.street`,
+    `${prefix}.houseNumber`,
     `${prefix}.city`,
     `${prefix}.postalCode`,
   ];
@@ -1328,6 +1348,7 @@ function addressForApi(address: CheckoutAddress) {
     lastName: address.lastName,
     phone: address.phone,
     street: address.street,
+    houseNumber: address.houseNumber,
     city: address.city,
     postalCode: address.postalCode,
     xExpressTownId: positiveIntOrUndefined(address.xExpressTownId),
@@ -1439,7 +1460,11 @@ function buildOrder({
     firstName: data.shipping.firstName,
     lastName: data.shipping.lastName,
     phone: data.shipping.phone,
-    street: data.shipping.street,
+    street: formatStreetAddress(
+      data.shipping.street,
+      data.shipping.houseNumber,
+    ),
+    houseNumber: data.shipping.houseNumber,
     city: data.shipping.city,
     postalCode: data.shipping.postalCode,
     xExpressTownId:
@@ -1461,7 +1486,11 @@ function buildOrder({
           firstName: data.billing.firstName,
           lastName: data.billing.lastName,
           phone: data.billing.phone,
-          street: data.billing.street,
+          street: formatStreetAddress(
+            data.billing.street,
+            data.billing.houseNumber,
+          ),
+          houseNumber: data.billing.houseNumber,
           city: data.billing.city,
           postalCode: data.billing.postalCode,
           xExpressTownId:

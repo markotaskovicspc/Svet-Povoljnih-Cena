@@ -13,6 +13,7 @@ import {
 import type { MyGlsConfig } from "./config";
 import { MyGlsConfigError, toMyGlsDate } from "./config";
 import type { MyGlsAddress, MyGlsParcel, MyGlsService } from "./types";
+import { courierAddressParts } from "@/lib/address/house-number";
 
 type OrderForMyGlsPayload = {
   id: string;
@@ -23,6 +24,7 @@ type OrderForMyGlsPayload = {
   shipLastName: string;
   shipPhone: string;
   shipStreet: string;
+  shipHouseNumber?: string | null;
   shipCity: string;
   shipPostalCode: string;
   shipCountry: string;
@@ -226,33 +228,26 @@ function addressFromOrder(
   contactEmail: string | null,
 ): MyGlsAddress {
   const sourceStreet = order.glsDeliveryPointAddress ?? order.shipStreet;
-  const street = splitStreet(sourceStreet, "Adresa isporuke");
+  const street = courierAddressParts(
+    sourceStreet,
+    order.glsDeliveryPointAddress ? null : order.shipHouseNumber,
+  );
+  if (!street) {
+    throw new MyGlsConfigError(
+      "Adresa isporuke mora sadržati ulicu i važeći kućni broj za MyGLS nalog.",
+    );
+  }
   return {
     Name: order.shipCompanyName ?? recipientName,
     Street: street.street,
-    HouseNumber: street.houseNumber,
-    HouseNumberInfo: street.houseNumberInfo,
+    HouseNumber: street.providerHouseNumber,
+    HouseNumberInfo: `(${street.originalHouseNumber})`,
     City: order.glsDeliveryPointCity ?? order.shipCity,
     ZipCode: order.glsDeliveryPointPostalCode ?? order.shipPostalCode,
     CountryIsoCode: order.shipCountry || "RS",
     ContactName: recipientName,
     ContactPhone: normalizePhone(order.shipPhone),
     ContactEmail: contactEmail,
-  };
-}
-
-function splitStreet(value: string, label: string) {
-  const normalized = value.trim().replace(/\s+/g, " ");
-  const match = normalized.match(/^(.*?)[,\s]+(\d+[a-zA-Z\/\-]*)\s*(.*)$/);
-  if (!match?.[1] || !match[2]) {
-    throw new MyGlsConfigError(
-      `${label} mora sadržati ulicu i kućni broj za MyGLS nalog.`,
-    );
-  }
-  return {
-    street: match[1].trim().replace(/,$/, ""),
-    houseNumber: match[2].trim(),
-    houseNumberInfo: match[3]?.trim() || null,
   };
 }
 

@@ -40,7 +40,7 @@ const product = {
 };
 const input = {
   guestEmail: "checkout-test@example.com", lines: [{ sku: "TEST", qty: 1 }],
-  shipping: { firstName: "Test", lastName: "Kupac", phone: "0600000000", street: "Test 1", city: "Beograd", postalCode: "11000", country: "RS" },
+  shipping: { firstName: "Test", lastName: "Kupac", phone: "0600000000", street: "Test", houseNumber: "1", city: "Beograd", postalCode: "11000", country: "RS" },
   shippingMethod: "KAMION", paymentMethod: "POUZECE_GOTOVINA", consent: true,
 };
 const request = (body = input) => new Request("https://example.com/api/checkout/order", {

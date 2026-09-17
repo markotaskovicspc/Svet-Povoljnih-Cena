@@ -45,7 +45,8 @@ const order = {
   shipFirstName: "Petar",
   shipLastName: "Petrović",
   shipPhone: "0642223344",
-  shipStreet: "Bulevar oslobođenja 10A",
+  shipStreet: "Bulevar oslobođenja (10A)",
+  shipHouseNumber: "10A",
   shipCity: "Novi Sad",
   shipPostalCode: "21000",
   shipCountry: "RS",
@@ -91,7 +92,8 @@ describe("MyGLS reclamation payload", () => {
     expect(parcel.PickupAddress).toMatchObject({
       Name: "Petar Petrović",
       Street: "Bulevar oslobođenja",
-      HouseNumber: "10A",
+      HouseNumber: "10",
+      HouseNumberInfo: "(10A)",
       City: "Novi Sad",
     });
     expect(parcel.DeliveryAddress).toMatchObject({
