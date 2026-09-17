@@ -267,6 +267,7 @@ export async function sendFiscalReceipt(args: {
   pdf?: Buffer;
   attachments?: EmailAttachment[];
   withdrawalForm?: Buffer;
+  buyerInvoiceAttached?: boolean;
   idempotencyKey?: string;
 }): Promise<DispatchResult> {
   if (!args.to) return NULL;
@@ -277,6 +278,7 @@ export async function sendFiscalReceipt(args: {
       receiptNumber: args.receiptNumber,
       qrUrl: args.qrUrl,
       baseUrl: cfg.baseUrl,
+      buyerInvoiceAttached: args.buyerInvoiceAttached,
     }),
   );
   const attachments: EmailAttachment[] = args.attachments

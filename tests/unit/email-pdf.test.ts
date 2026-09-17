@@ -82,6 +82,21 @@ describe("customer PDF documents", () => {
     }
   });
 
+  it("renders the post-fiscalization company invoice as a separate document", async () => {
+    const bytes = await buildInvoicePdf(businessOrder, {
+      kind: "BUYER_RECEIPT",
+      number: "R-SPC-2026-TEST",
+      issuedAt: new Date("2026-09-17T12:05:00.000Z"),
+      fiscalReceiptNumbers: ["AB12/42"],
+    });
+
+    expect(bytes.toString("binary")).toContain("/Subtype /Image");
+    expect(bytes.length).toBeGreaterThan(20_000);
+    if (process.env.BUYER_INVOICE_PDF_SAMPLE_PATH) {
+      writeFileSync(process.env.BUYER_INVOICE_PDF_SAMPLE_PATH, bytes);
+    }
+  });
+
   it("numbers each withdrawal item so the buyer can circle it", () => {
     const bytes = buildWithdrawalFormPdf(order);
     const pdf = bytes.toString("binary");

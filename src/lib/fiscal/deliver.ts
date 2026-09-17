@@ -17,6 +17,11 @@ import {
   type FiscalIssueOutcome,
 } from "./issue";
 import { getFiscalConfig } from "./config";
+import {
+  issueFiscalBuyerInvoiceForOrder,
+  markFiscalBuyerInvoiceEmailStatus,
+  type FiscalBuyerInvoiceResult,
+} from "@/lib/receipts";
 
 export interface DeliverResult {
   outcome: FiscalIssueOutcome;
@@ -126,6 +131,32 @@ export async function issueAndDeliverFiscalReceipt(
     };
   }));
 
+  const fiscalReceiptNumbers = receiptDocuments.map(
+    (document) => document.receiptNumber!,
+  );
+  const finalFiscalizedAt = receiptDocuments.at(-1)!.issuedAt!;
+  let buyerInvoice: FiscalBuyerInvoiceResult;
+  try {
+    buyerInvoice = await issueFiscalBuyerInvoiceForOrder(orderId, {
+      issuedAt: finalFiscalizedAt,
+      fiscalReceiptNumbers,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    buyerInvoice = { ok: false, error: message };
+  }
+  if (!buyerInvoice.ok) {
+    console.error(
+      `[fiscal] buyer invoice failed for ${orderId}: ${buyerInvoice.error}`,
+    );
+  } else if (buyerInvoice.issued) {
+    attachments.push({
+      filename: `racun-${loaded.order.id}.pdf`,
+      content: buyerInvoice.bytes.toString("base64"),
+      contentType: "application/pdf",
+    });
+  }
+
   const withdrawalForm = await buildWithdrawalFormPdf({
     number: loaded.order.id,
     createdAt: new Date(loaded.order.createdAt),
@@ -165,7 +196,7 @@ export async function issueAndDeliverFiscalReceipt(
       : undefined,
   });
 
-  const receiptNumbers = receiptDocuments.map((document) => document.receiptNumber).join(", ");
+  const receiptNumbers = fiscalReceiptNumbers.join(", ");
   const send = await sendFiscalReceipt({
     order: loaded.order,
     to: loaded.recipient,
@@ -173,6 +204,7 @@ export async function issueAndDeliverFiscalReceipt(
     qrUrl: receiptDocuments[0]?.qrUrl,
     attachments,
     withdrawalForm,
+    buyerInvoiceAttached: buyerInvoice.ok && buyerInvoice.issued,
     idempotencyKey: opts.forceEmail
       ? `fiscal:${orderId}:final:resend:${Date.now()}`
       : `fiscal:${orderId}:final`,
@@ -180,10 +212,27 @@ export async function issueAndDeliverFiscalReceipt(
 
   if (!send.ok) {
     await markEmailStatus(receiptDocuments.map((document) => document.id), null, send.error);
+    if (buyerInvoice.ok && buyerInvoice.issued) {
+      await markFiscalBuyerInvoiceEmailStatus(buyerInvoice.invoiceId, {
+        emailedAt: null,
+        error: send.error,
+      }).catch((err) => {
+        console.error(`[fiscal] buyer invoice email status failed for ${orderId}`, err);
+      });
+    }
     return { outcome, emailed: false, emailError: send.error };
   }
 
-  await markEmailStatus(receiptDocuments.map((document) => document.id), new Date(), null);
+  const emailedAt = new Date();
+  await markEmailStatus(receiptDocuments.map((document) => document.id), emailedAt, null);
+  if (buyerInvoice.ok && buyerInvoice.issued) {
+    await markFiscalBuyerInvoiceEmailStatus(buyerInvoice.invoiceId, {
+      emailedAt,
+      error: null,
+    }).catch((err) => {
+      console.error(`[fiscal] buyer invoice email status failed for ${orderId}`, err);
+    });
+  }
   return { outcome, emailed: true };
 }
 

@@ -23,6 +23,17 @@ export type BuyerReceiptResult =
     }
   | { ok: false; error: string };
 
+export type FiscalBuyerInvoiceResult =
+  | {
+      ok: true;
+      issued: true;
+      invoiceId: string;
+      number: string;
+      bytes: Buffer;
+    }
+  | { ok: true; issued: false }
+  | { ok: false; error: string };
+
 export async function issueBuyerReceiptForOrder(
   orderId: string,
   opts: {
@@ -141,6 +152,113 @@ export async function issueBuyerReceiptForOrder(
   };
 }
 
+/**
+ * Creates the accounting copy which accompanies an already-issued fiscal
+ * receipt. The checkout pro-forma remains a separate PROFORMA invoice.
+ */
+export async function issueFiscalBuyerInvoiceForOrder(
+  orderId: string,
+  args: {
+    issuedAt: Date;
+    fiscalReceiptNumbers: string[];
+  },
+): Promise<FiscalBuyerInvoiceResult> {
+  const row = await db.order.findUnique({
+    where: { id: orderId },
+    include: {
+      items: { orderBy: { id: "asc" } },
+      payments: { orderBy: { createdAt: "desc" }, take: 1 },
+      user: { select: { email: true } },
+      invoices: { where: { kind: "BUYER_RECEIPT" }, take: 1 },
+    },
+  });
+  if (!row) return { ok: false, error: `Order ${orderId} ne postoji.` };
+
+  const buyer = resolveOrderDocumentBuyerAddress(row);
+  if (!buyer.companyName?.trim() && !buyer.pib?.trim()) {
+    return { ok: true, issued: false };
+  }
+
+  const fiscalReceiptNumbers = args.fiscalReceiptNumbers
+    .map((number) => number.trim())
+    .filter(Boolean);
+  if (!fiscalReceiptNumbers.length) {
+    return { ok: false, error: "Nedostaje broj fiskalnog računa." };
+  }
+
+  const recipient = row.user?.email ?? row.guestEmail ?? null;
+  const number = `R-${row.number}`;
+  const bytes = await buildInvoicePdf(orderToPdfInput(row), {
+    kind: "BUYER_RECEIPT",
+    number,
+    issuedAt: args.issuedAt,
+    fiscalReceiptNumbers,
+  });
+  const uploaded = await uploadReceiptPdf({
+    orderNumber: row.number,
+    receiptNumber: number,
+    bytes,
+  }).catch((err) => {
+    console.error("[buyer-invoice] upload failed", err);
+    return null;
+  });
+
+  const snapshot = {
+    ...buildReceiptSnapshot(row, recipient),
+    fiscal: {
+      issuedAt: args.issuedAt.toISOString(),
+      receiptNumbers: fiscalReceiptNumbers,
+    },
+  };
+  const invoice = await db.invoice.upsert({
+    where: { orderId_kind: { orderId: row.id, kind: "BUYER_RECEIPT" } },
+    create: {
+      orderId: row.id,
+      kind: "BUYER_RECEIPT",
+      status: "ISSUED",
+      number,
+      pdfObjectKey: uploaded?.objectKey ?? null,
+      recipientEmail: recipient,
+      snapshot: snapshot as Prisma.InputJsonValue,
+      total: row.total,
+      issuedAt: args.issuedAt,
+    },
+    update: {
+      status: "ISSUED",
+      number,
+      pdfUrl: null,
+      pdfObjectKey: uploaded?.objectKey ?? row.invoices[0]?.pdfObjectKey ?? null,
+      recipientEmail: recipient,
+      emailedAt: null,
+      emailError: null,
+      snapshot: snapshot as Prisma.InputJsonValue,
+      total: row.total,
+      issuedAt: args.issuedAt,
+    },
+    select: { id: true, number: true },
+  });
+
+  return {
+    ok: true,
+    issued: true,
+    invoiceId: invoice.id,
+    number: invoice.number,
+    bytes,
+  };
+}
+
+export async function markFiscalBuyerInvoiceEmailStatus(
+  invoiceId: string,
+  result: { emailedAt: Date | null; error: string | null },
+) {
+  await db.invoice.update({
+    where: { id: invoiceId },
+    data: result.emailedAt
+      ? { status: "EMAIL_SENT", emailedAt: result.emailedAt, emailError: null }
+      : { status: "EMAIL_FAILED", emailedAt: null, emailError: result.error },
+  });
+}
+
 export async function buildBuyerReceiptPdfForInvoice(invoiceId: string) {
   const invoice = await db.invoice.findUnique({
     where: { id: invoiceId },
@@ -155,9 +273,25 @@ export async function buildBuyerReceiptPdfForInvoice(invoiceId: string) {
     },
   });
   if (!invoice) return null;
+  const snapshot = invoice.snapshot as {
+    fiscal?: { issuedAt?: string; receiptNumbers?: string[] };
+  } | null;
+  const fiscalIssuedAt = snapshot?.fiscal?.issuedAt
+    ? new Date(snapshot.fiscal.issuedAt)
+    : invoice.issuedAt;
   return {
     invoice,
-    bytes: await buildInvoicePdf(orderToPdfInput(invoice.order)),
+    bytes: await buildInvoicePdf(
+      orderToPdfInput(invoice.order),
+      invoice.kind === "BUYER_RECEIPT"
+        ? {
+            kind: "BUYER_RECEIPT",
+            number: invoice.number,
+            issuedAt: fiscalIssuedAt,
+            fiscalReceiptNumbers: snapshot?.fiscal?.receiptNumbers ?? [],
+          }
+        : { kind: "PROFORMA" },
+    ),
   };
 }
 

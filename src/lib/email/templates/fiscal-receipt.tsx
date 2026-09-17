@@ -11,6 +11,7 @@ export interface FiscalReceiptProps {
   receiptNumber: string;
   qrUrl?: string | null;
   baseUrl?: string;
+  buyerInvoiceAttached?: boolean;
 }
 
 export function FiscalReceiptEmail({
@@ -18,6 +19,7 @@ export function FiscalReceiptEmail({
   receiptNumber,
   qrUrl,
   baseUrl = "https://www.svetpovoljnihcena.rs",
+  buyerInvoiceAttached = false,
 }: FiscalReceiptProps) {
   const orderUrl = order.userId
     ? `${baseUrl}/nalog/porudzbine/${encodeURIComponent(order.id)}`
@@ -29,6 +31,13 @@ export function FiscalReceiptEmail({
         U prilogu se nalazi fiskalni račun broj <strong>{receiptNumber}</strong>{" "}
         za porudžbinu <strong>{order.id}</strong>.
       </EmailParagraph>
+      {buyerInvoiceAttached ? (
+        <EmailParagraph>
+          U prilogu je i prateći račun sa podacima vaše firme. Promet je već
+          evidentiran fiskalnim računom; ovaj dodatni dokument nije poseban
+          zahtev za uplatu. Plaćanje se obavlja izabranim načinom plaćanja.
+        </EmailParagraph>
+      ) : null}
       <EmailParagraph>
         Račun je izdat u trenutku preuzimanja robe iz skladišta i predstavlja
         zvaničan dokument za garanciju i reklamaciju.

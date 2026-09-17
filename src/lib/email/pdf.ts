@@ -286,8 +286,22 @@ export type SupplierInvoiceOrderInput = InvoiceDocumentBase & {
 };
 
 type InvoicePageMode =
-  | { kind: "customer"; total: number; paymentMethod: string }
+  | {
+      kind: "customer";
+      total: number;
+      paymentMethod: string;
+      document: InvoicePdfDocument;
+    }
   | { kind: "supplier" };
+
+export type InvoicePdfDocument =
+  | { kind: "PROFORMA" }
+  | {
+      kind: "BUYER_RECEIPT";
+      number: string;
+      issuedAt: Date;
+      fiscalReceiptNumbers: string[];
+    };
 
 const INVOICE_PIXEL_WIDTH = 1240;
 const INVOICE_PIXEL_HEIGHT = 1754;
@@ -295,6 +309,7 @@ const INVOICE_ROWS_PER_PAGE = 10;
 
 export async function buildInvoicePdf(
   order: InvoiceOrderInput,
+  document: InvoicePdfDocument = { kind: "PROFORMA" },
 ): Promise<Buffer> {
   const lines: InvoiceLine[] = order.items.flatMap((item) => [
     {
@@ -349,6 +364,7 @@ export async function buildInvoicePdf(
           kind: "customer",
           total: order.total,
           paymentMethod: order.paymentMethod,
+          document,
         }),
       ),
     ),
@@ -463,16 +479,22 @@ function invoicePageSvg(
       ? (() => {
           const basisTotal = mode.total / 1.2;
           const vatTotal = mode.total - basisTotal;
+          const buyerReceipt = mode.document.kind === "BUYER_RECEIPT";
+          const fiscalReference = mode.document.kind === "BUYER_RECEIPT"
+            ? `<text x="82" y="${tableBottom + 414}" class="note">Promet je evidentiran fiskalnim računom: ${xmlEscapePdf(mode.document.fiscalReceiptNumbers.join(", "))}</text>
+      <text x="82" y="${tableBottom + 440}" class="note">Ovaj dokument prati fiskalni račun i ne predstavlja zahtev za ponovnu uplatu.</text>`
+            : "";
           return `<g transform="translate(650 ${tableBottom + 55})">
         <text x="0" y="0" class="totalLabel">Osnovica bez PDV-a</text><text x="500" y="0" text-anchor="end" class="totalValue">${xmlEscapePdf(formatInvoiceMoney(basisTotal))}</text>
         <text x="0" y="48" class="totalLabel">PDV 20%</text><text x="500" y="48" text-anchor="end" class="totalValue">${xmlEscapePdf(formatInvoiceMoney(vatTotal))}</text>
         <rect x="-18" y="75" width="536" height="88" fill="#eaf1fa"/>
-        <text x="0" y="130" class="grandLabel">UKUPNO ZA UPLATU</text><text x="500" y="130" text-anchor="end" class="grandValue">${xmlEscapePdf(formatInvoiceMoney(mode.total))}</text>
+        <text x="0" y="130" class="grandLabel">${buyerReceipt ? "UKUPNO" : "UKUPNO ZA UPLATU"}</text><text x="500" y="130" text-anchor="end" class="grandValue">${xmlEscapePdf(formatInvoiceMoney(mode.total))}</text>
       </g>
       <rect x="70" y="${tableBottom + 260}" width="1100" height="74" class="infoBox"/>
       <text x="92" y="${tableBottom + 306}" class="infoLabel">NAČIN PLAĆANJA</text>
       <text x="1148" y="${tableBottom + 306}" text-anchor="end" class="infoValue">${xmlEscapePdf(paymentMethodLabel(mode.paymentMethod))}</text>
-      <text x="82" y="${tableBottom + 380}" class="note">PDV 20% je prikazan po svakoj stavci i uključen je u ukupnu cenu.</text>`;
+      <text x="82" y="${tableBottom + 380}" class="note">PDV 20% je prikazan po svakoj stavci i uključen je u ukupnu cenu.</text>
+      ${fiscalReference}`;
         })()
       : "";
   const supplierNotice =
@@ -484,6 +506,21 @@ function invoicePageSvg(
   const logo = LOGO_JPEG
     ? `<image x="70" y="58" width="390" height="65" preserveAspectRatio="xMinYMid meet" href="data:image/jpeg;base64,${LOGO_JPEG.toString("base64")}"/>`
     : `<text x="70" y="104" class="brand">Svet Povoljnih Cena</text>`;
+  const customerDocument = mode.kind === "customer" ? mode.document : null;
+  const documentTitle =
+    customerDocument?.kind === "BUYER_RECEIPT" ? "RAČUN" : "PREDRAČUN";
+  const documentNumber =
+    customerDocument?.kind === "BUYER_RECEIPT"
+      ? customerDocument.number
+      : order.number;
+  const documentDate =
+    customerDocument?.kind === "BUYER_RECEIPT"
+      ? customerDocument.issuedAt
+      : order.createdAt;
+  const documentDateLabel =
+    customerDocument?.kind === "BUYER_RECEIPT"
+      ? "Datum fiskalizacije"
+      : "Datum";
 
   return `<?xml version="1.0" encoding="UTF-8"?>
   <svg xmlns="http://www.w3.org/2000/svg" width="${INVOICE_PIXEL_WIDTH}" height="${INVOICE_PIXEL_HEIGHT}" viewBox="0 0 ${INVOICE_PIXEL_WIDTH} ${INVOICE_PIXEL_HEIGHT}">
@@ -513,9 +550,9 @@ function invoicePageSvg(
     </style>
     <rect width="1240" height="1754" fill="#fff"/>
     ${logo}
-    <text x="1170" y="86" text-anchor="end" class="docTitle">PREDRAČUN</text>
-    <text x="1170" y="119" text-anchor="end" class="docNo">${xmlEscapePdf(order.number)}</text>
-    <text x="1170" y="148" text-anchor="end" class="date">Datum: ${xmlEscapePdf(DOCUMENT_DATE_FORMATTER.format(order.createdAt))}</text>
+    <text x="1170" y="86" text-anchor="end" class="docTitle">${documentTitle}</text>
+    <text x="1170" y="119" text-anchor="end" class="docNo">${xmlEscapePdf(documentNumber)}</text>
+    <text x="1170" y="148" text-anchor="end" class="date">${documentDateLabel}: ${xmlEscapePdf(DOCUMENT_DATE_FORMATTER.format(documentDate))}</text>
     <rect x="70" y="165" width="1100" height="4" fill="${blue}"/>
     <rect x="70" y="205" width="550" height="235" class="partyBox"/>
     <rect x="620" y="205" width="550" height="235" class="partyBox"/>

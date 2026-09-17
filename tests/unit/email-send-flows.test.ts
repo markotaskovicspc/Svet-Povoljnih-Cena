@@ -482,6 +482,7 @@ describe("all transactional Resend send flows", () => {
       qrUrl: "https://tax.example/audit",
       pdf: Buffer.from("synthetic fiscal pdf"),
       withdrawalForm: Buffer.from("synthetic withdrawal form"),
+      buyerInvoiceAttached: true,
     });
 
     expect(mocks.trackedDispatch).toHaveBeenNthCalledWith(
@@ -501,6 +502,12 @@ describe("all transactional Resend send flows", () => {
           expect.objectContaining({ filename: `obrazac-za-odustajanje-${order.id}.pdf` }),
         ],
       }),
+    );
+    expect(mocks.trackedDispatch.mock.calls[1]?.[0].html).toContain(
+      "prateći račun sa podacima vaše firme",
+    );
+    expect(mocks.trackedDispatch.mock.calls[1]?.[0].html).toContain(
+      "nije poseban",
     );
   });
 
