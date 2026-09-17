@@ -410,18 +410,24 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
       const successfulPayload = providerRequests.find(
         (request: { body: { ParcelList?: Array<{ ClientReference?: string }> } }) =>
           request.body.ParcelList?.some(
-            (parcel) => parcel.ClientReference === fixture.orderNumber,
+            (parcel) => parcel.ClientReference === `${fixture.orderNumber}-P1`,
           ),
       )?.body;
       expect(successfulPayload).toBeDefined();
       if (!successfulPayload) throw new Error("Primarni MyGLS payload nije pronađen.");
       expect(successfulPayload.Password).toHaveLength(64);
       expect(successfulPayload.ClientNumberList).toEqual([123456]);
-      expect(successfulPayload.ParcelList).toHaveLength(1);
+      expect(successfulPayload.ParcelList).toHaveLength(12);
       const parcel = successfulPayload.ParcelList[0];
-      expect(parcel.ClientReference).toBe(fixture.orderNumber);
-      expect(parcel.Count).toBe(12);
+      expect(parcel.ClientReference).toBe(`${fixture.orderNumber}-P1`);
+      expect(successfulPayload.ParcelList.map((entry: { Count: number }) => entry.Count)).toEqual(
+        Array(12).fill(1),
+      );
+      expect(successfulPayload.ParcelList.map((entry: { ClientReference: string }) => entry.ClientReference)).toEqual(
+        Array.from({ length: 12 }, (_, index) => `${fixture.orderNumber}-P${index + 1}`),
+      );
       expect(parcel.CODAmount).toBe(12_000);
+      expect(successfulPayload.ParcelList.slice(1).every((entry: { CODAmount: number }) => entry.CODAmount === 0)).toBe(true);
       expect(parcel.PickupDate).toMatch(/^\/Date\(\d+\)\/$/);
       expect(parcel.PickupAddress.HouseNumber).toBe("1");
       expect(parcel.DeliveryAddress).toMatchObject({
@@ -435,8 +441,9 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
         "CS1",
         "FDS",
       ]);
-      expect(parcel.ParcelPropertyList).toHaveLength(12);
-      for (const property of parcel.ParcelPropertyList) {
+      for (const payloadParcel of successfulPayload.ParcelList) {
+        expect(payloadParcel.ParcelPropertyList).toHaveLength(1);
+        const property = payloadParcel.ParcelPropertyList[0];
         expect(property).toMatchObject({
           Width: 88,
           Length: 44,

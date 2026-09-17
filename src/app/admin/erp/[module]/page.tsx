@@ -146,12 +146,22 @@ export default async function ErpModulePage({
           { label: `Tačka ${erpModule.number}` },
         ]}
         actions={
-          <Link
-            href="/admin/erp"
-            className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
-          >
-            Svi ERP moduli
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            {slug === "preuzimanja" ? (
+              <Link
+                href="/admin/erp/preuzimanja/povrati"
+                className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
+              >
+                Povrati za prijem
+              </Link>
+            ) : null}
+            <Link
+              href="/admin/erp"
+              className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
+            >
+              Svi ERP moduli
+            </Link>
+          </div>
         }
       />
       <div className="px-8 py-6">

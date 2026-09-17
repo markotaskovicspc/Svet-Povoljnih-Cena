@@ -1541,6 +1541,10 @@ model Shipment {
   providerParcelId      String?
   providerParcelIds     Json?
   providerParcelNumbers Json?
+  /// Current amount that MyGLS should collect for the still-active parcels.
+  /// Nullable keeps historical shipments compatible; legacy rows fall back to
+  /// the assignment snapshot stored in rawCreateResponse.
+  codAmount             Decimal?        @db.Decimal(12, 2)
   lastStatusSyncAt      DateTime?
   lastStatusEventAt     DateTime?
   rawCreateResponse     Json?
@@ -1552,10 +1556,11 @@ model Shipment {
   createdAt             DateTime        @default(now())
   updatedAt             DateTime        @updatedAt
 
-  order       Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  reclamation Reclamation?    @relation(fields: [reclamationId], references: [id], onDelete: SetNull)
-  warehouse   Warehouse?      @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
-  events      ShipmentEvent[]
+  order            Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  reclamation      Reclamation?      @relation(fields: [reclamationId], references: [id], onDelete: SetNull)
+  warehouse        Warehouse?        @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  events           ShipmentEvent[]
+  pickupBatchLines PickupBatchLine[]
 
   @@unique([reclamationId, purpose])
   @@index([orderId])
@@ -2820,32 +2825,55 @@ model PickupBatch {
 }
 
 model PickupBatchLine {
-  id                  String          @id @default(cuid())
-  batchId             String
-  orderId             String
-  orderItemId         String?
-  reclamationId       String?
-  purpose             ShipmentPurpose @default(ORDER_DELIVERY)
+  id                       String          @id @default(cuid())
+  batchId                  String
+  orderId                  String
+  orderItemId              String?
+  reclamationId            String?
+  purpose                  ShipmentPurpose @default(ORDER_DELIVERY)
   /// Stable logical unit inside a batch. Mixed orders use one provider-specific
   /// order group; replacements use their reclamation ID.
-  lineGroupKey        String
+  lineGroupKey             String
   /// Quantity represented by this logical picking line. Null keeps legacy
   /// order rows compatible and falls back to OrderItem.qty.
-  quantity            Int?
-  packageNo           Int             @default(1)
-  weightKg            Decimal?        @db.Decimal(10, 3)
-  widthCm             Decimal?        @db.Decimal(8, 2)
-  depthCm             Decimal?        @db.Decimal(8, 2)
-  heightCm            Decimal?        @db.Decimal(8, 2)
+  quantity                 Int?
+  packageNo                Int             @default(1)
+  weightKg                 Decimal?        @db.Decimal(10, 3)
+  widthCm                  Decimal?        @db.Decimal(8, 2)
+  depthCm                  Decimal?        @db.Decimal(8, 2)
+  heightCm                 Decimal?        @db.Decimal(8, 2)
   /// Provider-confirmed time when the courier physically took this package.
   /// Every package in one lineGroupKey is updated together.
-  courierPickedUpAt   DateTime?
-  courierPickedUpById String?
+  courierPickedUpAt        DateTime?
+  courierPickedUpById      String?
+  /// Exact provider identity for this physical package. New MyGLS labels use
+  /// one provider parcel per sold unit so cancellation never relies on array
+  /// position or a PDF label order.
+  shipmentId               String?
+  providerParcelId         String?
+  providerParcelNumber     String?
+  providerClientReference  String?
+  providerCodAmount        Decimal?        @db.Decimal(12, 2)
+  packageValue             Decimal?        @db.Decimal(12, 2)
+  providerStatusCode       String?
+  providerStatusLabel      String?
+  providerStatusAt         DateTime?
+  cancellationRequestedAt  DateTime?
+  providerLabelCancelledAt DateTime?
+  codAdjustedAt            DateTime?
+  cancellationError        String?         @db.Text
+  /// A deferred package keeps the order reservation. It becomes sellable only
+  /// if the whole order is cancelled through the existing cancellation flow.
+  deferredAt               DateTime?
+  deferredById             String?
+  rescheduledAt            DateTime?
+  deferredFromLineId       String?
 
   batch       PickupBatch  @relation(fields: [batchId], references: [id], onDelete: Cascade)
   order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
   orderItem   OrderItem?   @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
   reclamation Reclamation? @relation(fields: [reclamationId], references: [id], onDelete: Cascade)
+  shipment    Shipment?    @relation(fields: [shipmentId], references: [id], onDelete: SetNull)
 
   @@unique([batchId, lineGroupKey, packageNo])
   @@unique([reclamationId, packageNo])
@@ -2853,6 +2881,10 @@ model PickupBatchLine {
   @@index([orderItemId])
   @@index([reclamationId])
   @@index([purpose, orderId])
+  @@index([shipmentId])
+  @@index([providerParcelNumber])
+  @@index([deferredAt, rescheduledAt])
+  @@index([deferredFromLineId])
 }
 
 model PartnerApiClient {

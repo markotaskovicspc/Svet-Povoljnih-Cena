@@ -277,19 +277,24 @@ describe("MyGLS reclamation payload", () => {
     ]);
   });
 
-  it("keeps multiple boxes of the same item in one numbered MyGLS parcel", () => {
+  it("makes every sold unit separately cancellable even for the same item", () => {
     const labelParcels = buildMyGlsParcelsForOrder({
       cfg: config,
       order,
       packages,
     });
 
-    expect(labelParcels).toHaveLength(1);
-    expect(labelParcels[0]).toMatchObject({
-      Count: 2,
-      Content: "Stolica",
-      CODAmount: 12_000,
-    });
+    expect(labelParcels).toHaveLength(2);
+    expect(labelParcels.map((parcel) => parcel.Count)).toEqual([1, 1]);
+    expect(labelParcels.map((parcel) => parcel.ClientReference)).toEqual([
+      "SPC-2026-000001-P1",
+      "SPC-2026-000001-P2",
+    ]);
+    expect(labelParcels.map((parcel) => parcel.CODAmount)).toEqual([12_000, 0]);
+    expect(labelParcels.map((parcel) => parcel.Content)).toEqual([
+      "Stolica",
+      "Stolica",
+    ]);
   });
 
   it("blocks incomplete measurements before any provider call", () => {

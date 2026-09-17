@@ -19,6 +19,10 @@ import {
   savePickupPackage,
 } from "@/lib/admin/pickup-batch.server";
 import {
+  deferMyGlsPickupPackage,
+  rescheduleDeferredMyGlsPackage,
+} from "@/lib/admin/mygls-package-cancellation.server";
+import {
   isPickupBatchEditable,
   pickupCourierSnapshot,
   pickupBatchDisplayStatus,
@@ -39,6 +43,10 @@ export const metadata = {
 };
 
 const batchSchema = z.object({ batchId: z.string().min(1) });
+const packageLineSchema = z.object({
+  batchId: z.string().min(1),
+  lineId: z.string().min(1),
+});
 const removeGroupSchema = batchSchema.extend({ lineGroupKey: z.string().min(1) });
 const packageSchema = batchSchema.extend({
   lineId: z.string().min(1),
@@ -208,6 +216,70 @@ async function postAction(
   )(formData);
 }
 
+async function deferPackageAction(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+  return withAdminState(
+    {
+      allowed: ["OPS"],
+      action: "pickup-batch.package.defer",
+      entity: "PickupBatchLine",
+    },
+    async (actorId, actionData: FormData) => {
+      const parsed = packageLineSchema.safeParse(
+        Object.fromEntries(actionData.entries()),
+      );
+      if (!parsed.success) {
+        return { ok: false as const, error: "GLS paket nije izabran." };
+      }
+      const result = await deferMyGlsPickupPackage(parsed.data.lineId, actorId);
+      revalidatePickupPaths(parsed.data.batchId);
+      return {
+        ok: true as const,
+        entityId: parsed.data.lineId,
+        diff: result,
+        message: "GLS paket je odložen, rezervacija je sačuvana i kupac je obavešten.",
+      };
+    },
+  )(formData);
+}
+
+async function reschedulePackageAction(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+  return withAdminState(
+    {
+      allowed: ["OPS"],
+      action: "pickup-batch.package.reschedule",
+      entity: "PickupBatchLine",
+    },
+    async (actorId, actionData: FormData) => {
+      const parsed = packageLineSchema.safeParse(
+        Object.fromEntries(actionData.entries()),
+      );
+      if (!parsed.success) {
+        return { ok: false as const, error: "Odloženi paket nije izabran." };
+      }
+      const result = await rescheduleDeferredMyGlsPackage(
+        parsed.data.lineId,
+        actorId,
+      );
+      revalidatePickupPaths(parsed.data.batchId);
+      revalidatePath(`/admin/erp/preuzimanja/${result.batchId}`);
+      return {
+        ok: true as const,
+        entityId: parsed.data.lineId,
+        diff: result,
+        message: `Paket je dodat u novi GLS nalog ${result.batchNumber}.`,
+      };
+    },
+  )(formData);
+}
+
 export default async function PickupBatchPage({
   params,
   searchParams,
@@ -316,7 +388,9 @@ export default async function PickupBatchPage({
     handoverProgress,
   );
   const showCourierHandoverStatus =
-    batch.status === "BOOKED" || batch.status === "PICKED_UP";
+    batch.status === "BOOKED" ||
+    batch.status === "PICKED_UP" ||
+    rows.some((row) => Boolean(row.deferredAt));
   const legacyCompleteHandover =
     batch.status === "PICKED_UP" && handoverProgress.pickedUpPackages === 0;
   const displayedHandoverProgress = legacyCompleteHandover
@@ -709,9 +783,47 @@ export default async function PickupBatchPage({
                                     <SubmitButton size="xs" pendingLabel="Čuvanje…">Sačuvaj</SubmitButton>
                                   </AdminActionForm>
                                 ) : (
-                                  <p className={row.measurementsComplete ? "text-ink-700" : "text-warning"}>
-                                    #{row.packageNo} · {formatPackageMeasurements(row)}
-                                  </p>
+                                  <div className="rounded-lg border border-border p-2">
+                                    <p className={row.measurementsComplete ? "text-ink-700" : "text-warning"}>
+                                      #{row.packageNo} · {formatPackageMeasurements(row)}
+                                    </p>
+                                    {row.providerParcelNumber ? (
+                                      <p className="mt-1 font-mono text-xs text-ink-500">
+                                        GLS paket {row.providerParcelNumber}
+                                      </p>
+                                    ) : null}
+                                    <p className="mt-1 text-xs font-medium">
+                                      {row.deferredAt
+                                        ? row.rescheduledAt
+                                          ? "Odložen · ponovo zakazan"
+                                          : "Odložen · rezervacija sačuvana"
+                                        : row.courierPickedUpAt
+                                          ? "Preuzeo kurir"
+                                          : row.providerParcelNumber
+                                            ? "Čeka preuzimanje"
+                                            : "Čeka GLS adresnicu"}
+                                    </p>
+                                    {row.cancellationError ? (
+                                      <p className="mt-1 text-xs text-danger">{row.cancellationError}</p>
+                                    ) : null}
+                                    {myGls && row.deferredAt && !row.rescheduledAt ? (
+                                      <AdminActionForm action={reschedulePackageAction} className="mt-2">
+                                        <input type="hidden" name="batchId" value={batch.id} />
+                                        <input type="hidden" name="lineId" value={row.lineId} />
+                                        <SubmitButton size="xs" pendingLabel="Dodavanje…" confirm="Ponovo dodati ovaj odloženi paket u novi GLS nalog? Dostava se neće ponovo naplatiti.">
+                                          Ponovo zakaži
+                                        </SubmitButton>
+                                      </AdminActionForm>
+                                    ) : myGls && batch.status === "BOOKED" && row.providerParcelNumber && !row.courierPickedUpAt ? (
+                                      <AdminActionForm action={deferPackageAction} className="mt-2">
+                                        <input type="hidden" name="batchId" value={batch.id} />
+                                        <input type="hidden" name="lineId" value={row.lineId} />
+                                        <SubmitButton size="xs" variant="destructive" pendingLabel="Provera i odlaganje…" confirm={`Odložiti samo GLS paket ${row.providerParcelNumber}? Artikal ostaje rezervisan, otkupnina tekuće isporuke biće umanjena i kupac obavešten.`}>
+                                          Odloži paket
+                                        </SubmitButton>
+                                      </AdminActionForm>
+                                    ) : null}
+                                  </div>
                                 )}
                                 {myGls && hasKnownMyGlsHardLimitViolation(row) ? (
                                   <p className="mt-1 text-xs text-warning">
@@ -826,6 +938,13 @@ function pickupLineRow(line: {
   heightCm: unknown;
   courierPickedUpAt: Date | null;
   courierPickedUpById: string | null;
+  providerParcelNumber: string | null;
+  providerStatusCode: string | null;
+  providerStatusLabel: string | null;
+  providerStatusAt: Date | null;
+  cancellationError: string | null;
+  deferredAt: Date | null;
+  rescheduledAt: Date | null;
   order: { id: string; number: string };
   reclamation: {
     number: string;
@@ -913,9 +1032,13 @@ function pickupLineRow(line: {
     courierPickedUpAt: courier ? courier.pickedUpAt : line.courierPickedUpAt,
     handoverReport: courier?.handoverReport,
     courierPickedUpById: line.courierPickedUpById,
-    courierStatus: courier?.status ?? null,
-    courierStatusLabel: courier?.label ?? null,
-    courierStatusAt: courier?.statusAt ?? null,
+    providerParcelNumber: line.providerParcelNumber,
+    cancellationError: line.cancellationError,
+    deferredAt: line.deferredAt,
+    rescheduledAt: line.rescheduledAt,
+    courierStatus: line.providerStatusCode ?? courier?.status ?? null,
+    courierStatusLabel: line.providerStatusLabel ?? courier?.label ?? null,
+    courierStatusAt: line.providerStatusAt ?? courier?.statusAt ?? null,
     weightKg,
     widthCm,
     depthCm,

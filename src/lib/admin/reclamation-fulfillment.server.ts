@@ -17,7 +17,6 @@ import {
   MYGLS_PROVIDER,
   type SmallParcelProvider,
 } from "@/lib/mygls/config";
-import { isReturnWarehouse } from "@/lib/admin/return-warehouse";
 
 const RECLAMATION_PURPOSES: ShipmentPurpose[] = [
   "RECLAMATION_RETURN",
@@ -357,8 +356,8 @@ export async function receiveReclamationReturn(args: {
         isDefault: true,
       },
     });
-    if (!warehouse || !isReturnWarehouse(warehouse)) {
-      throw new Error("Izaberite aktivan magacin oštećene/povratne robe, ne glavni DC.");
+    if (!warehouse?.active) {
+      throw new Error("Izaberite aktivan magacin za prijem pregledane robe.");
     }
     const represented = await tx.warehouseStock.findFirst({
       where: { productId: reclamation.productId },

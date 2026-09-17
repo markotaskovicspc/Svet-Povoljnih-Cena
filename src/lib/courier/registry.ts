@@ -106,6 +106,9 @@ type ShipmentCreationOptions = {
   supplierFulfillmentId?: string;
   /** Prepare an X Express label without announcing it to the provider yet. */
   announceXExpress?: boolean;
+  /** Picking-group identity used to distinguish a later rescheduled package
+   * from an earlier partial shipment containing the same order item. */
+  assignmentKey?: string;
 };
 
 export function createShipmentForOrder(
@@ -332,6 +335,7 @@ async function processShipmentForOrder(
         supplierFulfillmentId: supplierFulfillment?.id,
         pickupOverride:
           supplierPickup?.provider === "MYGLS" ? supplierPickup.pickup : undefined,
+        assignmentKey: options.assignmentKey,
       };
       if (mode === "preflight") {
         await preflightMyGlsProviderShipmentForOrder(order.id, myGlsOptions);
@@ -368,6 +372,7 @@ async function processShipmentForOrder(
       supplierFulfillmentId: supplierFulfillment?.id,
       pickupOverride:
         supplierPickup?.provider === "MYGLS" ? supplierPickup.pickup : undefined,
+      assignmentKey: options.assignmentKey,
     };
     if (mode === "preflight") {
       await preflightMyGlsProviderShipmentForOrder(order.id, myGlsOptions);

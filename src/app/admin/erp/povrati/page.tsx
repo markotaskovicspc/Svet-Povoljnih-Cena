@@ -3,8 +3,10 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdminAction, withAdminState, type AdminActionState } from "@/lib/admin";
 import { receiveReclamationReturn } from "@/lib/admin/reclamation-fulfillment.server";
-import { filterReturnWarehouses } from "@/lib/admin/return-warehouse";
-import { listReturnedOrders } from "@/lib/admin/returned-orders.server";
+import {
+  listReturnedOrders,
+  receiveReturnedOrderUnit,
+} from "@/lib/admin/returned-orders.server";
 import { db } from "@/lib/db";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle, StatCard } from "@/components/admin/card";
@@ -14,12 +16,18 @@ import { SubmitButton } from "@/components/admin/submit-button";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
-  title: "Povrati · ERP",
+  title: "Povrati za prijem · Picking",
   robots: { index: false, follow: false },
 };
 
 const receiveSchema = z.object({
   reclamationId: z.string().min(1),
+  warehouseId: z.string().min(1),
+});
+const receiveOrderUnitSchema = z.object({
+  orderId: z.string().min(1),
+  orderItemId: z.string().min(1),
+  unitNo: z.coerce.number().int().positive(),
   warehouseId: z.string().min(1),
 });
 
@@ -37,13 +45,14 @@ async function receiveReturnAction(
     async (actorId, formData: FormData) => {
       const parsed = receiveSchema.safeParse(Object.fromEntries(formData.entries()));
       if (!parsed.success) {
-        return { ok: false as const, error: "Izaberite povrat i magacin oštećene robe." };
+        return { ok: false as const, error: "Izaberite povrat i magacin prijema." };
       }
       const result = await receiveReclamationReturn({
         ...parsed.data,
         actorId,
       });
       revalidatePath("/admin/erp/povrati");
+      revalidatePath("/admin/erp/preuzimanja/povrati");
       revalidatePath(`/admin/erp/reklamacije-dnevnik/${parsed.data.reclamationId}`);
       revalidatePath("/admin/erp/stanje-po-magacinima");
       return {
@@ -55,6 +64,40 @@ async function receiveReturnAction(
           movementId: result.movement.id,
           qty: result.movement.qty,
         },
+      };
+    },
+  )(formData);
+}
+
+async function receiveOrderUnitAction(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+  return withAdminState(
+    {
+      allowed: ["OPS"],
+      action: "order.return.receive",
+      entity: "OrderItem",
+    },
+    async (actorId, actionData: FormData) => {
+      const parsed = receiveOrderUnitSchema.safeParse(
+        Object.fromEntries(actionData.entries()),
+      );
+      if (!parsed.success) {
+        return { ok: false as const, error: "Izaberite vraćeni paket i magacin prijema." };
+      }
+      const result = await receiveReturnedOrderUnit({
+        ...parsed.data,
+        actorId,
+      });
+      revalidatePath("/admin/erp/preuzimanja/povrati");
+      revalidatePath("/admin/erp/povrati");
+      revalidatePath("/admin/erp/stanje-po-magacinima");
+      return {
+        ok: true as const,
+        entityId: parsed.data.orderItemId,
+        message: `Paket je pregledan i proknjižen u ${result.warehouse.code} · ${result.warehouse.name}.`,
       };
     },
   )(formData);
@@ -80,21 +123,33 @@ export default async function ReturnsPage() {
       },
     }),
     db.warehouse.findMany({
-      where: { active: true, isDefault: false },
+      where: { active: true },
       orderBy: [{ code: "asc" }],
       select: { id: true, code: true, name: true, active: true, isDefault: true },
     }),
     db.stockMovement.findMany({
-      where: { idempotencyKey: { startsWith: "reclamation-return:" } },
+      where: {
+        OR: [
+          { idempotencyKey: { startsWith: "reclamation-return:" } },
+          { idempotencyKey: { startsWith: "order-return:" } },
+        ],
+      },
       select: { idempotencyKey: true, createdAt: true, warehouse: { select: { code: true, name: true } } },
     }),
   ]);
-  const warehouses = filterReturnWarehouses(warehouseCandidates);
+  const warehouses = warehouseCandidates;
   const receiptByReclamation = new Map(
-    movements.map((movement) => [
-      movement.idempotencyKey?.slice("reclamation-return:".length),
-      movement,
-    ]),
+    movements
+      .filter((movement) => movement.idempotencyKey?.startsWith("reclamation-return:"))
+      .map((movement) => [
+        movement.idempotencyKey?.slice("reclamation-return:".length),
+        movement,
+      ]),
+  );
+  const orderReceiptByKey = new Map(
+    movements
+      .filter((movement) => movement.idempotencyKey?.startsWith("order-return:"))
+      .map((movement) => [movement.idempotencyKey, movement]),
   );
   const readyForReceipt = reclamations.filter((reclamation) =>
     ["DELIVERED", "RETURNED"].includes(reclamation.shipments[0]?.status ?? ""),
@@ -104,20 +159,29 @@ export default async function ReturnsPage() {
   return (
     <>
       <PageHeader
-        title="Povrati"
-        description="Vraćene porudžbine i reklamacioni povrati, uz pregled kurirskih pošiljaka i prijem robe."
+        title="Povrati za prijem"
+        description="Poseban picking tok za pregled vraćenih paketa, izbor magacina i bezbedno knjiženje robe na stanje."
         crumbs={[
           { href: "/admin", label: "Admin" },
           { href: "/admin/erp", label: "ERP" },
-          { label: "Povrati" },
+          { href: "/admin/erp/preuzimanja", label: "Picking i preuzimanja" },
+          { label: "Povrati za prijem" },
         ]}
         actions={
-          <Link
-            href="/admin/erp/reklamacije-dnevnik"
-            className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted"
-          >
-            Reklamacije
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/admin/erp/preuzimanja"
+              className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted"
+            >
+              Odlazni picking
+            </Link>
+            <Link
+              href="/admin/erp/reklamacije-dnevnik"
+              className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted"
+            >
+              Reklamacije
+            </Link>
+          </div>
         }
       />
       <main className="space-y-6 px-4 py-6 md:px-8">
@@ -155,6 +219,36 @@ export default async function ReturnsPage() {
                         <div key={item.id}>
                           <span className="font-mono">{item.sku}</span> · {item.qty} kom
                           <p className="text-xs text-ink-500">{item.name}</p>
+                          <div className="mt-2 space-y-2">
+                            {Array.from({ length: item.qty }, (_, index) => {
+                              const unitNo = index + 1;
+                              const receipt = orderReceiptByKey.get(
+                                `order-return:${order.number}:${item.id}:${unitNo}`,
+                              );
+                              return receipt ? (
+                                <p key={unitNo} className="text-xs text-success">
+                                  Paket {unitNo}/{item.qty} primljen {formatDate(receipt.createdAt)} · {receipt.warehouse.code}
+                                </p>
+                              ) : item.productId ? (
+                                <AdminActionForm key={unitNo} action={receiveOrderUnitAction} className="flex flex-wrap items-end gap-2 rounded-lg border border-border p-2">
+                                  <input type="hidden" name="orderId" value={order.id} />
+                                  <input type="hidden" name="orderItemId" value={item.id} />
+                                  <input type="hidden" name="unitNo" value={unitNo} />
+                                  <Field label={`Paket ${unitNo}/${item.qty}`}>
+                                    <select name="warehouseId" required className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm" defaultValue={warehouses[0]?.id ?? ""}>
+                                      <option value="" disabled>Magacin prijema</option>
+                                      {warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.code} · {warehouse.name}</option>)}
+                                    </select>
+                                  </Field>
+                                  <SubmitButton size="sm" disabled={!warehouses.length} confirm={`Potvrditi da je paket ${unitNo}/${item.qty} pregledan i vratiti jedan komad na stanje izabranog magacina?`}>
+                                    Primi paket
+                                  </SubmitButton>
+                                </AdminActionForm>
+                              ) : (
+                                <p key={unitNo} className="text-xs text-warning">Paket nema vezan artikal lagera.</p>
+                              );
+                            })}
+                          </div>
                         </div>
                       ))}
                     </td>
@@ -183,8 +277,7 @@ export default async function ReturnsPage() {
         {!warehouses.length ? (
           <Card>
             <p className="text-sm text-warning">
-              Nema aktivnog odvojenog magacina. U modulu „Magacini“ prvo napravite magacin
-              „Oštećena/povratna roba“. Glavni DC namerno nije dozvoljen za ovaj prijem.
+              Nema aktivnog magacina u koji pregledana vraćena roba može da se primi.
             </p>
           </Card>
         ) : null}
@@ -226,13 +319,13 @@ export default async function ReturnsPage() {
                         ) : canReceive ? (
                           <AdminActionForm action={receiveReturnAction} className="flex items-end gap-2">
                             <input type="hidden" name="reclamationId" value={reclamation.id} />
-                            <Field label="Magacin oštećene robe">
+                            <Field label="Magacin prijema">
                               <select name="warehouseId" required className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm" defaultValue={warehouses[0]?.id ?? ""}>
                                 <option value="" disabled>Izaberite</option>
                                 {warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.code} · {warehouse.name}</option>)}
                               </select>
                             </Field>
-                            <SubmitButton size="sm" confirm={`Primiti ${reclamation.quantity} kom i proknjižiti u izabrani odvojeni magacin?`}>
+                            <SubmitButton size="sm" confirm={`Magacioner je pregledao paket. Primiti ${reclamation.quantity} kom i proknjižiti u izabrani magacin?`}>
                               Primi i proknjiži
                             </SubmitButton>
                           </AdminActionForm>

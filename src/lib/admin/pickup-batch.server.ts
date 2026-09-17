@@ -35,7 +35,10 @@ import {
   type SmallParcelProvider,
 } from "@/lib/mygls/config";
 import { usableMyGlsLabelWhere } from "@/lib/mygls/labels";
-import { deleteMyGlsLabelsForShipment } from "@/lib/mygls/shipments";
+import {
+  deleteMyGlsLabelsForShipment,
+  readMyGlsPackageAssignments,
+} from "@/lib/mygls/shipments";
 import {
   requireXExpressShipmentConfig,
   X_EXPRESS_PROVIDER,
@@ -1530,11 +1533,13 @@ async function createMyGlsLabelsForPickupBatch(
       const codAmount =
         group.purpose === "RECLAMATION_REPLACEMENT"
           ? 0
-          : await pickupAssignmentCodAmount(
-              group.orderId,
-              "MYGLS",
-              orderItemIds,
-            );
+          : group.lines.every((line) => Boolean(line.deferredFromLineId))
+            ? await deferredPackageCodAmount(group.orderId, group.lines)
+            : await pickupAssignmentCodAmount(
+                group.orderId,
+                "MYGLS",
+                orderItemIds,
+              );
       try {
         if (group.purpose === "RECLAMATION_REPLACEMENT") {
           await preflightReclamationShipment({
@@ -1552,6 +1557,7 @@ async function createMyGlsLabelsForPickupBatch(
             provider: "MYGLS",
             orderItemIds,
             codAmount,
+            assignmentKey: group.lineGroupKey,
           });
         }
       } catch (error) {
@@ -1588,12 +1594,18 @@ async function createMyGlsLabelsForPickupBatch(
             provider: "MYGLS",
             orderItemIds,
             codAmount,
+            assignmentKey: group.lineGroupKey,
           });
       if (shipment.provider !== MYGLS_PROVIDER || shipment.status === "FAILED") {
         throw new Error(
           `Picking grupa ${group.lineGroupKey} nema uspešno kreiranu MyGLS adresnicu.`,
         );
       }
+      await bindMyGlsPackageAssignments(
+        shipment.id,
+        shipment.rawCreateResponse,
+        group.lines.map((line) => line.id),
+      );
       shipmentIds.push(shipment.id);
     }
     allLabelsCreated = true;
@@ -1909,12 +1921,74 @@ function pickupGroupError(
   );
 }
 
+async function bindMyGlsPackageAssignments(
+  shipmentId: string,
+  rawCreateResponse: unknown,
+  lineIds: readonly string[],
+) {
+  const assignments = readMyGlsPackageAssignments(rawCreateResponse);
+  if (assignments.length !== lineIds.length) {
+    throw new Error(
+      "MyGLS nije vratio pouzdanu vezu između svih picking paketa i adresnica.",
+    );
+  }
+  await db.$transaction(async (tx) => {
+    const lines = await tx.pickupBatchLine.findMany({
+      where: { id: { in: [...lineIds] } },
+      include: {
+        orderItem: {
+          select: {
+            unitPriceSale: true,
+            assemblyPrice: true,
+            withAssembly: true,
+          },
+        },
+      },
+    });
+    if (lines.length !== lineIds.length) {
+      throw new Error("Picking paket više ne postoji.");
+    }
+    for (const line of lines) {
+      const assignment = assignments.find(
+        (candidate) =>
+          candidate.packageNo === line.packageNo &&
+          candidate.orderItemId === line.orderItemId,
+      );
+      if (!assignment) {
+        throw new Error(
+          `MyGLS identitet nije pronađen za picking paket #${line.packageNo}.`,
+        );
+      }
+      const packageValue = line.orderItem
+        ? Number(line.orderItem.unitPriceSale) +
+          (line.orderItem.withAssembly
+            ? Number(line.orderItem.assemblyPrice ?? 0)
+            : 0)
+        : 0;
+      await tx.pickupBatchLine.update({
+        where: { id: line.id },
+        data: {
+          shipmentId,
+          providerParcelId: String(assignment.parcelId),
+          providerParcelNumber: String(assignment.parcelNumber),
+          providerClientReference: assignment.clientReference,
+          providerCodAmount: new Prisma.Decimal(assignment.codAmount),
+          packageValue: new Prisma.Decimal(packageValue),
+          cancellationError: null,
+        },
+      });
+    }
+  }, TRANSACTION_OPTIONS);
+}
+
 type PickupWorkLine = {
   lineGroupKey: string;
   orderId: string;
   orderItemId: string | null;
   reclamationId: string | null;
   purpose: ShipmentPurpose;
+  deferredFromLineId?: string | null;
+  packageValue?: unknown;
 };
 
 type PickupWorkGroup<T extends PickupWorkLine = PickupWorkLine> = {
@@ -1951,6 +2025,26 @@ function pickupWorkGroups<T extends PickupWorkLine>(lines: readonly T[]) {
     });
   }
   return [...groups.values()];
+}
+
+async function deferredPackageCodAmount(
+  orderId: string,
+  lines: readonly PickupWorkLine[],
+) {
+  const order = await db.order.findUnique({
+    where: { id: orderId },
+    select: { paymentMethod: true },
+  });
+  if (!order) throw new Error("Porudžbina odloženog paketa ne postoji.");
+  if (!isCashOnDeliveryPaymentMethod(order.paymentMethod)) return 0;
+  return (
+    Math.round(
+      lines.reduce(
+        (sum, line) => sum + Number(line.packageValue ?? 0),
+        0,
+      ) * 100,
+    ) / 100
+  );
 }
 
 function pickupPackageContent(

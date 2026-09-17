@@ -10,6 +10,7 @@ import { IpsPaymentConfirmation } from "./templates/ips-payment-confirmation";
 import { OrderStatusChanged } from "./templates/order-status-changed";
 import { OrderItemsChanged } from "./templates/order-items-changed";
 import { WarehouseOrderCancelled } from "./templates/warehouse-order-cancelled";
+import { PartialDelivery } from "./templates/partial-delivery";
 import { FiscalReceiptEmail } from "./templates/fiscal-receipt";
 import { ReclamationReceipt } from "./templates/reclamation-receipt";
 import { ReclamationStatusChanged } from "./templates/reclamation-status-changed";
@@ -216,6 +217,49 @@ export async function sendWarehouseOrderCancellation(args: {
     text,
     tags: { kind: "warehouse_order_cancelled", order: args.orderNumber },
     idempotencyKey: args.idempotencyKey,
+  });
+}
+
+export async function sendPartialDelivery(args: {
+  order: Order;
+  to: string;
+  itemName: string;
+  sku: string;
+  packageValue: number;
+  remainingCod: number;
+  pickupBatchLineId: string;
+}): Promise<DispatchResult> {
+  if (!args.to) return NULL;
+  const cfg = getEmailConfig();
+  const { html, text } = await renderEmail(
+    PartialDelivery({
+      order: args.order,
+      itemName: args.itemName,
+      sku: args.sku,
+      packageValue: args.packageValue,
+      remainingCod: args.remainingCod,
+      baseUrl: cfg.baseUrl,
+    }),
+  );
+  return trackedDispatch({
+    kind: "order_status",
+    to: args.to,
+    subject: `Porudžbina ${args.order.id} — parcijalna isporuka`,
+    html,
+    text,
+    bcc: cfg.orderBcc,
+    tags: {
+      kind: "order_status",
+      order: args.order.id,
+      status: "partial_delivery",
+    },
+    metadata: {
+      pickupBatchLineId: args.pickupBatchLineId,
+      deferredSku: args.sku,
+      packageValue: args.packageValue,
+      remainingCod: args.remainingCod,
+    },
+    idempotencyKey: `partial-delivery:${args.pickupBatchLineId}`,
   });
 }
 

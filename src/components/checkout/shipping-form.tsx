@@ -244,7 +244,7 @@ function AddressFieldset({
       {xExpressAddressEnabled ? (
         <>
           <XExpressStreetAutocomplete
-            className="order-2 col-span-2 lg:col-span-2"
+            className="order-2 col-span-1 lg:col-span-5"
             townId={watch(`${prefix}.xExpressTownId` as const) ?? null}
             value={watch(`${prefix}.street` as const) ?? ""}
             error={showError("street")}

@@ -31,6 +31,16 @@ type MyGlsShipmentOptions = {
   codAmount?: number;
   supplierFulfillmentId?: string;
   pickupOverride?: MyGlsPickupAddress;
+  assignmentKey?: string;
+};
+
+export type MyGlsPackageAssignment = {
+  packageNo: number;
+  orderItemId: string | null;
+  clientReference: string;
+  parcelId: number;
+  parcelNumber: number;
+  codAmount: number;
 };
 
 /**
@@ -74,6 +84,11 @@ export async function createMyGlsShipmentForOrder(
     const parcelNumbers = printData
       .map((item) => item.ParcelNumberWithCheckdigit ?? item.ParcelNumber)
       .filter(isNumber);
+    const packageAssignments = buildPackageAssignments(
+      parcelList,
+      options.packages ?? [],
+      printData,
+    );
     const trackingNo = String(
       parcelNumbers[0] ?? first.ParcelNumber ?? first.ParcelId ?? order.number,
     );
@@ -86,6 +101,7 @@ export async function createMyGlsShipmentForOrder(
     const sanitizedResponse = {
       ...response,
       Labels: Array.from(label.bytes),
+      myGlsPackageAssignments: packageAssignments,
     };
 
     const data = {
@@ -100,6 +116,7 @@ export async function createMyGlsShipmentForOrder(
       providerParcelId: first.ParcelId ? String(first.ParcelId) : null,
       providerParcelIds: parcelIds as Prisma.InputJsonValue,
       providerParcelNumbers: parcelNumbers as Prisma.InputJsonValue,
+      codAmount: new Prisma.Decimal(codAmount),
       trackingNo,
       labelUrl: label.labelUrl,
       labelObjectKey: label.objectKey,
@@ -110,6 +127,7 @@ export async function createMyGlsShipmentForOrder(
         orderItemIds: assignmentOrderItemIds,
         codAmount,
         supplierFulfillmentId: options.supplierFulfillmentId,
+        assignmentKey: options.assignmentKey,
       }) as Prisma.InputJsonValue,
       syncError: null,
     };
@@ -165,6 +183,7 @@ export async function createMyGlsShipmentForOrder(
       orderItemIds: assignmentOrderItemIds,
       codAmount,
       supplierFulfillmentId: options.supplierFulfillmentId,
+      assignmentKey: options.assignmentKey,
     });
     throw err;
   }
@@ -260,6 +279,7 @@ async function prepareMyGlsShipmentForOrder(
         sameShipmentAssignment(
           shipment.rawCreateResponse,
           assignmentOrderItemIds,
+          options.assignmentKey,
         )),
   );
   assertFulfillmentPaymentReady({
@@ -285,6 +305,7 @@ async function prepareMyGlsShipmentForOrder(
     packages: options.packages ?? [],
     purpose,
     pickupContactOnLabel: Boolean(options.supplierFulfillmentId),
+    clientReferenceSuffix: deferredReferenceSuffix(options.assignmentKey),
   });
 
   return {
@@ -299,6 +320,12 @@ async function prepareMyGlsShipmentForOrder(
     shipmentId,
     parcelList,
   } as const;
+}
+
+function deferredReferenceSuffix(assignmentKey?: string) {
+  const deferredId = assignmentKey?.split(":deferred:")[1]?.trim();
+  if (!deferredId) return undefined;
+  return `R${deferredId.replace(/[^a-z0-9]/gi, "").slice(-8)}`;
 }
 
 export async function deleteMyGlsLabelsForShipment(shipmentId: string) {
@@ -418,11 +445,13 @@ async function persistFailedShipment(args: {
   orderItemIds: string[];
   codAmount: number;
   supplierFulfillmentId?: string;
+  assignmentKey?: string;
 }) {
   const rawCreateResponse = withShipmentAssignment(args.raw, {
     orderItemIds: args.orderItemIds,
     codAmount: args.codAmount,
     supplierFulfillmentId: args.supplierFulfillmentId,
+    assignmentKey: args.assignmentKey,
   });
   const event = {
     status: "FAILED" as const,
@@ -456,6 +485,75 @@ async function persistFailedShipment(args: {
       syncError: args.message,
       events: { create: event },
     },
+  });
+}
+
+function buildPackageAssignments(
+  parcelList: readonly { ClientReference: string; CODAmount?: number }[],
+  packages: readonly PhysicalPackage[],
+  printData: readonly {
+    ClientReference?: string;
+    ParcelId?: number;
+    ParcelNumber?: number;
+    ParcelNumberWithCheckdigit?: number;
+  }[],
+): MyGlsPackageAssignment[] {
+  if (parcelList.length !== packages.length) {
+    throw new MyGlsProviderError(
+      "MyGLS nije kreirao po jedan adresabilan paket za svaki prodati komad.",
+    );
+  }
+  const byReference = new Map(
+    printData.map((item) => [String(item.ClientReference ?? ""), item]),
+  );
+  return parcelList.map((parcel, index) => {
+    const response = byReference.get(parcel.ClientReference);
+    const parcelId = response?.ParcelId;
+    const parcelNumber =
+      response?.ParcelNumberWithCheckdigit ?? response?.ParcelNumber;
+    if (!isNumber(parcelId) || !isNumber(parcelNumber)) {
+      throw new MyGlsProviderError(
+        `MyGLS odgovor nema identitet paketa ${parcel.ClientReference}.`,
+      );
+    }
+    return {
+      packageNo: packages[index]?.packageNo ?? index + 1,
+      orderItemId: packages[index]?.orderItemId ?? null,
+      clientReference: parcel.ClientReference,
+      parcelId,
+      parcelNumber,
+      codAmount: Number(parcel.CODAmount ?? 0),
+    };
+  });
+}
+
+export function readMyGlsPackageAssignments(
+  raw: unknown,
+): MyGlsPackageAssignment[] {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
+  const value = (raw as Record<string, unknown>).myGlsPackageAssignments;
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+    const item = entry as Record<string, unknown>;
+    const packageNo = Number(item.packageNo);
+    const parcelId = Number(item.parcelId);
+    const parcelNumber = Number(item.parcelNumber);
+    if (
+      !Number.isInteger(packageNo) ||
+      packageNo < 1 ||
+      !Number.isFinite(parcelId) ||
+      !Number.isFinite(parcelNumber)
+    ) return [];
+    return [{
+      packageNo,
+      orderItemId:
+        typeof item.orderItemId === "string" ? item.orderItemId : null,
+      clientReference: String(item.clientReference ?? ""),
+      parcelId,
+      parcelNumber,
+      codAmount: Math.max(0, Number(item.codAmount ?? 0) || 0),
+    }];
   });
 }
 

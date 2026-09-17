@@ -2,6 +2,10 @@ export type ShipmentAssignment = {
   orderItemIds: string[];
   codAmount: number;
   supplierFulfillmentId?: string;
+  /** Stable picking group identity. Deferred packages reuse the same order
+   * item but must create a new provider shipment instead of returning the
+   * earlier, still-active partial shipment. */
+  assignmentKey?: string;
 };
 
 export function normalizeOrderItemIds(values: readonly string[] | undefined) {
@@ -31,6 +35,10 @@ export function readShipmentAssignment(raw: unknown): ShipmentAssignment | null 
       value.supplierFulfillmentId.trim()
         ? value.supplierFulfillmentId.trim()
         : undefined,
+    assignmentKey:
+      typeof value.assignmentKey === "string" && value.assignmentKey.trim()
+        ? value.assignmentKey.trim()
+        : undefined,
   };
 }
 
@@ -55,6 +63,9 @@ export function withShipmentAssignment(
       ...(assignment.supplierFulfillmentId?.trim()
         ? { supplierFulfillmentId: assignment.supplierFulfillmentId.trim() }
         : {}),
+      ...(assignment.assignmentKey?.trim()
+        ? { assignmentKey: assignment.assignmentKey.trim() }
+        : {}),
     },
   };
 }
@@ -62,11 +73,13 @@ export function withShipmentAssignment(
 export function sameShipmentAssignment(
   raw: unknown,
   orderItemIds: readonly string[],
+  assignmentKey?: string,
 ) {
   const existing = readShipmentAssignment(raw);
   const requested = normalizeOrderItemIds(orderItemIds);
   return (
     existing != null &&
+    (assignmentKey == null || existing.assignmentKey === assignmentKey) &&
     existing.orderItemIds.length === requested.length &&
     existing.orderItemIds.every((id, index) => id === requested[index])
   );

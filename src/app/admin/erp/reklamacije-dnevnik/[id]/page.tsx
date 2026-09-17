@@ -68,6 +68,7 @@ function refresh(id: string) {
   revalidatePath(`/admin/erp/reklamacije-dnevnik/${id}`);
   revalidatePath("/admin/erp/reklamacije-dnevnik");
   revalidatePath("/admin/erp/povrati");
+  revalidatePath("/admin/erp/preuzimanja/povrati");
   revalidatePath("/admin/erp/preuzimanja");
   revalidatePath("/nalog/reklamacije");
 }
@@ -347,7 +348,7 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
           { href: "/admin/erp/reklamacije-dnevnik", label: "Reklamacije" },
           { label: reclamation.number },
         ]}
-        actions={<div className="flex gap-2"><Link href="/admin/erp/povrati" className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Povrati</Link><Link href={`/admin/erp/prodajni-nalozi/${reclamation.orderId}`} className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Porudžbina</Link></div>}
+        actions={<div className="flex gap-2"><Link href="/admin/erp/preuzimanja/povrati" className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Povrati za prijem</Link><Link href={`/admin/erp/prodajni-nalozi/${reclamation.orderId}`} className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Porudžbina</Link></div>}
       />
       <main className="space-y-6 px-4 py-6 md:px-8">
         <Card>

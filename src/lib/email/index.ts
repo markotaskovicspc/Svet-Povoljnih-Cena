@@ -14,6 +14,7 @@ export {
   sendOrderStatusChanged,
   sendOrderItemsChanged,
   sendWarehouseOrderCancellation,
+  sendPartialDelivery,
   sendFiscalReceipt,
   sendReclamationReceipt,
   sendReclamationStatusChanged,

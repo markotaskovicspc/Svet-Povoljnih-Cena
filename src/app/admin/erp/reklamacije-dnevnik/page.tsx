@@ -511,7 +511,7 @@ export default async function ReclamationsPage({
           { href: "/admin/erp", label: "ERP" },
           { label: "Dnevnik reklamacija" },
         ]}
-        actions={<div className="flex flex-wrap gap-2"><Link href="/admin/erp/povrati" className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Povrati</Link><Link href="/admin/erp/reklamacije-izvestaji" className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Reklamacije – izveštaji</Link><Link href="/api/admin/erp/reklamacije-dnevnik/export" className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Preuzmi XLSX</Link></div>}
+        actions={<div className="flex flex-wrap gap-2"><Link href="/admin/erp/preuzimanja/povrati" className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Povrati za prijem</Link><Link href="/admin/erp/reklamacije-izvestaji" className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Reklamacije – izveštaji</Link><Link href="/api/admin/erp/reklamacije-dnevnik/export" className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Preuzmi XLSX</Link></div>}
       />
       <div className="space-y-10 px-8 py-6">
         <details className="group rounded-xl border border-border bg-surface">
