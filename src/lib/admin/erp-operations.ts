@@ -1635,22 +1635,32 @@ async function salesOrderRows(
         orderBy: { createdAt: "desc" },
         select: { status: true },
       },
-      shipments: {
-        where: { purpose: "ORDER_DELIVERY" },
-        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-        select: {
-          provider: true,
-          status: true,
-          providerStatusCode: true,
-          syncError: true,
-          rawCreateResponse: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      },
     },
   });
+  // Provider responses may embed PDF labels. Read only the two JSON properties
+  // used for item assignment and partial handover, in one batched query.
+  const orderIds = orders.map((order) => order.id);
+  const shipmentRows = orderIds.length ? await db.$queryRaw<Array<
+    SalesOrderCourierShipment & { orderId: string }
+  >>(Prisma.sql`
+    SELECT "orderId", "provider", "status", "providerStatusCode", "syncError",
+      "createdAt", "updatedAt",
+      jsonb_build_object(
+        'assignment', "rawCreateResponse" -> 'assignment',
+        'packageHandover', "rawCreateResponse" -> 'packageHandover'
+      ) AS "rawCreateResponse"
+    FROM ${databaseIdentifier("Shipment")}
+    WHERE "orderId" IN (${Prisma.join(orderIds)}) AND "purpose" = 'ORDER_DELIVERY'
+    ORDER BY "updatedAt" DESC, "createdAt" DESC
+  `) : [];
+  const shipmentsByOrder = new Map<string, SalesOrderCourierShipment[]>();
+  for (const shipment of shipmentRows) {
+    const group = shipmentsByOrder.get(shipment.orderId) ?? [];
+    group.push(shipment);
+    shipmentsByOrder.set(shipment.orderId, group);
+  }
   return orders.flatMap((order): ErpRow[] => {
+    const shipments = shipmentsByOrder.get(order.id) ?? [];
     const saleFiscalDocuments = order.fiscalDocuments.filter(
       (document) => document.kind === "SALE",
     );
@@ -1678,7 +1688,7 @@ async function salesOrderRows(
     const orderCourier = salesOrderCourierDisplay({
       shippingMethod: order.shippingMethod,
       itemId: null,
-      shipments: order.shipments,
+      shipments,
     });
     const paymentStatuses = order.payments.map((payment) => payment.status);
     const common = {
@@ -1777,7 +1787,7 @@ async function salesOrderRows(
       const courier = salesOrderCourierDisplay({
         shippingMethod: order.shippingMethod,
         itemId: item.id,
-        shipments: order.shipments,
+        shipments,
       });
       const product = item.product;
       const leaf = product?.categories[0]?.category ?? null;
