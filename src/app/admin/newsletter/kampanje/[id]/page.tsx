@@ -123,10 +123,17 @@ export default async function NewsletterCampaignPage({
           { label: campaign.title },
         ]}
         actions={
-          <AdminActionForm action={duplicateNewsletterCampaignAction}>
-            <input type="hidden" name="id" value={campaign.id} />
-            <SubmitButton variant="outline" pendingLabel="Kopiram…">Napravi kopiju</SubmitButton>
-          </AdminActionForm>
+          <div className="flex flex-wrap gap-2">
+            <AdminActionForm action={duplicateNewsletterCampaignAction}>
+              <input type="hidden" name="id" value={campaign.id} />
+              <SubmitButton variant="outline" pendingLabel="Kopiram…">Napravi kopiju</SubmitButton>
+            </AdminActionForm>
+            <AdminActionForm action={duplicateNewsletterCampaignAction}>
+              <input type="hidden" name="id" value={campaign.id} />
+              <input type="hidden" name="allContacts" value="on" />
+              <SubmitButton variant="outline" pendingLabel="Pripremam…" confirm="Napraviti nacrt iste poruke za sve kontakte, uključujući one bez saglasnosti? Odjavljene i blokirane adrese se izostavljaju. Slanje bez saglasnosti nosi rizik za SES nalog. Ovaj korak još ne šalje mejlove.">Kopiraj za sve kontakte</SubmitButton>
+            </AdminActionForm>
+          </div>
         }
       />
       <main className="space-y-6 px-4 py-6 md:px-8">
@@ -138,7 +145,7 @@ export default async function NewsletterCampaignPage({
         ) : null}
         {campaign.includeContactsWithoutConsent ? (
           <div role="alert" className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
-            <strong>Upozorenje:</strong> stara opcija za kontakte bez saglasnosti više se ne primenjuje. Slanje uključuje samo potvrđene prijave.
+            <strong>Upozorenje:</strong> ova kampanja uključuje i kontakte bez zabeležene saglasnosti. To ne menja njihove saglasnosti i nosi rizik ograničenja SES naloga.
             Izričito odjavljene, potisnute i provider opt-out adrese ostaju isključene.
           </div>
         ) : null}
@@ -213,11 +220,11 @@ export default async function NewsletterCampaignPage({
                     {" "}ili <Link href="/admin/newsletter?view=audiences" className="font-medium text-walnut hover:underline">napravi novi segment</Link>.
                   </p>
                 </Field>
-                <p className="text-sm text-ink-600 lg:col-span-2">Sve grupe uključuju samo kontakte sa zabeleženom saglasnošću. Odjavljeni kontakti, odbijene adrese i prijave spama automatski se izostavljaju.</p>
+                <p className="text-sm text-ink-600 lg:col-span-2">Podrazumevano se uključuju samo kontakti sa zabeleženom saglasnošću. Odjavljeni kontakti, odbijene adrese i prijave spama automatski se izostavljaju.</p>
                 <label className="flex items-start gap-3 rounded-xl border border-border/70 p-3 text-sm text-ink-500 lg:col-span-2">
-                  <input type="checkbox" disabled aria-describedby="no-consent-unavailable" className="mt-1" />
-                  <span>Uključi kontakte bez saglasnosti — nije aktivno
-                    <span id="no-consent-unavailable" className="mt-1 block text-xs">Nije dostupno za marketinško slanje preko SES-a. Slanje u paketima ne zamenjuje saglasnost.</span>
+                  <input type="checkbox" name="includeContactsWithoutConsent" defaultChecked={campaign.includeContactsWithoutConsent} aria-describedby="no-consent-warning" className="mt-1" />
+                  <span>Uključi i kontakte bez zabeležene saglasnosti
+                    <span id="no-consent-warning" className="mt-1 block text-xs">Proširuje izabrane grupe, bez promene saglasnosti. Odjavljene i blokirane adrese ostaju isključene. Neželjena masovna pošta može dovesti do ograničenja SES naloga; sporije slanje ne uklanja taj rizik.</span>
                   </span>
                 </label>
               </div>
@@ -389,19 +396,19 @@ function WorkflowCard({
           <AdminActionForm action={retryNewsletterCampaignAction}>
             <input type="hidden" name="id" value={campaign.id} />
             {retrySummary.unknown > 0 ? (
-              <label className="mb-3 flex max-w-xl items-start gap-3 rounded-xl border border-warning/40 bg-warning/10 p-3 text-sm">
-                <input type="checkbox" name="retryUnknownAcknowledged" className="mt-1" />
-                <span><strong>Ponovi i {retrySummary.unknown} poruka sa nepoznatim ishodom — prihvatam rizik duplikata.</strong>
-                  <span className="mt-1 block">SES možda već ima ove poruke iako potvrda nije sačuvana. Uključite samo ako želite ručno ponavljanje uprkos tom riziku. Odluka se beleži u evidenciji.</span>
-                </span>
-              </label>
+              <>
+                <input type="hidden" name="retryUnknownAcknowledged" value="on" />
+                <p className="mb-3 max-w-xl text-sm text-ink-600">Za {retrySummary.unknown} poruka prethodni ishod nije potvrđen. Ponovni pokušaj može poslati duplikat.</p>
+              </>
             ) : null}
             <SubmitButton
               variant="outline"
               pendingLabel="Vraćam u red…"
-              confirm="Nastaviti postepeno slanje postojećoj listi? Poruke sa zabeleženom potvrdom slanja se preskaču. Ako ste uključili nepoznate ishode, prihvatate da neke poruke mogu stići dvaput."
+              confirm={retrySummary.unknown > 0
+                ? `Pokušati ponovo? Uključeno je ${retrySummary.unknown} poruka sa nepoznatim ishodom, pa neke mogu stići dvaput. Poruke sa zabeleženom potvrdom slanja se preskaču.`
+                : "Ponovo pokušati slanje neposlatih poruka? Poruke sa zabeleženom potvrdom slanja se preskaču."}
             >
-              Nastavi / ponovi slanje
+              Pokušaj ponovo
             </SubmitButton>
           </AdminActionForm>
         ) : null}

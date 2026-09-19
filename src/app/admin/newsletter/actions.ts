@@ -226,13 +226,14 @@ export async function duplicateNewsletterCampaignAction(
     { allowed, action: "newsletter.campaign.duplicate", entity: "NewsletterCampaign" },
     async (actorId, formData: FormData) => {
       const sourceId = value(formData, "id");
-      const campaign = await duplicateNewsletterCampaign(sourceId, actorId);
+      const allContacts = formData.get("allContacts") === "on";
+      const campaign = await duplicateNewsletterCampaign(sourceId, actorId, allContacts);
       return {
         ok: true as const,
         entityId: campaign.id,
         message: "Kopija kampanje je kreirana.",
         result: { id: campaign.id },
-        diff: { sourceId },
+        diff: { sourceId, allContacts },
       };
     },
   )(formData);

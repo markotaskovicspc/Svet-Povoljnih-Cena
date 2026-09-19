@@ -45,12 +45,35 @@ beforeEach(() => {
 });
 
 describe("newsletter audience and send safeguards", () => {
-  it("fails closed even when a legacy request asks to include unconsented contacts", async () => {
-    mocks.contacts.mockResolvedValue([{ ...contact, status: "PENDING" }, { ...contact, id: "missing", subscribedAt: null }, contact]);
+  it("requires explicit broader selection and never includes withdrawals or suppression", async () => {
+    mocks.contacts.mockResolvedValue([
+      { ...contact, id: "pending", email: "pending@example.com", status: "PENDING", subscribedAt: null },
+      { ...contact, id: "missing", email: "missing@example.com", subscribedAt: null },
+      { ...contact, id: "withdrawn", status: "UNSUBSCRIBED" },
+      { ...contact, id: "suppressed", status: "SUPPRESSED" },
+      { ...contact, id: "old-withdrawal", unsubscribedAt: new Date() }, contact,
+    ]);
+    expect((await resolveNewsletterAudience({})).recipients.map((row) => row.id)).toEqual(["c1"]);
     const result = await resolveNewsletterAudience({}, { includeContactsWithoutConsent: true });
-    expect(result.recipients.map((row) => row.id)).toEqual(["c1"]);
-    expect(mocks.contacts.mock.calls[0][0].where).toMatchObject({ status: "ACTIVE", subscribedAt: { not: null } });
-    expect(saveCampaignSchema.parse({ id: "x", title: "x", subject: "x", content: [], includeContactsWithoutConsent: true }).includeContactsWithoutConsent).toBe(false);
+    expect(result.recipients.map((row) => row.id)).toEqual(["pending", "missing", "c1"]);
+    expect(result.breakdown.matchedWithoutConsent).toBe(2);
+    expect(result.recipients[0].status).toBe("PENDING");
+    expect(saveCampaignSchema.parse({ id: "x", title: "x", subject: "x", content: [] }).includeContactsWithoutConsent).toBe(false);
+    expect(saveCampaignSchema.parse({ id: "x", title: "x", subject: "x", content: [], includeContactsWithoutConsent: true }).includeContactsWithoutConsent).toBe(true);
+  });
+  it("allows an explicitly selected pending contact through the final SES guard without granting consent", async () => {
+    const pending = { ...contact, status: "PENDING", subscribedAt: null };
+    mocks.contacts.mockResolvedValue([pending]);
+    mocks.recipients.mockImplementation(async ({ where }) => typeof where.campaignId === "object" ? [] : [{ ...recipient, contact: pending }]);
+    mocks.campaign.mockResolvedValue({ id: "campaign1", status: "SENDING", audienceMode: "DYNAMIC", subject: "Ponuda", content: [], audienceFilterSnapshot: {}, includeContactsWithoutConsent: true, createdById: "a1", approvedById: "a2" });
+    mocks.behavior.mockResolvedValue([{ id: "r1" }]);
+    await sendNewsletterCampaign("campaign1");
+    expect(mocks.bulk).toHaveBeenCalledOnce();
+    const query = mocks.behavior.mock.calls[0][0];
+    expect(query.values).toContain(true);
+    expect(query.sql).toContain('c."unsubscribedAt" IS NULL');
+    expect(query.sql).toContain('c."suppressedAt" IS NULL');
+    expect(query.sql).toContain("IN ('ACTIVE', 'PENDING')");
   });
   it("includes opted-in guest buyers in the built-in buyers group", async () => {
     const result = await resolveNewsletterAudience(builtInNewsletterAudiences.find((row) => row.id === "builtin:buyers")!.filter);

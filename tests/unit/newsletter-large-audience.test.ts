@@ -7,7 +7,7 @@ it("selects and prepares 70,000 contacts in bounded inserts without custom-field
   const contacts = Array.from({ length: 70_000 }, (_, i) => ({ id: `c${i}`, email: `p${i}@example.com`, firstName: null, lastName: null, language: "sr-Latn", status: "ACTIVE" as const, subscribedAt: new Date(), tags: ["custom-list"], userId: null, source: "import" }));
   mocks.contacts.mockResolvedValue(contacts);
   const everyone = builtInNewsletterAudiences.find((row) => row.id === "builtin:subscribers")!;
-  expect(everyone.name).toBe("Svi korisnici");
+  expect(everyone.name).toBe("Svi kontakti");
   const resolved = await resolveNewsletterAudience(everyone.filter);
   expect(resolved.recipients).toHaveLength(70_000);
   expect(mocks.contacts.mock.calls[0][0].select.customFields).toBeUndefined();

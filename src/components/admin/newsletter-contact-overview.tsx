@@ -8,8 +8,8 @@ export function NewsletterContactOverview({ counts }: { counts: ContactOverview 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Svi email kontakti" value={number(counts.total)} hint="Jedinstvene adrese iz svih izvora, sa i bez saglasnosti." />
         <StatCard label="Sa aktivnom saglasnošću" value={number(counts.activeConsent)} hint="Potvrđene aktivne prijave u newsletter evidenciji." tone="success" />
-        <StatCard label="Bez aktivne saglasnosti" value={number(counts.withoutActiveConsent)} hint="Nisu aktivno prijavljeni u newsletter evidenciji; ne uključuju se u slanje." />
-        <StatCard label="Dostupni za newsletter" value={number(counts.eligible)} hint="Aktivne prijave bez blokade slanja. Izabrane grupe i ograničenja kampanje mogu smanjiti ovaj broj." tone="success" />
+        <StatCard label="Bez aktivne saglasnosti" value={number(counts.withoutActiveConsent)} hint="Nisu aktivno prijavljeni; uključuju se samo uz poseban izbor u kampanji." />
+        <StatCard label="Za slanje sa saglasnošću" value={number(counts.eligible)} hint="Aktivne prijave bez blokade slanja. Izabrane grupe i ograničenja kampanje mogu smanjiti ovaj broj." tone="success" />
       </div>
       <p className="text-xs text-ink-500">
         Ukupno obuhvata naloge korisnika, kupce iz ERP-a, emailove iz porudžbina i checkouta, newsletter prijave i uvezene custom liste.

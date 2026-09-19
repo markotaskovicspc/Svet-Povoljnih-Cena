@@ -433,7 +433,7 @@ export function ProductCard({
       >
         <h3
           className={cn(
-            "truncate text-xs leading-snug font-semibold text-ink-900 md:text-[13px]",
+            "line-clamp-2 min-h-[2.75em] text-xs leading-snug font-semibold text-ink-900 md:text-[13px]",
             compactOnDesktop && "md:text-[11px]",
           )}
         >

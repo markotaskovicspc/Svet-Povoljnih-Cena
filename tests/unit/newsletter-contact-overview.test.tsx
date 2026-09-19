@@ -21,7 +21,7 @@ it("keeps all known addresses separate from consent and send eligibility", async
   expect(html).toContain("69.666");
   expect(html).toContain("Svi email kontakti");
   expect(html).toContain("Sa aktivnom saglasnošću");
-  expect(html).toContain("Dostupni za newsletter");
+  expect(html).toContain("Za slanje sa saglasnošću");
   expect(html).toContain("12 adresa ima ranije evidentiranu prijavu");
   expect(html).toContain("ove adrese još nisu uključene");
 });

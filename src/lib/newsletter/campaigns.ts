@@ -1,4 +1,5 @@
 import "server-only";
+import { syncAllNewsletterContacts } from "./all-contacts";
 import { runNewsletterBatches } from "./batch-runner";
 import { newsletterDeliveryPolicy } from "./delivery-policy";
 import { withNewsletterDeliveryPacing } from "./delivery-pacing";
@@ -58,7 +59,7 @@ export const saveCampaignSchema = z.object({
   replyTo: z.union([z.literal(""), z.email()]).optional().default(""),
   audienceIds: z.array(z.string().min(1)).max(20).default([]),
   audienceMode: z.enum(["DYNAMIC", "FIXED"]).default("DYNAMIC"),
-  includeContactsWithoutConsent: z.boolean().default(false).transform(() => false),
+  includeContactsWithoutConsent: z.boolean().default(false),
   topicKey: z.string().trim().min(1).max(60).default("promotions"),
   content: newsletterContentSchema,
 });
@@ -111,6 +112,7 @@ export async function saveNewsletterCampaign(
   if (!editableStatuses.has(current.status)) {
     throw new Error("Zakazana ili poslata kampanja ne može da se menja. Otkažite je ili napravite kopiju.");
   }
+  if (input.includeContactsWithoutConsent) await syncAllNewsletterContacts();
   const audienceIds = Array.from(new Set(input.audienceIds));
   const customIds = audienceIds.filter((id) => !id.startsWith("builtin:"));
   const audienceRows: Array<{ id: string; name: string; filter: unknown }> = [
@@ -313,16 +315,19 @@ export async function cancelNewsletterCampaign(campaignId: string, actorId: stri
 
 export { retryNewsletterCampaign } from "./retry";
 
-export async function duplicateNewsletterCampaign(campaignId: string, actorId: string) {
+export async function duplicateNewsletterCampaign(campaignId: string, actorId: string, allContacts = false) {
   const source = await db.newsletterCampaign.findUniqueOrThrow({ where: { id: campaignId } });
   const rendered = await renderNewsletterCampaign({
     subject: source.subject,
     previewText: source.previewText,
     content: source.content,
   });
+  if (allContacts) await syncAllNewsletterContacts();
+  const copiedFilter = allContacts ? combineNewsletterAudiences([builtInNewsletterAudiences[0]!]) : source.audienceFilterSnapshot;
+  const selected = allContacts ? await resolveNewsletterAudience(copiedFilter, { includeContactsWithoutConsent: true }) : null;
   return db.newsletterCampaign.create({
     data: {
-      title: `${source.title} — kopija`,
+      title: `${source.title} — ${allContacts ? "svi kontakti" : "kopija"}`,
       subject: source.subject,
       previewText: source.previewText,
       body: rendered.text,
@@ -332,10 +337,11 @@ export async function duplicateNewsletterCampaign(campaignId: string, actorId: s
       fromName: source.fromName,
       fromEmail: source.fromEmail,
       replyTo: source.replyTo,
-      audienceId: source.audienceId,
+      audienceId: allContacts ? null : source.audienceId,
       audienceMode: source.audienceMode,
-      includeContactsWithoutConsent: false,
-      audienceFilterSnapshot: source.audienceFilterSnapshot as Prisma.InputJsonValue | undefined,
+      includeContactsWithoutConsent: allContacts,
+      audienceFilterSnapshot: copiedFilter as Prisma.InputJsonValue | undefined,
+      ...(selected ? { recipients: selected.recipients.length, audienceBreakdown: selected.breakdown } : {}),
       topicKey: source.topicKey,
       createdById: actorId,
       updatedById: actorId,
@@ -347,8 +353,8 @@ export async function duplicateNewsletterCampaign(campaignId: string, actorId: s
           content: source.content as Prisma.InputJsonValue,
           html: rendered.html,
           text: rendered.text,
-          audienceFilter: source.audienceFilterSnapshot as Prisma.InputJsonValue | undefined,
-          includeContactsWithoutConsent: false,
+          audienceFilter: copiedFilter as Prisma.InputJsonValue | undefined,
+          includeContactsWithoutConsent: allContacts,
           createdById: actorId,
         },
       },
@@ -527,6 +533,7 @@ export async function sendNewsletterCampaign(campaignId: string, options: { defe
     (campaign.audienceMode === "DYNAMIC" && campaign.status === "PREPARING") ||
     !(await db.newsletterCampaignRecipient.count({ where: { campaignId } }))
   ) {
+    if (campaign.includeContactsWithoutConsent) await syncAllNewsletterContacts();
     const resolved = await resolveNewsletterAudience(filter, {
       includeContactsWithoutConsent: campaign.includeContactsWithoutConsent,
     });
@@ -869,7 +876,7 @@ export async function replaceCampaignRecipients(
 
 async function finalEligibleRecipients(
   campaignId: string,
-  _includeContactsWithoutConsent: boolean,
+  includeContactsWithoutConsent: boolean,
   limit?: number,
   filter?: unknown,
 ) {
@@ -883,7 +890,10 @@ async function finalEligibleRecipients(
     ...(limit ? { take: limit } : {}),
   });
   const isAllowedStatus = (contact: typeof rows[number]["contact"]) =>
-    contact?.status === "ACTIVE" && Boolean(contact.subscribedAt);
+    Boolean(contact && !contact.unsubscribedAt && !contact.suppressedAt && (
+      (contact.status === "ACTIVE" && contact.subscribedAt) ||
+      (includeContactsWithoutConsent && ["ACTIVE", "PENDING"].includes(contact.status))
+    ));
   const inactive = rows.filter((row) => !isAllowedStatus(row.contact));
   if (inactive.length) {
     await db.newsletterCampaignRecipient.updateMany({
@@ -899,7 +909,7 @@ async function finalEligibleRecipients(
   if (active.length && filter) {
     const parsed = newsletterAudienceFilterSchema.parse(filter);
     // Recheck segment membership for every batch, including a checkout completed after scheduling.
-    const current = await resolveNewsletterAudience(parsed, { restrictContactIds: active.map((row) => row.contactId).filter((id): id is string => Boolean(id)) });
+    const current = await resolveNewsletterAudience(parsed, { includeContactsWithoutConsent, restrictContactIds: active.map((row) => row.contactId).filter((id): id is string => Boolean(id)) });
     const ids = new Set(current.recipients.map((contact) => contact.id));
     const excluded = active.filter((row) => !row.contactId || !ids.has(row.contactId));
     if (excluded.length) await db.newsletterCampaignRecipient.updateMany({
@@ -944,6 +954,7 @@ async function sendSesNewsletterBatch(args: {
     fromName: string | null;
     fromEmail: string | null;
     replyTo: string | null;
+    includeContactsWithoutConsent?: boolean;
   };
   recipients: Awaited<ReturnType<typeof finalEligibleRecipients>>;
   rendered: Awaited<ReturnType<typeof renderNewsletterCampaign>>;
@@ -968,7 +979,10 @@ async function sendSesNewsletterBatch(args: {
     SET "status" = 'FAILED', "failureReason" = 'ses:delivery_unknown', "updatedAt" = NOW()
     WHERE r."id" IN (${Prisma.join(args.recipients.map((recipient) => recipient.id))}) AND r."status" = 'QUEUED'
       AND EXISTS (SELECT 1 FROM ${databaseIdentifier("MarketingContact")} c
-        WHERE c."id" = r."contactId" AND c."status" = 'ACTIVE' AND c."subscribedAt" IS NOT NULL AND lower(c."email") = lower(r."email"))
+        WHERE c."id" = r."contactId" AND c."unsubscribedAt" IS NULL AND c."suppressedAt" IS NULL
+          AND ((c."status" = 'ACTIVE' AND c."subscribedAt" IS NOT NULL)
+            OR (${args.campaign.includeContactsWithoutConsent === true} AND c."status" IN ('ACTIVE', 'PENDING')))
+          AND lower(c."email") = lower(r."email"))
       AND NOT EXISTS (SELECT 1 FROM ${databaseIdentifier("EmailSuppression")} s WHERE lower(s."email") = lower(r."email"))
       AND EXISTS (SELECT 1 FROM ${databaseIdentifier("NewsletterCampaign")} c
         WHERE c."id" = r."campaignId" AND c."status" IN ('PREPARING', 'SENDING', 'PARTIAL_FAILED', 'FAILED'))

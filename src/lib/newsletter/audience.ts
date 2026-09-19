@@ -178,7 +178,8 @@ export async function resolveNewsletterAudience(
   options: ResolveNewsletterAudienceOptions = {},
   limit = maximumAudienceContacts(),
 ) {
-  // Legacy callers may still supply this flag; it never grants marketing consent.
+  // Explicit campaign override changes selection, never the consent record.
+  const includeWithoutConsent = options.includeContactsWithoutConsent === true;
   const filter = newsletterAudienceFilterSchema.parse(rawFilter ?? {});
   const savedFilters = [
     filter,
@@ -192,13 +193,14 @@ export async function resolveNewsletterAudience(
   const safeLimit = Math.min(Math.max(Math.trunc(limit), 1), 250_000);
   const contacts = await db.marketingContact.findMany({
     where: {
-      status: "ACTIVE" as const, subscribedAt: { not: null },
+      ...(includeWithoutConsent ? { status: { in: ["ACTIVE", "PENDING"] as ("ACTIVE" | "PENDING")[] } } : { status: "ACTIVE" as const, subscribedAt: { not: null } }),
+      unsubscribedAt: null, suppressedAt: null,
       AND: [
         ...(filter.manualContactIds.length ? [{ id: { in: filter.manualContactIds } }] : []),
         ...(options.restrictContactIds ? [{ id: { in: options.restrictContactIds } }] : []),
       ],
     },
-    select: { id: true, userId: true, email: true, firstName: true, lastName: true, language: true, status: true, source: true, tags: true, subscribedAt: true },
+    select: { id: true, userId: true, email: true, firstName: true, lastName: true, language: true, status: true, source: true, tags: true, subscribedAt: true, unsubscribedAt: true, suppressedAt: true },
     take: safeLimit + 1,
     orderBy: { subscribedAt: "asc" },
   });
@@ -305,12 +307,15 @@ export async function resolveNewsletterAudience(
     })).map((row) => row.email.toLowerCase()),
   );
   const recipients: AudienceRecipient[] = [];
+  const selectedEmails = new Set<string>();
   let excludedSuppressed = 0;
   let excludedRules = 0;
-  const matchedWithoutConsent = 0;
+  let matchedWithoutConsent = 0;
 
   for (const contact of contacts) {
-    if (contact.status !== "ACTIVE" || !contact.subscribedAt) continue;
+    if (!["ACTIVE", "PENDING"].includes(contact.status) || contact.unsubscribedAt || contact.suppressedAt) continue;
+    const hasConsent = contact.status === "ACTIVE" && Boolean(contact.subscribedAt);
+    if (!includeWithoutConsent && !hasConsent) continue;
     if (suppressed.has(contact.email.toLowerCase())) {
       excludedSuppressed += 1;
       continue;
@@ -348,13 +353,17 @@ export async function resolveNewsletterAudience(
       excludedRules += 1;
       continue;
     }
+    const normalizedEmail = contact.email.trim().toLowerCase();
+    if (selectedEmails.has(normalizedEmail) || !z.email().safeParse(normalizedEmail).success) continue;
+    selectedEmails.add(normalizedEmail);
+    if (!hasConsent) matchedWithoutConsent += 1;
     recipients.push({
       id: contact.id,
-      email: contact.email,
+      email: normalizedEmail,
       firstName: contact.firstName,
       lastName: contact.lastName,
       language: contact.language,
-      status: contact.status,
+      status: hasConsent ? "ACTIVE" : "PENDING",
     });
 
   }
@@ -362,8 +371,8 @@ export async function resolveNewsletterAudience(
     filter,
     recipients,
     breakdown: {
-      activeContacts: contacts.filter((contact) => contact.status === "ACTIVE").length,
-      contactsWithoutConsent: contacts.filter((contact) => contact.status === "PENDING").length,
+      activeContacts: contacts.filter((contact) => contact.status === "ACTIVE" && contact.subscribedAt).length,
+      contactsWithoutConsent: contacts.filter((contact) => contact.status !== "ACTIVE" || !contact.subscribedAt).length,
       matched: recipients.length,
       matchedWithoutConsent,
       excludedSuppressed,
@@ -535,7 +544,7 @@ export function audienceFilterJson(filter: NewsletterAudienceFilter): Prisma.Inp
 
 /** Stable built-in audiences are snapshotted just like saved custom segments. */
 export const builtInNewsletterAudiences = [
-  { id: "builtin:subscribers", name: "Svi korisnici", description: "Sve grupe i custom liste objedinjene, svaka adresa samo jednom. Samo kontakti sa saglasnošću.", rules: [] },
+  { id: "builtin:subscribers", name: "Svi kontakti", description: "Sve grupe i custom liste, svaka adresa jednom. Podrazumevano sa saglasnošću; za širi izbor uključite opciju ispod.", rules: [] },
   { id: "builtin:registered", name: "Registrovani korisnici", description: "Korisnici sa nalogom i saglasnošću za promocije.", rules: [{ id: "registered", field: "registered", operator: "is_true" }] },
   { id: "builtin:buyers", name: "Postojeći kupci", description: "Kupci sa nalogom i gosti koji su kupili, uz saglasnost.", rules: [{ id: "buyers", field: "hasPurchased", operator: "is_true" }] },
   { id: "builtin:abandoned", name: "Nezavršena kupovina", description: "Checkout pre 1 h–30 dana, bez porudžbine i uz newsletter saglasnost. Dozvola za podsetnik korpe nije dovoljna.", rules: [{ id: "abandoned", field: "abandonedCheckout", operator: "is_true" }] },
