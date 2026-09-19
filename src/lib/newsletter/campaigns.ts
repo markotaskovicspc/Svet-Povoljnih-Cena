@@ -1043,7 +1043,17 @@ async function sendSesNewsletterBatch(args: {
     },
   );
   if (!result.ok) {
-    // Only explicit request throttling proves SES accepted none of this batch.
+    // A signed AWS authorization rejection proves that this request did not
+    // send. Keep it FAILED (not automatically queued), with the actual reason.
+    // Timeouts and missing responses must retain the ambiguity marker below.
+    if (/^ses:AccessDeniedException status=403\b/.test(result.error)) {
+      await db.newsletterCampaignRecipient.updateMany({
+        where: { id: { in: recipients.map((row) => row.id) }, status: "FAILED", failureReason: "ses:delivery_unknown" },
+        data: { failureReason: result.error.slice(0, 4000) },
+      });
+      throw new Error(`Amazon SES je odbio ovu grupu poruka: nedostaje AWS dozvola ses:SendBulkEmail za izabranog pošiljaoca. Ova grupa nije poslata. ${result.error}`);
+    }
+    // Explicit throttling is safe to retry automatically.
     if (/^ses:(TooManyRequestsException|ThrottlingException)\b/.test(result.error)) {
       await db.newsletterCampaignRecipient.updateMany({
         where: { id: { in: recipients.map((row) => row.id) }, status: "FAILED", failureReason: "ses:delivery_unknown" },

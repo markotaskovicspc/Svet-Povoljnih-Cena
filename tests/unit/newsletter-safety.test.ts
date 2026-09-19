@@ -81,6 +81,17 @@ describe("newsletter audience and send safeguards", () => {
     await expect(sendNewsletterCampaign("campaign1")).rejects.toThrow("neće se automatski ponavljati");
     expect(mocks.updateMany.mock.calls.some(([arg]) => arg.data.status === "QUEUED")).toBe(false);
   });
+  it("records explicit AWS permission rejection as failed without requeueing or claiming an unknown outcome", async () => {
+    mocks.behavior.mockResolvedValue([{ id: "r1" }]);
+    const error = "ses:AccessDeniedException status=403 requestId=test retryable=false message=not authorized to perform ses:SendBulkEmail";
+    mocks.bulk.mockResolvedValue({ ok: false, error });
+    await expect(sendNewsletterCampaign("campaign1")).rejects.toThrow("Ova grupa nije poslata");
+    expect(mocks.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ["r1"] }, status: "FAILED", failureReason: "ses:delivery_unknown" },
+      data: { failureReason: error },
+    });
+    expect(mocks.updateMany.mock.calls.some(([arg]) => arg.data.status === "QUEUED")).toBe(false);
+  });
   it("requeues an explicitly rejected throttled request", async () => {
     mocks.behavior.mockResolvedValue([{ id: "r1" }]); mocks.bulk.mockResolvedValue({ ok: false, error: "ses:TooManyRequestsException throttled" });
     await expect(sendNewsletterCampaign("campaign1")).rejects.toThrow();
