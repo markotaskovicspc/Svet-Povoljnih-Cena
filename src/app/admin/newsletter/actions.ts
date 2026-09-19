@@ -434,7 +434,7 @@ function importSummary(
     duplicateRows: number;
   },
 ) {
-  return `${prefix} Ispravnih: ${result.uniqueValid}; redova sa izričitom saglasnošću: ${result.explicitConsent}; bez zabeležene saglasnosti (mogu se uključiti u nacrt uz upozorenje): ${result.withoutConsent}; neispravnih: ${result.invalidRows}; duplikata u fajlu: ${result.duplicateRows}.`;
+  return `${prefix} Ispravnih: ${result.uniqueValid}; redova sa izričitom saglasnošću: ${result.explicitConsent}; bez zabeležene saglasnosti (isključeni iz slanja): ${result.withoutConsent}; neispravnih: ${result.invalidRows}; duplikata u fajlu: ${result.duplicateRows}.`;
 }
 
 async function campaignAction(

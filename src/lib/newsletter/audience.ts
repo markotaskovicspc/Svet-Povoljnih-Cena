@@ -198,6 +198,7 @@ export async function resolveNewsletterAudience(
         ...(options.restrictContactIds ? [{ id: { in: options.restrictContactIds } }] : []),
       ],
     },
+    select: { id: true, userId: true, email: true, firstName: true, lastName: true, language: true, status: true, source: true, tags: true, subscribedAt: true },
     take: safeLimit + 1,
     orderBy: { subscribedAt: "asc" },
   });
@@ -489,8 +490,8 @@ function operatorsForField(field: z.infer<typeof audienceFieldSchema>) {
 }
 
 function maximumAudienceContacts() {
-  const configured = Number.parseInt(process.env.NEWSLETTER_AUDIENCE_MAX_CONTACTS ?? "50000", 10);
-  return Number.isFinite(configured) ? Math.min(Math.max(configured, 1), 250_000) : 50_000;
+  const configured = Number.parseInt(process.env.NEWSLETTER_AUDIENCE_MAX_CONTACTS ?? "100000", 10);
+  return Number.isFinite(configured) ? Math.min(Math.max(configured, 100_000), 250_000) : 100_000;
 }
 
 function unique(values: string[]) {
@@ -534,7 +535,7 @@ export function audienceFilterJson(filter: NewsletterAudienceFilter): Prisma.Inp
 
 /** Stable built-in audiences are snapshotted just like saved custom segments. */
 export const builtInNewsletterAudiences = [
-  { id: "builtin:subscribers", name: "Svi prijavljeni na newsletter", description: "Samo kontakti sa potvrđenom saglasnošću.", rules: [] },
+  { id: "builtin:subscribers", name: "Svi korisnici", description: "Sve grupe i custom liste objedinjene, svaka adresa samo jednom. Samo kontakti sa saglasnošću.", rules: [] },
   { id: "builtin:registered", name: "Registrovani korisnici", description: "Korisnici sa nalogom i saglasnošću za promocije.", rules: [{ id: "registered", field: "registered", operator: "is_true" }] },
   { id: "builtin:buyers", name: "Postojeći kupci", description: "Kupci sa nalogom i gosti koji su kupili, uz saglasnost.", rules: [{ id: "buyers", field: "hasPurchased", operator: "is_true" }] },
   { id: "builtin:abandoned", name: "Nezavršena kupovina", description: "Checkout pre 1 h–30 dana, bez porudžbine i uz newsletter saglasnost. Dozvola za podsetnik korpe nije dovoljna.", rules: [{ id: "abandoned", field: "abandonedCheckout", operator: "is_true" }] },

@@ -4,7 +4,7 @@
     "ABANDONED_CART_RECOVERY_ENABLED": "true",
     "NEXT_PUBLIC_MERCHANT_WAREHOUSE_ADDRESS": "Evropska bb, 22300 Stara Pazova",
     "NEXT_PUBLIC_MERCHANT_RETURNS_ADDRESS": "Evropska bb, 22300 Stara Pazova",
-    "NEXT_PUBLIC_MERCHANT_RETURNS_CONTACT_NAME": "Marko Medić",
+    "NEXT_PUBLIC_MERCHANT_RETURNS_CONTACT_NAME": "Marko Medi\u0107",
     "NEXT_PUBLIC_MERCHANT_RETURNS_CONTACT_PHONE": "060 511 5034",
     "RABALUX_PICKUP_NAME": "Rabalux Srbija",
     "RABALUX_PICKUP_STREET": "Donje Sajlovo",
@@ -23,6 +23,10 @@
     {
       "path": "/api/cron/background-jobs",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/newsletter",
+      "schedule": "* * * * *"
     },
     {
       "path": "/api/cron/fiscal-retry",

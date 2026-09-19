@@ -1,4 +1,5 @@
 import "server-only";
+import { runNewsletterBatches } from "./batch-runner";
 
 import {
   NewsletterCampaignStatus,
@@ -516,7 +517,7 @@ export async function enqueueDueNewsletterCampaigns(now = new Date()) {
   return due.length;
 }
 
-export async function sendNewsletterCampaign(campaignId: string) {
+export async function sendNewsletterCampaign(campaignId: string, options: { deferContinuation?: boolean } = {}) {
   let campaign = await db.newsletterCampaign.findUniqueOrThrow({
     where: { id: campaignId },
     include: { audience: true },
@@ -592,12 +593,13 @@ export async function sendNewsletterCampaign(campaignId: string) {
       where: { campaignId, status: "QUEUED" },
     });
     if (cfg.provider === "ses" && queued) {
-      await enqueueSesNewsletterContinuation(campaignId, `eligible-${queued}`);
+      if (!options.deferContinuation) await enqueueSesNewsletterContinuation(campaignId, `eligible-${queued}`);
       return {
         ok: true as const,
         partial: true as const,
         recipients: 0,
         remaining: queued,
+        nextCursor: `eligible-${queued}`,
       };
     }
     if (cfg.provider === "ses") {
@@ -637,7 +639,7 @@ export async function sendNewsletterCampaign(campaignId: string) {
     if (!cfg.sesCredentialsConfigured) {
       throw new Error("Amazon SES pristup nije konfigurisan.");
     }
-    return sendSesNewsletterBatch({ campaign, recipients, rendered, cfg });
+    return sendSesNewsletterBatch({ campaign, recipients, rendered, cfg, deferContinuation: options.deferContinuation });
   }
   if (!cfg.apiKey) throw new Error("Email provider pristup nije konfigurisan.");
   if (cfg.provider !== "resend") throw new Error("Newsletter Broadcast slanje zahteva Resend provider.");
@@ -873,15 +875,15 @@ export async function refreshCampaignStats(campaignId: string) {
   });
 }
 
-async function replaceCampaignRecipients(
+export async function replaceCampaignRecipients(
   campaignId: string,
   recipients: Array<{ id: string; email: string; firstName: string | null; lastName: string | null; language: string; status: "ACTIVE" | "PENDING" }>,
 ) {
   await db.$transaction(async (tx) => {
     await tx.newsletterCampaignRecipient.deleteMany({ where: { campaignId, status: "QUEUED" } });
-    if (recipients.length) {
+    for (let offset = 0; offset < recipients.length; offset += 2_000) {
       await tx.newsletterCampaignRecipient.createMany({
-        data: recipients.map((recipient) => ({
+        data: recipients.slice(offset, offset + 2_000).map((recipient) => ({
           campaignId,
           contactId: recipient.id,
           email: recipient.email,
@@ -893,7 +895,7 @@ async function replaceCampaignRecipients(
         skipDuplicates: true,
       });
     }
-  });
+  }, { timeout: 60_000, maxWait: 10_000 });
 }
 
 async function finalEligibleRecipients(
@@ -977,6 +979,7 @@ async function sendSesNewsletterBatch(args: {
   recipients: Awaited<ReturnType<typeof finalEligibleRecipients>>;
   rendered: Awaited<ReturnType<typeof renderNewsletterCampaign>>;
   cfg: ReturnType<typeof getEmailConfig>;
+  deferContinuation?: boolean;
 }) {
   if (process.env.NODE_ENV === "production" && (!args.cfg.sesConfigurationSet || !args.cfg.sesSnsTopicArn || !args.cfg.baseUrl.startsWith("https://"))) {
     throw new Error("Slanje je zaustavljeno: podesite SES configuration set, SNS povratne događaje i HTTPS odjavu.");
@@ -1006,8 +1009,9 @@ async function sendSesNewsletterBatch(args: {
   const recipients = args.recipients.filter((row) => claimedIds.has(row.id));
   if (!recipients.length) {
     const remaining = await db.newsletterCampaignRecipient.count({ where: { campaignId: args.campaign.id, status: "QUEUED" } });
-    if (remaining) await enqueueSesNewsletterContinuation(args.campaign.id, `claim-${args.recipients.at(-1)?.id}`);
-    return { ok: true as const, duplicate: true as const };
+    const nextCursor = `claim-${args.recipients.at(-1)?.id}`;
+    if (remaining && !args.deferContinuation) await enqueueSesNewsletterContinuation(args.campaign.id, nextCursor);
+    return { ok: true as const, duplicate: true as const, remaining, nextCursor };
   }
   await db.newsletterCampaign.update({
     where: { id: args.campaign.id },
@@ -1102,19 +1106,25 @@ async function sendSesNewsletterBatch(args: {
     where: { campaignId: args.campaign.id, status: "QUEUED" },
   });
   if (remaining) {
-    await enqueueSesNewsletterContinuation(
-      args.campaign.id,
-      recipients.at(-1)?.id ?? `remaining-${remaining}`,
-    );
+    const nextCursor = recipients.at(-1)?.id ?? `remaining-${remaining}`;
+    if (!args.deferContinuation) await enqueueSesNewsletterContinuation(args.campaign.id, nextCursor);
     return {
       ok: true as const,
       partial: true as const,
       recipients: result.results.filter((item) => item.ok).length,
       remaining,
+      nextCursor,
     };
   }
 
   return finalizeSesNewsletterCampaign(args.campaign.id);
+}
+
+export async function sendNewsletterCampaignRun(campaignId: string) {
+  return runNewsletterBatches(
+    () => sendNewsletterCampaign(campaignId, { deferContinuation: true }),
+    (cursor) => enqueueSesNewsletterContinuation(campaignId, cursor),
+  );
 }
 
 async function enqueueSesNewsletterContinuation(campaignId: string, cursor: string) {

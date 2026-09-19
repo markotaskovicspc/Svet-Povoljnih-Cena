@@ -202,7 +202,7 @@ export default async function NewsletterCampaignPage({
                     ) : null}
                   </div>
                   <p className="mt-2 text-xs text-ink-500">
-                    Imaš svoj spisak? <Link href="/admin/newsletter?view=contacts" className="font-medium text-walnut hover:underline">Uvezi CSV/XLSX</Link>
+                    Imaš svoj spisak? <Link href="/admin/newsletter?view=contacts" className="font-medium text-walnut hover:underline">Uvezi CSV/Excel ili nalepi kontakte</Link>
                     {" "}ili <Link href="/admin/newsletter?view=audiences" className="font-medium text-walnut hover:underline">napravi novi segment</Link>.
                   </p>
                 </Field>

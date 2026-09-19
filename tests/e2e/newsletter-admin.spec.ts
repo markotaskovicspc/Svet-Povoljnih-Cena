@@ -314,23 +314,15 @@ test.describe("newsletter admin acceptance", () => {
       `${importEmails.overlap},Duplikat,Kontakt,yes,2026-08-24,qa-csv`,
       "nije-email,Loš,Red,da,2026-08-24,qa-csv",
     ].join("\n");
-    const previewForm = page.locator("form").filter({ has: page.getByRole("button", { name: "Proveri bez upisa" }) });
-    await previewForm.locator('input[name="contactsFile"]').setInputFiles({
-      name: "qa-kontakti.csv",
-      mimeType: "text/csv",
-      buffer: Buffer.from(csv),
-    });
-    await previewForm.getByRole("button", { name: "Proveri bez upisa" }).click();
-    await acceptanceExpect(previewForm.getByRole("status")).toContainText("Ispravnih: 3");
-    await acceptanceExpect(previewForm.getByRole("status")).toContainText("redova sa izričitom saglasnošću: 2");
-    await acceptanceExpect(previewForm.getByRole("status")).toContainText("neispravnih: 1");
-    await acceptanceExpect(previewForm.getByRole("status")).toContainText("duplikata u fajlu: 1");
-
-    const importForm = page.locator("form").filter({ has: page.getByRole("button", { name: "Uvezi kontakte" }) });
+    const importForm = page.getByTestId("newsletter-contact-import");
     await fillImportForm(importForm, csvListName, "qa-kontakti.csv", "text/csv", Buffer.from(csv));
-    page.once("dialog", (dialog) => dialog.accept());
-    await importForm.getByRole("button", { name: "Uvezi kontakte" }).click();
-    await acceptanceExpect(importForm.getByRole("status")).toContainText(`Publika „Lista — ${csvListName}” je spremna`);
+    await importForm.getByRole("button", { name: "Proveri kontakte", exact: true }).click();
+    await acceptanceExpect(importForm).toContainText("Ispravnih: 3");
+    await acceptanceExpect(importForm).toContainText("Sa saglasnošću u uvozu: 2");
+    await acceptanceExpect(importForm).toContainText("Neispravnih: 1");
+    await acceptanceExpect(importForm).toContainText("Duplikata: 1");
+    await importForm.getByRole("button", { name: "Sačuvaj u custom listu", exact: true }).click();
+    await acceptanceExpect(importForm.getByRole("status")).toContainText(`Custom lista „${csvListName}“ je spremna`);
 
     await acceptanceExpect.poll(async () => db.marketingContact.findMany({
       where: { email: { in: Object.values(importEmails) } },
@@ -346,7 +338,7 @@ test.describe("newsletter admin acceptance", () => {
       select: { id: true, estimatedCount: true },
     });
     audienceIds.add(csvAudience.id);
-    expect(csvAudience.estimatedCount).toBe(2);
+    expect(csvAudience.estimatedCount).toBe(1);
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Kontakti");
@@ -358,9 +350,9 @@ test.describe("newsletter admin acceptance", () => {
     ]);
     const xlsxBuffer = Buffer.from(await workbook.xlsx.writeBuffer());
     await fillImportForm(importForm, xlsxListName, "qa-kontakti.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", xlsxBuffer);
-    page.once("dialog", (dialog) => dialog.accept());
-    await importForm.getByRole("button", { name: "Uvezi kontakte" }).click();
-    await acceptanceExpect(importForm.getByRole("status")).toContainText(`Publika „Lista — ${xlsxListName}” je spremna`);
+    await importForm.getByRole("button", { name: "Proveri kontakte", exact: true }).click();
+    await importForm.getByRole("button", { name: "Sačuvaj u custom listu", exact: true }).click();
+    await acceptanceExpect(importForm.getByRole("status")).toContainText(`Custom lista „${xlsxListName}“ je spremna`);
 
     const overlap = await db.marketingContact.findUniqueOrThrow({
       where: { email: importEmails.overlap }, select: { tags: true },
@@ -371,7 +363,7 @@ test.describe("newsletter admin acceptance", () => {
       select: { id: true, estimatedCount: true },
     });
     audienceIds.add(xlsxAudience.id);
-    expect(xlsxAudience.estimatedCount).toBe(3);
+    expect(xlsxAudience.estimatedCount).toBe(2);
 
     await page.goto(`/admin/newsletter?view=contacts&q=${encodeURIComponent(importEmails.overlap)}`, { waitUntil: "domcontentloaded" });
     const contactRow = page.getByText(importEmails.overlap, { exact: true }).locator("xpath=ancestor::tr");
@@ -409,7 +401,6 @@ test.describe("newsletter admin acceptance", () => {
       versions: [{ includeContactsWithoutConsent: false }],
     });
 
-    page.once("dialog", (dialog) => dialog.accept());
     await page.getByRole("button", { name: "Pošalji na proveru" }).click();
     await acceptanceExpect.poll(async () => db.newsletterCampaign.findUnique({
       where: { id: overrideCampaignId },
@@ -630,6 +621,7 @@ test.describe("newsletter admin acceptance", () => {
     await db.rateLimitBucket.deleteMany({
       where: { OR: [adminEmail, reviewerEmail, publicEmail].map((email) => ({ key: { contains: email } })) },
     });
+    await db.newsletterContactImport.deleteMany({ where: { listName: { startsWith: tag } } });
     await db.adminUser.deleteMany({ where: { email: { in: [adminEmail, reviewerEmail] } } });
     adminId = null;
     reviewerId = null;

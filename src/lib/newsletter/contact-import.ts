@@ -10,47 +10,12 @@ import {
 import {
   audienceFilterJson,
   emptyAudienceFilter,
-  previewNewsletterAudience,
 } from "@/lib/newsletter/audience";
 
+import { contactTableFromRows, guessContactColumns, parseContactCsv, prepareContactImport, type ImportContact } from "./import-parser";
+
 const MAX_IMPORT_BYTES = 20 * 1024 * 1024;
-const MAX_IMPORT_ROWS = 100_000;
 const CHUNK_SIZE = 1_000;
-
-const HEADER_ALIASES = {
-  email: ["email", "e-mail", "mail", "mejl", "email_adresa"],
-  firstName: ["first_name", "firstname", "ime"],
-  lastName: ["last_name", "lastname", "prezime"],
-  consent: ["consent", "saglasnost", "opt_in", "newsletter_saglasnost"],
-  consentedAt: [
-    "consented_at",
-    "consent_date",
-    "datum_saglasnosti",
-    "datum_prijave",
-  ],
-  source: ["source", "izvor"],
-} as const;
-
-const AFFIRMATIVE_CONSENT = new Set([
-  "1",
-  "true",
-  "yes",
-  "da",
-  "granted",
-  "active",
-  "potvrdjeno",
-  "potvrđeno",
-]);
-
-type ParsedContact = {
-  email: string;
-  firstName: string | null;
-  lastName: string | null;
-  source: string;
-  consented: boolean;
-  consentedAt: Date | null;
-  rowNumber: number;
-};
 
 export type NewsletterContactImportPreview = {
   totalRows: number;
@@ -80,26 +45,27 @@ export async function importNewsletterContacts(
   const summary = preview(parsed);
   const listName = cleanListName(listNameRaw);
   const importedAt = new Date();
+  for (let offset = 0; offset < parsed.contacts.length; offset += CHUNK_SIZE) {
+    await db.$transaction((tx) => writeNewsletterContactChunk(tx, parsed.contacts.slice(offset, offset + CHUNK_SIZE), {
+      actorId, listName, fileName: file.name, importedAt,
+    }), { timeout: 30_000 });
+  }
+  const audience = await upsertImportedContactAudience(db, listName, actorId, importedAt);
+  return { ...summary, audience };
+}
+
+export async function writeNewsletterContactChunk(
+  tx: Prisma.TransactionClient,
+  contacts: ImportContact[],
+  { actorId, listName, fileName, importedAt, consentEvidence }: { actorId: string; listName: string; fileName: string; importedAt: Date; consentEvidence?: string | null },
+) {
   const marketingContactTable = databaseIdentifier("MarketingContact");
   const consentEventTable = databaseIdentifier("MarketingConsentEvent");
   const subscriberTable = databaseIdentifier("NewsletterSubscriber");
   const contactStatusType = databaseIdentifier("MarketingContactStatus");
   const consentEventType = databaseIdentifier("MarketingConsentEventType");
 
-  for (let offset = 0; offset < parsed.contacts.length; offset += CHUNK_SIZE) {
-    const chunk = parsed.contacts.slice(offset, offset + CHUNK_SIZE);
-    const payload = chunk.map((row) => ({
-      email: row.email,
-      firstName: row.firstName,
-      lastName: row.lastName,
-      source: row.source,
-      consented: row.consented,
-      consentedAt: (row.consentedAt ?? importedAt).toISOString(),
-      rowNumber: row.rowNumber,
-    }));
-    const json = JSON.stringify(payload);
-
-    await db.$transaction(async (tx) => {
+  const json = JSON.stringify(contacts.map((row) => ({ ...row, consentedAt: row.consentedAt ?? importedAt.toISOString() })));
       await tx.$executeRaw(Prisma.sql`
         WITH imported AS (
           SELECT *
@@ -108,13 +74,15 @@ export async function importNewsletterContacts(
             "firstName" text,
             "lastName" text,
             source text,
+            language text,
+            "customFields" jsonb,
             consented boolean,
             "consentedAt" timestamptz,
             "rowNumber" integer
           )
         )
         INSERT INTO ${marketingContactTable} AS existing_contact (
-          id, email, "firstName", "lastName", language, status, source, tags,
+          id, email, "firstName", "lastName", language, "customFields", status, source, tags,
           "consentVersion", "subscribedAt", "confirmedAt", "createdAt", "updatedAt"
         )
         SELECT
@@ -122,7 +90,8 @@ export async function importNewsletterContacts(
           imported.email,
           imported."firstName",
           imported."lastName",
-          'sr-Latn',
+          COALESCE(imported.language, 'sr-Latn'),
+          COALESCE(imported."customFields", '{}'::jsonb),
           CASE WHEN imported.consented THEN 'ACTIVE'::${contactStatusType}
                ELSE 'PENDING'::${contactStatusType} END,
           imported.source,
@@ -137,6 +106,7 @@ export async function importNewsletterContacts(
           "firstName" = COALESCE(EXCLUDED."firstName", existing_contact."firstName"),
           "lastName" = COALESCE(EXCLUDED."lastName", existing_contact."lastName"),
           source = COALESCE(existing_contact.source, EXCLUDED.source),
+          "customFields" = COALESCE(existing_contact."customFields", '{}'::jsonb) || COALESCE(EXCLUDED."customFields", '{}'::jsonb),
           tags = ARRAY(
             SELECT DISTINCT tag
             FROM unnest(existing_contact.tags || EXCLUDED.tags) AS tag
@@ -186,6 +156,8 @@ export async function importNewsletterContacts(
             "firstName" text,
             "lastName" text,
             source text,
+            language text,
+            "customFields" jsonb,
             consented boolean,
             "consentedAt" timestamptz,
             "rowNumber" integer
@@ -208,10 +180,11 @@ export async function importNewsletterContacts(
                THEN ${NEWSLETTER_POLICY_VERSION}::text ELSE NULL END,
           ${actorId}::text,
           jsonb_build_object(
-            'importedFile', ${safeFileName(file.name)}::text,
+            'importedFile', ${safeFileName(fileName)}::text,
             'contactList', ${listName}::text,
             'rowNumber', imported."rowNumber",
-            'explicitConsent', imported.consented
+            'explicitConsent', imported.consented,
+            'consentEvidence', ${consentEvidence ?? null}::text
           ),
           CASE WHEN imported.consented THEN imported."consentedAt" ELSE ${importedAt}::timestamptz END
         FROM imported
@@ -226,6 +199,8 @@ export async function importNewsletterContacts(
             "firstName" text,
             "lastName" text,
             source text,
+            language text,
+            "customFields" jsonb,
             consented boolean,
             "consentedAt" timestamptz,
             "rowNumber" integer
@@ -251,8 +226,9 @@ export async function importNewsletterContacts(
           consent = true,
           "unsubscribedAt" = NULL
       `);
-    });
-  }
+}
+
+export async function upsertImportedContactAudience(client: Prisma.TransactionClient, listName: string, actorId: string, importedAt = new Date()) {
 
   const audienceName = `Lista — ${listName}`;
   const filter = {
@@ -268,16 +244,19 @@ export async function importNewsletterContacts(
       }],
     }],
   };
-  const audiencePreview = await previewNewsletterAudience(filter, {
-    includeContactsWithoutConsent: true,
-  });
-  const audience = await db.newsletterAudience.upsert({
+  const eligible = await client.$queryRaw<Array<{ count: bigint }>>(Prisma.sql`
+    SELECT count(*)::bigint AS count FROM ${databaseIdentifier("MarketingContact")} c
+    WHERE c."status" = 'ACTIVE' AND c."subscribedAt" IS NOT NULL AND ${listName} = ANY(c."tags")
+      AND NOT EXISTS (SELECT 1 FROM ${databaseIdentifier("EmailSuppression")} s WHERE s."email" = c."email")
+  `);
+  const count = Number(eligible[0]?.count ?? 0);
+  const audience = await client.newsletterAudience.upsert({
     where: { name: audienceName },
     create: {
       name: audienceName,
       description: `Kontakti iz uvezene liste „${listName}”.`,
       filter: audienceFilterJson(filter),
-      estimatedCount: audiencePreview.count,
+      estimatedCount: count,
       estimatedAt: importedAt,
       createdById: actorId,
       updatedById: actorId,
@@ -285,14 +264,14 @@ export async function importNewsletterContacts(
     update: {
       description: `Kontakti iz uvezene liste „${listName}”.`,
       filter: audienceFilterJson(filter),
-      estimatedCount: audiencePreview.count,
+      estimatedCount: count,
       estimatedAt: importedAt,
       updatedById: actorId,
     },
     select: { id: true, name: true, estimatedCount: true },
   });
 
-  return { ...summary, audience };
+  return audience;
 }
 
 async function parseContactFile(file: File) {
@@ -304,51 +283,12 @@ async function parseContactFile(file: File) {
   const rows = extension === "xlsx"
     ? await xlsxRows(file)
     : extension === "csv"
-      ? csvRows(await file.text())
+      ? parseContactCsv(await file.text())
       : null;
   if (!rows) throw new Error("Podržani su samo .csv i .xlsx fajlovi.");
-  if (rows.length < 2) throw new Error("Fajl nema redove kontakata.");
-  if (rows.length - 1 > MAX_IMPORT_ROWS) {
-    throw new Error(`Fajl ima više od ${MAX_IMPORT_ROWS.toLocaleString("sr-Latn-RS")} redova.`);
-  }
-
-  const headers = rows[0]!.map(normalizeHeader);
-  const indexes = resolveHeaders(headers);
-  if (indexes.email < 0) throw new Error("Nedostaje obavezna kolona email.");
-
-  const seen = new Set<string>();
-  const contacts: ParsedContact[] = [];
-  let invalidRows = 0;
-  let duplicateRows = 0;
-  for (let index = 1; index < rows.length; index += 1) {
-    const row = rows[index] ?? [];
-    const email = normalizeEmail(cell(row, indexes.email));
-    if (!email) {
-      if (row.some((value) => value.trim())) invalidRows += 1;
-      continue;
-    }
-    if (seen.has(email)) {
-      duplicateRows += 1;
-      continue;
-    }
-    seen.add(email);
-    const consentRaw = cell(row, indexes.consent).trim().toLocaleLowerCase("sr-Latn");
-    const consented = AFFIRMATIVE_CONSENT.has(consentRaw);
-    const consentedAt = consented
-      ? parseConsentDate(cell(row, indexes.consentedAt))
-      : null;
-    contacts.push({
-      email,
-      firstName: cleanText(cell(row, indexes.firstName), 120),
-      lastName: cleanText(cell(row, indexes.lastName), 120),
-      source: cleanText(cell(row, indexes.source), 60) ?? "admin-import",
-      consented,
-      consentedAt,
-      rowNumber: index + 1,
-    });
-  }
-  if (!contacts.length) throw new Error("Nije pronađena nijedna ispravna email adresa.");
-  return { contacts, totalRows: rows.length - 1, invalidRows, duplicateRows };
+  const table = contactTableFromRows(rows);
+  const parsed = prepareContactImport(table, guessContactColumns(table.headers));
+  return parsed;
 }
 
 function preview(parsed: Awaited<ReturnType<typeof parseContactFile>>): NewsletterContactImportPreview {
@@ -382,92 +322,6 @@ async function xlsxRows(file: File) {
     rows.push(values);
   });
   return rows;
-}
-
-function csvRows(input: string) {
-  const delimiter = detectDelimiter(input);
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let value = "";
-  let quoted = false;
-  for (let index = 0; index < input.length; index += 1) {
-    const char = input[index]!;
-    if (char === '"') {
-      if (quoted && input[index + 1] === '"') {
-        value += '"';
-        index += 1;
-      } else {
-        quoted = !quoted;
-      }
-    } else if (char === delimiter && !quoted) {
-      row.push(value.trim());
-      value = "";
-    } else if ((char === "\n" || char === "\r") && !quoted) {
-      if (char === "\r" && input[index + 1] === "\n") index += 1;
-      row.push(value.trim());
-      if (row.some(Boolean)) rows.push(row);
-      row = [];
-      value = "";
-    } else {
-      value += char;
-    }
-  }
-  row.push(value.trim());
-  if (row.some(Boolean)) rows.push(row);
-  return rows;
-}
-
-function detectDelimiter(input: string) {
-  const header = input.split(/\r?\n/, 1)[0] ?? "";
-  return [...([';', ',', '\t'] as const)].sort(
-    (left, right) => header.split(right).length - header.split(left).length,
-  )[0];
-}
-
-function resolveHeaders(headers: string[]) {
-  const find = (aliases: readonly string[]) =>
-    headers.findIndex((header) => aliases.includes(header));
-  return {
-    email: find(HEADER_ALIASES.email),
-    firstName: find(HEADER_ALIASES.firstName),
-    lastName: find(HEADER_ALIASES.lastName),
-    consent: find(HEADER_ALIASES.consent),
-    consentedAt: find(HEADER_ALIASES.consentedAt),
-    source: find(HEADER_ALIASES.source),
-  };
-}
-
-function normalizeHeader(value: string) {
-  return value
-    .replace(/^\uFEFF/, "")
-    .trim()
-    .toLocaleLowerCase("sr-Latn")
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_|_$/g, "");
-}
-
-function normalizeEmail(value: string) {
-  const email = value.trim().toLowerCase();
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 320
-    ? email
-    : null;
-}
-
-function parseConsentDate(value: string) {
-  if (!value.trim()) return null;
-  const parsed = new Date(value.trim());
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
-
-function cleanText(value: string, max: number) {
-  const clean = value.trim().replace(/\s+/g, " ").slice(0, max);
-  return clean || null;
-}
-
-function cell(row: string[], index: number) {
-  return index >= 0 ? row[index] ?? "" : "";
 }
 
 function excelValue(value: ExcelJS.CellValue) {

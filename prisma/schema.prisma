@@ -3346,6 +3346,23 @@ enum NewsletterRecipientStatus {
   UNSUBSCRIBED
 }
 
+model NewsletterContactImport {
+  id              String   @id
+  actorId         String
+  listName        String
+  fingerprint     String
+  fileName        String
+  consentEvidence String?
+  totalContacts   Int
+  nextBatch       Int      @default(0)
+  importedCount   Int      @default(0)
+  completedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([actorId, createdAt])
+}
+
 model MarketingContact {
   id             String                 @id @default(cuid())
   email          String                 @unique
@@ -3356,6 +3373,7 @@ model MarketingContact {
   status         MarketingContactStatus @default(PENDING)
   source         String?
   tags           String[]               @default([])
+  customFields   Json?
   consentVersion String?
   subscribedAt   DateTime?
   confirmedAt    DateTime?

@@ -601,10 +601,10 @@ async function dispatchJob(job: JobRow) {
       return;
     }
     case "NEWSLETTER_CAMPAIGN_SEND": {
-      const { failNewsletterCampaign, sendNewsletterCampaign } = await import("@/lib/newsletter/campaigns");
+      const { failNewsletterCampaign, sendNewsletterCampaignRun } = await import("@/lib/newsletter/campaigns");
       const campaignId = (payload as z.infer<typeof schemas.NEWSLETTER_CAMPAIGN_SEND>).campaignId;
       try {
-        await sendNewsletterCampaign(campaignId);
+        await sendNewsletterCampaignRun(campaignId);
       } catch (error) {
         await failNewsletterCampaign(campaignId, error);
         throw error;

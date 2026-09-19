@@ -1,0 +1,20 @@
+import { expect, it, vi } from "vitest";
+const mocks = vi.hoisted(() => ({ remove: vi.fn(), create: vi.fn(), tx: vi.fn(), contacts: vi.fn() }));
+vi.mock("@/lib/db", () => ({ databaseIdentifier: vi.fn(), db: { $transaction: mocks.tx, marketingContact: { findMany: mocks.contacts }, emailSuppression: { findMany: async () => [] } } }));
+import { replaceCampaignRecipients } from "@/lib/newsletter/campaigns";
+import { builtInNewsletterAudiences, resolveNewsletterAudience } from "@/lib/newsletter/audience";
+it("selects and prepares 70,000 contacts in bounded inserts without custom-field payloads", async () => {
+  const contacts = Array.from({ length: 70_000 }, (_, i) => ({ id: `c${i}`, email: `p${i}@example.com`, firstName: null, lastName: null, language: "sr-Latn", status: "ACTIVE" as const, subscribedAt: new Date(), tags: ["custom-list"], userId: null, source: "import" }));
+  mocks.contacts.mockResolvedValue(contacts);
+  const everyone = builtInNewsletterAudiences.find((row) => row.id === "builtin:subscribers")!;
+  expect(everyone.name).toBe("Svi korisnici");
+  const resolved = await resolveNewsletterAudience(everyone.filter);
+  expect(resolved.recipients).toHaveLength(70_000);
+  expect(mocks.contacts.mock.calls[0][0].select.customFields).toBeUndefined();
+  mocks.tx.mockImplementation(async (fn) => fn({ newsletterCampaignRecipient: { deleteMany: mocks.remove, createMany: mocks.create } }));
+  await replaceCampaignRecipients("campaign", resolved.recipients);
+  expect(mocks.remove).toHaveBeenCalledExactlyOnceWith({ where: { campaignId: "campaign", status: "QUEUED" } });
+  expect(mocks.create).toHaveBeenCalledTimes(35);
+  expect(mocks.create.mock.calls.every(([args]) => args.data.length === 2000 && args.skipDuplicates)).toBe(true);
+  expect(mocks.create.mock.calls.flatMap(([args]) => args.data).at(-1).email).toBe("p69999@example.com");
+});

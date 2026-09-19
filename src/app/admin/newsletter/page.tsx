@@ -12,6 +12,7 @@ import { AdminActionForm } from "@/components/admin/action-form";
 import { Card, CardTitle, StatCard } from "@/components/admin/card";
 import { DataTable } from "@/components/admin/data-table";
 import { Field } from "@/components/admin/field";
+import { NewsletterContactImport } from "@/components/admin/newsletter-contact-import";
 import { NewsletterAudienceBuilder } from "@/components/admin/newsletter-audience-builder";
 import { PageHeader } from "@/components/admin/page-header";
 import { SubmitButton } from "@/components/admin/submit-button";
@@ -23,8 +24,6 @@ import {
   deleteNewsletterAudienceAction,
   deleteNewsletterTemplateAction,
   saveNewsletterAudienceAction,
-  importNewsletterContactsAction,
-  previewNewsletterContactImportAction,
   unsubscribeMarketingContactAction,
 } from "./actions";
 
@@ -37,7 +36,7 @@ export const metadata = {
 const views = [
   ["campaigns", "Kampanje"],
   ["audiences", "Publike"],
-  ["contacts", "Kontakti i saglasnosti"],
+  ["contacts", "Custom liste i kontakti"],
   ["templates", "Šabloni"],
   ["settings", "Podešavanja"],
 ] as const;
@@ -190,8 +189,8 @@ async function AudiencesView({ selectedId }: { selectedId?: string }) {
     <div className="grid gap-6 2xl:grid-cols-[360px_minmax(0,1fr)]">
       <div className="space-y-3">
         <Card>
-          <CardTitle description="Segmenti se računaju nad kontaktima sa aktivnom saglasnošću.">Sačuvane publike</CardTitle>
-          <Link href="/admin/newsletter?view=audiences" className={buttonVariants({ variant: "outline", size: "sm" })}>+ Nova publika</Link>
+          <CardTitle description="Segmenti se računaju nad kontaktima sa aktivnom saglasnošću.">Moje liste i publike</CardTitle>
+          <div className="flex flex-wrap gap-2"><Link href="/admin/newsletter?view=contacts" className={buttonVariants({ variant: "outline", size: "sm" })}>+ Custom lista / uvoz</Link><Link href="/admin/newsletter?view=audiences" className={buttonVariants({ variant: "outline", size: "sm" })}>+ Novi segment</Link></div>
         </Card>
         {audiences.map((audience) => (
           <Card key={audience.id} className={selected?.id === audience.id ? "border-walnut" : ""}>
@@ -231,60 +230,8 @@ async function ContactsView({ q }: { q: string }) {
   return (
     <>
       <Card>
-        <CardTitle description="Prvo proverite fajl bez upisa. Samo red sa izričitom vrednošću da/yes/true/1 u koloni consent postaje aktivan; svi ostali ostaju evidentirani bez zabeležene saglasnosti. U nacrtu ih možete uključiti uz jasno upozorenje. Ranija odjava ili potiskivanje uvek imaju prednost.">
-          Uvoz kontakata iz CSV/XLSX
-        </CardTitle>
-        <div className="mb-4 rounded-lg border border-warning/25 bg-warning/10 px-4 py-3 text-sm text-warning">
-          <strong>Važno:</strong> stara baza bez dokaza saglasnosti može da se uveze.
-          Ti kontakti se u nacrtu uključuju posebnom opcijom uz upozorenje; izričite odjave i potiskivanja nikada se ne zaobilaze.
-        </div>
-        <div className="grid gap-4 xl:grid-cols-2">
-          <AdminActionForm
-            action={previewNewsletterContactImportAction}
-            preserveValues
-            className="rounded-lg border border-border p-4"
-          >
-            <Field label="CSV ili XLSX fajl" hint="Do 20 MB i 100.000 redova. Obavezna kolona: email.">
-              <Input name="contactsFile" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required />
-            </Field>
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <SubmitButton variant="outline" pendingLabel="Proveravam…">
-                Proveri bez upisa
-              </SubmitButton>
-              <a
-                href="data:text/csv;charset=utf-8,email%2Cime%2Cprezime%2Cconsent%2Cdatum_saglasnosti%2Cizvor%0Akupac%40primer.rs%2CAna%2CAni%C4%87%2Cda%2C2026-08-24%2Cstara-baza"
-                download="newsletter-kontakti-sablon.csv"
-                className="text-sm text-walnut underline-offset-4 hover:underline"
-              >
-                Preuzmi CSV šablon
-              </a>
-            </div>
-          </AdminActionForm>
-          <AdminActionForm
-            action={importNewsletterContactsAction}
-            className="space-y-3 rounded-lg border border-border p-4"
-          >
-            <Field
-              label="Naziv liste / publike"
-              hint="Na primer: Sajam avgust 2026. Posle uvoza ova lista će se automatski pojaviti među publikama u nacrtu."
-            >
-              <Input name="listName" required maxLength={150} placeholder="Sajam avgust 2026" />
-            </Field>
-            <Field label="CSV ili XLSX fajl za upis" hint="Za veliku bazu koristite isti fajl koji ste prethodno proverili.">
-              <Input name="contactsFile" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required />
-            </Field>
-            <div className="mt-3 rounded-lg border border-warning/25 bg-warning/10 px-3 py-2 text-xs leading-5 text-warning">
-              Redovi bez izričite saglasnosti biće uvezeni sa statusom „bez zabeležene saglasnosti“. Njih kasnije možete uključiti u pojedinačnu kampanju uz upozorenje, bez menjanja tog statusa.
-            </div>
-            <SubmitButton
-              className="mt-3"
-              pendingLabel="Uvozim…"
-              confirm="Uvesti kontakte? Postojeće odjave i potiskivanja neće biti ponovo aktivirani."
-            >
-              Uvezi kontakte
-            </SubmitButton>
-          </AdminActionForm>
-        </div>
+        <CardTitle description="Napravite svoju listu iz CSV/Excel fajla ili nalepite do 100.000 kontakata. Email, ime i dodatne kolone se povezuju sa postojećim kontaktima. Uvoz se čuva u paketima i može da se nastavi posle prekida.">Custom liste i uvoz kontakata</CardTitle>
+        <NewsletterContactImport />
       </Card>
       <Card>
         <CardTitle description="Kratak operativni redosled za svaku novu kampanju.">
@@ -292,7 +239,7 @@ async function ContactsView({ q }: { q: string }) {
         </CardTitle>
         <ol className="grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-5">
           {[
-            ["1", "Kontakti", "Dajte listi naziv i uvezite CSV/XLSX; publika od uvezenih kontakata pravi se automatski."],
+            ["1", "Kontakti", "Dajte listi naziv, uvezite CSV/XLSX ili nalepite kontakte; custom lista se pravi automatski."],
             ["2", "Publika", "U nacrtu ček-boksovima spojite jednu ili više lista i segmenata."],
             ["3", "Kampanja", "Napravite nacrt, sadržaj i test poruku na internu adresu."],
             ["4", "Provera", "Pošaljite na odobrenje; za veliku publiku važi kontrola drugog administratora."],
@@ -316,6 +263,7 @@ async function ContactsView({ q }: { q: string }) {
         columns={[
           { key: "email", label: "Kontakt" },
           { key: "source", label: "Izvor" },
+          { key: "custom", label: "Dodatni podaci" },
           { key: "lists", label: "Liste" },
           { key: "consent", label: "Saglasnost" },
           { key: "dates", label: "Datumi" },
@@ -326,6 +274,7 @@ async function ContactsView({ q }: { q: string }) {
           cells: {
             email: <div><span className="font-mono text-xs">{contact.email}</span><p className="text-xs text-ink-500">{[contact.firstName, contact.lastName].filter(Boolean).join(" ") || "bez imena"}</p></div>,
             source: contact.source ?? "—",
+            custom: contact.customFields && typeof contact.customFields === "object" && !Array.isArray(contact.customFields) ? <details className="max-w-xs text-xs"><summary className="cursor-pointer">{Object.keys(contact.customFields).length} polja</summary><dl className="mt-2 space-y-1">{Object.entries(contact.customFields).map(([key, value]) => <div key={key}><dt className="font-medium">{key}</dt><dd className="break-words">{String(value ?? "")}</dd></div>)}</dl></details> : "—",
             lists: contact.tags?.length ? <span className="text-xs">{contact.tags.join(", ")}</span> : "—",
             consent: <div><StatusPill status={contact.status} label={contactLabel[contact.status]} /><p className="mt-1 text-[11px] text-ink-500">{contact.consentEvents[0] ? `${contact.consentEvents[0].type} · ${contact.consentEvents[0].source}` : "bez događaja"}</p></div>,
             dates: <span className="text-xs">Prijava: {contact.subscribedAt ? formatDate(contact.subscribedAt) : "—"}<br />Odjava: {contact.unsubscribedAt ? formatDate(contact.unsubscribedAt) : "—"}</span>,
