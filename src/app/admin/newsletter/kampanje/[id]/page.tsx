@@ -7,6 +7,7 @@ import { getEmailConfig } from "@/lib/email/config";
 import { builtInNewsletterAudiences, selectedNewsletterAudiences } from "@/lib/newsletter/audience";
 import { getNewsletterContactOverview } from "@/lib/newsletter/contact-overview";
 import { NewsletterContactOverview } from "@/components/admin/newsletter-contact-overview";
+import { isNewsletterTestAudience, newsletterAudienceLabel } from "@/lib/newsletter/audience-label";
 import { newsletterDeliveryPolicy } from "@/lib/newsletter/delivery-policy";
 import { newsletterRetrySummary } from "@/lib/newsletter/retry";
 import { AdminActionForm } from "@/components/admin/action-form";
@@ -107,7 +108,7 @@ export default async function NewsletterCampaignPage({
       : [];
   const selectedAudienceIds = new Set(selectedAudiences.map((audience) => audience.id));
   const selectedAudienceLabel = selectedAudiences.length
-    ? selectedAudiences.map((audience) => audience.name).join(", ")
+    ? selectedAudiences.map((audience) => newsletterAudienceLabel(audience.name)).join(", ")
     : "publika nije izabrana";
 
   return (
@@ -156,7 +157,13 @@ export default async function NewsletterCampaignPage({
           <StatCard label="Kliknuto" value={(campaign.clicked ?? 0).toLocaleString("sr-Latn-RS")} hint={rate(campaign.clicked ?? 0, campaign.delivered ?? 0)} />
         </div>
 
-        <a href="#test-email" className="inline-flex rounded-lg border border-border px-4 py-2 text-sm font-medium text-walnut hover:bg-muted-bg">Pošalji test na određenu adresu</a>
+        <div id="test-email" className="scroll-mt-6">
+          <Card>
+            <CardTitle description="Prvo sačuvajte izmene. Test šalje poslednju sačuvanu verziju samo na unetu adresu, bez slanja grupama.">Pošalji test pre slanja grupama</CardTitle>
+            <NewsletterTestSend key={campaign.updatedAt.toISOString()} campaignId={campaign.id} savedVersion={campaign.updatedAt.toISOString()} email={admin.email ?? ""} action={sendNewsletterTestAction} />
+            {cfg.provider === "none" ? <p className="mt-3 text-xs text-warning">Provider je „none“: test će biti evidentiran kao simulirano slanje.</p> : null}
+          </Card>
+        </div>
 
         {editable ? (
           <Card>
@@ -191,23 +198,26 @@ export default async function NewsletterCampaignPage({
                     className="grid max-h-64 gap-2 overflow-y-auto rounded-xl border border-border/70 bg-muted-bg/30 p-3 sm:grid-cols-2"
                   >
                     {audiences.map((audience) => (
-                      <label key={audience.id} className="flex cursor-pointer items-start gap-3 rounded-lg bg-surface px-3 py-2 text-sm shadow-sm">
-                        <input
-                          type="checkbox"
-                          name="audienceIds"
-                          value={audience.id}
-                          defaultChecked={selectedAudienceIds.has(audience.id)}
-                          className="mt-0.5 size-4 accent-[#123f5a]"
-                        />
-                        <span>
-                          <strong className="font-medium text-ink-900">{audience.name}</strong>
-                          <span className="block text-xs text-ink-500">
-                            {audience.description || (typeof audience.estimatedCount === "number"
-                              ? `do ${audience.estimatedCount.toLocaleString("sr-Latn-RS")} kontakata`
-                              : "broj još nije izračunat")}
+                      <div key={audience.id} className="rounded-lg bg-surface px-3 py-2 text-sm shadow-sm">
+                        <label className="flex cursor-pointer items-start gap-3">
+                          <input
+                            type="checkbox"
+                            name="audienceIds"
+                            value={audience.id}
+                            defaultChecked={selectedAudienceIds.has(audience.id)}
+                            className="mt-0.5 size-4 accent-[#123f5a]"
+                          />
+                          <span>
+                            <strong className="font-medium text-ink-900">{newsletterAudienceLabel(audience.name)}</strong>
+                            <span className="block text-xs text-ink-500">
+                              {isNewsletterTestAudience(audience.name) ? "Sačuvana test lista — nije grupa kupaca." : audience.description || (typeof audience.estimatedCount === "number"
+                                ? `do ${audience.estimatedCount.toLocaleString("sr-Latn-RS")} kontakata`
+                                : "broj još nije izračunat")}
+                            </span>
                           </span>
-                        </span>
-                      </label>
+                        </label>
+                        {isNewsletterTestAudience(audience.name) ? <a href="#test-email" className="mt-2 block font-medium text-walnut underline">Izaberi adresu i pošalji test →</a> : null}
+                      </div>
                     ))}
                     {!audiences.length ? (
                       <p className="text-sm text-ink-500">Još nema sačuvanih publika.</p>
@@ -258,12 +268,7 @@ export default async function NewsletterCampaignPage({
           <NewsletterEmailPreview html={campaign.html ?? ""} />
         </Card>
 
-        <div id="test-email" className="grid scroll-mt-6 gap-6 xl:grid-cols-2">
-          <Card>
-            <CardTitle description="Prvo sačuvajte izmene. Test šalje poslednju sačuvanu verziju samo na unetu adresu, bez slanja grupama.">Pošalji test pre slanja grupama</CardTitle>
-            <NewsletterTestSend key={campaign.updatedAt.toISOString()} campaignId={campaign.id} savedVersion={campaign.updatedAt.toISOString()} email={admin.email ?? ""} action={sendNewsletterTestAction} />
-            {cfg.provider === "none" ? <p className="mt-3 text-xs text-warning">Provider je „none“: test će biti evidentiran kao simulirano slanje.</p> : null}
-          </Card>
+        <div>
           <Card>
             <CardTitle>Sačuvaj kao šablon</CardTitle>
             <AdminActionForm action={saveNewsletterTemplateAction} className="flex flex-wrap items-end gap-3">

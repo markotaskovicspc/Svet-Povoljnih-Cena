@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { MarketingContactStatus, NewsletterCampaignStatus } from "@prisma/client";
 import { requireAdminAction } from "@/lib/admin";
 import { db } from "@/lib/db";
+import { newsletterAudienceLabel } from "@/lib/newsletter/audience-label";
 import { getEmailConfig } from "@/lib/email/config";
 import {
   emptyAudienceFilter,
@@ -198,22 +199,22 @@ async function AudiencesView({ selectedId }: { selectedId?: string }) {
         </Card>
         {audiences.map((audience) => (
           <Card key={audience.id} className={selected?.id === audience.id ? "border-walnut" : ""}>
-            <Link href={`/admin/newsletter?view=audiences&audienceId=${audience.id}`} className="font-medium text-walnut hover:underline">{audience.name}</Link>
+            <Link href={`/admin/newsletter?view=audiences&audienceId=${audience.id}`} className="font-medium text-walnut hover:underline">{newsletterAudienceLabel(audience.name)}</Link>
             <p className="mt-1 text-xs text-ink-500">{audience.estimatedCount ?? "—"} procenjeno · {audience._count.campaigns} kampanja</p>
             {audience.description ? <p className="mt-2 text-sm text-ink-700">{audience.description}</p> : null}
             <AdminActionForm action={deleteNewsletterAudienceAction} className="mt-3">
               <input type="hidden" name="id" value={audience.id} />
-              <SubmitButton variant="ghost" size="sm" confirm={`Obrisati publiku „${audience.name}“?`}>Obriši</SubmitButton>
+              <SubmitButton variant="ghost" size="sm" confirm={`Obrisati publiku „${newsletterAudienceLabel(audience.name)}“?`}>Obriši</SubmitButton>
             </AdminActionForm>
           </Card>
         ))}
       </div>
       <Card>
-        <CardTitle description="AND/OR pravila, ručni izbor i isključenja kampanja mogu se kombinovati.">{selected ? `Uredi: ${selected.name}` : "Nova publika"}</CardTitle>
-        <AdminActionForm action={saveNewsletterAudienceAction} className="space-y-5">
+        <CardTitle description="AND/OR pravila, ručni izbor i isključenja kampanja mogu se kombinovati.">{selected ? `Uredi: ${newsletterAudienceLabel(selected.name)}` : "Nova publika"}</CardTitle>
+        <AdminActionForm key={selected?.id ?? "new-audience"} action={saveNewsletterAudienceAction} className="space-y-5">
           <input type="hidden" name="id" value={selected?.id ?? ""} />
           <div className="grid gap-4 md:grid-cols-2">
-            <Field label="Naziv"><Input name="name" required maxLength={160} defaultValue={selected?.name ?? ""} /></Field>
+            <Field label="Naziv"><Input name="name" required maxLength={160} defaultValue={selected ? newsletterAudienceLabel(selected.name) : ""} /></Field>
             <Field label="Opis"><Input name="description" maxLength={500} defaultValue={selected?.description ?? ""} /></Field>
           </div>
           <NewsletterAudienceBuilder initialFilter={selected?.filter ?? emptyAudienceFilter()} contacts={contacts} campaigns={campaigns} />
@@ -382,8 +383,8 @@ function campaignAudienceNames(campaign: {
 }) {
   const selected = selectedNewsletterAudiences(campaign.audienceFilterSnapshot);
   return selected.length
-    ? selected.map((audience) => audience.name).join(", ")
-    : campaign.audience?.name ?? "—";
+    ? selected.map((audience) => newsletterAudienceLabel(audience.name)).join(", ")
+    : campaign.audience ? newsletterAudienceLabel(campaign.audience.name) : "—";
 }
 
 function Ready({ value, children }: { value: boolean; children?: React.ReactNode }) {

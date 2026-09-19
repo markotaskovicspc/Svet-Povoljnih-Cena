@@ -165,6 +165,7 @@ test.describe("newsletter admin acceptance", () => {
       expect(saved.html).toContain("garantni-list-logo.jpeg");
 
       const testForm = page.locator("form#newsletter-campaign-test-send:visible").first();
+      await testForm.getByRole("radio", { name: /Druga adresa/ }).check();
       await testForm.locator('input[name="email"]').fill(adminEmail);
       await testForm.getByRole("button", { name: "Pošalji test" }).click();
       await acceptanceExpect.poll(async () => db.emailMessage.count({
