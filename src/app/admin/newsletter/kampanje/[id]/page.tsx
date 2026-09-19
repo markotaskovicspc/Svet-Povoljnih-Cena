@@ -5,6 +5,8 @@ import { requireAdminAction } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { getEmailConfig } from "@/lib/email/config";
 import { builtInNewsletterAudiences, selectedNewsletterAudiences } from "@/lib/newsletter/audience";
+import { getNewsletterContactOverview } from "@/lib/newsletter/contact-overview";
+import { NewsletterContactOverview } from "@/components/admin/newsletter-contact-overview";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { Card, CardTitle, StatCard } from "@/components/admin/card";
 import { DataTable } from "@/components/admin/data-table";
@@ -71,7 +73,7 @@ export default async function NewsletterCampaignPage({
 }) {
   const admin = await requireAdminAction(["ADS"]);
   const { id } = await params;
-  const [campaign, savedAudiences, products, recipients] = await Promise.all([
+  const [campaign, savedAudiences, products, recipients, contactOverview] = await Promise.all([
     db.newsletterCampaign.findUnique({
       where: { id },
       include: {
@@ -87,6 +89,7 @@ export default async function NewsletterCampaignPage({
       select: { sku: true, name: true, shortName: true },
     }),
     db.newsletterCampaignRecipient.findMany({ where: { campaignId: id }, orderBy: { updatedAt: "desc" }, take: 200 }),
+    getNewsletterContactOverview(),
   ]);
   if (!campaign) notFound();
   const audiences = [...builtInNewsletterAudiences, ...savedAudiences.map((audience) => ({ ...audience, description: "" }))];
@@ -124,6 +127,7 @@ export default async function NewsletterCampaignPage({
         }
       />
       <main className="space-y-6 px-4 py-6 md:px-8">
+        <NewsletterContactOverview counts={contactOverview} />
         {campaign.failureReason ? (
           <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
             <strong>Slanje nije završeno:</strong> {campaign.failureReason}
@@ -137,7 +141,7 @@ export default async function NewsletterCampaignPage({
         ) : null}
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="Primaoci" value={(campaign.recipients ?? recipients.length).toLocaleString("sr-Latn-RS")} hint={campaign.audienceMode === "FIXED" ? "fiksirana lista" : "računaju se pri slanju"} />
+          <StatCard label="Primaoci ove kampanje" value={campaign.recipients == null ? "—" : campaign.recipients.toLocaleString("sr-Latn-RS")} hint={campaign.recipients == null ? "broj primalaca još nije izračunat" : campaign.audienceMode === "FIXED" ? "fiksirana lista primalaca" : "izračunato za ovu kampanju"} />
           <StatCard label="Isporučeno" value={(campaign.delivered ?? 0).toLocaleString("sr-Latn-RS")} tone="success" />
           <StatCard label="Otvoreno" value={(campaign.opened ?? 0).toLocaleString("sr-Latn-RS")} hint={rate(campaign.opened ?? 0, campaign.delivered ?? 0)} />
           <StatCard label="Kliknuto" value={(campaign.clicked ?? 0).toLocaleString("sr-Latn-RS")} hint={rate(campaign.clicked ?? 0, campaign.delivered ?? 0)} />

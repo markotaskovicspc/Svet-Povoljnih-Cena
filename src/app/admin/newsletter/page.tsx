@@ -8,6 +8,8 @@ import {
   selectedNewsletterAudiences,
 } from "@/lib/newsletter/audience";
 import { marketingContactMigrationPreview } from "@/lib/newsletter/contacts";
+import { getNewsletterContactOverview } from "@/lib/newsletter/contact-overview";
+import { NewsletterContactOverview } from "@/components/admin/newsletter-contact-overview";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { Card, CardTitle, StatCard } from "@/components/admin/card";
 import { DataTable } from "@/components/admin/data-table";
@@ -71,7 +73,7 @@ export default async function NewsletterPage({
   const view = views.some(([key]) => key === params.view) ? params.view! : "campaigns";
   const q = params.q?.trim() ?? "";
 
-  const [campaignStatus, contactStatus, recentCampaigns] = await Promise.all([
+  const [campaignStatus, contactStatus, recentCampaigns, contactOverview] = await Promise.all([
     db.newsletterCampaign.groupBy({ by: ["status"], _count: { _all: true } }),
     db.marketingContact.groupBy({ by: ["status"], _count: { _all: true } }),
     db.newsletterCampaign.findMany({
@@ -79,6 +81,7 @@ export default async function NewsletterPage({
       take: 100,
       include: { audience: { select: { name: true } } },
     }),
+    getNewsletterContactOverview(),
   ]);
   const statusCount = Object.fromEntries(campaignStatus.map((row) => [row.status, row._count._all]));
   const contactsCount = Object.fromEntries(contactStatus.map((row) => [row.status, row._count._all]));
@@ -117,8 +120,9 @@ export default async function NewsletterPage({
           ))}
         </nav>
 
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="Aktivni kontakti" value={(contactsCount.ACTIVE ?? 0).toLocaleString("sr-Latn-RS")} hint={`${contactsCount.PENDING ?? 0} čeka potvrdu`} tone="success" />
+        <NewsletterContactOverview counts={contactOverview} />
+
+        <div className="grid gap-4 sm:grid-cols-3">
           <StatCard label="Nacrti i provera" value={((statusCount.DRAFT ?? 0) + (statusCount.IN_REVIEW ?? 0)).toLocaleString("sr-Latn-RS")} />
           <StatCard label="Isporučeno" value={sentMetrics.delivered.toLocaleString("sr-Latn-RS")} hint={`od ${sentMetrics.recipients.toLocaleString("sr-Latn-RS")} adresiranih`} />
           <StatCard label="Otvaranje / klik" value={`${rate(sentMetrics.opened, sentMetrics.delivered)} / ${rate(sentMetrics.clicked, sentMetrics.delivered)}`} hint="za prikazane kampanje" />
@@ -259,6 +263,7 @@ async function ContactsView({ q }: { q: string }) {
           <SubmitButton>Filtriraj</SubmitButton>
         </form>
       </Card>
+      <p className="text-sm text-ink-500">Newsletter evidencija: prikaz poslednjih {contacts.length} kontakata{q ? " koji odgovaraju pretrazi" : ""}, najviše 500. Ukupan broj svih email kontakata iz sistema prikazan je iznad.</p>
       <DataTable
         columns={[
           { key: "email", label: "Kontakt" },
