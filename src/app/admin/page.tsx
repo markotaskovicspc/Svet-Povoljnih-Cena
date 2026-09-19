@@ -1,5 +1,7 @@
 import { db } from "@/lib/db";
-import { getDashboardData } from "@/lib/admin/dashboard-data";
+import { Suspense } from "react";
+import { getDashboardOperations, type DashboardDataInput, type DashboardOperations } from "@/lib/admin/dashboard-data";
+import { getDashboardAnalytics } from "@/lib/admin/dashboard-analytics";
 import { requireAdminAction } from "@/lib/admin";
 import { formatRsd } from "@/lib/format";
 import { resolveReportPeriod } from "@/lib/admin/report-period";
@@ -35,6 +37,24 @@ export default async function AdminDashboard({
 }) {
   const admin = await requireAdminAction();
   const sp = await searchParams;
+  return (
+    <>
+      <PageHeader
+        title="Kontrolna tabla"
+        description="Dnevni pregled, sačuvani poslovni periodi i jedinstven magacinski kontekst."
+      />
+      <Suspense fallback={<DashboardPending label="Učitavanje filtera…" />}>
+        <DashboardBody adminId={admin.id} sp={sp} />
+      </Suspense>
+    </>
+  );
+}
+
+function DashboardPending({ label }: { label: string }) {
+  return <div role="status" className="rounded-xl border border-border/60 bg-surface p-6 text-sm text-ink-500">{label}</div>;
+}
+
+async function DashboardBody({ adminId, sp }: { adminId: string; sp: DashboardParams }) {
   const explicitContext = cleanDashboardContext(sp);
   const hasExplicitContext = hasDashboardContext(sp);
 
@@ -48,7 +68,7 @@ export default async function AdminDashboard({
       ? Promise.resolve(null)
       : db.adminSavedView.findFirst({
           where: {
-            adminUserId: admin.id,
+            adminUserId: adminId,
             module: "dashboard",
             isDefault: true,
           },
@@ -83,66 +103,13 @@ export default async function AdminDashboard({
   const selectedWarehouse = warehouses.find((warehouse) => warehouse.id === warehouseId);
   const warehouseLabel = selectedWarehouse?.name ?? "Svi magacini";
 
-  const {
-    orderSummary, fiscalRows, reclamationCount, topProducts,
-    warehouseStockRows, incomingRows, visitRows, conversionRows, lowStock,
-  } = await getDashboardData({
+  const input: DashboardDataInput = {
     now, warehouseId, todayPeriod, ordersPeriod, fiscalPeriod,
     reclamationsPeriod, topProductsPeriod, analyticsPeriod,
-  });
-
-  const fiscal = fiscalRows[0] ?? { today_net: 0, period_net: 0 };
-  const ordersToday = orderSummary.today_count;
-  const ordersTodayAmount = orderSummary.today_total;
-  const ordersTodayShipping = orderSummary.today_shipping;
-  const ordersInPeriod = orderSummary.period_count;
-  const ordersInPeriodAmount = orderSummary.period_total;
-  const ordersInPeriodShipping = orderSummary.period_shipping;
-  const incoming = incomingRows[0] ?? {
-    order_count: 0,
-    remaining_qty: 0,
-    value_rsd: 0,
-    total_volume: 0,
   };
-  const visits = visitRows[0] ?? {
-    active_now: 0,
-    today: 0,
-    daily_average_30d: 0,
-  };
-  const conversions = conversionRows[0] ?? {
-    visitors: 0,
-    purchasers: 0,
-    purchase_value: 0,
-    cart_buyers: 0,
-    converted_cart_buyers: 0,
-  };
-  const visitPurchaseConversion = conversions.visitors
-    ? (conversions.purchasers / conversions.visitors) * 100
-    : 0;
-  const valuePerVisit = conversions.visitors
-    ? conversions.purchase_value / conversions.visitors
-    : 0;
-  const cartPurchaseConversion = conversions.cart_buyers
-    ? (conversions.converted_cart_buyers / conversions.cart_buyers) * 100
-    : 0;
-  const totalStock = warehouseStockRows.reduce(
-    (total, row) => ({
-      total_qty: total.total_qty + row.total_qty,
-      stock_value: total.stock_value + row.stock_value,
-      total_volume: total.total_volume + row.total_volume,
-    }),
-    { total_qty: 0, stock_value: 0, total_volume: 0 },
-  );
-  const visibleWarehouseStock = warehouseId
-    ? warehouseStockRows.filter((row) => row.id === warehouseId)
-    : warehouseStockRows;
-  const visiblePallets = visibleWarehouseStock.reduce(
-    (total, row) => ({
-      occupied: total.occupied + row.occupied_pallet_places,
-      missingSkuCount: total.missingSkuCount + row.missing_pallet_sku_count,
-    }),
-    { occupied: 0, missingSkuCount: 0 },
-  );
+  const operations = getDashboardOperations(input);
+  const analytics = getDashboardAnalytics(input);
+  const sectionKey = JSON.stringify(context);
   const exportWarehouse = warehouseId
     ? `&warehouseId=${encodeURIComponent(warehouseId)}`
     : "";
@@ -150,11 +117,6 @@ export default async function AdminDashboard({
   const fiscalExport = `/api/admin/erp/prodajni-nalozi/export?from=${context.fiscalFrom}&to=${context.fiscalTo}&dateField=fiscal-issued-at&fiscalStatus=issued${exportWarehouse}`;
 
   return (
-    <>
-      <PageHeader
-        title="Kontrolna tabla"
-        description="Dnevni pregled, sačuvani poslovni periodi i jedinstven magacinski kontekst."
-      />
       <div className="space-y-8 px-8 py-6">
         {sp.forbidden ? (
           <div className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-ink-700">
@@ -179,6 +141,61 @@ export default async function AdminDashboard({
         </div>
 
         <section aria-label="Ključni pokazatelji" className="space-y-8">
+          <Suspense key={`operations-${sectionKey}`} fallback={<DashboardPending label="Učitavanje porudžbina i zaliha…" />}>
+            <OperationalCards data={operations} input={input} warehouseLabel={warehouseLabel} />
+          </Suspense>
+          <Suspense key={`analytics-${sectionKey}`} fallback={<DashboardPending label="Učitavanje poseta i konverzija…" />}>
+            <AnalyticsCards data={analytics} periodLabel={analyticsPeriod.label} />
+          </Suspense>
+        </section>
+        <Suspense key={`tables-${sectionKey}`} fallback={<DashboardPending label="Učitavanje pregleda magacina i artikala…" />}>
+          <OperationalTables data={operations} input={input} warehouseLabel={warehouseLabel} />
+        </Suspense>
+      </div>
+  );
+}
+
+type OperationalSectionProps = {
+  data: Promise<DashboardOperations>;
+  input: DashboardDataInput;
+  warehouseLabel: string;
+};
+
+async function OperationalCards({ data, input, warehouseLabel }: OperationalSectionProps) {
+  const { warehouseId, ordersPeriod, fiscalPeriod, reclamationsPeriod } = input;
+  const { orderSummary, fiscalRows, reclamationCount, warehouseStockRows, incomingRows } = await data;
+  const fiscal = fiscalRows[0] ?? { today_net: 0, period_net: 0 };
+  const ordersToday = orderSummary.today_count;
+  const ordersTodayAmount = orderSummary.today_total;
+  const ordersTodayShipping = orderSummary.today_shipping;
+  const ordersInPeriod = orderSummary.period_count;
+  const ordersInPeriodAmount = orderSummary.period_total;
+  const ordersInPeriodShipping = orderSummary.period_shipping;
+  const incoming = incomingRows[0] ?? {
+    order_count: 0,
+    remaining_qty: 0,
+    value_rsd: 0,
+    total_volume: 0,
+  };
+  const totalStock = warehouseStockRows.reduce(
+    (total, row) => ({
+      total_qty: total.total_qty + row.total_qty,
+      stock_value: total.stock_value + row.stock_value,
+      total_volume: total.total_volume + row.total_volume,
+    }),
+    { total_qty: 0, stock_value: 0, total_volume: 0 },
+  );
+  const visibleWarehouseStock = warehouseId
+    ? warehouseStockRows.filter((row) => row.id === warehouseId)
+    : warehouseStockRows;
+  const visiblePallets = visibleWarehouseStock.reduce(
+    (total, row) => ({
+      occupied: total.occupied + row.occupied_pallet_places,
+      missingSkuCount: total.missingSkuCount + row.missing_pallet_sku_count,
+    }),
+    { occupied: 0, missingSkuCount: 0 },
+  );
+  return <>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             <StatCard label="Porudžbine danas" value={String(ordersToday)} hint={`${formatRsd(ordersTodayAmount)} · dostava ${formatRsd(ordersTodayShipping)} · ${warehouseLabel}`} />
             <StatCard label="Porudžbine u periodu" value={String(ordersInPeriod)} hint={`${formatRsd(ordersInPeriodAmount)} · dostava ${formatRsd(ordersInPeriodShipping)} · ${ordersPeriod.label} · ${warehouseLabel}`} />
@@ -198,6 +215,40 @@ export default async function AdminDashboard({
             <StatCard label="Roba u dolasku" value={formatRsd(incoming.value_rsd)} hint={`${incoming.remaining_qty} kom · ${formatVolume(incoming.total_volume)} · ${warehouseLabel}`} />
           </div>
 
+  </>;
+}
+
+async function AnalyticsCards({ data, periodLabel }: {
+  data: ReturnType<typeof getDashboardAnalytics>;
+  periodLabel: string;
+}) {
+  const { visitRows, conversionRows, checkedAt } = await data;
+  const visits = visitRows[0] ?? {
+    active_now: 0,
+    today: 0,
+    daily_average_30d: 0,
+  };
+  const conversions = conversionRows[0] ?? {
+    visitors: 0,
+    purchasers: 0,
+    purchase_value: 0,
+    cart_buyers: 0,
+    converted_cart_buyers: 0,
+  };
+  const visitPurchaseConversion = conversions.visitors
+    ? (conversions.purchasers / conversions.visitors) * 100
+    : 0;
+  const valuePerVisit = conversions.visitors
+    ? conversions.purchase_value / conversions.visitors
+    : 0;
+  const cartPurchaseConversion = conversions.cart_buyers
+    ? (conversions.converted_cart_buyers / conversions.cart_buyers) * 100
+    : 0;
+  const checkedAtLabel = new Intl.DateTimeFormat("sr-Latn-RS", {
+    timeZone: "Europe/Belgrade", hour: "2-digit", minute: "2-digit", second: "2-digit",
+  }).format(new Date(checkedAt));
+  return <div className="space-y-4">
+    <p className="text-xs text-ink-500">Analitika: presek u {checkedAtLabel} · podaci mogu kasniti do 30 sekundi.</p>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <StatCard label="Trenutni broj poseta" value={String(visits.active_now)} hint="Jedinstvene consented sesije u poslednjih 5 minuta" />
             <StatCard label="Današnji broj poseta" value={String(visits.today)} hint="Jedinstvene consented sesije danas" />
@@ -205,12 +256,20 @@ export default async function AdminDashboard({
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <StatCard label="Poseta → kupovina" value={`${visitPurchaseConversion.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 2 })}%`} hint={`${conversions.purchasers} kupaca / ${conversions.visitors} posetilaca · ${analyticsPeriod.label}`} />
-            <StatCard label="Poseta → vrednost" value={formatRsd(valuePerVisit)} hint={`${formatRsd(conversions.purchase_value)} atribuirane vrednosti · ${analyticsPeriod.label}`} />
-            <StatCard label="Korpa → kupovina" value={`${cartPurchaseConversion.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 2 })}%`} hint={`${conversions.converted_cart_buyers} / ${conversions.cart_buyers} kupaca · ${analyticsPeriod.label}`} />
+            <StatCard label="Poseta → kupovina" value={`${visitPurchaseConversion.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 2 })}%`} hint={`${conversions.purchasers} kupaca / ${conversions.visitors} posetilaca · ${periodLabel}`} />
+            <StatCard label="Poseta → vrednost" value={formatRsd(valuePerVisit)} hint={`${formatRsd(conversions.purchase_value)} atribuirane vrednosti · ${periodLabel}`} />
+            <StatCard label="Korpa → kupovina" value={`${cartPurchaseConversion.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 2 })}%`} hint={`${conversions.converted_cart_buyers} / ${conversions.cart_buyers} kupaca · ${periodLabel}`} />
           </div>
-        </section>
+  </div>;
+}
 
+async function OperationalTables({ data, input, warehouseLabel }: OperationalSectionProps) {
+  const { warehouseId, topProductsPeriod } = input;
+  const { warehouseStockRows, topProducts, lowStock } = await data;
+  const visibleWarehouseStock = warehouseId
+    ? warehouseStockRows.filter((row) => row.id === warehouseId)
+    : warehouseStockRows;
+  return <>
         <Card>
           <CardTitle
             description={`${warehouseId ? `Prikazan je magacin ${warehouseLabel}.` : "Prikazani su svi aktivni magacini."} Zapremina koristi 69 m³ ÷ komada u kontejneru; ako taj podatak ne postoji, koristi Š × D × V transportnog pakovanja ÷ 1.000.000 ÷ komada u paketu. Dimenzije pojedinačnog pakovanja se ne koriste. Paletna mesta = zbir zaokruženog naviše odnosa stanje ÷ komada na paleti, zasebno po SKU-u.`}
@@ -290,7 +349,5 @@ export default async function AdminDashboard({
             />
           </Card>
         </div>
-      </div>
-    </>
-  );
+  </>;
 }

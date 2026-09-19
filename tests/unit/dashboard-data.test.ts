@@ -45,3 +45,15 @@ describe("dashboard data snapshot", () => {
     await expect(getDashboardData(input)).rejects.toThrow("Podaci kontrolne table nisu učitani.");
   });
 });
+
+it("keeps analytics scans out of the operational query and operational tables out of analytics", () => {
+  const operations = buildDashboardDataQuery(input, "operations");
+  const analytics = buildDashboardDataQuery(input, "analytics");
+  expect(operations.text).not.toContain('"AnalyticsEvent"');
+  expect(operations.text).toContain('AS "orderSummary"');
+  expect(operations.text).toContain('AS "lowStock"');
+  expect(analytics.text).toContain('AS "visitRows"');
+  expect(analytics.text).toContain('AS "conversionRows"');
+  expect(analytics.text).not.toContain('FROM "Order"');
+  expect(analytics.text).not.toContain('FROM "Warehouse"');
+});

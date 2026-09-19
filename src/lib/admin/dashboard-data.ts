@@ -87,9 +87,9 @@ export type DashboardData = {
   lowStock: LowStockRow[];
 };
 
-// One read-only statement gives every card the same database snapshot and
-// avoids queueing ten separate round trips on the production connection pool.
-export function buildDashboardDataQuery(input: DashboardDataInput) {
+// Each section is a single read-only statement. Operational cards share one
+// fresh snapshot; analytics can stream separately without holding them back.
+export function buildDashboardDataQuery(input: DashboardDataInput, section: "all" | "operations" | "analytics" = "all") {
   const { now, warehouseId, todayPeriod, ordersPeriod, fiscalPeriod,
     reclamationsPeriod, topProductsPeriod, analyticsPeriod } = input;
   const visitsPeriod = resolveReportPeriod({ range: "30d" }, now);
@@ -110,7 +110,7 @@ export function buildDashboardDataQuery(input: DashboardDataInput) {
     ? Prisma.sql`AND po."receivingWarehouseId" = ${warehouseId}`
     : Prisma.empty;
 
-  return Prisma.sql`SELECT
+  const operations = Prisma.sql`
     (SELECT row_to_json(result) FROM (
       SELECT
         COUNT(*) FILTER (WHERE o."createdAt" >= ${todayPeriod.start} AND o."createdAt" < ${todayPeriod.endExclusive})::int AS today_count,
@@ -231,6 +231,25 @@ export function buildDashboardDataQuery(input: DashboardDataInput) {
       WHERE po.status IN ('DRAFT', 'SENT', 'CONFIRMED') ${purchaseWarehouseSql}
     ) result) AS "incomingRows",
     (SELECT COALESCE(json_agg(result), '[]'::json) FROM (
+      SELECT
+        p.id,
+        p.sku,
+        p.name,
+        COALESCE(SUM(CASE WHEN w.id IS NOT NULL THEN ws.qty ELSE 0 END), 0)::int AS qty,
+        p."incomingStock"::int AS incoming_stock
+      FROM "Product" p
+      LEFT JOIN "WarehouseStock" ws ON ws."productId" = p.id
+      LEFT JOIN "Warehouse" w
+        ON w.id = ws."warehouseId" AND w.active = true ${stockWarehouseSql}
+      WHERE p."isActive" = true
+      GROUP BY p.id, p.sku, p.name, p."incomingStock"
+      HAVING COALESCE(SUM(CASE WHEN w.id IS NOT NULL THEN ws.qty ELSE 0 END), 0) <= 2
+      ORDER BY qty ASC, p.name ASC
+      LIMIT 8
+    ) result) AS "lowStock"
+  `;
+  const analytics = Prisma.sql`
+    (SELECT COALESCE(json_agg(result), '[]'::json) FROM (
       WITH daily AS (
         SELECT
           (a."occurredAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Belgrade')::date AS day,
@@ -299,29 +318,28 @@ export function buildDashboardDataQuery(input: DashboardDataInput) {
         COALESCE((SELECT SUM(value) FROM attributed), 0)::double precision AS purchase_value,
         (SELECT COUNT(*) FROM cart_buyers)::int AS cart_buyers,
         (SELECT COUNT(*) FROM converted_cart_buyers)::int AS converted_cart_buyers
-    ) result) AS "conversionRows",
-    (SELECT COALESCE(json_agg(result), '[]'::json) FROM (
-      SELECT
-        p.id,
-        p.sku,
-        p.name,
-        COALESCE(SUM(CASE WHEN w.id IS NOT NULL THEN ws.qty ELSE 0 END), 0)::int AS qty,
-        p."incomingStock"::int AS incoming_stock
-      FROM "Product" p
-      LEFT JOIN "WarehouseStock" ws ON ws."productId" = p.id
-      LEFT JOIN "Warehouse" w
-        ON w.id = ws."warehouseId" AND w.active = true ${stockWarehouseSql}
-      WHERE p."isActive" = true
-      GROUP BY p.id, p.sku, p.name, p."incomingStock"
-      HAVING COALESCE(SUM(CASE WHEN w.id IS NOT NULL THEN ws.qty ELSE 0 END), 0) <= 2
-      ORDER BY qty ASC, p.name ASC
-      LIMIT 8
-    ) result) AS "lowStock"
+    ) result) AS "conversionRows"
   `;
+  return Prisma.sql`SELECT ${section === "operations" ? operations : section === "analytics" ? analytics : Prisma.sql`${operations}, ${analytics}`}`;
 }
 
 export async function getDashboardData(input: DashboardDataInput): Promise<DashboardData> {
   const [data] = await db.$queryRaw<DashboardData[]>(buildDashboardDataQuery(input));
   if (!data) throw new Error("Podaci kontrolne table nisu učitani.");
+  return data;
+}
+
+export type DashboardOperations = Omit<DashboardData, "visitRows" | "conversionRows">;
+export type DashboardAnalytics = Pick<DashboardData, "visitRows" | "conversionRows">;
+
+export async function getDashboardOperations(input: DashboardDataInput): Promise<DashboardOperations> {
+  const [data] = await db.$queryRaw<DashboardOperations[]>(buildDashboardDataQuery(input, "operations"));
+  if (!data) throw new Error("Poslovni podaci kontrolne table nisu učitani.");
+  return data;
+}
+
+export async function getDashboardAnalyticsData(input: DashboardDataInput): Promise<DashboardAnalytics> {
+  const [data] = await db.$queryRaw<DashboardAnalytics[]>(buildDashboardDataQuery(input, "analytics"));
+  if (!data) throw new Error("Analitika kontrolne table nije učitana.");
   return data;
 }
