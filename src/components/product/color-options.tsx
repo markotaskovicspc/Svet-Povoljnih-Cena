@@ -66,7 +66,7 @@ export function getProductColorOptions(product: Product): ProductColorOption[] {
 export function ProductColorOptions({
   product,
   className,
-  label = "Opcije boja",
+  label = "Varijante proizvoda",
   showLabels = false,
   selectedSku,
   onSelectSku,

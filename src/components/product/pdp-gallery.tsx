@@ -4,7 +4,7 @@
  * PDP gallery — main image with magnify-on-hover + click-to-lightbox,
  * vertical thumb strip on the right, plus virtual "video" and "3D" thumbs
  * that swap the main view to a video player or an embedded 3D viewer.
- * Original photos are shown first; eligible connections prepare 3D after the photo.
+ * Original photos are shown first; video and 3D load when selected.
  *
  * Media is sourced from the product catalog import; the cloud service can
  * supply images / video / 3D bundles by SKU pattern.
@@ -33,7 +33,7 @@ import {
 } from "@/lib/media";
 import { useIsWished, useWishlist } from "@/lib/hooks/use-wishlist";
 import { ProductArEntryControls, ProductThreeDEntry } from "./product-ar-entry-controls";
-import { prepareProductAr, scheduleProductArWarmup } from "@/lib/product-ar-loader";
+import { prepareProductAr } from "@/lib/product-ar-loader";
 import { PdpPictograms } from "@/components/product/pdp-pictograms";
 import { resolveStorefrontPictograms } from "@/lib/storefront-pictograms";
 import { useCurrentProductAr } from "@/lib/hooks/use-current-product-ar";
@@ -66,10 +66,6 @@ interface PdpGalleryProps {
 
 export function PdpGallery({ product, badges, arAsset: initialArAsset }: PdpGalleryProps) {
   const { asset: arAsset, refresh: refreshArAsset } = useCurrentProductAr(product.slug, initialArAsset);
-  const galleryRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (arAsset && galleryRef.current) return scheduleProductArWarmup(galleryRef.current, arAsset.glbUrl);
-  }, [arAsset]);
   const isDesktop = useSyncExternalStore(subscribeLayout, getDesktopSnapshot, getServerSnapshot);
   const wished = useIsWished(product.sku);
   const toggleWish = useWishlist((s) => s.toggleProduct);
@@ -252,7 +248,7 @@ export function PdpGallery({ product, badges, arAsset: initialArAsset }: PdpGall
   }
 
   return (
-    <div ref={galleryRef} data-product-gallery className="flex flex-col gap-4 md:flex-row-reverse md:gap-6">
+    <div data-product-gallery className="flex flex-col gap-4 md:flex-row-reverse md:gap-6">
       {/* Main stage */}
       <div className="relative flex-1 md:self-start">
         <button
@@ -309,7 +305,8 @@ export function PdpGallery({ product, badges, arAsset: initialArAsset }: PdpGall
                     <Image src={s.asset.url} alt={s.asset.alt ?? product.name} fill loading="lazy" sizes="100vw" className="object-contain" />
                 ) : s.kind === "video" ? (
                   <video
-                    src={s.asset.url}
+                    src={!isDesktop && activeIndex === index ? s.asset.url : undefined}
+                    preload="none"
                     controls
                     playsInline
                     className="h-full w-full object-cover"
@@ -318,7 +315,7 @@ export function PdpGallery({ product, badges, arAsset: initialArAsset }: PdpGall
                 ) : (
                   <iframe
                     title={`3D pregled — ${product.name}`}
-                    src={s.asset.url}
+                    src={!isDesktop && activeIndex === index ? s.asset.url : undefined}
                     className="h-full w-full border-0"
                     allow="accelerometer; gyroscope; xr-spatial-tracking"
                   />
@@ -431,7 +428,8 @@ export function PdpGallery({ product, badges, arAsset: initialArAsset }: PdpGall
                 ) : s.kind === "video" ? (
                   <div className="grid h-full w-full place-items-center">
                     <video
-                      src={s.asset.url}
+                      src={isDesktop && activeIndex === index ? s.asset.url : undefined}
+                      preload="none"
                       controls
                       playsInline
                       className="h-full w-full object-cover"
@@ -442,7 +440,7 @@ export function PdpGallery({ product, badges, arAsset: initialArAsset }: PdpGall
                   <div className="bg-canvas grid h-full w-full place-items-center">
                     <iframe
                       title={`3D pregled — ${product.name}`}
-                      src={s.asset.url}
+                      src={isDesktop && activeIndex === index ? s.asset.url : undefined}
                       className="h-full w-full border-0"
                       allow="accelerometer; gyroscope; xr-spatial-tracking"
                     />

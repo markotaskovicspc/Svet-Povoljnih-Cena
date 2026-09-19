@@ -6,6 +6,7 @@
  * skeleton loading variant, reduced-motion friendly micro-interactions.
  */
 import Image from "next/image";
+import { optimizedIconUrl } from "@/lib/media/optimized-icon";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
@@ -675,7 +676,7 @@ function ProductCardPictogram({
       className="relative size-[25px] overflow-hidden rounded-full bg-white/90 shadow-soft-1 ring-1 ring-white/80 md:size-7"
     >
       <Image
-        src={pictogram.iconUrl}
+        src={optimizedIconUrl(pictogram.iconUrl)}
         alt=""
         width={40}
         height={40}

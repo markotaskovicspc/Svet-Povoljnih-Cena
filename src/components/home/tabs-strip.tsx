@@ -5,6 +5,7 @@
  */
 import Link from "next/link";
 import Image from "next/image";
+import { optimizedIconUrl } from "@/lib/media/optimized-icon";
 import { motion } from "framer-motion";
 import {
   Tag,
@@ -62,11 +63,11 @@ export function TabsStrip({ tabs }: TabsStripProps) {
                   <span className="bg-muted-bg text-walnut group-hover:bg-walnut grid size-10 shrink-0 place-items-center rounded-lg transition group-hover:text-canvas">
                     {promoTab.iconAsset ? (
                       <Image
-                        src={promoTab.iconAsset.url}
+                        src={optimizedIconUrl(promoTab.iconAsset.url)}
                         alt=""
                         width={promoTab.iconAsset.width ?? 96}
                         height={promoTab.iconAsset.height ?? 96}
-                        unoptimized={promoTab.iconAsset.url.endsWith(".svg")}
+                        unoptimized
                         className="max-h-8 max-w-9 object-contain transition group-hover:scale-105"
                       />
                     ) : (

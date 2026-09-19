@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { randomBytes } from "node:crypto";
 import { Fragment } from "react";
+import { LinkExistingProduct } from "@/components/admin/link-existing-product";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
@@ -1564,8 +1565,8 @@ export default async function ProductDetail({
             )}
           </Card>
           <Card>
-            <CardTitle description="Svaka boja ostaje zaseban SKU sa svojim slikama i zalihama.">
-              Boje u porodici
+            <CardTitle description="Svaka varijanta ostaje zaseban SKU sa svojim slikama i zalihama.">
+              Varijante u porodici
             </CardTitle>
             {product.familyMembership ? (
               <div className="mt-4 space-y-2">
@@ -1610,8 +1611,8 @@ export default async function ProductDetail({
                           }
                         >
                           {member.storefrontEnabled
-                            ? "Boja spremna za web"
-                            : "Boja nije spremna za web"}
+                            ? "Varijanta spremna za web"
+                            : "Varijanta nije spremna za web"}
                         </p>
                       </div>
                       <Link
@@ -1629,14 +1630,14 @@ export default async function ProductDetail({
                   className="mt-4 grid grid-cols-1 gap-3 rounded-xl border border-dashed border-brand-blue/35 bg-brand-blue-50/30 p-4 md:grid-cols-[1fr_1fr_140px_auto]"
                 >
                   <input type="hidden" name="sourceProductId" value={product.id} />
-                  <Field label="SKU nove boje">
+                  <Field label="SKU nove varijante">
                     <Input
                       name="sku"
                       required
                       placeholder="Nova jedinstvena šifra"
                     />
                   </Field>
-                  <Field label="Naziv boje">
+                  <Field label="Oznaka nove varijante">
                     <Input
                       name="label"
                       required
@@ -1650,18 +1651,18 @@ export default async function ProductDetail({
                       pattern="#[0-9A-Fa-f]{6}"
                     />
                   </Field>
-                  <SubmitButton className="self-end">Nova boja</SubmitButton>
+                  <SubmitButton className="self-end">Napravi novi artikal</SubmitButton>
                 </AdminActionForm>
               </div>
             ) : (
               <p className="mt-3 text-sm text-ink-500">
-                Artikal još nije povezan sa drugim bojama. Unesite eksplicitnu
-                šifru porodice u kartonu ispod.
+                Artikal još nije povezan sa drugim varijantama. Pronađite postojeći SKU ispod.
               </p>
             )}
+            <LinkExistingProduct sourceId={product.id} sourceVersion={product.updatedAt.toISOString()} />
           </Card>
           <Card>
-          <CardTitle description="Opisni podaci se pri čuvanju primenjuju na sve članove porodice. SKU, boje, slike, zalihe, nabavne i prodajne cene, akcije, TNC/DTZ/Novo/Heroji oznake i supplier identitet ostaju samo na konkretnom artiklu.">
+          <CardTitle description={product.familyMembership?.family.preserveVariantData ? "Podaci ove porodice uređuju se pojedinačno. Čuvanje menja samo ovaj artikal; nazivi, veličine, dimenzije, opisi, slike, cene i zalihe drugih varijanti ostaju sačuvani." : "Opisni podaci se pri čuvanju primenjuju na sve članove porodice. SKU, boje, slike, zalihe, nabavne i prodajne cene, akcije, TNC/DTZ/Novo/Heroji oznake i supplier identitet ostaju samo na konkretnom artiklu."}>
             Karton proizvoda
           </CardTitle>
           <AdminActionForm
@@ -1679,12 +1680,10 @@ export default async function ProductDetail({
             />
             <fieldset className="space-y-3 rounded-xl border border-brand-blue/25 bg-brand-blue-50/40 p-4">
               <legend className="px-2 text-xs font-semibold uppercase tracking-[0.12em] text-brand-blue">
-                Porodica boja
+                Porodica varijanti
               </legend>
               <p className="text-xs text-ink-600">
-                Prazna šifra odvaja ovu boju bez brisanja SKU-a ili istorije.
-                Opisni podaci važe za celu porodicu; cene, akcije i statusi važe
-                samo za ovaj SKU.
+                Prazna šifra odvaja varijantu bez brisanja SKU-a ili istorije. {product.familyMembership?.family.preserveVariantData ? "Svaki artikal zadržava svoje podatke." : "Opisni podaci važe za celu porodicu; cene, akcije i statusi važe samo za ovaj SKU."}
               </p>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-6">
                 <Field label="Šifra porodice">
@@ -1694,7 +1693,7 @@ export default async function ProductDetail({
                     placeholder="npr. SMAK-UGAONA"
                   />
                 </Field>
-                <Field label="Naziv ove boje">
+                <Field label="Oznaka ove varijante">
                   <Input
                     name="familyColorLabel"
                     defaultValue={
@@ -1732,7 +1731,7 @@ export default async function ProductDetail({
                       product.id
                     }
                   />
-                  Glavna boja
+                  Glavna varijanta
                 </label>
                 <label className="flex items-center gap-2 self-end pb-2 text-sm font-medium">
                   <input
@@ -1742,7 +1741,7 @@ export default async function ProductDetail({
                       product.familyMembership?.storefrontEnabled ?? false
                     }
                   />
-                  Boja spremna za web
+                  Varijanta spremna za web
                 </label>
               </div>
             </fieldset>

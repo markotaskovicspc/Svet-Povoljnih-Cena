@@ -537,6 +537,7 @@ model Product {
 /// primary product owns shared presentation data, while every member keeps its
 /// own prices, promotions and lifecycle statuses.
 model ProductFamily {
+  preserveVariantData Boolean @default(false)
   id               String   @id @default(cuid())
   code             String   @unique
   primaryProductId String?  @unique

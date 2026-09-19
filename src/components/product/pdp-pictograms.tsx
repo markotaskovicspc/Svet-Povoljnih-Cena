@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { optimizedIconUrl } from "@/lib/media/optimized-icon";
 import type { Pictogram } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -34,7 +35,7 @@ export function PdpPictograms({
           className="relative size-11 overflow-hidden rounded-full bg-white/90 shadow-soft-1 ring-1 ring-white/80"
         >
           <Image
-            src={pictogram.iconUrl}
+            src={optimizedIconUrl(pictogram.iconUrl)}
             alt=""
             width={72}
             height={72}

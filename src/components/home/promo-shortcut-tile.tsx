@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { optimizedIconUrl } from "@/lib/media/optimized-icon";
 import Link from "next/link";
 import {
   CalendarDays,
@@ -96,11 +97,11 @@ export function PromoShortcutTile({
       >
         {iconAsset ? (
           <Image
-            src={iconAsset.url}
+            src={optimizedIconUrl(iconAsset.url)}
             alt=""
             width={iconAsset.width ?? 96}
             height={iconAsset.height ?? 96}
-            unoptimized={iconAsset.url.endsWith(".svg")}
+            unoptimized
             className={cn(
               "h-9 w-9 object-contain",
               iconImageClass,

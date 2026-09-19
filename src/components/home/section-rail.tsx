@@ -6,6 +6,7 @@
  */
 import Link from "next/link";
 import Image from "next/image";
+import { optimizedIconUrl } from "@/lib/media/optimized-icon";
 import { motion } from "framer-motion";
 import {
   ArrowRight,
@@ -131,11 +132,11 @@ export function SectionRail({
             {titleIcon ? (
               <span className="flex size-11 shrink-0 items-center justify-center md:size-14">
                 <Image
-                  src={titleIcon.url}
+                  src={optimizedIconUrl(titleIcon.url)}
                   alt={titleIcon.alt ?? ""}
                   width={titleIcon.width ?? 80}
                   height={titleIcon.height ?? 80}
-                  unoptimized={titleIcon.url.endsWith(".svg")}
+                  unoptimized
                   className="max-h-full max-w-full object-contain"
                 />
               </span>

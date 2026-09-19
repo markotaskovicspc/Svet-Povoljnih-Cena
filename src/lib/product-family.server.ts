@@ -180,14 +180,15 @@ export async function syncProductFamilyMembershipColor(
   const membership = await tx.productFamilyMember.findUnique({
     where: { productId: input.productId },
     select: {
-      family: { select: { code: true } },
+      family: { select: { code: true, preserveVariantData: true } },
+      label: true,
       colorHex: true,
       position: true,
       storefrontEnabled: true,
     },
   });
   if (!membership) return null;
-  const label = defaultProductFamilyLabel(input);
+  const label = membership.family.preserveVariantData ? membership.label : defaultProductFamilyLabel(input);
   if (!label) {
     throw new Error(
       "Artikal u porodici boja mora imati popunjeno polje Boja 1.",
@@ -278,12 +279,12 @@ export async function ensureProductColorFamily(
           colorHex: true,
           position: true,
           storefrontEnabled: true,
-          family: { select: { code: true, primaryProductId: true } },
+          family: { select: { code: true, primaryProductId: true, preserveVariantData: true } },
         },
       },
     },
   });
-  const label = defaultProductFamilyLabel(product);
+  const label = product.familyMembership?.family.preserveVariantData ? product.familyMembership.label : defaultProductFamilyLabel(product);
   if (!label) {
     throw new Error(
       `SKU ${product.sku} mora imati popunjeno polje Boja 1 pre povezivanja.`,
@@ -394,6 +395,53 @@ export async function addExistingProductToColorFamily(
   });
   await propagateProductFamilySharedData(tx, family.primaryProductId, ["master"]);
   return { familyId: family.familyId, familyCode: family.familyCode, target };
+}
+
+export async function linkExistingProductVariant(
+  tx: Prisma.TransactionClient,
+  input: { sourceId: string; targetId: string; sourceVersion: string; targetVersion: string; label: string },
+) {
+  if (input.sourceId === input.targetId) throw new Error("Artikal ne može biti povezan sam sa sobom.");
+  // Serializes the linking workflow; the caller also uses SERIALIZABLE to
+  // reject concurrent membership changes made through older editing paths.
+  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('spc:link-existing-variant'))::text AS "lock"`;
+  const select = {
+    id: true, sku: true, slug: true, name: true, sizeLabel: true, colorPrimary: true,
+    colorSecondary: true, updatedAt: true, deletedAt: true,
+    familyMembership: { include: { family: { include: { _count: { select: { members: true } } } } } },
+  } satisfies Prisma.ProductSelect;
+  const source = await tx.product.findUniqueOrThrow({ where: { id: input.sourceId }, select });
+  const target = await tx.product.findUniqueOrThrow({ where: { id: input.targetId }, select });
+  if (source.deletedAt || target.deletedAt) throw new Error("Arhivirani artikal ne može biti povezan.");
+  if (source.updatedAt.toISOString() !== input.sourceVersion || target.updatedAt.toISOString() !== input.targetVersion) {
+    throw new Error("Artikal je u međuvremenu izmenjen. Osvežite stranicu i ponovo pronađite SKU.");
+  }
+  if (source.familyMembership && source.familyMembership.familyId === target.familyMembership?.familyId) {
+    return { familyId: source.familyMembership.familyId, duplicate: true, source, target };
+  }
+  if (target.familyMembership && target.familyMembership.family._count.members > 1) {
+    throw new Error(`SKU ${target.sku} je već povezan sa drugim artiklima. Najpre ga odvojite iz porodice ${target.familyMembership.family.code}.`);
+  }
+  const label = normalizeProductFamilyLabel(input.label);
+  let familyId = source.familyMembership?.familyId;
+  let code = source.familyMembership?.family.code;
+  if (!familyId || !code) {
+    code = await uniqueProductFamilyCode(tx, source.sku, source.id);
+    const sourceLabel = [source.sizeLabel, defaultProductFamilyLabel(source)].filter(Boolean).join(" · ") || source.sku;
+    const member = await setProductFamilyMembership(tx, { productId: source.id, familyCode: code, label: sourceLabel, makePrimary: true, storefrontEnabled: true });
+    familyId = member!.familyId;
+  }
+  await tx.productFamily.update({ where: { id: familyId }, data: { preserveVariantData: true } });
+  const last = await tx.productFamilyMember.findFirst({ where: { familyId }, orderBy: { position: "desc" }, select: { position: true } });
+  await setProductFamilyMembership(tx, {
+    productId: target.id, familyCode: code, label,
+    colorHex: target.familyMembership?.colorHex,
+    position: (last?.position ?? -1) + 1,
+    storefrontEnabled: target.familyMembership?.storefrontEnabled ?? true,
+  });
+  // Intentionally no Product writes or master-data propagation. These are
+  // existing SKUs with their own sizes, prices, logistics, media and stock.
+  return { familyId, duplicate: false, source, target };
 }
 
 export async function moveProductFamilyMember(
@@ -538,6 +586,7 @@ export async function getProductFamilyProductIds(
       family: {
         select: {
           primaryProductId: true,
+          preserveVariantData: true,
           members: {
             orderBy: [{ position: "asc" }, { productId: "asc" }],
             select: { productId: true },
@@ -549,6 +598,7 @@ export async function getProductFamilyProductIds(
   return membership
     ? {
         familyId: membership.familyId,
+        preserveVariantData: membership.family.preserveVariantData,
         primaryProductId: membership.family.primaryProductId,
         productIds: membership.family.members.map((member) => member.productId),
       }
@@ -567,6 +617,9 @@ export async function propagateProductFamilySharedData(
 ) {
   const family = await getProductFamilyProductIds(tx, sourceProductId);
   if (!family || family.productIds.length < 2) return [];
+  const syncMaster = groups.includes("master") && !family.preserveVariantData;
+  const syncPublication = groups.includes("publication");
+  if (!syncMaster && !syncPublication) return [];
   await lockFamily(tx, family.familyId);
   const source = await tx.product.findUniqueOrThrow({
     where: { id: sourceProductId },
@@ -589,8 +642,6 @@ export async function propagateProductFamilySharedData(
     select: { id: true, sku: true },
   });
 
-  const syncMaster = groups.includes("master");
-  const syncPublication = groups.includes("publication");
   for (const target of targets) {
     const data: Prisma.ProductUncheckedUpdateInput = {};
     if (syncMaster) {
