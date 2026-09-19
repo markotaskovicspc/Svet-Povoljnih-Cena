@@ -1,3 +1,4 @@
+import { selectArticleGridPage, supportsArticleGridSelection } from "@/lib/admin/article-grid-page";
 import { NextResponse } from "next/server";
 import { requireAdminAction } from "@/lib/admin";
 import {
@@ -73,6 +74,20 @@ export async function GET(
     !query.trim() &&
     filters.length === 0 &&
     sorting.length === 0;
+  const articleSelection = { query, searchColumn: requestedSearchColumn, searchColumns, filters, sorting };
+  if (slug === "artikli" && !useDatabasePagination && supportsArticleGridSelection(articleSelection)) {
+    const selected = await selectArticleGridPage(articleSelection, start, pageSize);
+    const module = await getErpModule(slug, {
+      take: pageSize, articleIds: selected.ids,
+      warehouseId: search.get("warehouseId"), includeLookupOptions: false,
+    });
+    const byId = new Map(module?.rows.map((row) => [row.id, row]));
+    return NextResponse.json({
+      rows: selected.ids.flatMap((id) => { const row = byId.get(id); return row ? [row] : []; }),
+      page, pageSize, total: selected.total,
+      pageCount: Math.max(1, Math.ceil(selected.total / pageSize)),
+    });
+  }
   const [erpModule, databaseTotal] = await Promise.all([
     getErpModule(slug, {
       take: useDatabasePagination ? pageSize : 500_000,

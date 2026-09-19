@@ -43,15 +43,15 @@ export default async function ErpModulePage({
   const definition = getErpModuleDefinition(slug);
   if (definition?.redirectHref) redirect(definition.redirectHref);
   const isStocktakeArchive = slug === "popisi" && search.view === "archive";
-  const erpModule = await getErpModule(slug, {
-    stocktakeArchived: isStocktakeArchive,
-  });
-  if (!erpModule) notFound();
   const isRabaluxStockView =
     slug === "artikli" && search.view === "rabalux-stock";
-  const selectedSavedView =
+  const [erpModule, selectedSavedView] = await Promise.all([
+    getErpModule(slug, {
+      stocktakeArchived: isStocktakeArchive,
+      deferRows: slug === "artikli" && Boolean(search.view),
+    }),
     slug === "artikli" && search.view && !isRabaluxStockView
-      ? await db.adminSavedView.findFirst({
+      ? db.adminSavedView.findFirst({
           where: {
             id: search.view,
             adminUserId: admin.id,
@@ -64,7 +64,9 @@ export default async function ErpModulePage({
             columns: true,
           },
         })
-      : null;
+      : Promise.resolve(null),
+  ]);
+  if (!erpModule) notFound();
   const savedColumns =
     selectedSavedView?.columns &&
     typeof selectedSavedView.columns === "object" &&

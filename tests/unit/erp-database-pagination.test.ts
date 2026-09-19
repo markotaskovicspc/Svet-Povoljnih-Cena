@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => {
   }])) };
 });
 vi.mock("@/lib/db", () => ({ db: mocks.db }));
-vi.mock("@/lib/admin/pickup-batch.server", () => ({ getPickupPostingAvailability: vi.fn().mockResolvedValue({ available: true }) }));
+vi.mock("@/lib/admin/pickup-availability.server", () => ({ getPickupPostingAvailability: vi.fn().mockResolvedValue({ available: true }) }));
 import { getErpModule } from "@/lib/admin/erp";
 import { countErpDatabaseRows, supportsErpDatabasePagination } from "@/lib/admin/erp-pagination";
 
@@ -57,4 +57,11 @@ it("reports a paginated first-page total without declaring the whole list comple
   const erpModule = await getErpModule("kupci");
   expect(erpModule?.rows).toHaveLength(100);
   expect(erpModule).toMatchObject({ initialRowsTotal: 250, initialRowsComplete: false });
+});
+
+it("does not load products or warehouses for an empty article selection", async () => {
+  const module = await getErpModule("artikli", { articleIds: [], take: 25, includeLookupOptions: false });
+  expect(module?.rows).toEqual([]);
+  expect(mocks.db.product.findMany).not.toHaveBeenCalled();
+  expect(mocks.db.warehouse.findMany).not.toHaveBeenCalled();
 });

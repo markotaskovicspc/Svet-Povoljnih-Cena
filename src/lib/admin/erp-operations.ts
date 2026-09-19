@@ -2335,7 +2335,12 @@ async function unpublishedRows(take: number): Promise<ErpRow[]> {
   const products = await db.product.findMany({
     take,
     orderBy: { updatedAt: "desc" },
-    include: {
+    select: {
+      id: true, sku: true, name: true, articleStatus: true,
+      fullPrice: true, stock: true, isActive: true, updatedAt: true,
+      deletedAt: true, availableWebManual: true, availableWebAuto: true,
+      dcAvailableQty: true, supplierStock: true, supplierApprovalStatus: true,
+      lastSupplierStockSyncAt: true,
       supplier: { select: { integrationKey: true, enabled: true } },
       familyMembership: { select: { storefrontEnabled: true } },
       priceListEntries: {

@@ -886,7 +886,7 @@ export const erpDashboardModules: ErpDashboardModule[] = erpModules.flatMap(
 );
 
 export async function getErpDashboardModules() {
-  const { getPickupPostingAvailability } = await import("@/lib/admin/pickup-batch.server");
+  const { getPickupPostingAvailability } = await import("@/lib/admin/pickup-availability.server");
   const availability = await getPickupPostingAvailability();
   return erpDashboardModules.map((module) =>
     module.slug === "preuzimanja"
@@ -911,13 +911,14 @@ export async function getErpModule(
     salesOrderFilters?: SalesOrderExportFilters;
     stocktakeArchived?: boolean;
     deferRows?: boolean;
+    articleIds?: string[];
   } = {},
 ) {
   const definition = getErpModuleDefinition(slug);
   if (!definition) return undefined;
   const pickupAvailabilityPromise =
     slug === "preuzimanja"
-      ? import("@/lib/admin/pickup-batch.server").then(({ getPickupPostingAvailability }) => getPickupPostingAvailability())
+      ? import("@/lib/admin/pickup-availability.server").then(({ getPickupPostingAvailability }) => getPickupPostingAvailability())
       : Promise.resolve(null);
   const take = Math.max(1, Math.min(options.take ?? 100, 500_000));
   const skip = Math.max(0, options.skip ?? 0);
@@ -925,7 +926,7 @@ export async function getErpModule(
   const [rows, articleContext, supplierContext, purchasePriceContext, pickupAvailability] = await Promise.all([
     options.deferRows ? Promise.resolve([] as ErpRow[]) :
       getPersistedErpRows(slug, take, options.warehouseId, options.query, options.searchColumn,
-        { ...options.salesOrderFilters, stocktakeArchived: options.stocktakeArchived }, skip),
+        { ...options.salesOrderFilters, stocktakeArchived: options.stocktakeArchived }, skip, options.articleIds),
     includeLookupOptions && slug === "artikli" ? getArticleModuleContext() : Promise.resolve(null),
     includeLookupOptions && slug === "dobavljaci" ? getSupplierModuleContext() : Promise.resolve(null),
     includeLookupOptions && slug === "nabavne-cene" ? getPurchasePriceModuleContext() : Promise.resolve(null),
@@ -1049,10 +1050,11 @@ async function getPersistedErpRows(
   searchColumn?: string,
   salesOrderFilters?: SalesOrderExportFilters,
   skip = 0,
+  articleIds?: string[],
 ): Promise<ErpRow[]> {
   switch (slug) {
     case "artikli":
-      return getArticleRows(take, warehouseId, query, searchColumn, skip);
+      return getArticleRows(take, warehouseId, query, searchColumn, skip, articleIds);
     case "dobavljaci":
       return getSupplierRows(take, skip);
     case "nabavne-cene":
@@ -1136,11 +1138,14 @@ async function getArticleRows(
   query?: string,
   searchColumn?: string,
   skip = 0,
+  articleIds?: string[],
 ): Promise<ErpRow[]> {
-  const where = articleSearchWhere(query, searchColumn);
+  if (articleIds?.length === 0) return [];
+  const searchWhere = articleSearchWhere(query, searchColumn);
+  const where = articleIds ? { AND: [searchWhere ?? {}, { id: { in: articleIds } }] } : searchWhere;
   const [products, activeWarehouses] = await Promise.all([db.product.findMany({
     where,
-    orderBy: { updatedAt: "desc" },
+    orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
     take,
     skip,
     select: {

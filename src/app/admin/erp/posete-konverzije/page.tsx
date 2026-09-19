@@ -260,7 +260,7 @@ export default async function AnalyticsConversionPage({
           </label>
           <div className="flex items-end gap-2">
             <button className="h-9 rounded-lg bg-walnut px-4 text-sm font-medium text-white">Primeni</button>
-            <Link href={exportHref} className="inline-flex h-9 items-center rounded-lg border border-border px-4 text-sm font-medium text-ink-700">Excel</Link>
+            <a href={exportHref} className="inline-flex h-9 items-center rounded-lg border border-border px-4 text-sm font-medium text-ink-700">Excel</a>
           </div>
         </form>
 

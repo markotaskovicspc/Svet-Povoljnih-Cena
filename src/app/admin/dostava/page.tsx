@@ -4,12 +4,9 @@ import { z } from "zod";
 import { DeliveryScope } from "@prisma/client";
 import { withAdmin, withAdminState, requireAdminAction } from "@/lib/admin";
 import type { AdminActionState } from "@/lib/admin/action-state";
-import { syncXExpressDictionaries } from "@/lib/x-express/sync";
 import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
-import {
-  MYGLS_PROVIDER,
-  syncMyGlsMasterData,
-} from "@/lib/mygls";
+import { MYGLS_PROVIDER } from "@/lib/mygls/config";
+import { getDeliveryDictionaryCounts } from "@/lib/admin/delivery-dictionary-counts";
 import { num } from "@/lib/api/_helpers";
 import { formatRsd } from "@/lib/format";
 import { PageHeader } from "@/components/admin/page-header";
@@ -30,7 +27,7 @@ import {
   getDeliveryTariffSettings,
   type DeliveryTariffSettings,
 } from "@/lib/delivery-tariff-settings";
-import { getPickupPostingAvailability } from "@/lib/admin/pickup-batch.server";
+import { getPickupPostingAvailability } from "@/lib/admin/pickup-availability.server";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -356,6 +353,7 @@ async function syncXExpressDictionariesAction() {
   return withAdminState(
     { allowed: ["OPS"], action: "delivery.xExpressDictionarySync", entity: "CourierSyncRun" },
     async () => {
+      const { syncXExpressDictionaries } = await import("@/lib/x-express/sync");
       const result = await syncXExpressDictionaries();
       revalidatePath("/admin/dostava");
       return { ok: true as const, diff: result, message: "X Express šifarnici su osveženi." };
@@ -369,6 +367,7 @@ async function syncMyGlsMasterDataAction() {
   return withAdminState(
     { allowed: ["OPS"], action: "delivery.myGlsMasterDataSync", entity: "CourierSyncRun" },
     async () => {
+      const { syncMyGlsMasterData } = await import("@/lib/mygls/sync");
       const result = await syncMyGlsMasterData();
       revalidatePath("/admin/dostava");
       return { ok: true as const, diff: result, message: "MyGLS šifarnici su osveženi." };
@@ -382,15 +381,13 @@ export default async function DeliveryPage() {
     rules,
     cities,
     categories,
-    xTowns,
-    xStreets,
-    xStatuses,
+    dictionaryCounts,
     xRuns,
-    glsDeliveryPoints,
-    glsLocations,
     glsRuns,
     xExpressReadiness,
     myGlsReadiness,
+    deliveryWindows,
+    deliveryTariffSettings,
   ] = await Promise.all([
     db.deliveryPriceRule.findMany({
       orderBy: [{ scope: "asc" }, { updatedAt: "desc" }],
@@ -402,34 +399,25 @@ export default async function DeliveryPage() {
     }),
     db.deliveryCity.findMany({ orderBy: { name: "asc" } }),
     db.category.findMany({ orderBy: { path: "asc" }, select: { id: true, name: true, path: true } }),
-    db.xExpressTown.count({ where: { active: true } }),
-    db.xExpressStreet.count({ where: { active: true, deleted: false } }),
-    db.courierStatusCode.count({
-      where: { provider: X_EXPRESS_PROVIDER, active: true },
-    }),
+    getDeliveryDictionaryCounts(),
     db.courierSyncRun.findMany({
       where: { provider: X_EXPRESS_PROVIDER },
       orderBy: { startedAt: "desc" },
       take: 5,
-    }),
-    db.courierDeliveryPoint.count({
-      where: { provider: MYGLS_PROVIDER, active: true },
-    }),
-    db.courierLocationCode.count({
-      where: { provider: MYGLS_PROVIDER, active: true },
+      select: { id: true, startedAt: true, kind: true, status: true, recordsOk: true, recordsRead: true, errorMessage: true },
     }),
     db.courierSyncRun.findMany({
       where: { provider: MYGLS_PROVIDER },
       orderBy: { startedAt: "desc" },
       take: 5,
+      select: { id: true, startedAt: true, kind: true, status: true, recordsOk: true, recordsRead: true, errorMessage: true },
     }),
     getPickupPostingAvailability("X_EXPRESS"),
     getPickupPostingAvailability("MYGLS"),
-  ]);
-  const [deliveryWindows, deliveryTariffSettings] = await Promise.all([
     getDeliveryWindows(),
     getDeliveryTariffSettings(),
   ]);
+  const { xTowns, xStreets, xStatuses, glsDeliveryPoints, glsLocations } = dictionaryCounts;
 
   return (
     <>

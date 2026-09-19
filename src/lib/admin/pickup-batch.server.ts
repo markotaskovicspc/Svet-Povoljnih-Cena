@@ -1,4 +1,5 @@
 import "server-only";
+import { getPickupPostingAvailability } from "@/lib/admin/pickup-availability.server";
 
 import {
   Prisma,
@@ -29,9 +30,7 @@ import {
   splitAmountByWeights,
 } from "@/lib/courier/shipment-assignment";
 import {
-  getMyGlsConfig,
   MYGLS_PROVIDER,
-  requireMyGlsEnabled,
   type SmallParcelProvider,
 } from "@/lib/mygls/config";
 import { usableMyGlsLabelWhere } from "@/lib/mygls/labels";
@@ -40,7 +39,6 @@ import {
   readMyGlsPackageAssignments,
 } from "@/lib/mygls/shipments";
 import {
-  requireXExpressShipmentConfig,
   X_EXPRESS_PROVIDER,
 } from "@/lib/x-express/config";
 import {
@@ -53,7 +51,6 @@ import {
   type MyGlsBookingChannel,
   MYGLS_BOOKING_CHANNEL_LABEL,
   nextPickupBatchNumber,
-  PICKUP_BATCH_EXTERNAL_BLOCK_REASON,
 } from "@/lib/admin/pickup-batch";
 import {
   createReclamationShipment,
@@ -75,55 +72,7 @@ const TRANSACTION_OPTIONS = {
   timeout: 30_000,
 } as const;
 
-export async function getPickupPostingAvailability(
-  providerOverride?: string | null,
-) {
-  const provider = normalizeProvider(providerOverride) ??
-    (await getSelectedSmallParcelProvider());
-  if (provider === "MYGLS") {
-    try {
-      requireMyGlsEnabled();
-      return {
-        available: true as const,
-        reason: null,
-        provider: "MYGLS" as const,
-        mode: "LABELS_THEN_AUTOMATIC_BOOKING" as const,
-      };
-    } catch (error) {
-      const cfg = getMyGlsConfig();
-      return {
-        available: false as const,
-        reason:
-          cfg.env === "production" && !cfg.enabled
-            ? PICKUP_BATCH_EXTERNAL_BLOCK_REASON
-            : error instanceof Error
-              ? error.message
-              : "MyGLS konfiguracija nije kompletna.",
-        provider: "MYGLS" as const,
-        mode: "LABELS_THEN_AUTOMATIC_BOOKING" as const,
-      };
-    }
-  }
-  try {
-    requireXExpressShipmentConfig(true);
-    return {
-      available: true as const,
-      reason: null,
-      provider: "X_EXPRESS" as const,
-      mode: "LABELS_THEN_AUTOMATIC_BOOKING" as const,
-    };
-  } catch (error) {
-    return {
-      available: false as const,
-      reason:
-        error instanceof Error
-          ? error.message
-          : "X Express konfiguracija nije kompletna.",
-      provider: "X_EXPRESS" as const,
-      mode: "LABELS_THEN_AUTOMATIC_BOOKING" as const,
-    };
-  }
-}
+export { getPickupPostingAvailability } from "@/lib/admin/pickup-availability.server";
 
 export async function createPickupBatch(provider: SmallParcelProvider) {
   const availability = await getPickupPostingAvailability(provider);
