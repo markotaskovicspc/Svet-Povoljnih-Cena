@@ -1,6 +1,7 @@
 import "server-only";
 
 import { join } from "node:path";
+import { formatLogisticsVolume } from "@/lib/admin/purchase-order";
 import { Resvg } from "@resvg/resvg-js";
 import sharp from "sharp";
 import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
@@ -190,7 +191,7 @@ function purchaseOrderPageSvg(
     totalCell(x + 815, totalY, 80, totals.cartons),
     totalCell(x + 895, totalY, 80, totals.qty),
     `<rect x="${x + 975}" y="${totalY}" width="95" height="${totalHeight}" class="grid"/>`,
-    totalCell(x + 1070, totalY, 95, `${formatNumber(totals.volume, 3)} m³`),
+    totalCell(x + 1070, totalY, 95, `${formatLogisticsVolume(totals.volume)} m³`),
     `<rect x="${x + 1165}" y="${totalY}" width="235" height="${totalHeight}" class="grid"/><text x="${x + 1390}" y="${totalY + 25}" text-anchor="end" class="total-small">Ukupno za plaćanje / Total payment</text>`,
     `<rect x="${x + 1400}" y="${totalY}" width="234" height="${totalHeight}" class="grid"/><text x="${x + 1622}" y="${totalY + 25}" text-anchor="end" class="total">${xmlEscape(order.currency)} ${formatNumber(totals.value, 2)}</text>`,
   ].join("");
@@ -208,7 +209,7 @@ function purchaseOrderPageSvg(
         String(Math.ceil(item.qty / Math.max(item.packQty ?? 1, 1))),
         String(item.qty),
         "piece / kom",
-        `${formatNumber(item.totalVolume, 3)} m³`,
+        `${formatLogisticsVolume(item.totalVolume)} m³`,
         item.certificates ?? "—",
         item.barcode ?? "—",
         formatNumber(item.purchasePrice, 2),

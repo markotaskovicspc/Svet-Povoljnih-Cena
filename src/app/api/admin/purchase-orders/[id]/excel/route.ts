@@ -152,6 +152,7 @@ export async function GET(
   sheet.getCell(totalRowNumber, 7).value = totalCartons;
   sheet.getCell(totalRowNumber, 8).value = totalQty;
   sheet.getCell(totalRowNumber, 10).value = Number(order.totalVolume ?? 0);
+  sheet.getCell(totalRowNumber, 10).numFmt = "#,##0.000######";
   sheet.mergeCells(totalRowNumber, 11, totalRowNumber, 12);
   sheet.getCell(totalRowNumber, 11).value = "Ukupno za plaćanje / Total payment";
   sheet.mergeCells(totalRowNumber, 13, totalRowNumber, 14);
@@ -185,7 +186,7 @@ export async function GET(
         wrapText: true,
       };
     });
-    row.getCell(10).numFmt = "#,##0.000";
+    row.getCell(10).numFmt = "#,##0.000######";
     row.getCell(13).numFmt = "#,##0.00";
     row.getCell(14).numFmt = "#,##0.00";
   });
@@ -248,7 +249,7 @@ export async function GET(
     };
     cell.alignment = { vertical: "middle", wrapText: true };
   });
-  itemsSheet.getColumn("volume").numFmt = "#,##0.000";
+  itemsSheet.getColumn("volume").numFmt = "#,##0.000######";
   itemsSheet.getColumn("price").numFmt = "#,##0.00";
   itemsSheet.getColumn("total").numFmt = "#,##0.00";
   itemsSheet.autoFilter = { from: "A1", to: `K${Math.max(2, order.items.length + 1)}` };

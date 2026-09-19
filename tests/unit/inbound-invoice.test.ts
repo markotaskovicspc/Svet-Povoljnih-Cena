@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { resolvePurchaseOrderLineLogistics } from "@/lib/admin/purchase-order";
 import {
   allocateActualInboundCosts,
   allocateInvoiceCostsByOrderValue,
@@ -16,6 +17,23 @@ import {
 } from "@/lib/admin/inbound-invoice";
 
 describe("ERP module 5 inbound invoices and COGS", () => {
+  it("accepts small transport packages and allocates costs in their actual volume ratio", () => {
+    const lines = [2, 4].map((width, index) => ({
+      id: String(index), sku: String(index), qty: 24, purchaseValueRsd: 1000,
+      totalVolumeM3: resolvePurchaseOrderLineLogistics({
+        locked: true, qty: 24, snapshottedTotalVolumeM3: 0,
+        product: { packQty: 2, packWidthCm: width, packDepthCm: 2, packHeightCm: 2 },
+      }).totalVolumeM3,
+    }));
+    expect(() => assertInboundCostVolumeReady(lines)).not.toThrow();
+    const allocations = allocateActualInboundCosts({
+      costs: { invoiceValueRsd: 2000, customsValueRsd: 0, transportValueRsd: 300, otherRelatedCostsRsd: 30 },
+      otherCostsBasis: "VOLUME", lines,
+    });
+    expect(allocations.map(line => line.transportRsd)).toEqual([100, 200]);
+    expect(allocations.map(line => line.otherRelatedCostsRsd)).toEqual([10, 20]);
+  });
+
   it("reuses the purchase-order warehouse for a legacy posted invoice", () => {
     expect(
       resolveInboundReceiptWarehouse({

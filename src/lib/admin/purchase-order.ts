@@ -22,6 +22,20 @@ export type PurchaseOrderLineCalculation = {
 
 export const STANDARD_CONTAINER_VOLUME_M3 = 69;
 
+// Match the order/item DECIMAL(18, 9) columns. Three decimal places in m³
+// discard small packages and incorrectly block receipt posting.
+export function roundLogisticsVolume(volumeM3: number) {
+  return round(volumeM3, 9);
+}
+
+export function formatLogisticsVolume(volumeM3: number | null) {
+  if (volumeM3 == null) return "—";
+  return volumeM3.toLocaleString("sr-Latn-RS", {
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 9,
+  });
+}
+
 export const PRODUCT_LOGISTICS_SOURCE_ERROR =
   "Unesite količinu za ceo kontejner ili kom/pak i sve tri dimenzije transportnog pakovanja (širinu, dubinu i visinu).";
 
@@ -157,7 +171,8 @@ export function calculateUnitLogistics(input: ProductUnitLogisticsInput) {
       ? input.packGrossWeightKg / weightPackQty
       : Math.max(input.grossWeightKg ?? input.weightKg ?? 0, 0);
   return {
-    volumeM3: round(volumeM3, 6),
+    // Round the line total only, after multiplying by the ordered quantity.
+    volumeM3,
     weightKg: round(weightKg, 6),
   };
 }
@@ -187,14 +202,14 @@ export function resolvePurchaseOrderLineLogistics(input: {
   if (!input.product || (input.locked && snapshottedTotalVolumeM3 > 0)) {
     return {
       packQty: input.snapshottedPackQty ?? null,
-      totalVolumeM3: round(snapshottedTotalVolumeM3, 3),
+      totalVolumeM3: roundLogisticsVolume(snapshottedTotalVolumeM3),
       totalWeightKg: round(snapshottedTotalWeightKg, 3),
       repairedLockedSnapshot: false,
     };
   }
 
   const logistics = calculateUnitLogistics(input.product);
-  const totalVolumeM3 = round(logistics.volumeM3 * Math.max(input.qty, 0), 3);
+  const totalVolumeM3 = roundLogisticsVolume(logistics.volumeM3 * Math.max(input.qty, 0));
   const totalWeightKg = round(logistics.weightKg * Math.max(input.qty, 0), 3);
   return {
     packQty:

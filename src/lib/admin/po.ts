@@ -24,6 +24,7 @@ import {
   canReceivePurchaseOrder,
   isPackQuantityValid,
   resolvePurchaseOrderLineLogistics,
+  roundLogisticsVolume,
   resolveOpenPurchaseOrderCustomsRate,
   purchaseOrderSendDate,
   purchaseOrderSupplierEmailIssue,
@@ -240,7 +241,7 @@ export async function addPurchaseOrderItem(input: {
         moq: product.moq,
         packQty: product.packQty,
         qty: input.qty,
-        totalVolume: Number((logistics.volumeM3 * input.qty).toFixed(3)),
+        totalVolume: roundLogisticsVolume(logistics.volumeM3 * input.qty),
         totalWeight: Number((logistics.weightKg * input.qty).toFixed(3)),
         customsRate: product.customsRate,
         calcRetailPrice: product.fullPrice,
@@ -348,7 +349,7 @@ export async function updatePurchaseOrderItem(input: {
       purchasePrice: input.purchasePrice,
       customsRate: input.customsRate,
       calcRetailPrice: input.calcRetailPrice,
-      totalVolume: Number((logistics.volumeM3 * input.qty).toFixed(3)),
+      totalVolume: roundLogisticsVolume(logistics.volumeM3 * input.qty),
       totalWeight: Number((logistics.weightKg * input.qty).toFixed(3)),
     },
   });
@@ -1088,7 +1089,7 @@ export async function recomputePurchaseOrderTotals(id: string) {
     db.purchaseOrder.update({
       where: { id },
       data: {
-        totalVolume: Number(totalVolume.toFixed(3)),
+        totalVolume: roundLogisticsVolume(totalVolume),
         totalWeight: Number(totalWeight.toFixed(3)),
         totalPrice: Number(totalPrice.toFixed(2)),
         bmPct: financials.totalBmPct,

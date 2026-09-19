@@ -5,6 +5,7 @@ import {
   calculateUnitLogistics,
   canReceivePurchaseOrder,
   hasProductVolumeSource,
+  formatLogisticsVolume,
   isPackQuantityValid,
   productLogisticsSource,
   PURCHASE_ORDER_EMAIL_BODY,
@@ -17,6 +18,12 @@ import {
 } from "@/lib/admin/purchase-order";
 
 describe("ERP module 4 purchase-order rules", () => {
+  it("shows small positive volumes instead of a misleading zero", () => {
+    expect(formatLogisticsVolume(0.000096)).toBe("0,000096");
+    expect(formatLogisticsVolume(0.000000001)).toBe("0,000000001");
+    expect(formatLogisticsVolume(1.5)).toBe("1,500");
+    expect(formatLogisticsVolume(null)).toBe("—");
+  });
   it("calculates delivery from loading date and transit days first", () => {
     expect(
       calculateDeliveryDate({
@@ -97,7 +104,7 @@ describe("ERP module 4 purchase-order rules", () => {
         packDepthCm: 0,
         packHeightCm: 0,
       }),
-    ).toEqual({ volumeM3: 0.036316, weightKg: 0.4 });
+    ).toEqual({ volumeM3: 69 / 1900, weightKg: 0.4 });
   });
 
   it("accepts container quantity alone or the complete package group", () => {
@@ -218,6 +225,39 @@ describe("ERP module 4 purchase-order rules", () => {
       totalWeightKg: 0,
       repairedLockedSnapshot: false,
     });
+  });
+
+  it.each([false, true])("preserves small package volume for a locked=%s order", (locked) => {
+    const result = resolvePurchaseOrderLineLogistics({
+      locked,
+      qty: 24,
+      snapshottedTotalVolumeM3: 0,
+      product: { packQty: 2, packWidthCm: 2, packDepthCm: 2, packHeightCm: 2 },
+    });
+    expect(result.totalVolumeM3).toBe(0.000096);
+    expect(result.repairedLockedSnapshot).toBe(locked);
+  });
+
+  it("keeps an existing small posted volume without replacing or rounding it to zero", () => {
+    expect(resolvePurchaseOrderLineLogistics({
+      locked: true,
+      qty: 24,
+      snapshottedTotalVolumeM3: 0.000096,
+      product: { containerQty: 2 },
+    })).toMatchObject({ totalVolumeM3: 0.000096, repairedLockedSnapshot: false });
+  });
+
+  it("does not round per-unit volume before multiplying the order quantity", () => {
+    expect(resolvePurchaseOrderLineLogistics({
+      locked: false,
+      qty: 1900,
+      product: { containerQty: 1900 },
+    }).totalVolumeM3).toBe(69);
+    expect(resolvePurchaseOrderLineLogistics({
+      locked: false,
+      qty: 100,
+      product: { packQty: 100, packWidthCm: 2, packDepthCm: 2, packHeightCm: 2 },
+    }).totalVolumeM3).toBe(0.000008);
   });
 
   it("marks quantities that are not divisible by package size", () => {

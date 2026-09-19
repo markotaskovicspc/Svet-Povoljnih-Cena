@@ -28,6 +28,7 @@ import {
   calculateDeliveryDate,
   calculatePurchaseOrderFinancials,
   isPackQuantityValid,
+  formatLogisticsVolume,
   purchaseOrderCapacityWarnings,
   purchaseOrderSendDate,
   purchaseOrderSupplierEmailIssue,
@@ -665,7 +666,7 @@ export default async function PurchaseOrderEditorPage({
 
             <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-border/60 pt-4 text-sm">
               <dt className="text-ink-500">Ukupna zapremina</dt>
-              <dd className="text-right tabular-nums">{fmt(num(order.totalVolume), 3)} m³</dd>
+              <dd className="text-right tabular-nums">{formatLogisticsVolume(num(order.totalVolume))} m³</dd>
               <dt className="text-ink-500">Ukupna težina</dt>
               <dd className="text-right tabular-nums">{fmt(num(order.totalWeight), 3)} kg</dd>
               <dt className="text-ink-500">Ukupna cena</dt>
@@ -760,7 +761,7 @@ export default async function PurchaseOrderEditorPage({
                               <span className="px-3 py-2">{item.currency} · {item.parity ?? "—"} · {dtLocal(item.priceValidFrom)}</span>
                               <span className="px-3 py-2">{item.moq ?? "—"} / {item.packQty ?? "—"}</span>
                               <span className="px-3 py-2 text-right">{item.qty}</span>
-                              <span className="px-3 py-2 text-right">{fmt(num(item.totalVolume), 3)} m³ / {fmt(num(item.totalWeight), 3)} kg</span>
+                              <span className="px-3 py-2 text-right">{formatLogisticsVolume(num(item.totalVolume))} m³ / {fmt(num(item.totalWeight), 3)} kg</span>
                               <span className="px-3 py-2 text-right">{fmt(num(item.customsRate))}</span>
                               <span className="px-3 py-2 text-right">{fmt(num(item.calcRetailPrice))}</span>
                               <span className="px-3 py-2 text-right">{fmt(num(item.bmPct))}%</span>
@@ -785,7 +786,7 @@ export default async function PurchaseOrderEditorPage({
                                   />
                                   {invalidPack ? <span className="mt-1 block text-[10px] text-danger">Nije deljivo sa {item.packQty}</span> : null}
                                 </div>
-                                <span className="px-3 py-2 text-right">{fmt(num(item.totalVolume), 3)} m³ / {fmt(num(item.totalWeight), 3)} kg</span>
+                                <span className="px-3 py-2 text-right">{formatLogisticsVolume(num(item.totalVolume))} m³ / {fmt(num(item.totalWeight), 3)} kg</span>
                                 <div className="px-2 py-2"><Input aria-label={`Carinska stopa ${item.sku}`} name="customsRate" type="number" min={0} max={100} step="0.01" defaultValue={num(item.customsRate) ?? ""} /></div>
                                 <div className="px-2 py-2"><Input aria-label={`Kalkulativna MPC ${item.sku}`} name="calcRetailPrice" type="number" min={0} step="0.01" defaultValue={num(item.calcRetailPrice) ?? ""} /></div>
                                 <div className="flex items-center justify-end gap-2 px-2 py-2">
