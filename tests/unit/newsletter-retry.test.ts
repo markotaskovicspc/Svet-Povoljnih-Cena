@@ -40,3 +40,9 @@ it("can prepare a campaign whose failure happened before recipients were created
  await retryNewsletterCampaign("c","admin");
  expect(mocks.claim.mock.calls[0][0].data.status).toBe("SCHEDULED");expect(mocks.createJob).toHaveBeenCalledOnce();
 });
+it("only requeues ambiguous outcomes after separate explicit acknowledgment, preserving delivery guards",async()=>{
+ const result=await retryNewsletterCampaign("c","admin",{retryUnknownAcknowledged:true});
+ expect(mocks.requeue).toHaveBeenCalledTimes(2);
+ expect(mocks.requeue.mock.calls[1][0]).toEqual({where:{...retryableNewsletterRecipientWhere("c"),OR:undefined,failureReason:"ses:delivery_unknown"},data:{status:"QUEUED",failureReason:null}});
+ expect(result).toMatchObject({retryUnknownAcknowledged:true,unknownRequeued:10});
+});

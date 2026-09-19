@@ -208,9 +208,11 @@ export async function retryNewsletterCampaignAction(
   formData: FormData,
 ) {
   return campaignAction(formData, "newsletter.campaign.retry", async (id, actorId) => {
-    const result = await retryNewsletterCampaign(id, actorId);
+    const result = await retryNewsletterCampaign(id, actorId, {
+      retryUnknownAcknowledged: formData.get("retryUnknownAcknowledged") === "on",
+    });
     return {
-      message: result.queued ? `${result.queued} neposlatih poruka je u redu za postepeno slanje.${result.unknown ? ` ${result.unknown} poruka sa nepoznatim ishodom nije ponovljeno.` : ""}` : "Kampanja je stavljena u red za pripremu i postepeno slanje.",
+      message: result.queued ? `${result.queued} poruka je u redu za postepeno slanje.${result.unknownRequeued ? ` Ručno je uključeno ${result.unknownRequeued} nepoznatih ishoda, uz prihvaćen rizik duplikata.` : ""}${result.unknown ? ` ${result.unknown} poruka sa nepoznatim ishodom nije ponovljeno.` : ""}` : "Kampanja je stavljena u red za pripremu i postepeno slanje.",
       diff: result,
     };
   });

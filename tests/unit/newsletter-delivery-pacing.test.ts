@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 const mocks = vi.hoisted(() => ({ query: vi.fn(), execute: vi.fn(), bucket: vi.fn() }));
 vi.mock("@/lib/db", () => ({ databaseIdentifier: (name: string) => Prisma.raw(`"${name}"`), db: { $queryRaw: mocks.query, $executeRaw: mocks.execute, rateLimitBucket: { findUnique: mocks.bucket } } }));
 import { withNewsletterDeliveryPacing } from "@/lib/newsletter/delivery-pacing";
+import { failNewsletterCampaign } from "@/lib/newsletter/campaigns";
 import { BackgroundJobDeferredError } from "@/lib/background-job-deferral";
 const resetAt = new Date("2026-09-19T14:00:00Z");
 beforeEach(() => { vi.clearAllMocks();mocks.query.mockResolvedValue([{count: 7, leaseUntil: "2026-09-19 14:00:00"}]);mocks.execute.mockResolvedValue(1); });
@@ -23,6 +24,5 @@ it("also paces failures without swallowing the provider error", async () => {
   expect(mocks.execute).toHaveBeenCalledOnce();
 });
 it("deferred waits do not turn a campaign into FAILED", async () => {
-  const { failNewsletterCampaign }=await import("@/lib/newsletter/campaigns");
   await expect(failNewsletterCampaign("campaign",new BackgroundJobDeferredError(resetAt))).resolves.toBeUndefined();
 });

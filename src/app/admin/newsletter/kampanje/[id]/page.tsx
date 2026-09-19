@@ -388,12 +388,20 @@ function WorkflowCard({
         {campaign.status === "FAILED" || campaign.status === "PARTIAL_FAILED" ? (
           <AdminActionForm action={retryNewsletterCampaignAction}>
             <input type="hidden" name="id" value={campaign.id} />
+            {retrySummary.unknown > 0 ? (
+              <label className="mb-3 flex max-w-xl items-start gap-3 rounded-xl border border-warning/40 bg-warning/10 p-3 text-sm">
+                <input type="checkbox" name="retryUnknownAcknowledged" className="mt-1" />
+                <span><strong>Ponovi i {retrySummary.unknown} poruka sa nepoznatim ishodom — prihvatam rizik duplikata.</strong>
+                  <span className="mt-1 block">SES možda već ima ove poruke iako potvrda nije sačuvana. Uključite samo ako želite ručno ponavljanje uprkos tom riziku. Odluka se beleži u evidenciji.</span>
+                </span>
+              </label>
+            ) : null}
             <SubmitButton
               variant="outline"
               pendingLabel="Vraćam u red…"
-              confirm="Nastaviti slanje postojećoj listi i ponoviti samo potvrđeno odbijene poruke? Već prihvaćene poruke i nepoznati ishodi neće biti ponovljeni."
+              confirm="Nastaviti postepeno slanje postojećoj listi? Poruke sa zabeleženom potvrdom slanja se preskaču. Ako ste uključili nepoznate ishode, prihvatate da neke poruke mogu stići dvaput."
             >
-              Ponovi samo neposlate
+              Nastavi / ponovi slanje
             </SubmitButton>
           </AdminActionForm>
         ) : null}

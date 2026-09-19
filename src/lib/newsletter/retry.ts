@@ -27,7 +27,7 @@ export async function newsletterRetrySummary(campaignId: string) {
   return { queued, retryable, unknown };
 }
 
-export async function retryNewsletterCampaign(campaignId: string, actorId: string) {
+export async function retryNewsletterCampaign(campaignId: string, actorId: string, options: { retryUnknownAcknowledged?: boolean } = {}) {
   const now = new Date();
   return db.$transaction(async (tx) => {
     const campaign = await tx.newsletterCampaign.findUniqueOrThrow({ where: { id: campaignId } });
@@ -46,6 +46,14 @@ export async function retryNewsletterCampaign(campaignId: string, actorId: strin
       where: retryableNewsletterRecipientWhere(campaignId),
       data: { status: "QUEUED", failureReason: null },
     });
+    // This is a separately acknowledged manual recovery, never an automatic
+    // retry. Keep every positive delivery/opt-out signal protected even here.
+    const unknownRequeued = options.retryUnknownAcknowledged
+      ? await tx.newsletterCampaignRecipient.updateMany({
+          where: { ...retryableNewsletterRecipientWhere(campaignId), OR: undefined, failureReason: "ses:delivery_unknown" },
+          data: { status: "QUEUED", failureReason: null },
+        })
+      : { count: 0 };
     const queued = await tx.newsletterCampaignRecipient.count({ where: { campaignId, status: "QUEUED" } });
     const unknown = await tx.newsletterCampaignRecipient.count({ where: { campaignId, status: "FAILED", failureReason: "ses:delivery_unknown" } });
     if (total && !queued && !campaign.providerBroadcastId) {
@@ -67,6 +75,10 @@ export async function retryNewsletterCampaign(campaignId: string, actorId: strin
     } else {
       await tx.backgroundJob.create({ data: { ...job, kind: "NEWSLETTER_CAMPAIGN_SEND", idempotencyKey } });
     }
-    return { scheduledAt: now, requeued: requeued.count, queued, unknown, previousFailureReason: campaign.failureReason };
+    return {
+      scheduledAt: now, requeued: requeued.count, unknownRequeued: unknownRequeued.count,
+      retryUnknownAcknowledged: options.retryUnknownAcknowledged === true,
+      queued, unknown, previousFailureReason: campaign.failureReason,
+    };
   });
 }
