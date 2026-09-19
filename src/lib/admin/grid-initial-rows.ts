@@ -11,7 +11,10 @@ type InitialGridRequest = {
 };
 
 export function canReuseInitialGridRows(module: ErpModule, request: InitialGridRequest) {
-  return module.initialRowsComplete === true && module.rows.length <= 100 &&
+  const knownFirstPage = Number.isInteger(module.initialRowsTotal) &&
+    module.initialRowsTotal! >= module.rows.length &&
+    module.rows.length === Math.min(100, module.initialRowsTotal!);
+  return (module.initialRowsComplete === true || knownFirstPage) && module.rows.length <= 100 &&
     request.page === 1 && !request.query.trim() && !request.filters.length &&
     !request.sorting.length && !Object.values(request.context).some(Boolean) &&
     request.reloadToken === 0;

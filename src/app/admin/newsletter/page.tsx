@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { MarketingContactStatus } from "@prisma/client";
+import type { MarketingContactStatus, Prisma } from "@prisma/client";
 import { requireAdminAction } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { newsletterAudienceLabel } from "@/lib/newsletter/audience-label";
@@ -55,6 +55,13 @@ const contactLabel: Record<MarketingContactStatus, string> = {
   SUPPRESSED: "Potisnut",
 };
 
+const campaignListSelect = {
+  id: true, title: true, subject: true, status: true,
+  scheduledAt: true, sentAt: true, recipients: true, delivered: true,
+  opened: true, clicked: true, bounced: true, audienceFilterSnapshot: true,
+  audience: { select: { name: true } },
+} satisfies Prisma.NewsletterCampaignSelect;
+
 export default async function NewsletterPage({
   searchParams,
 }: {
@@ -67,11 +74,11 @@ export default async function NewsletterPage({
 
   const [campaignStatus, contactStatus, recentCampaigns, contactOverview] = await Promise.all([
     db.newsletterCampaign.groupBy({ by: ["status"], _count: { _all: true } }),
-    db.marketingContact.groupBy({ by: ["status"], _count: { _all: true } }),
+    view === "settings" ? db.marketingContact.groupBy({ by: ["status"], _count: { _all: true } }) : Promise.resolve([]),
     db.newsletterCampaign.findMany({
       orderBy: { updatedAt: "desc" },
       take: 100,
-      include: { audience: { select: { name: true } } },
+      select: campaignListSelect,
     }),
     getNewsletterContactOverview(),
   ]);
@@ -137,7 +144,7 @@ export default async function NewsletterPage({
 async function CampaignsView({
   campaigns,
 }: {
-  campaigns: Awaited<ReturnType<typeof db.newsletterCampaign.findMany<{ include: { audience: { select: { name: true } } } }>>>;
+  campaigns: Prisma.NewsletterCampaignGetPayload<{ select: typeof campaignListSelect }>[];
 }) {
   const templates = await db.newsletterTemplate.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } });
   return (
@@ -301,7 +308,7 @@ async function ContactsView({ q }: { q: string }) {
 }
 
 async function TemplatesView() {
-  const templates = await db.newsletterTemplate.findMany({ orderBy: { updatedAt: "desc" } });
+  const templates = await db.newsletterTemplate.findMany({ orderBy: { updatedAt: "desc" }, select: { id: true, name: true, subject: true, updatedAt: true } });
   return (
     <DataTable
       columns={[

@@ -41,7 +41,9 @@ describe("sales list projected courier metadata", () => {
       email: "test@example.invalid", warehouse: "DC",
     } });
     expect(rows[1]).toMatchObject({ id: "order-a", values: { qty: 1, totalGross: 300 } });
-    expect(mocks.orders.mock.calls[0][0].include.shipments).toBeUndefined();
+    expect(mocks.orders.mock.calls[0][0].select.shipments).toBeUndefined();
+    expect(mocks.orders.mock.calls[0][0].select.items.select.unitPriceSale).toBe(true);
+    expect(mocks.orders.mock.calls[0][0].include).toBeUndefined();
     const query = mocks.shipments.mock.calls[0][0];
     expect(query.text).toContain("jsonb_build_object");
     expect(query.text).toContain('"purpose" = \'ORDER_DELIVERY\'');

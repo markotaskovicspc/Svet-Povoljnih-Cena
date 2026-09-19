@@ -66,7 +66,7 @@ export default async function NewsletterCampaignPage({
 }) {
   const admin = await requireAdminAction(["ADS"]);
   const { id } = await params;
-  const [campaign, savedAudiences, products, recipients, contactOverview, retrySummary] = await Promise.all([
+  const [campaign, recipients, contactOverview, retrySummary] = await Promise.all([
     db.newsletterCampaign.findUnique({
       where: { id },
       include: {
@@ -74,6 +74,13 @@ export default async function NewsletterCampaignPage({
         versions: { orderBy: { version: "desc" }, take: 20 },
       },
     }),
+    db.newsletterCampaignRecipient.findMany({ where: { campaignId: id }, orderBy: { updatedAt: "desc" }, take: 200 }),
+    getNewsletterContactOverview(),
+    newsletterRetrySummary(id),
+  ]);
+  if (!campaign) notFound();
+  const editable = campaign.status === "DRAFT" || campaign.status === "IN_REVIEW";
+  const [savedAudiences, products] = editable ? await Promise.all([
     db.newsletterAudience.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, estimatedCount: true } }),
     db.product.findMany({
       where: { isActive: true, deletedAt: null, availableWebManual: true },
@@ -81,16 +88,11 @@ export default async function NewsletterCampaignPage({
       take: 1_000,
       select: { sku: true, name: true, shortName: true },
     }),
-    db.newsletterCampaignRecipient.findMany({ where: { campaignId: id }, orderBy: { updatedAt: "desc" }, take: 200 }),
-    getNewsletterContactOverview(),
-    newsletterRetrySummary(id),
-  ]);
-  if (!campaign) notFound();
+  ]) : [[], []];
   const audiences = [...builtInNewsletterAudiences, ...savedAudiences.map((audience) => ({ ...audience, description: "" }))];
   const actorIds = Array.from(new Set([campaign.createdById, campaign.updatedById, campaign.approvedById, ...campaign.versions.map((version) => version.createdById)].filter((value): value is string => Boolean(value))));
   const actors = actorIds.length ? await db.adminUser.findMany({ where: { id: { in: actorIds } }, select: { id: true, email: true, firstName: true, lastName: true } }) : [];
   const actorName = new Map(actors.map((actor) => [actor.id, [actor.firstName, actor.lastName].filter(Boolean).join(" ") || actor.email]));
-  const editable = campaign.status === "DRAFT" || campaign.status === "IN_REVIEW";
   const cfg = getEmailConfig();
   const snapshotAudiences = selectedNewsletterAudiences(campaign.audienceFilterSnapshot);
   const selectedAudiences = snapshotAudiences.length

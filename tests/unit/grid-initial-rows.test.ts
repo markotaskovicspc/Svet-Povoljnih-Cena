@@ -29,6 +29,15 @@ describe("initial ERP row reuse", () => {
     expect(canReuseInitialGridRows(gridModule, initial)).toBe(true);
     expect(canReuseInitialGridRows({ ...gridModule, rows: [] }, initial)).toBe(true);
   });
+  it("reuses an exactly sized first page with a known total but fetches subsequent pages", () => {
+    const paged = { ...gridModule, initialRowsComplete: false, initialRowsTotal: 250,
+      rows: Array.from({ length: 100 }, (_, id) => ({ id: String(id), values: {} })) };
+    const reuse = createInitialGridRowsReuse(paged);
+    expect(reuse(paged, initial)).toBe(true);
+    expect(reuse(paged, { ...initial, page: 2 })).toBe(false);
+    expect(reuse(paged, initial)).toBe(false);
+    expect(canReuseInitialGridRows({ ...paged, rows: [] }, initial)).toBe(false);
+  });
   it("fetches when the snapshot may have been truncated or requires pagination", () => {
     expect(canReuseInitialGridRows({ ...gridModule, initialRowsComplete: false }, initial)).toBe(false);
     expect(canReuseInitialGridRows({ ...gridModule, initialRowsComplete: undefined }, initial)).toBe(false);

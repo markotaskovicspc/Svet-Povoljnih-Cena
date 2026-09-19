@@ -34,25 +34,17 @@ export default async function AdminLayout({
   }
 
   const availableNav = allowedNavFor(user.role);
-  const [navigationView, articleSavedViews] = await Promise.all([
-    db.adminSavedView.findFirst({
-      where: {
-        adminUserId: user.id,
-        module: "admin-navigation",
-        isDefault: true,
-      },
-      orderBy: { updatedAt: "desc" },
-      select: { columns: true },
-    }),
-    db.adminSavedView.findMany({
-      where: {
-        adminUserId: user.id,
-        module: "artikli",
-      },
-      orderBy: [{ isDefault: "desc" }, { name: "asc" }],
-      select: { id: true, name: true },
-    }),
-  ]);
+  const savedNavigation = await db.adminSavedView.findMany({
+    where: {
+      adminUserId: user.id,
+      OR: [{ module: "admin-navigation", isDefault: true }, { module: "artikli" }],
+    },
+    orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+    select: { id: true, name: true, module: true, columns: true, updatedAt: true },
+  });
+  const navigationView = savedNavigation.filter((view) => view.module === "admin-navigation")
+    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
+  const articleSavedViews = savedNavigation.filter((view) => view.module === "artikli");
   const nav = withArticleSavedViewLinks(
     applyAdminNavPreferences(
       availableNav,

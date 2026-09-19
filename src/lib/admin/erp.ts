@@ -1,4 +1,5 @@
 import { isInitialErpSnapshotComplete } from "./grid-initial-rows";
+import { countErpDatabaseRows, supportsErpDatabasePagination } from "./erp-pagination";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
@@ -13,7 +14,6 @@ import {
   composePurchasePriceAttributes,
   composePurchasePricePattern,
 } from "@/lib/admin/purchase-price";
-import { getPickupPostingAvailability } from "@/lib/admin/pickup-batch.server";
 import { articleSearchWhere } from "@/lib/admin/article-search";
 import { ARTICLE_STATUS_LABELS } from "@/lib/article-status";
 import {
@@ -148,6 +148,10 @@ export type ErpModule = {
   rows: ErpRow[];
   /** Complete snapshot for the small operational lists; avoids a duplicate mount fetch. */
   initialRowsComplete?: boolean;
+  /** Total for an unfiltered, database-paginated first page. */
+  initialRowsTotal?: number;
+  /** Grid loads its authoritative filtered rows once after mounting. */
+  initialRowsPending?: boolean;
   notes?: string[];
   blockedReason?: string;
   /** Canonical admin screen for legacy modules that should no longer render their generic ERP grid. */
@@ -882,6 +886,7 @@ export const erpDashboardModules: ErpDashboardModule[] = erpModules.flatMap(
 );
 
 export async function getErpDashboardModules() {
+  const { getPickupPostingAvailability } = await import("@/lib/admin/pickup-batch.server");
   const availability = await getPickupPostingAvailability();
   return erpDashboardModules.map((module) =>
     module.slug === "preuzimanja"
@@ -905,12 +910,27 @@ export async function getErpModule(
     searchColumn?: string;
     salesOrderFilters?: SalesOrderExportFilters;
     stocktakeArchived?: boolean;
+    deferRows?: boolean;
   } = {},
 ) {
   const definition = getErpModuleDefinition(slug);
   if (!definition) return undefined;
-  const pickupAvailability =
-    slug === "preuzimanja" ? await getPickupPostingAvailability() : null;
+  const pickupAvailabilityPromise =
+    slug === "preuzimanja"
+      ? import("@/lib/admin/pickup-batch.server").then(({ getPickupPostingAvailability }) => getPickupPostingAvailability())
+      : Promise.resolve(null);
+  const take = Math.max(1, Math.min(options.take ?? 100, 500_000));
+  const skip = Math.max(0, options.skip ?? 0);
+  const includeLookupOptions = options.includeLookupOptions !== false;
+  const [rows, articleContext, supplierContext, purchasePriceContext, pickupAvailability] = await Promise.all([
+    options.deferRows ? Promise.resolve([] as ErpRow[]) :
+      getPersistedErpRows(slug, take, options.warehouseId, options.query, options.searchColumn,
+        { ...options.salesOrderFilters, stocktakeArchived: options.stocktakeArchived }, skip),
+    includeLookupOptions && slug === "artikli" ? getArticleModuleContext() : Promise.resolve(null),
+    includeLookupOptions && slug === "dobavljaci" ? getSupplierModuleContext() : Promise.resolve(null),
+    includeLookupOptions && slug === "nabavne-cene" ? getPurchasePriceModuleContext() : Promise.resolve(null),
+    pickupAvailabilityPromise,
+  ]);
   const runtimeDefinition = pickupAvailability
     ? {
         ...definition,
@@ -920,32 +940,11 @@ export async function getErpModule(
         blockedReason: pickupAvailability.reason ?? undefined,
       }
     : definition;
-  const take = Math.max(1, Math.min(options.take ?? 100, 500_000));
-  const skip = Math.max(0, options.skip ?? 0);
-  const includeLookupOptions = options.includeLookupOptions !== false;
-  const [rows, articleContext, supplierContext, purchasePriceContext] = await Promise.all([
-    getPersistedErpRows(
-      slug,
-      take,
-      options.warehouseId,
-      options.query,
-      options.searchColumn,
-      {
-        ...options.salesOrderFilters,
-        stocktakeArchived: options.stocktakeArchived,
-      },
-      skip,
-    ),
-    includeLookupOptions && slug === "artikli"
-      ? getArticleModuleContext()
-      : Promise.resolve(null),
-    includeLookupOptions && slug === "dobavljaci"
-      ? getSupplierModuleContext()
-      : Promise.resolve(null),
-    includeLookupOptions && slug === "nabavne-cene"
-      ? getPurchasePriceModuleContext()
-      : Promise.resolve(null),
-  ]);
+  const initialRowsTotal = !options.deferRows && options.take === undefined && !skip &&
+    !options.query?.trim() && !options.warehouseId && !options.salesOrderFilters &&
+    !options.stocktakeArchived && supportsErpDatabasePagination(slug)
+      ? rows.length < take ? rows.length : await countErpDatabaseRows(slug)
+      : null;
   const columns = runtimeDefinition.columns.map((column) => ({
     ...column,
     options: articleContext
@@ -1018,7 +1017,9 @@ export async function getErpModule(
     columns,
     commands,
     rows,
-    initialRowsComplete: isInitialErpSnapshotComplete(slug, rows.length, take, options),
+    initialRowsTotal: initialRowsTotal ?? undefined,
+    initialRowsPending: options.deferRows === true,
+    initialRowsComplete: !options.deferRows && isInitialErpSnapshotComplete(slug, rows.length, take, options),
     contextFilters: articleContext
       ? [
           {
@@ -1033,9 +1034,9 @@ export async function getErpModule(
       : runtimeDefinition.contextFilters,
     notes: [
       ...(runtimeDefinition.notes ?? []),
-      rows.length
+      ...(options.deferRows ? [] : [rows.length
         ? "Redovi su učitani iz baze. Izmene podržanih polja se snimaju kroz admin API i ulaze u audit log."
-        : "Nema još zapisa u bazi za ovaj ERP modul.",
+        : "Nema još zapisa u bazi za ovaj ERP modul."]),
     ],
   };
 }
@@ -1053,22 +1054,22 @@ async function getPersistedErpRows(
     case "artikli":
       return getArticleRows(take, warehouseId, query, searchColumn, skip);
     case "dobavljaci":
-      return getSupplierRows(take);
+      return getSupplierRows(take, skip);
     case "nabavne-cene":
-      return getPurchasePriceRows(take);
+      return getPurchasePriceRows(take, skip);
     case "porudzbenice":
-      return getPurchaseOrderRows(take);
+      return getPurchaseOrderRows(take, skip);
     case "porudzbenice-po-artiklima":
-      return getPurchaseOrderItemRows(take);
+      return getPurchaseOrderItemRows(take, skip);
     case "ulazne-fakture":
-      return getInboundInvoiceRows(take);
+      return getInboundInvoiceRows(take, skip);
     case "mp-cene":
-      return getRetailPriceRows(take);
+      return getRetailPriceRows(take, skip);
     default:
       return getOperationalErpRows(slug, take, {
         ...salesOrderFilters,
         ...(warehouseId ? { warehouseId } : {}),
-      });
+      }, skip);
   }
 }
 
@@ -1495,10 +1496,11 @@ export function countArticleRows(query?: string, searchColumn?: string) {
   });
 }
 
-async function getSupplierRows(take: number): Promise<ErpRow[]> {
+async function getSupplierRows(take: number, skip = 0): Promise<ErpRow[]> {
   const suppliers = await db.supplier.findMany({
-    orderBy: { name: "asc" },
+    orderBy: [{ name: "asc" }, { id: "asc" }],
     take,
+    skip,
     select: {
       id: true,
       code: true,
@@ -1551,10 +1553,11 @@ async function getSupplierRows(take: number): Promise<ErpRow[]> {
   }));
 }
 
-async function getPurchasePriceRows(take: number): Promise<ErpRow[]> {
+async function getPurchasePriceRows(take: number, skip = 0): Promise<ErpRow[]> {
   const prices = await db.purchasePrice.findMany({
-    orderBy: [{ validFrom: "desc" }, { createdAt: "desc" }],
+    orderBy: [{ validFrom: "desc" }, { createdAt: "desc" }, { id: "asc" }],
     take,
+    skip,
     include: {
       supplier: { select: { name: true } },
       product: {
@@ -1593,10 +1596,11 @@ async function getPurchasePriceRows(take: number): Promise<ErpRow[]> {
   }));
 }
 
-async function getPurchaseOrderRows(take: number): Promise<ErpRow[]> {
+async function getPurchaseOrderRows(take: number, skip = 0): Promise<ErpRow[]> {
   const orders = await db.purchaseOrder.findMany({
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     take,
+    skip,
     include: {
       supplier: { select: { name: true } },
     },
@@ -1623,10 +1627,11 @@ async function getPurchaseOrderRows(take: number): Promise<ErpRow[]> {
   }));
 }
 
-async function getPurchaseOrderItemRows(take: number): Promise<ErpRow[]> {
+async function getPurchaseOrderItemRows(take: number, skip = 0): Promise<ErpRow[]> {
   const items = await db.purchaseOrderItem.findMany({
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     take,
+    skip,
     include: {
       purchaseOrder: {
         select: {
@@ -1689,10 +1694,11 @@ async function getPurchaseOrderItemRows(take: number): Promise<ErpRow[]> {
   }));
 }
 
-async function getInboundInvoiceRows(take: number): Promise<ErpRow[]> {
+async function getInboundInvoiceRows(take: number, skip = 0): Promise<ErpRow[]> {
   const invoices = await db.inboundInvoice.findMany({
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     take,
+    skip,
     include: {
       supplier: { select: { name: true } },
       purchaseOrder: { select: { number: true } },
@@ -1731,11 +1737,12 @@ async function getInboundInvoiceRows(take: number): Promise<ErpRow[]> {
   }));
 }
 
-async function getRetailPriceRows(take: number): Promise<ErpRow[]> {
+async function getRetailPriceRows(take: number, skip = 0): Promise<ErpRow[]> {
   const now = new Date();
   const products = await db.product.findMany({
-    orderBy: { updatedAt: "desc" },
+    orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
     take,
+    skip,
     select: {
       id: true,
       sku: true,

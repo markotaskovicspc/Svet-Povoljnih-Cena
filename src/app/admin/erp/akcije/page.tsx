@@ -146,7 +146,7 @@ export default async function ActionsPage({
         orderBy: { name: "asc" },
         select: { id: true, name: true },
       }),
-      getErpModule("akcije", { take: 10_000 }),
+      getErpModule("akcije"),
       db.$queryRaw<Array<{ now: Date }>>`SELECT NOW() AS "now"`,
       getMonthlyActionMetadata(),
     ]);

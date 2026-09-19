@@ -13,6 +13,7 @@ import {
   parseGridArray,
 } from "@/lib/admin/grid-query";
 import { summarizeSalesOrderRows } from "@/lib/admin/sales-order-overview";
+import { countErpDatabaseRows, supportsErpDatabasePagination } from "@/lib/admin/erp-pagination";
 
 export async function GET(
   request: Request,
@@ -67,7 +68,8 @@ export async function GET(
   );
   const query = search.get("q") ?? "";
   const useDatabasePagination =
-    slug === "artikli" &&
+    (slug === "artikli" || supportsErpDatabasePagination(slug)) &&
+    !search.get("warehouseId") && !search.get("archive") &&
     !query.trim() &&
     filters.length === 0 &&
     sorting.length === 0;
@@ -82,7 +84,9 @@ export async function GET(
       stocktakeArchived:
         slug === "popisi" && search.get("archive") === "1",
     }),
-    useDatabasePagination ? countArticleRows() : Promise.resolve(null),
+    useDatabasePagination
+      ? slug === "artikli" ? countArticleRows() : countErpDatabaseRows(slug)
+      : Promise.resolve(null),
   ]);
   if (!erpModule) {
     return NextResponse.json({ error: "Nepoznat admin modul." }, { status: 404 });

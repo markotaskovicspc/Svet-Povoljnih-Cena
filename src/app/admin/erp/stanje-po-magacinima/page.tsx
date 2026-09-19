@@ -274,10 +274,10 @@ export default async function InventoryPage({
     (Array.isArray(requestedView) ? requestedView[0] : requestedView) ===
     "upravljanje";
   const [warehouse, stockModule, productCount, stockedCount] = await Promise.all([
-    db.warehouse.findFirst({ where: { active: true, isDefault: true } }),
-    getErpModule("stanje-po-magacinima", { take: 10_000 }),
-    db.product.count({ where: { deletedAt: null } }),
-    db.product.count({ where: { deletedAt: null, stock: { gt: 0 } } }),
+    managementView ? db.warehouse.findFirst({ where: { active: true, isDefault: true } }) : Promise.resolve(null),
+    managementView ? Promise.resolve(null) : getErpModule("stanje-po-magacinima", { deferRows: true }),
+    managementView ? db.product.count({ where: { deletedAt: null } }) : Promise.resolve(0),
+    managementView ? db.product.count({ where: { deletedAt: null, stock: { gt: 0 } } }) : Promise.resolve(0),
   ]);
 
   return (

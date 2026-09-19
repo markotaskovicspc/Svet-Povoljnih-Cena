@@ -475,14 +475,14 @@ export function ErpGrid({
   const [serverRows, setServerRows] = useState<ErpRow[]>(module.rows);
   const reuseInitialRows = useRef(createInitialGridRowsReuse(module));
   const [page, setPage] = useState(1);
-  const [pageCount, setPageCount] = useState(1);
-  const [totalRows, setTotalRows] = useState(module.rows.length);
+  const [pageCount, setPageCount] = useState(Math.max(1, Math.ceil((module.initialRowsTotal ?? module.rows.length) / 100)));
+  const [totalRows, setTotalRows] = useState(module.initialRowsTotal ?? module.rows.length);
   const [summary, setSummary] = useState<SalesOrderGridSummary | null>(() =>
-    module.slug === "prodajni-nalozi"
+    module.slug === "prodajni-nalozi" && !module.initialRowsPending
       ? summarizeSalesOrderRows(module.rows)
       : null,
   );
-  const [loadingRows, setLoadingRows] = useState(false);
+  const [loadingRows, setLoadingRows] = useState(module.initialRowsPending === true);
   const [reloadToken, setReloadToken] = useState(0);
   const [context, setContext] = useState<Record<string, string>>(() =>
     ({
@@ -2117,6 +2117,9 @@ export function ErpGrid({
                     })}
                   </tr>
                 ))}
+                {loadingRows && filteredRows.length === 0 ? (
+                  <tr><td colSpan={visible.length + 1 + (module.detailHrefBase ? 1 : 0)} className="px-6 py-14 text-center text-ink-500" role="status">Učitavam redove…</td></tr>
+                ) : null}
                 {!loadingRows && filteredRows.length === 0 ? (
                   <tr>
                     <td

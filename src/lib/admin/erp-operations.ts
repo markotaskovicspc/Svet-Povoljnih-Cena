@@ -1049,22 +1049,23 @@ export async function getOperationalErpRows(
   slug: string,
   take = 100,
   salesOrderFilters?: SalesOrderExportFilters,
+  skip = 0,
 ): Promise<ErpRow[]> {
   switch (slug) {
     case "sifarnici-artikala":
-      return productLookupRows(take);
+      return productLookupRows(take, skip);
     case "cenovnici":
-      return priceListRows(take);
+      return priceListRows(take, skip);
     case "akcijske-cene":
       return actionPriceRows(take);
     case "akcije":
-      return actionRows(take);
+      return actionRows(take, skip);
     case "loyalty":
-      return loyaltyRows(take);
+      return loyaltyRows(take, skip);
     case "linearne-promocije":
-      return linearPromotionRows(take);
+      return linearPromotionRows(take, skip);
     case "magacini":
-      return warehouseRows(take);
+      return warehouseRows(take, skip);
     case "stanje-po-magacinima":
       return warehouseStockRows(take);
     case "kretanja-zaliha":
@@ -1074,46 +1075,47 @@ export async function getOperationalErpRows(
     case "prodajni-nalozi":
       return salesOrderRows(take, salesOrderFilters);
     case "otpremnice":
-      return dispatchRows(take);
+      return dispatchRows(take, skip);
     case "preuzimanja":
-      return pickupRows(take);
+      return pickupRows(take, skip);
     case "kupci":
-      return customerRows(take);
+      return customerRows(take, skip);
     case "partner-klijenti":
-      return partnerClientRows(take);
+      return partnerClientRows(take, skip);
     case "partner-rezervacije":
-      return partnerReservationRows(take);
+      return partnerReservationRows(take, skip);
     case "integracije":
       return integrationRows();
     case "racunovodstveni-registri":
-      return accountingRows(take);
+      return accountingRows(take, skip);
     case "neobjavljeni-artikli":
       return unpublishedRows(take);
     case "landing-strane":
-      return landingPageRows(take);
+      return landingPageRows(take, skip);
     case "landing-sekcije":
-      return landingSectionRows(take);
+      return landingSectionRows(take, skip);
     case "mobilni-tabovi":
       return mobileTabRows();
     case "pozicije-piktograma":
-      return pictogramPlacementRows(take);
+      return pictogramPlacementRows(take, skip);
     case "newsletter-kampanje":
-      return newsletterRows(take);
+      return newsletterRows(take, skip);
     case "posete-konverzije":
-      return analyticsRows(take);
+      return analyticsRows(take, skip);
     case "reklamacije-dnevnik":
-      return reclamationRows(take);
+      return reclamationRows(take, skip);
     case "admin-podesavanja":
-      return adminSettingRows(take);
+      return adminSettingRows(take, skip);
     default:
       return [];
   }
 }
 
-async function productLookupRows(take: number): Promise<ErpRow[]> {
+async function productLookupRows(take: number, skip = 0): Promise<ErpRow[]> {
   const rows = await db.productLookupValue.findMany({
     take,
-    orderBy: [{ kind: "asc" }, { value: "asc" }],
+    skip,
+    orderBy: [{ kind: "asc" }, { value: "asc" }, { id: "asc" }],
     include: { _count: { select: { assignments: true } } },
   });
   return rows.map((row) => ({
@@ -1128,10 +1130,11 @@ async function productLookupRows(take: number): Promise<ErpRow[]> {
   }));
 }
 
-async function priceListRows(take: number): Promise<ErpRow[]> {
+async function priceListRows(take: number, skip = 0): Promise<ErpRow[]> {
   const rows = await db.priceList.findMany({
     take,
-    orderBy: { updatedAt: "desc" },
+    skip,
+    orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
     include: { _count: { select: { entries: true } } },
   });
   return rows.map((row) => ({
@@ -1177,10 +1180,11 @@ async function actionPriceRows(take: number): Promise<ErpRow[]> {
   }));
 }
 
-async function actionRows(take: number): Promise<ErpRow[]> {
+async function actionRows(take: number, skip = 0): Promise<ErpRow[]> {
   const rows = await db.action.findMany({
     take,
-    orderBy: [{ priority: "desc" }, { startsAt: "desc" }],
+    skip,
+    orderBy: [{ priority: "desc" }, { startsAt: "desc" }, { id: "asc" }],
     include: { _count: { select: { actionPrices: true } } },
   });
   return rows.map((row) => ({
@@ -1201,10 +1205,11 @@ async function actionRows(take: number): Promise<ErpRow[]> {
   }));
 }
 
-async function loyaltyRows(take: number): Promise<ErpRow[]> {
+async function loyaltyRows(take: number, skip = 0): Promise<ErpRow[]> {
   const rows = await db.loyaltyRule.findMany({
     take,
-    orderBy: [{ priority: "desc" }, { updatedAt: "desc" }],
+    skip,
+    orderBy: [{ priority: "desc" }, { updatedAt: "desc" }, { id: "asc" }],
   });
   return rows.map((row) => ({
     id: row.id,
@@ -1219,10 +1224,11 @@ async function loyaltyRows(take: number): Promise<ErpRow[]> {
   }));
 }
 
-async function linearPromotionRows(take: number): Promise<ErpRow[]> {
+async function linearPromotionRows(take: number, skip = 0): Promise<ErpRow[]> {
   const rows = await db.linearPromotion.findMany({
     take,
-    orderBy: [{ priority: "desc" }, { updatedAt: "desc" }],
+    skip,
+    orderBy: [{ priority: "desc" }, { updatedAt: "desc" }, { id: "asc" }],
     include: {
       categories: { include: { category: { select: { name: true } } } },
       groups: { include: { group: { select: { name: true } } } },
@@ -1247,10 +1253,11 @@ async function linearPromotionRows(take: number): Promise<ErpRow[]> {
   }));
 }
 
-async function warehouseRows(take: number): Promise<ErpRow[]> {
+async function warehouseRows(take: number, skip = 0): Promise<ErpRow[]> {
   const rows = await db.warehouse.findMany({
     take,
-    orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+    skip,
+    orderBy: [{ isDefault: "desc" }, { name: "asc" }, { id: "asc" }],
   });
   return rows.map((row) => ({
     id: row.id,
@@ -1572,12 +1579,61 @@ async function salesOrderRows(
     },
     take,
     orderBy: { createdAt: "desc" },
-    include: {
+    select: {
+      id: true,
+      number: true,
+      channel: true,
+      createdAt: true,
+      status: true,
+      paymentMethod: true,
+      shippingMethod: true,
+      userId: true,
+      guestEmail: true,
+      shipPhone: true,
+      courierPaidAt: true,
+      sefAcceptedAt: true,
+      shipping: true,
+      firstPurchaseDiscount: true,
+      billingSameAsShipping: true,
+      shipFirstName: true,
+      shipLastName: true,
+      shipStreet: true,
+      shipPostalCode: true,
+      shipCity: true,
+      shipCompanyName: true,
+      shipPib: true,
+      billFirstName: true,
+      billLastName: true,
+      billStreet: true,
+      billPostalCode: true,
+      billCity: true,
+      billCompanyName: true,
+      billPib: true,
       customer: { select: { email: true } },
       priceList: { select: { code: true, name: true, currency: true } },
       items: {
         orderBy: { id: "asc" },
-        include: {
+        select: {
+          id: true,
+          warehouseId: true,
+          sku: true,
+          name: true,
+          qty: true,
+          unitPriceSale: true,
+          supplierName: true,
+          supplierReservedQty: true,
+          categoryName: true,
+          groupName: true,
+          subgroupName: true,
+          collectionName: true,
+          shortDescriptionSnapshot: true,
+          shortNameSnapshot: true,
+          attribute1: true,
+          attribute2: true,
+          attribute3: true,
+          attribute4: true,
+          color1: true,
+          color2: true,
           warehouse: { select: { name: true } },
           fiscalLines: {
             where: {
@@ -1972,13 +2028,14 @@ function timestamp(value: Date | string | undefined) {
   return Number.isFinite(result) ? result : 0;
 }
 
-async function dispatchRows(take: number): Promise<ErpRow[]> {
+async function dispatchRows(take: number, skip = 0): Promise<ErpRow[]> {
   const rows = await db.dispatchNote.findMany({
     where: {
       type: { in: [DispatchNoteType.CUSTOMER, DispatchNoteType.INTERNAL] },
     },
     take,
-    orderBy: { createdAt: "desc" },
+    skip,
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     include: {
       sourceWarehouse: { select: { name: true } },
       destinationWarehouse: { select: { name: true } },
@@ -2004,10 +2061,11 @@ async function dispatchRows(take: number): Promise<ErpRow[]> {
   }));
 }
 
-async function pickupRows(take: number): Promise<ErpRow[]> {
+async function pickupRows(take: number, skip = 0): Promise<ErpRow[]> {
   const rows = await db.pickupBatch.findMany({
     take,
-    orderBy: { createdAt: "desc" },
+    skip,
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     include: {
       _count: { select: { lines: true } },
       lines: {
@@ -2088,10 +2146,11 @@ async function pickupRows(take: number): Promise<ErpRow[]> {
   });
 }
 
-async function customerRows(take: number): Promise<ErpRow[]> {
+async function customerRows(take: number, skip = 0): Promise<ErpRow[]> {
   const rows = await db.customer.findMany({
     take,
-    orderBy: { updatedAt: "desc" },
+    skip,
+    orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
   });
   return rows.map((row) => ({
     id: row.id,
@@ -2114,10 +2173,11 @@ async function customerRows(take: number): Promise<ErpRow[]> {
   }));
 }
 
-async function partnerClientRows(take: number): Promise<ErpRow[]> {
+async function partnerClientRows(take: number, skip = 0): Promise<ErpRow[]> {
   const rows = await db.partnerApiClient.findMany({
     take,
-    orderBy: { createdAt: "desc" },
+    skip,
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
   });
   return rows.map((row) => ({
     id: row.id,
@@ -2133,10 +2193,11 @@ async function partnerClientRows(take: number): Promise<ErpRow[]> {
   }));
 }
 
-async function partnerReservationRows(take: number): Promise<ErpRow[]> {
+async function partnerReservationRows(take: number, skip = 0): Promise<ErpRow[]> {
   const rows = await db.partnerReservation.findMany({
     take,
-    orderBy: { createdAt: "desc" },
+    skip,
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     include: {
       client: { select: { name: true } },
       product: { select: { sku: true, name: true } },
@@ -2229,10 +2290,11 @@ async function integrationRows(): Promise<ErpRow[]> {
   ];
 }
 
-async function accountingRows(take: number): Promise<ErpRow[]> {
+async function accountingRows(take: number, skip = 0): Promise<ErpRow[]> {
   const rows = await db.fiscalDocument.findMany({
     take,
-    orderBy: { createdAt: "desc" },
+    skip,
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     select: {
       id: true,
       receiptNumber: true,
@@ -2317,10 +2379,11 @@ async function unpublishedRows(take: number): Promise<ErpRow[]> {
     .filter((row) => Boolean(row.values.blockingReason));
 }
 
-async function landingPageRows(take: number): Promise<ErpRow[]> {
+async function landingPageRows(take: number, skip = 0): Promise<ErpRow[]> {
   const rows = await db.landingPage.findMany({
     take,
-    orderBy: { updatedAt: "desc" },
+    skip,
+    orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
     include: { _count: { select: { sections: true } } },
   });
   return rows.map((row) => ({
@@ -2350,10 +2413,11 @@ async function landingPageRows(take: number): Promise<ErpRow[]> {
   }));
 }
 
-async function landingSectionRows(take: number): Promise<ErpRow[]> {
+async function landingSectionRows(take: number, skip = 0): Promise<ErpRow[]> {
   const rows = await db.landingPageSection.findMany({
     take,
-    orderBy: [{ landingPage: { title: "asc" } }, { position: "asc" }],
+    skip,
+    orderBy: [{ landingPage: { title: "asc" } }, { position: "asc" }, { id: "asc" }],
     include: { landingPage: { select: { title: true } } },
   });
   return rows.map((row) => ({
@@ -2390,10 +2454,11 @@ async function mobileTabRows(): Promise<ErpRow[]> {
   }));
 }
 
-async function pictogramPlacementRows(take: number): Promise<ErpRow[]> {
+async function pictogramPlacementRows(take: number, skip = 0): Promise<ErpRow[]> {
   const rows = await db.pictogramPlacement.findMany({
     take,
-    orderBy: { createdAt: "desc" },
+    skip,
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     include: {
       pictogram: { select: { label: true } },
       action: { select: { name: true } },
@@ -2412,10 +2477,11 @@ async function pictogramPlacementRows(take: number): Promise<ErpRow[]> {
   }));
 }
 
-async function newsletterRows(take: number): Promise<ErpRow[]> {
+async function newsletterRows(take: number, skip = 0): Promise<ErpRow[]> {
   const rows = await db.newsletterCampaign.findMany({
     take,
-    orderBy: { updatedAt: "desc" },
+    skip,
+    orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
   });
   return rows.map((row) => ({
     id: row.id,
@@ -2433,10 +2499,11 @@ async function newsletterRows(take: number): Promise<ErpRow[]> {
   }));
 }
 
-async function analyticsRows(take: number): Promise<ErpRow[]> {
+async function analyticsRows(take: number, skip = 0): Promise<ErpRow[]> {
   const rows = await db.analyticsEvent.findMany({
     take,
-    orderBy: { occurredAt: "desc" },
+    skip,
+    orderBy: [{ occurredAt: "desc" }, { id: "asc" }],
     include: { product: { select: { sku: true } } },
   });
   return rows.map((row) => ({
@@ -2454,10 +2521,11 @@ async function analyticsRows(take: number): Promise<ErpRow[]> {
   }));
 }
 
-async function reclamationRows(take: number): Promise<ErpRow[]> {
+async function reclamationRows(take: number, skip = 0): Promise<ErpRow[]> {
   const rows = await db.reclamation.findMany({
     take,
-    orderBy: { createdAt: "desc" },
+    skip,
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     include: {
       order: { select: { number: true } },
       orderItem: { select: { name: true } },
@@ -2497,9 +2565,10 @@ async function reclamationRows(take: number): Promise<ErpRow[]> {
   }));
 }
 
-async function adminSettingRows(take: number): Promise<ErpRow[]> {
+async function adminSettingRows(take: number, skip = 0): Promise<ErpRow[]> {
   const rows = await db.adminSetting.findMany({
     take,
+    skip,
     orderBy: { key: "asc" },
   });
   return rows.map((row) => ({

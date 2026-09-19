@@ -204,7 +204,7 @@ export default async function ReclamationsPage({
           product: { select: { name: true } },
         },
       }),
-      getErpModule("reklamacije-dnevnik", { take: 10_000 }),
+      getErpModule("reklamacije-dnevnik"),
     ]);
 
   // Photo bucket is private — swap stored canonical URLs for signed ones.

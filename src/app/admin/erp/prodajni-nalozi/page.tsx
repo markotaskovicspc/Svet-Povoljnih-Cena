@@ -13,7 +13,7 @@ export const metadata = {
 
 export default async function SalesOrdersOverviewPage() {
   await requireAdminAction(["OPS"]);
-  const erpModule = await getErpModule("prodajni-nalozi");
+  const erpModule = await getErpModule("prodajni-nalozi", { deferRows: true });
   if (!erpModule) notFound();
   return (
     <>
