@@ -7,3 +7,5 @@ export const metadata = {
 };
 
 export default ReturnsPage;
+
+export const maxDuration = 180;

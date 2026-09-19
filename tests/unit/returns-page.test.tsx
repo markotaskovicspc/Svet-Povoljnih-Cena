@@ -3,17 +3,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   orders: vi.fn(), count: vi.fn(), reclamations: vi.fn(),
-  warehouses: vi.fn(), movements: vi.fn(), authorize: vi.fn(),
+  jobs: vi.fn(), warehouses: vi.fn(), movements: vi.fn(), authorize: vi.fn(),
 }));
 vi.mock("@/lib/db", () => ({ db: {
   order: { findMany: mocks.orders, count: mocks.count },
   reclamation: { findMany: mocks.reclamations },
   warehouse: { findMany: mocks.warehouses },
   stockMovement: { findMany: mocks.movements },
+  backgroundJob: { findMany: mocks.jobs },
 } }));
 vi.mock("@/lib/admin", () => ({ requireAdminAction: mocks.authorize, withAdminState: vi.fn() }));
 vi.mock("@/lib/admin/reclamation-fulfillment.server", () => ({ receiveReclamationReturn: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 
 import ReturnsPage from "@/app/admin/erp/povrati/page";
 
@@ -28,6 +30,7 @@ const returnedOrder = (id: string, shipments = [{
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.jobs.mockResolvedValue([]);
   mocks.orders.mockResolvedValue([]);
   mocks.count.mockResolvedValue(0);
   mocks.reclamations.mockResolvedValue([]);
@@ -36,6 +39,28 @@ beforeEach(() => {
 });
 
 describe("ERP returns page", () => {
+  it("shows the missing refund data and a retry for an already received package", async () => {
+    mocks.orders.mockResolvedValue([returnedOrder("1")]);
+    mocks.movements.mockResolvedValue([{ id: "receipt", idempotencyKey: "order-return:SPC-1:item-1:1", warehouseId: "warehouse", createdAt: new Date(), warehouse: { code: "MAG-004", name: "Povrati" } }]);
+    mocks.jobs.mockImplementation(({ where }) => where.kind ? [] : [{ idempotencyKey: "return-fiscal:receipt", status: "RETRY", lastError: "Refundacija čeka identifikaciju kupca." }]);
+    const html = renderToStaticMarkup(await ReturnsPage());
+    expect(html).toContain("Refundacija čeka identifikaciju kupca.");
+    expect(html).toContain("Dopuni / ponovi refundaciju");
+    expect(html).toContain('name="buyerId"');
+    expect(html).not.toContain("Fiskalna refundacija obrađena.");
+  });
+
+  it("keeps the refund marked processed after completed background jobs are cleaned up", async () => {
+    const order = returnedOrder("1");
+    mocks.orders.mockResolvedValue([{ ...order, items: [{ ...order.items[0], fiscalLines: [{ refundedQty: 1 }] }],
+      paymentRefunds: [{ status: "PENDING", error: "Povraćaj novca zahteva ručnu potvrdu." }] }]);
+    mocks.movements.mockResolvedValue([{ id: "receipt", idempotencyKey: "order-return:SPC-1:item-1:1", warehouseId: "warehouse", createdAt: new Date(), warehouse: { code: "MAG-004", name: "Povrati" } }]);
+    const html = renderToStaticMarkup(await ReturnsPage());
+    expect(html).toContain("Fiskalna refundacija obrađena.");
+    expect(html).toContain("Povraćaj novca zahteva ručnu potvrdu.");
+    expect(html).not.toContain("Dopuni / ponovi refundaciju");
+  });
+
   it("shows the seven courier returns even when no reclamation return exists", async () => {
     mocks.orders.mockResolvedValue(Array.from({ length: 7 }, (_, index) => returnedOrder(String(index))));
     mocks.count.mockResolvedValue(7);

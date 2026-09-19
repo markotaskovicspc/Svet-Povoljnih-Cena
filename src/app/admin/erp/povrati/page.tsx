@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+import { processBackgroundJob } from "@/lib/background-jobs";
 import { z } from "zod";
 import { requireAdminAction, withAdminState, type AdminActionState } from "@/lib/admin";
 import { receiveReclamationReturn } from "@/lib/admin/reclamation-fulfillment.server";
@@ -15,6 +17,7 @@ import { Field } from "@/components/admin/field";
 import { SubmitButton } from "@/components/admin/submit-button";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 180;
 export const metadata = {
   title: "Povrati za prijem · Picking",
   robots: { index: false, follow: false },
@@ -28,6 +31,7 @@ const receiveOrderUnitSchema = z.object({
   orderId: z.string().min(1),
   orderItemId: z.string().min(1),
   unitNo: z.coerce.number().int().positive(),
+  buyerId: z.string().trim().max(100).optional(),
   warehouseId: z.string().min(1),
 });
 
@@ -91,13 +95,14 @@ async function receiveOrderUnitAction(
         ...parsed.data,
         actorId,
       });
+      after(async () => { await processBackgroundJob(result.jobId); });
       revalidatePath("/admin/erp/preuzimanja/povrati");
       revalidatePath("/admin/erp/povrati");
       revalidatePath("/admin/erp/stanje-po-magacinima");
       return {
         ok: true as const,
         entityId: parsed.data.orderItemId,
-        message: `Paket je pregledan i proknjižen u ${result.warehouse.code} · ${result.warehouse.name}.`,
+        message: `Paket je primljen u ${result.warehouse.code} · ${result.warehouse.name}. Automatska fiskalna refundacija je zakazana; osvežite pregled za rezultat.`,
       };
     },
   )(formData);
@@ -134,9 +139,18 @@ export default async function ReturnsPage() {
           { idempotencyKey: { startsWith: "order-return:" } },
         ],
       },
-      select: { idempotencyKey: true, createdAt: true, warehouse: { select: { code: true, name: true } } },
+      select: { id: true, idempotencyKey: true, warehouseId: true, createdAt: true, warehouse: { select: { code: true, name: true } } },
     }),
   ]);
+  const jobs = movements.length ? await db.backgroundJob.findMany({
+    where: { idempotencyKey: { in: movements.filter(row => row.idempotencyKey?.startsWith("order-return:")).map(row => `return-fiscal:${row.id}`) } },
+    select: { idempotencyKey: true, status: true, lastError: true },
+  }) : [];
+  const jobByReceipt = new Map(jobs.map(job => [job.idempotencyKey, job]));
+  const paymentJobs = returnedOrders.orders.length ? await db.backgroundJob.findMany({
+    where: { kind: "PAYMENT_REFUND", status: { not: "COMPLETED" }, OR: returnedOrders.orders.map(order => ({ payload: { path: ["orderId"], equals: order.id } })) },
+    select: { payload: true, lastError: true },
+  }) : [];
   const warehouses = warehouseCandidates;
   const receiptByReclamation = new Map(
     movements
@@ -225,10 +239,34 @@ export default async function ReturnsPage() {
                               const receipt = orderReceiptByKey.get(
                                 `order-return:${order.number}:${item.id}:${unitNo}`,
                               );
+                              const job = receipt ? jobByReceipt.get(`return-fiscal:${receipt.id}`) : null;
+                              const receivedQty = [...orderReceiptByKey.keys()].filter(key => key?.startsWith(`order-return:${order.number}:${item.id}:`)).length;
+                              const fiscalDone = receivedQty > 0 && (item.fiscalLines ?? []).reduce((sum, line) => sum + line.refundedQty, 0) >= receivedQty;
                               return receipt ? (
-                                <p key={unitNo} className="text-xs text-success">
-                                  Paket {unitNo}/{item.qty} primljen {formatDate(receipt.createdAt)} · {receipt.warehouse.code}
-                                </p>
+                                <div key={unitNo} className="space-y-2 rounded-lg border border-border p-2">
+                                  <p className="text-xs text-success">Paket {unitNo}/{item.qty} primljen {formatDate(receipt.createdAt)} · {receipt.warehouse.code}</p>
+                                  <p className="text-xs">{(job?.status === "COMPLETED" || fiscalDone)
+                                    ? "Fiskalna refundacija obrađena."
+                                    : job?.lastError || "Fiskalna refundacija čeka obradu."}</p>
+                                  {(order.paymentRefunds ?? []).filter(refund => refund.status !== "COMPLETED").map((refund, index) => (
+                                    <p key={index} className="text-xs text-warning">{refund.error || "Povraćaj novca čeka obradu."}</p>
+                                  ))}
+                                  {paymentJobs.filter(job => job.payload && typeof job.payload === "object" && !Array.isArray(job.payload) && job.payload.orderId === order.id).map((job, index) => (
+                                    <p key={`payment-${index}`} className="text-xs text-warning">{job.lastError || "Povraćaj novca čeka proveru/obradu."}</p>
+                                  ))}
+                                  {job?.status !== "COMPLETED" && !fiscalDone && (
+                                    <AdminActionForm action={receiveOrderUnitAction} className="flex flex-wrap items-end gap-2">
+                                      <input type="hidden" name="orderId" value={order.id} />
+                                      <input type="hidden" name="orderItemId" value={item.id} />
+                                      <input type="hidden" name="unitNo" value={unitNo} />
+                                      <input type="hidden" name="warehouseId" value={receipt.warehouseId} />
+                                      <Field label="Identifikacija kupca (ako nedostaje)">
+                                        <input name="buyerId" maxLength={100} placeholder="10:PIB ili drugi važeći ID" className="h-8 rounded-lg border border-input px-2 text-sm" />
+                                      </Field>
+                                      <SubmitButton size="sm">Dopuni / ponovi refundaciju</SubmitButton>
+                                    </AdminActionForm>
+                                  )}
+                                </div>
                               ) : item.productId ? (
                                 <AdminActionForm key={unitNo} action={receiveOrderUnitAction} className="flex flex-wrap items-end gap-2 rounded-lg border border-border p-2">
                                   <input type="hidden" name="orderId" value={order.id} />
@@ -240,7 +278,10 @@ export default async function ReturnsPage() {
                                       {warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.code} · {warehouse.name}</option>)}
                                     </select>
                                   </Field>
-                                  <SubmitButton size="sm" disabled={!warehouses.length} confirm={`Potvrditi da je paket ${unitNo}/${item.qty} pregledan i vratiti jedan komad na stanje izabranog magacina?`}>
+                                  <Field label="Identifikacija kupca (ako nije na računu)">
+                                    <input name="buyerId" maxLength={100} placeholder="10:PIB ili drugi važeći ID" className="h-8 rounded-lg border border-input px-2 text-sm" />
+                                  </Field>
+                                  <SubmitButton size="sm" disabled={!warehouses.length} confirm={`Potvrditi da je paket ${unitNo}/${item.qty} pregledan, vratiti jedan komad na stanje i pokrenuti fiskalnu refundaciju?`}>
                                     Primi paket
                                   </SubmitButton>
                                 </AdminActionForm>

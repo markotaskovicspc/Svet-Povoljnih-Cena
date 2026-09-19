@@ -13,6 +13,8 @@ import {
 import { db } from "@/lib/db";
 import { adjustInventory } from "@/lib/inventory";
 import { num } from "@/lib/api/_helpers";
+import { withOrderReturnLock } from "./return-lock";
+import { returnedStockBalance } from "./return-stock";
 import { ipsPaymentProvider } from "@/lib/payments";
 import { providerForPaymentMethod } from "@/lib/payments/types";
 import { fiscalize, type FiscalDispatchResult } from "./transport";
@@ -336,14 +338,29 @@ async function finishIssuedSale(
   return saleOutcome(posted, order, created);
 }
 
-export async function issueFiscalRefund(input: {
+export type FiscalRefundInput = {
   fiscalLineIds: string[];
+  /** Explicit partial quantities, used only for inspected returned units. */
+  quantities?: Record<string, number>;
   paymentReturnMethod: PaymentMethod;
   warehouseId: string;
   /** Tax Authority buyer identification (`10:PIB`, `11:JMBG`, `20:lična karta`), mandatory for refund receipts. */
   buyerId: string;
   actorId?: string | null;
-}): Promise<FiscalRefundOutcome> {
+};
+
+export async function issueFiscalRefund(input: FiscalRefundInput): Promise<FiscalRefundOutcome> {
+  const orders = await db.fiscalDocumentLine.findMany({
+    where: { id: { in: input.fiscalLineIds } },
+    select: { fiscalDocument: { select: { orderId: true } } },
+  });
+  const ids = [...new Set(orders.map(line => line.fiscalDocument.orderId))];
+  if (ids.length !== 1) return { ok: false, reason: "invalid_request", error: "Izaberite redove jedne porudžbine." };
+  return withOrderReturnLock(ids[0]!, () => issueFiscalRefundUnderLock(input));
+}
+
+/** Internal: caller must hold withOrderReturnLock for this order. */
+export async function issueFiscalRefundUnderLock(input: FiscalRefundInput): Promise<FiscalRefundOutcome> {
   const uniqueLineIds = Array.from(new Set(input.fiscalLineIds.filter(Boolean)));
   if (!uniqueLineIds.length) {
     return { ok: false, reason: "invalid_request", error: "Izaberite bar jedan fiskalni red." };
@@ -377,8 +394,23 @@ export async function issueFiscalRefund(input: {
     },
   });
 
+  if (saleLines.length !== uniqueLineIds.length || saleLines.some(line => {
+    const qty = input.quantities?.[line.id];
+    return input.quantities && (!Number.isInteger(qty) || qty! <= 0 || qty! > line.qty - line.refundedQty);
+  })) return { ok: false, reason: "invalid_request", error: "Količina refundacije nije raspoloživa na originalnom računu." };
+
+  // An uncertain earlier request may already exist at the fiscal provider.
+  // Do not allow changed quantities or another UI path to bypass its protection.
+  const pending = await db.fiscalDocument.findMany({
+    where: { orderId: saleLines[0]?.fiscalDocument.order.id, kind: "REFUND", status: { not: "ISSUED" },
+      lines: { some: { originalSaleLineId: { in: uniqueLineIds } } } },
+    select: { dispatchedAt: true, error: true },
+  });
+  if (pending.some(isUnsafeFiscalRedispatch)) {
+    return { ok: false, reason: "gateway_failure", error: "Ranija refundacija čeka proveru u badi portalu; ponovno slanje je blokirano." };
+  }
   const refundable = saleLines
-    .map((line) => ({ line, qty: line.qty - line.refundedQty }))
+    .map((line) => ({ line, qty: input.quantities?.[line.id] ?? (line.qty - line.refundedQty) }))
     .filter((item) => item.qty > 0);
 
   if (!refundable.length) {
@@ -405,7 +437,7 @@ export async function issueFiscalRefund(input: {
       originalReceiptNumber,
       input.paymentReturnMethod,
       warehouse.id,
-      group.map((item) => `${item.line.id}:${item.qty}`).sort().join("|"),
+      group.map((item) => `${item.line.id}:${item.line.refundedQty}+${item.qty}`).sort().join("|"),
     );
 
     const existing = await db.fiscalDocument.findUnique({
@@ -486,6 +518,9 @@ export async function issueFiscalRefund(input: {
       include: { lines: true },
     }));
 
+    if (existing && existing.buyerId !== buyerId) {
+      await db.fiscalDocument.update({ where: { id: document.id }, data: { buyerId } });
+    }
     await markDocumentDispatched(document.id);
     const dispatch = await fiscalize({
       invoiceRef: idempotencyKey,
@@ -537,12 +572,16 @@ export async function issueFiscalRefund(input: {
         }
 
         if (line.productId) {
-          await adjustInventory(tx, {
+          const balance = line.orderItemId ? await returnedStockBalance(tx, line.orderItemId) : null;
+          const stockQty = balance
+            ? Math.max(0, Math.max(balance.received, balance.refunded) - balance.posted)
+            : item.qty;
+          if (stockQty > 0) await adjustInventory(tx, {
             idempotencyKey: `fiscal-refund:${document.id}:${line.id}`,
             warehouseId: warehouse.id,
             productId: line.productId,
             sku: line.sku,
-            qtyDelta: item.qty,
+            qtyDelta: stockQty,
             kind: "REFUND_RETURN",
             orderId: order.id,
             orderItemId: line.orderItemId,
@@ -1056,11 +1095,15 @@ export async function recordFiscalPaymentRefund(args: {
 }): Promise<string | null> {
   const provider = providerForPaymentMethod(args.method);
   const idempotencyKey = `fiscal-refund:${args.fiscalDocumentId}:${args.method}`.slice(0, 200);
-  const status = "COMPLETED" as const;
-  const rawRequest: Prisma.InputJsonValue | undefined = undefined;
-  const rawResponse: Prisma.InputJsonValue | undefined = undefined;
-  const providerRef: string | null = null;
-  const error: string | null = null;
+  const payment = await db.payment.findFirst({
+    where: { orderId: args.orderId, status: { in: ["PAID", "PARTIAL_REFUND", "REFUNDED"] } },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!payment) {
+    if (args.method === "POUZECE_GOTOVINA" || args.method === "POUZECE_KARTICA") return null;
+    return "Fiskalna refundacija je izdata; uplata nije potvrđena, povraćaj novca zahteva proveru.";
+  }
+  if (payment.method !== args.method) return "Način povraćaja se razlikuje od evidentirane uplate; potrebna je ručna provera.";
 
   if (args.method === "IPS") {
     try {
@@ -1085,30 +1128,18 @@ export async function recordFiscalPaymentRefund(args: {
       : existing.error ?? "Povraćaj novca zahteva proveru.";
   }
 
+  const error = "Fiskalna refundacija je izdata. Povraćaj novca ovim načinom plaćanja zahteva ručnu potvrdu izvršenja.";
   try {
     await db.paymentRefund.create({
       data: {
-        orderId: args.orderId,
-        fiscalDocumentId: args.fiscalDocumentId,
-        idempotencyKey,
-        method: args.method,
-        provider,
-        status,
-        amount: decimal(args.amount),
-        providerRef,
-        rawRequest,
-        rawResponse,
-        error,
-        actorId: args.actorId,
-        completedAt: status === "COMPLETED" ? new Date() : null,
+        orderId: args.orderId, fiscalDocumentId: args.fiscalDocumentId,
+        idempotencyKey, method: args.method, provider, status: "PENDING",
+        amount: decimal(args.amount), error, actorId: args.actorId,
       },
     });
   } catch (createError) {
-    if (!(createError instanceof Prisma.PrismaClientKnownRequestError) || createError.code !== "P2002") {
-      throw createError;
-    }
+    if (!(createError instanceof Prisma.PrismaClientKnownRequestError) || createError.code !== "P2002") throw createError;
   }
-
   return error;
 }
 

@@ -7,6 +7,8 @@ import type {
 import { StockMovementKind } from "@prisma/client";
 import { db } from "@/lib/db";
 import { adjustInventory, ensureDefaultWarehouse } from "@/lib/inventory";
+import { lockOrderReturn } from "@/lib/fiscal/return-lock";
+import { returnedStockBalance } from "@/lib/fiscal/return-stock";
 import {
   createShipmentForOrder,
   preflightShipmentForOrder,
@@ -358,6 +360,16 @@ export async function receiveReclamationReturn(args: {
     });
     if (!warehouse?.active) {
       throw new Error("Izaberite aktivan magacin za prijem pregledane robe.");
+    }
+    await lockOrderReturn(tx, reclamation.orderId);
+    const existingReceipt = await tx.stockMovement.findUnique({
+      where: { idempotencyKey: `reclamation-return:${reclamation.id}` },
+    });
+    if (!existingReceipt && reclamation.orderItemId) {
+      const balance = await returnedStockBalance(tx, reclamation.orderItemId);
+      if (balance.refunded > 0) {
+        throw new Error("Artikal već ima fiskalnu refundaciju i vraćeno stanje. Proverite postojeće knjiženje pre prijema reklamacije da se lager ne uveća dvaput.");
+      }
     }
     const represented = await tx.warehouseStock.findFirst({
       where: { productId: reclamation.productId },

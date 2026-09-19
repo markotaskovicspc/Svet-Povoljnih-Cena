@@ -89,6 +89,9 @@ const schemas = {
     activeShipmentCount: z.number().int().nonnegative(),
   }),
   IPS_PAYMENT_EMAIL: z.object({ orderId: z.string().min(1) }),
+  RETURN_FISCAL_REFUND: z.object({
+    movementId: z.string().min(1), buyerId: z.string().trim().max(100).optional(), actorId: z.string().optional(),
+  }),
   PAYMENT_REFUND: z.object({
     orderId: z.string().min(1),
     orderNumber: z.string().min(1),
@@ -137,6 +140,7 @@ const HIGH_PRIORITY_BACKGROUND_JOB_KINDS: BackgroundJobKind[] = [
   "ORDER_CANCELLATION_WAREHOUSE_EMAIL",
   "IPS_PAYMENT_EMAIL",
   "PAYMENT_REFUND",
+  "RETURN_FISCAL_REFUND",
   "RECLAMATION_RECEIPT",
   "RECLAMATION_STATUS_EMAIL",
   "SUPPLIER_ORDER_EMAIL",
@@ -804,6 +808,11 @@ async function dispatchJob(job: JobRow) {
       if (!loaded?.recipient) return;
       const result = await sendIpsPaymentConfirmation({ order: loaded.order, to: loaded.recipient });
       if (!result.ok) throw new Error(result.error);
+      return;
+    }
+    case "RETURN_FISCAL_REFUND": {
+      const { refundReceivedOrder } = await import("@/lib/fiscal/returned-order-refund");
+      await refundReceivedOrder(payload as z.infer<typeof schemas.RETURN_FISCAL_REFUND>);
       return;
     }
     case "PAYMENT_REFUND": {
