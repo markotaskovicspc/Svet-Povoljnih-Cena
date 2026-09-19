@@ -22,6 +22,8 @@ import { PageHeader } from "@/components/admin/page-header";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { newsletterCampaignLabels as campaignLabel, newsletterCount, newsletterRate, newsletterMetricExplanation } from "@/lib/newsletter/reporting";
+import { NewsletterStatsRefresh } from "@/components/admin/newsletter-stats-refresh";
 import {
   cancelNewsletterCampaignAction,
   deleteNewsletterCampaignDraftAction,
@@ -36,18 +38,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const campaignLabel: Record<NewsletterCampaignStatus, string> = {
-  DRAFT: "Nacrt",
-  IN_REVIEW: "Spremna za slanje",
-  APPROVED: "Odobrena",
-  SCHEDULED: "Zakazana",
-  PREPARING: "Priprema primalaca",
-  SENDING: "Provider šalje",
-  SENT: "Poslata",
-  CANCELLED: "Otkazana",
-  PARTIAL_FAILED: "Delimična greška",
-  FAILED: "Greška slanja",
-};
+
 
 const recipientLabel: Record<NewsletterRecipientStatus, string> = {
   QUEUED: "Čeka",
@@ -150,12 +141,26 @@ export default async function NewsletterCampaignPage({
           </div>
         ) : null}
 
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="Primaoci ove kampanje" value={campaign.recipients == null ? "—" : campaign.recipients.toLocaleString("sr-Latn-RS")} hint={campaign.recipients == null ? "broj primalaca još nije izračunat" : campaign.audienceMode === "FIXED" ? "fiksirana lista primalaca" : "izračunato za ovu kampanju"} />
-          <StatCard label="Isporučeno" value={(campaign.delivered ?? 0).toLocaleString("sr-Latn-RS")} tone="success" />
-          <StatCard label="Otvoreno" value={(campaign.opened ?? 0).toLocaleString("sr-Latn-RS")} hint={rate(campaign.opened ?? 0, campaign.delivered ?? 0)} />
-          <StatCard label="Kliknuto" value={(campaign.clicked ?? 0).toLocaleString("sr-Latn-RS")} hint={rate(campaign.clicked ?? 0, campaign.delivered ?? 0)} />
-        </div>
+        <section aria-label="Rezultati kampanje" className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="font-display text-lg text-ink-900">Rezultati kampanje</h2>
+            <NewsletterStatsRefresh key={campaign.updatedAt.toISOString()} protectEditor observedAt={new Date().toLocaleTimeString("sr-Latn-RS", { timeZone: "Europe/Belgrade" })} />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard label="Primaoci ove kampanje" value={newsletterCount(campaign.recipients)} hint={campaign.recipients == null ? "broj primalaca još nije izračunat" : campaign.audienceMode === "FIXED" ? "fiksirana lista primalaca" : "izračunato za ovu kampanju"} />
+            <StatCard label="Isporučeno" value={newsletterCount(campaign.delivered)} hint="potvrđena isporuka; ne garantuje glavni inbox" tone="success" />
+            <StatCard label="Open rate — otvaranja" value={newsletterRate(campaign.opened, campaign.delivered)} hint={`${newsletterCount(campaign.opened)} primalaca sa evidentiranim otvaranjem`} />
+            <StatCard label="CTR — klikovi" value={newsletterRate(campaign.clicked, campaign.delivered)} hint={`${newsletterCount(campaign.clicked)} primalaca je kliknulo na link`} />
+          </div>
+          <dl className="flex flex-wrap gap-x-6 gap-y-2 rounded-xl border border-border/60 bg-surface p-4 text-sm">
+            <div><dt className="inline text-ink-500">SES prihvatio: </dt><dd className="inline font-medium">{newsletterCount(retrySummary.accepted)}</dd></div>
+            <div><dt className="inline text-ink-500">Čeka slanje: </dt><dd className="inline font-medium">{newsletterCount(retrySummary.queued)}</dd></div>
+            <div><dt className="inline text-ink-500">Odbijena isporuka (bounce): </dt><dd className="inline font-medium">{newsletterCount(campaign.bounced)}</dd></div>
+            <div><dt className="inline text-ink-500">Prijave spama: </dt><dd className="inline font-medium">{newsletterCount(campaign.complained)}</dd></div>
+            <div><dt className="inline text-ink-500">Odjave: </dt><dd className="inline font-medium">{newsletterCount(campaign.unsubscribed)}</dd></div>
+          </dl>
+          <p className="text-xs text-ink-500">{newsletterMetricExplanation} Evidentirano otvaranje nije pouzdan dokaz da je osoba pročitala poruku.</p>
+        </section>
 
         <div id="test-email" className="scroll-mt-6">
           <Card>
@@ -411,8 +416,4 @@ function StatusPill({ status, label }: { status: string; label: string }) {
 
 function formatDate(date: Date) {
   return date.toLocaleString("sr-Latn-RS", { timeZone: "Europe/Belgrade", dateStyle: "short", timeStyle: "short" });
-}
-
-function rate(value: number, base: number) {
-  return base > 0 ? `${((value / base) * 100).toFixed(1)}% od isporučenih` : "bez podataka";
 }

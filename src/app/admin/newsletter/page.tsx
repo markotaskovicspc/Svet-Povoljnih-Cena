@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { MarketingContactStatus, NewsletterCampaignStatus } from "@prisma/client";
+import type { MarketingContactStatus } from "@prisma/client";
 import { requireAdminAction } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { newsletterAudienceLabel } from "@/lib/newsletter/audience-label";
@@ -22,6 +22,8 @@ import { SubmitButton } from "@/components/admin/submit-button";
 import { Input } from "@/components/ui/input";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { newsletterCampaignLabels as campaignLabel, newsletterCount, newsletterRate, newsletterMetricExplanation } from "@/lib/newsletter/reporting";
+import { NewsletterStatsRefresh } from "@/components/admin/newsletter-stats-refresh";
 import {
   createNewsletterCampaignAction,
   deleteNewsletterAudienceAction,
@@ -44,18 +46,7 @@ const views = [
   ["settings", "Podešavanja"],
 ] as const;
 
-const campaignLabel: Record<NewsletterCampaignStatus, string> = {
-  DRAFT: "Nacrt",
-  IN_REVIEW: "Na proveri",
-  APPROVED: "Odobrena",
-  SCHEDULED: "Zakazana",
-  PREPARING: "Priprema",
-  SENDING: "Slanje",
-  SENT: "Poslata",
-  CANCELLED: "Otkazana",
-  PARTIAL_FAILED: "Delimična greška",
-  FAILED: "Greška",
-};
+
 
 const contactLabel: Record<MarketingContactStatus, string> = {
   PENDING: "Čeka potvrdu",
@@ -123,11 +114,15 @@ export default async function NewsletterPage({
 
         <NewsletterContactOverview counts={contactOverview} />
 
-        <div className="grid gap-4 sm:grid-cols-3">
+        <NewsletterStatsRefresh observedAt={new Date().toLocaleTimeString("sr-Latn-RS", { timeZone: "Europe/Belgrade" })} />
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Nacrti i provera" value={((statusCount.DRAFT ?? 0) + (statusCount.IN_REVIEW ?? 0)).toLocaleString("sr-Latn-RS")} />
           <StatCard label="Isporučeno" value={sentMetrics.delivered.toLocaleString("sr-Latn-RS")} hint={`od ${sentMetrics.recipients.toLocaleString("sr-Latn-RS")} adresiranih`} />
-          <StatCard label="Otvaranje / klik" value={`${rate(sentMetrics.opened, sentMetrics.delivered)} / ${rate(sentMetrics.clicked, sentMetrics.delivered)}`} hint="za prikazane kampanje" />
+          <StatCard label="Open rate — otvaranja" value={newsletterRate(sentMetrics.opened, sentMetrics.delivered)} hint={`${newsletterCount(sentMetrics.opened)} evidentiranih otvaranja`} />
+          <StatCard label="CTR — klikovi" value={newsletterRate(sentMetrics.clicked, sentMetrics.delivered)} hint={`${newsletterCount(sentMetrics.clicked)} primalaca kliknulo`} />
         </div>
+
+        <p className="text-xs text-ink-500">Zbir za poslednjih {recentCampaigns.length} kampanja, po poslednjoj izmeni. Procenti se računaju iz ukupnih brojeva, ne kao prosek procenata. {newsletterMetricExplanation}</p>
 
         {view === "campaigns" ? <CampaignsView campaigns={recentCampaigns} /> : null}
         {view === "audiences" ? <AudiencesView selectedId={params.audienceId} /> : null}
@@ -162,19 +157,26 @@ async function CampaignsView({
       <DataTable
         columns={[
           { key: "campaign", label: "Kampanja" },
-          { key: "audience", label: "Publika" },
+
           { key: "status", label: "Status" },
           { key: "schedule", label: "Termin" },
-          { key: "results", label: "Rezultati" },
+          { key: "recipients", label: "Primaoci", align: "right" },
+          { key: "delivered", label: "Isporučeno", align: "right" },
+          { key: "opened", label: "Open rate", align: "right" },
+          { key: "clicked", label: "CTR", align: "right" },
+          { key: "bounced", label: "Odbijeno", align: "right" },
         ]}
         rows={campaigns.map((campaign) => ({
           id: campaign.id,
           cells: {
-            campaign: <div><Link href={`/admin/newsletter/kampanje/${campaign.id}`} className="font-medium text-walnut hover:underline">{campaign.title}</Link><p className="max-w-md truncate text-xs text-ink-500">{campaign.subject}</p></div>,
-            audience: <span>{campaignAudienceNames(campaign)}<br /><span className="text-xs text-ink-500">{campaign.audienceMode === "FIXED" ? "fiksna lista" : "dinamička"}</span></span>,
+            campaign: <div><Link href={`/admin/newsletter/kampanje/${campaign.id}`} className="font-medium text-walnut hover:underline">{campaign.title}</Link><p className="max-w-md truncate text-xs text-ink-500">{campaign.subject}</p><p className="max-w-xs text-xs text-ink-500">{campaignAudienceNames(campaign)}</p></div>,
             status: <StatusPill status={campaign.status} label={campaignLabel[campaign.status]} />,
             schedule: campaign.sentAt ? formatDate(campaign.sentAt) : campaign.scheduledAt ? formatDate(campaign.scheduledAt) : "—",
-            results: <span className="text-xs">{campaign.delivered ?? 0} isporučeno · {campaign.opened ?? 0} otvoreno · {campaign.clicked ?? 0} klik</span>,
+            recipients: <span className="tabular-nums">{newsletterCount(campaign.recipients)}</span>,
+            delivered: <span className="tabular-nums">{newsletterCount(campaign.delivered)}</span>,
+            opened: <div className="whitespace-nowrap tabular-nums"><strong>{newsletterRate(campaign.opened, campaign.delivered)}</strong><p className="text-xs text-ink-500">{newsletterCount(campaign.opened)} otvoreno</p></div>,
+            clicked: <div className="whitespace-nowrap tabular-nums"><strong>{newsletterRate(campaign.clicked, campaign.delivered)}</strong><p className="text-xs text-ink-500">{newsletterCount(campaign.clicked)} kliknulo</p></div>,
+            bounced: <span className="tabular-nums">{newsletterCount(campaign.bounced)}</span>,
           },
         }))}
         empty="Nema newsletter kampanja."
@@ -393,8 +395,4 @@ function Ready({ value, children }: { value: boolean; children?: React.ReactNode
 
 function formatDate(date: Date) {
   return date.toLocaleString("sr-Latn-RS", { timeZone: "Europe/Belgrade", dateStyle: "short", timeStyle: "short" });
-}
-
-function rate(value: number, base: number) {
-  return base > 0 ? `${((value / base) * 100).toFixed(1)}%` : "0%";
 }
