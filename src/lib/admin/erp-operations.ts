@@ -4,8 +4,9 @@ import {
   type OrderStatus,
   type PaymentStatus,
   type ShipmentStatus,
+  type Shipment,
 } from "@prisma/client";
-import { db } from "@/lib/db";
+import { databaseIdentifier, db } from "@/lib/db";
 import type {
   ErpColumn,
   ErpModule,
@@ -1152,7 +1153,10 @@ async function actionPriceRows(take: number): Promise<ErpRow[]> {
   const rows = await db.actionProduct.findMany({
     take,
     orderBy: [{ action: { priority: "desc" } }, { updatedAt: "desc" }],
-    include: { action: true, product: true },
+    include: {
+      action: { select: { name: true, priority: true, startsAt: true, endsAt: true } },
+      product: { select: { sku: true, name: true, fullPrice: true, cogs: true } },
+    },
   });
   return rows.map((row) => ({
     id: `${row.actionId}:${row.productId}`,
@@ -1569,7 +1573,7 @@ async function salesOrderRows(
     take,
     orderBy: { createdAt: "desc" },
     include: {
-      customer: true,
+      customer: { select: { email: true } },
       priceList: { select: { code: true, name: true, currency: true } },
       items: {
         orderBy: { id: "asc" },
@@ -1584,7 +1588,16 @@ async function salesOrderRows(
             select: { qty: true, refundedQty: true },
           },
           product: {
-            include: {
+            select: {
+              name: true,
+              shortName: true,
+              shortDescription: true,
+              attribute1: true,
+              attribute2: true,
+              attribute3: true,
+              attribute4: true,
+              colorPrimary: true,
+              colorSecondary: true,
               supplier: { select: { name: true } },
               group: { select: { name: true } },
               collection: { select: { name: true } },
@@ -1999,14 +2012,23 @@ async function pickupRows(take: number): Promise<ErpRow[]> {
       },
     },
   });
-  const shipments = await db.shipment.findMany({
-    where: { orderId: { in: [...new Set(rows.flatMap(row => row.lines.map(line => line.orderId)))] } },
-    select: {
-      orderId: true, provider: true, rawCreateResponse: true,
-      purpose: true, reclamationId: true, providerOrderId: true,
-      providerShipmentId: true, trackingNo: true, providerParcelNumbers: true,
-    },
-  });
+  const orderIds = [...new Set(rows.flatMap(row => row.lines.map(line => line.orderId)))];
+  // The raw provider response can contain label bytes and large histories. The
+  // list needs only assignment and handover metadata; project JSON in Postgres
+  // so the unused payload never travels to the app server.
+  const shipments = orderIds.length ? await db.$queryRaw<Array<Pick<Shipment,
+    "orderId" | "provider" | "purpose" | "reclamationId" | "providerOrderId" |
+    "providerShipmentId" | "trackingNo" | "providerParcelNumbers" | "rawCreateResponse"
+  >>>(Prisma.sql`
+    SELECT "orderId", "provider", "purpose", "reclamationId", "providerOrderId",
+      "providerShipmentId", "trackingNo", "providerParcelNumbers",
+      jsonb_build_object(
+        'assignment', "rawCreateResponse" -> 'assignment',
+        'packageHandover', "rawCreateResponse" -> 'packageHandover'
+      ) AS "rawCreateResponse"
+    FROM ${databaseIdentifier("Shipment")}
+    WHERE "orderId" IN (${Prisma.join(orderIds)})
+  `) : [];
   const shipmentsByOrder = new Map<string, typeof shipments>();
   for (const shipment of shipments) {
     const group = shipmentsByOrder.get(shipment.orderId) ?? [];
@@ -2201,7 +2223,17 @@ async function accountingRows(take: number): Promise<ErpRow[]> {
   const rows = await db.fiscalDocument.findMany({
     take,
     orderBy: { createdAt: "desc" },
-    include: {
+    select: {
+      id: true,
+      receiptNumber: true,
+      idempotencyKey: true,
+      kind: true,
+      status: true,
+      totalNet: true,
+      totalVat: true,
+      totalGross: true,
+      issuedAt: true,
+      createdAt: true,
       order: { select: { number: true } },
       warehouse: { select: { name: true } },
     },

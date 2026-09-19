@@ -2,8 +2,9 @@ import ExcelJS from "exceljs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ batches: vi.fn(), shipments: vi.fn(), module: vi.fn() }));
-vi.mock("@/lib/db", () => ({
-  db: { pickupBatch: { findMany: mocks.batches }, shipment: { findMany: mocks.shipments } },
+vi.mock("@/lib/db", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/db")>(),
+  db: { pickupBatch: { findMany: mocks.batches }, $queryRaw: mocks.shipments },
 }));
 vi.mock("@/lib/admin", () => ({ requireAdminAction: vi.fn() }));
 vi.mock("@/lib/admin/erp", async (importOriginal) => ({
@@ -46,6 +47,30 @@ beforeEach(() => {
 });
 
 describe("pickup-batch courier search", () => {
+  it("does not load shipments for an empty picking list", async () => {
+    mocks.batches.mockResolvedValue([]);
+    expect(await getOperationalErpRows("preuzimanja")).toEqual([]);
+    expect(mocks.shipments).not.toHaveBeenCalled();
+  });
+
+  it("projects only assignment and handover JSON and binds order ids", async () => {
+    await getOperationalErpRows("preuzimanja");
+    const query = mocks.shipments.mock.calls[0][0];
+    expect(query.text).toContain("jsonb_build_object");
+    expect(query.text).toContain("'assignment'");
+    expect(query.text).toContain("'packageHandover'");
+    expect(query.values).toEqual(["order-1"]);
+  });
+
+  it("keeps a reported partial handover visible after projecting provider metadata", async () => {
+    mocks.shipments.mockResolvedValue([{ ...shipment, rawCreateResponse: {
+      ...shipment.rawCreateResponse,
+      packageHandover: { version: 1, expectedPackages: 2, pickedUpPackages: 1,
+        recordedAt: "2026-09-15T09:00:00Z", note: "Preuzet jedan paket", source: "ADMIN" },
+    } }]);
+    const rows = await getOperationalErpRows("preuzimanja");
+    expect(rows[0].values.status).toBe("Delimično preuzeto");
+  });
   it.each(["", "number", "courierNumbers"])("finds the screenshot number with search column '%s'", async (searchColumn) => {
     const result = await (await listRows(request({ q: "26-0001106899", searchColumn }), context())).json();
     expect(result.total).toBe(1);

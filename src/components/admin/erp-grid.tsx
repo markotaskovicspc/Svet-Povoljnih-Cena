@@ -48,6 +48,7 @@ import type {
   ErpValue,
 } from "@/lib/admin/erp";
 import { nextGridSorting } from "@/lib/admin/grid-query";
+import { createInitialGridRowsReuse } from "@/lib/admin/grid-initial-rows";
 import {
   summarizeSalesOrderRows,
   type SalesOrderGridSummary,
@@ -472,6 +473,7 @@ export function ErpGrid({
   const [commandInput, setCommandInput] = useState<Record<string, string>>({});
   const [commandFormError, setCommandFormError] = useState<string | null>(null);
   const [serverRows, setServerRows] = useState<ErpRow[]>(module.rows);
+  const reuseInitialRows = useRef(createInitialGridRowsReuse(module));
   const [page, setPage] = useState(1);
   const [pageCount, setPageCount] = useState(1);
   const [totalRows, setTotalRows] = useState(module.rows.length);
@@ -581,6 +583,11 @@ export function ErpGrid({
   }, [module.slug]);
 
   useEffect(() => {
+    // Invalidate permanently on any changed request or server refresh. Returning
+    // to the first page after a filter/edit must not resurrect the old snapshot.
+    if (reuseInitialRows.current(module, {
+      page, query, filters: [...fixedFilters, ...filters], sorting, context, reloadToken,
+    })) return;
     const controller = new AbortController();
     const timeout = window.setTimeout(async () => {
       setLoadingRows(true);
@@ -638,6 +645,7 @@ export function ErpGrid({
   }, [
     filters,
     fixedFilters,
+    module,
     module.slug,
     page,
     query,

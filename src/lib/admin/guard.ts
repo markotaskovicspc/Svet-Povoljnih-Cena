@@ -2,8 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { AdminRoleName } from "@prisma/client";
-import { getCurrentUser } from "@/lib/auth/session";
-import { db } from "@/lib/db";
+import { getCurrentAdmin } from "@/lib/auth/session";
 import { logOperationalError } from "@/lib/monitoring";
 import {
   adminActionError,
@@ -32,36 +31,12 @@ export const ADMIN_ROLE_LABEL: Record<AdminRoleName, string> = {
  * redirects. Never returns null on success.
  */
 export async function requireAdminAction(allowed?: readonly AdminRoleName[]) {
-  const user = await getCurrentUser();
-  if (!user || user.userType !== "admin") {
-    redirect("/admin/prijava");
-  }
-  const admin = await db.adminUser.findUnique({
-    where: { id: user.id },
-    select: {
-      id: true,
-      email: true,
-      firstName: true,
-      lastName: true,
-      role: true,
-      enabled: true,
-    },
-  });
-  if (!admin?.enabled) {
-    redirect("/admin/prijava");
-  }
+  const admin = await getCurrentAdmin();
+  if (!admin) redirect("/admin/prijava");
   if (allowed && !isAuthorized(admin.role, allowed)) {
     redirect("/admin?forbidden=1");
   }
-  return {
-    ...user,
-    id: admin.id,
-    email: admin.email,
-    name:
-      [admin.firstName, admin.lastName].filter(Boolean).join(" ") ||
-      admin.email,
-    role: admin.role,
-  } as typeof user & { role: AdminRoleName };
+  return admin;
 }
 
 type AdminActionMeta = {

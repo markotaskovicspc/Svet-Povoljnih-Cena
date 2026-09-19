@@ -1,3 +1,4 @@
+import { isInitialErpSnapshotComplete } from "./grid-initial-rows";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
@@ -145,6 +146,8 @@ export type ErpModule = {
   commands: ErpCommand[];
   columns: ErpColumn[];
   rows: ErpRow[];
+  /** Complete snapshot for the small operational lists; avoids a duplicate mount fetch. */
+  initialRowsComplete?: boolean;
   notes?: string[];
   blockedReason?: string;
   /** Canonical admin screen for legacy modules that should no longer render their generic ERP grid. */
@@ -1015,6 +1018,7 @@ export async function getErpModule(
     columns,
     commands,
     rows,
+    initialRowsComplete: isInitialErpSnapshotComplete(slug, rows.length, take, options),
     contextFilters: articleContext
       ? [
           {

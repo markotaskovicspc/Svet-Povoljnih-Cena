@@ -106,7 +106,10 @@ export default async function ActionsPage({
             orderBy: { product: { sku: "asc" } },
             include: {
               product: {
-                include: {
+                select: {
+                  id: true, sku: true, name: true, shortDescription: true,
+                  attribute1: true, attribute2: true, attribute3: true, attribute4: true,
+                  colorPrimary: true, colorSecondary: true, fullPrice: true, cogs: true,
                   supplier: { select: { name: true } },
                   group: { select: { name: true } },
                   collection: { select: { name: true } },

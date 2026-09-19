@@ -1,17 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
 import {
-  ReclamationDecision,
   ReclamationRequest,
-  ReclamationResolution,
   ReclamationStatus,
   ReclamationType,
-  ReclamationWarehouseStatus,
-  ShipmentPurpose,
 } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import {
-  withAdmin,
   withAdminState,
   requireAdminAction,
   type AdminActionState,
@@ -30,20 +25,13 @@ import { PageHeader } from "@/components/admin/page-header";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  cancelReclamationShipment,
-  createReclamationShipment,
-  saveReclamationWarehouse,
-} from "@/lib/admin/reclamation-fulfillment.server";
 import { getErpModule } from "@/lib/admin/erp";
 import {
   createAdminReclamation,
   createReclamationSchema,
   lookupOrderForReclamation,
 } from "@/lib/api/reclamations";
-import { updateReclamationStatus } from "@/lib/api/reclamation-status";
 import { ReclamationOrderFields } from "@/components/admin/reclamation-order-search";
-import { queueReclamationReplacement } from "@/lib/admin/pickup-batch.server";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -69,35 +57,6 @@ const REQUEST_LABELS: Record<ReclamationRequest, string> = {
   ZAMENA: "Zamena",
   POVRACAJ_NOVCA: "Povraćaj novca",
   UMANJENJE_CENE: "Umanjenje cene",
-};
-
-const RESOLUTION_LABELS: Record<string, string> = {
-  POVRAT_NOVCA: "Povrat novca",
-  ZAMENA_ARTIKLA: "Zamena artikla",
-  ZAMENA_DELA: "Zamena dela",
-  POPUST: "Popust",
-  NIJE_UNETO: "Nije određeno",
-};
-
-const DECISION_LABELS: Record<ReclamationDecision, string> = {
-  CEKA: "Čeka odluku",
-  PRIHVACENA: "Prihvaćena",
-  ODBIJENA: "Odbijena",
-};
-
-const WAREHOUSE_STATUS_LABELS: Record<ReclamationWarehouseStatus, string> = {
-  NOT_REQUESTED: "Nije zatraženo",
-  REQUESTED: "Zatraženo",
-  PREPARING: "U pripremi",
-  READY: "Spremno",
-  HANDED_OVER: "Predato kuriru",
-  CANCELLED: "Otkazano",
-};
-
-const SHIPMENT_PURPOSE_LABELS: Record<ShipmentPurpose, string> = {
-  ORDER_DELIVERY: "Isporuka porudžbine",
-  RECLAMATION_RETURN: "Povrat od kupca",
-  RECLAMATION_REPLACEMENT: "Isporuka zamene/dela",
 };
 
 async function createManualReclamation(
@@ -219,242 +178,6 @@ async function createManualReclamation(
   )(formData);
 }
 
-async function updateStatus(formData: FormData) {
-  "use server";
-
-  return withAdmin(
-    { allowed: ["OPS"], action: "reclamation.statusUpdate", entity: "Reclamation" },
-    async (actorId, formData: FormData) => {
-      const id = String(formData.get("id") ?? "");
-      const status = String(formData.get("status") ?? "") as ReclamationStatus;
-      const note = String(formData.get("note") ?? "").trim() || null;
-      if (!id || !Object.values(ReclamationStatus).includes(status)) {
-        return { ok: false as const, error: "Nedostaje ID ili status." };
-      }
-      await updateReclamationStatus({
-        reclamationId: id,
-        status,
-        note,
-        actorId,
-      });
-      revalidatePath("/admin/erp/reklamacije-dnevnik");
-      revalidatePath("/nalog/reklamacije");
-      return { ok: true as const, entityId: id, diff: { status, note } };
-    },
-  )(formData);
-}
-
-async function updateReclamationDetails(formData: FormData) {
-  "use server";
-
-  return withAdmin(
-    {
-      allowed: ["OPS"],
-      action: "reclamation.detailsUpdate",
-      entity: "Reclamation",
-    },
-    async (actorId, formData: FormData) => {
-      const id = String(formData.get("id") ?? "");
-      const decision = String(formData.get("decision") ?? "") as ReclamationDecision;
-      const resolutionRaw = String(formData.get("resolution") ?? "");
-      const respondedAtRaw = String(formData.get("respondedAt") ?? "");
-      if (!id || !Object.values(ReclamationDecision).includes(decision)) {
-        return { ok: false as const, error: "Nedostaje reklamacija ili odluka." };
-      }
-      const resolution = resolutionRaw
-        ? (resolutionRaw as ReclamationResolution)
-        : null;
-      if (resolution && !Object.values(ReclamationResolution).includes(resolution)) {
-        return { ok: false as const, error: "Nepoznat način rešavanja." };
-      }
-      const respondedAt = respondedAtRaw
-        ? new Date(`${respondedAtRaw}T12:00:00.000Z`)
-        : null;
-      if (respondedAt && Number.isNaN(respondedAt.getTime())) {
-        return { ok: false as const, error: "Datum odgovora nije ispravan." };
-      }
-      const adminNote = String(formData.get("adminNote") ?? "").trim() || null;
-      const resolutionNote =
-        String(formData.get("resolutionNote") ?? "").trim() || null;
-      const current = await db.reclamation.findUnique({
-        where: { id },
-        select: {
-          quantity: true,
-          resolution: true,
-          replacementQty: true,
-          pickupBatchLines: {
-            where: { purpose: "RECLAMATION_REPLACEMENT" },
-            select: { id: true, batch: { select: { number: true } } },
-            take: 1,
-          },
-        },
-      });
-      if (!current) {
-        return { ok: false as const, error: "Reklamacija nije pronađena." };
-      }
-      const replacementQty =
-        resolution === "ZAMENA_DELA"
-          ? 0
-          : resolution === "ZAMENA_ARTIKLA"
-            ? current.quantity
-            : null;
-      if (decision === "PRIHVACENA" && resolution === "ZAMENA_DELA" && !resolutionNote) {
-        return {
-          ok: false as const,
-          error: "Upišite tačan naziv dela koji magacin treba da pošalje.",
-        };
-      }
-      if (
-        current.pickupBatchLines.length &&
-        (current.resolution !== resolution ||
-          current.replacementQty !== replacementQty)
-      ) {
-        return {
-          ok: false as const,
-          error:
-            `Zamena je u picking nalogu ${current.pickupBatchLines[0].batch.number}. Otvorite detalj reklamacije i kliknite „Ukloni zamenu iz picking naloga“, pa promenite vrstu zamene.`,
-        };
-      }
-      await db.reclamation.update({
-        where: { id },
-        data: {
-          decision,
-          resolution,
-          replacementQty,
-          respondedAt,
-          adminNote,
-          resolutionNote,
-        },
-      });
-      revalidatePath("/admin/erp/reklamacije-dnevnik");
-      revalidatePath("/admin/erp/preuzimanja");
-      return {
-        ok: true as const,
-        entityId: id,
-        diff: {
-          decision,
-          resolution,
-          replacementQty,
-          respondedAt,
-          adminNote,
-          resolutionNote,
-        },
-      };
-    },
-  )(formData);
-}
-
-async function updateWarehouse(formData: FormData) {
-  "use server";
-
-  return withAdmin(
-    {
-      allowed: ["OPS"],
-      action: "reclamation.warehouseUpdate",
-      entity: "Reclamation",
-    },
-    async (actorId, formData: FormData) => {
-      const reclamationId = String(formData.get("id") ?? "");
-      const warehouseId = String(formData.get("warehouseId") ?? "");
-      const status = String(
-        formData.get("warehouseStatus") ?? "",
-      ) as ReclamationWarehouseStatus;
-      if (
-        !reclamationId ||
-        !warehouseId ||
-        !Object.values(ReclamationWarehouseStatus).includes(status)
-      ) {
-        return { ok: false as const, error: "Izaberite magacin i status pripreme." };
-      }
-      await saveReclamationWarehouse({ reclamationId, warehouseId, status });
-      revalidatePath("/admin/erp/reklamacije-dnevnik");
-      revalidatePath("/admin/erp/preuzimanja");
-      return {
-        ok: true as const,
-        entityId: reclamationId,
-        diff: { warehouseId, status },
-      };
-    },
-  )(formData);
-}
-
-async function createShipment(formData: FormData) {
-  "use server";
-
-  return withAdmin(
-    {
-      allowed: ["OPS"],
-      action: "reclamation.shipmentCreate",
-      entity: "Reclamation",
-    },
-    async (actorId, formData: FormData) => {
-      const reclamationId = String(formData.get("id") ?? "");
-      const purpose = String(formData.get("purpose") ?? "") as ShipmentPurpose;
-      const packageCount = Number(formData.get("packageCount") ?? 1);
-      if (
-        !reclamationId ||
-        !["RECLAMATION_RETURN", "RECLAMATION_REPLACEMENT"].includes(purpose) ||
-        !Number.isInteger(packageCount) ||
-        packageCount < 1 ||
-        packageCount > 99
-      ) {
-        return { ok: false as const, error: "Kurirski zahtev nije ispravan." };
-      }
-      const shipment = purpose === "RECLAMATION_REPLACEMENT"
-        ? null
-        : await createReclamationShipment({
-            reclamationId,
-            purpose,
-            packageCount,
-            actorId,
-          });
-      const queued = purpose === "RECLAMATION_REPLACEMENT"
-        ? await queueReclamationReplacement(reclamationId, actorId)
-        : null;
-      if (queued && !queued.queued) {
-        return { ok: false as const, error: queued.reason };
-      }
-      revalidatePath("/admin/erp/reklamacije-dnevnik");
-      revalidatePath("/admin/erp/preuzimanja");
-      return {
-        ok: true as const,
-        entityId: reclamationId,
-        diff: {
-          purpose,
-          packageCount,
-          shipmentId: shipment?.id,
-          pickupBatchId: queued?.batchId,
-        },
-      };
-    },
-  )(formData);
-}
-
-async function cancelShipment(formData: FormData) {
-  "use server";
-
-  return withAdmin(
-    {
-      allowed: ["OPS"],
-      action: "reclamation.shipmentCancel",
-      entity: "Shipment",
-    },
-    async (actorId, formData: FormData) => {
-      const shipmentId = String(formData.get("shipmentId") ?? "");
-      if (!shipmentId) {
-        return { ok: false as const, error: "Pošiljka nije izabrana." };
-      }
-      const shipment = await cancelReclamationShipment(shipmentId, actorId);
-      revalidatePath("/admin/erp/reklamacije-dnevnik");
-      return {
-        ok: true as const,
-        entityId: shipment.id,
-        diff: { status: shipment.status },
-      };
-    },
-  )(formData);
-}
-
 export default async function ReclamationsPage({
   searchParams,
 }: {
@@ -468,7 +191,7 @@ export default async function ReclamationsPage({
     ...(sp.reclamation ? { id: sp.reclamation } : {}),
   };
 
-  const [items, warehouses, erpModule] =
+  const [items, erpModule] =
     await Promise.all([
       db.reclamation.findMany({
         where,
@@ -476,22 +199,10 @@ export default async function ReclamationsPage({
         take: 100,
         include: {
           photos: true,
-          events: { orderBy: { createdAt: "desc" } },
           order: { select: { number: true } },
           orderItem: { select: { name: true, qty: true } },
           product: { select: { name: true } },
-          warehouse: { select: { id: true, code: true, name: true } },
-          shipments: {
-            where: { purpose: { not: "ORDER_DELIVERY" } },
-            orderBy: { createdAt: "desc" },
-            include: { events: { orderBy: { occurredAt: "desc" }, take: 5 } },
-          },
         },
-      }),
-      db.warehouse.findMany({
-        where: { active: true },
-        orderBy: [{ isDefault: "desc" }, { code: "asc" }],
-        select: { id: true, code: true, name: true },
       }),
       getErpModule("reklamacije-dnevnik", { take: 10_000 }),
     ]);
@@ -687,227 +398,6 @@ export default async function ReclamationsPage({
                     </div>
                   ) : null}
 
-                  <div className="hidden">
-                    <form action={updateReclamationDetails} className="space-y-3">
-                      <input type="hidden" name="id" value={reclamation.id} />
-                      <div className="grid gap-3 sm:grid-cols-3">
-                        <Field label="Odluka">
-                          <select
-                            name="decision"
-                            defaultValue={reclamation.decision}
-                            className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
-                          >
-                            {Object.values(ReclamationDecision).map((decision) => (
-                              <option key={decision} value={decision}>
-                                {DECISION_LABELS[decision]}
-                              </option>
-                            ))}
-                          </select>
-                        </Field>
-                        <Field label="Način rešavanja">
-                          <select
-                            name="resolution"
-                            defaultValue={reclamation.resolution ?? ""}
-                            className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
-                          >
-                            <option value="">Nije određeno</option>
-                            {Object.values(ReclamationResolution).map((resolution) => (
-                              <option key={resolution} value={resolution}>
-                                {RESOLUTION_LABELS[resolution] ?? resolution}
-                              </option>
-                            ))}
-                          </select>
-                        </Field>
-                        <Field label="Datum odgovora">
-                          <input
-                            name="respondedAt"
-                            type="date"
-                            defaultValue={dateOnly(reclamation.respondedAt)}
-                            className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
-                          />
-                        </Field>
-                      </div>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <Field label="Interna napomena">
-                          <Textarea
-                            name="adminNote"
-                            defaultValue={reclamation.adminNote ?? ""}
-                            rows={2}
-                          />
-                        </Field>
-                        <Field label="Napomena o rešenju">
-                          <Textarea
-                            name="resolutionNote"
-                            defaultValue={reclamation.resolutionNote ?? ""}
-                            rows={2}
-                          />
-                        </Field>
-                      </div>
-                      <div className="flex justify-end">
-                        <SubmitButton size="sm">Sačuvaj obradu</SubmitButton>
-                      </div>
-                    </form>
-
-                    <div className="space-y-3">
-                      <form action={updateWarehouse} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
-                        <input type="hidden" name="id" value={reclamation.id} />
-                        <Field label="Magacin">
-                          <select
-                            name="warehouseId"
-                            defaultValue={reclamation.warehouseId ?? ""}
-                            className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
-                            required
-                          >
-                            <option value="" disabled>
-                              Izaberite
-                            </option>
-                            {warehouses.map((warehouse) => (
-                              <option key={warehouse.id} value={warehouse.id}>
-                                {warehouse.code} · {warehouse.name}
-                              </option>
-                            ))}
-                          </select>
-                        </Field>
-                        <Field label="Status pripreme">
-                          <select
-                            name="warehouseStatus"
-                            defaultValue={reclamation.warehouseStatus}
-                            className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
-                          >
-                            {Object.values(ReclamationWarehouseStatus).map((warehouseStatus) => (
-                              <option key={warehouseStatus} value={warehouseStatus}>
-                                {WAREHOUSE_STATUS_LABELS[warehouseStatus]}
-                              </option>
-                            ))}
-                          </select>
-                        </Field>
-                        <div className="flex items-end justify-end">
-                          <SubmitButton size="sm" variant="outline">
-                            Sačuvaj magacin
-                          </SubmitButton>
-                        </div>
-                      </form>
-
-                      <div className="rounded-lg border border-border/60 p-3">
-                        <p className="text-xs font-medium uppercase tracking-wide text-ink-500">
-                          Povrat i zamena
-                        </p>
-                        <div className="mt-2 flex flex-wrap items-end gap-2">
-                          {(["RECLAMATION_RETURN", "RECLAMATION_REPLACEMENT"] as const).map(
-                            (purpose) => {
-                              const existing = reclamation.shipments.find(
-                                (shipment) => shipment.purpose === purpose,
-                              );
-                              return existing ? (
-                                <div
-                                  key={purpose}
-                                  className="min-w-56 rounded-md bg-muted-bg px-3 py-2 text-xs"
-                                >
-                                  <p className="font-medium text-ink-900">
-                                    {SHIPMENT_PURPOSE_LABELS[purpose]}
-                                  </p>
-                                  <p className="mt-0.5 text-ink-600">
-                                    {existing.provider ?? "Kurir"} · {existing.status}
-                                    {existing.trackingNo ? ` · ${existing.trackingNo}` : ""}
-                                  </p>
-                                  {existing.status !== "DELIVERED" &&
-                                  existing.status !== "RETURNED" ? (
-                                    <form action={cancelShipment} className="mt-2">
-                                      <input
-                                        type="hidden"
-                                        name="shipmentId"
-                                        value={existing.id}
-                                      />
-                                      <SubmitButton
-                                        size="xs"
-                                        variant="destructive"
-                                        confirm="Otkazati ovaj kurirski nalog? Akcija se šalje podržanom provajderu."
-                                      >
-                                        Otkaži
-                                      </SubmitButton>
-                                    </form>
-                                  ) : null}
-                                </div>
-                              ) : (
-                                <form
-                                  key={purpose}
-                                  action={createShipment}
-                                  className="flex items-end gap-2"
-                                >
-                                  <input type="hidden" name="id" value={reclamation.id} />
-                                  <input type="hidden" name="purpose" value={purpose} />
-                                  <Field label="Paketa">
-                                    <input
-                                      name="packageCount"
-                                      type="number"
-                                      min={1}
-                                      max={99}
-                                      defaultValue={1}
-                                      className="h-8 w-20 rounded-lg border border-input bg-transparent px-2 text-sm"
-                                    />
-                                  </Field>
-                                  <SubmitButton
-                                    size="sm"
-                                    confirm={`Kreirati kurirski nalog: ${SHIPMENT_PURPOSE_LABELS[purpose]}?`}
-                                  >
-                                    {purpose === "RECLAMATION_RETURN"
-                                      ? "Kreiraj povrat"
-                                      : "Dodaj zamenu u picking"}
-                                  </SubmitButton>
-                                </form>
-                              );
-                            },
-                          )}
-                        </div>
-                        <p className="mt-2 text-xs text-ink-500">
-                          Samo potvrđena isporuka zamene/dela automatski zatvara reklamaciju.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <form
-                    action={updateStatus}
-                    className="hidden"
-                  >
-                    <input type="hidden" name="id" value={reclamation.id} />
-                    <Field label="Novi status">
-                      <select
-                        name="status"
-                        defaultValue={reclamation.status}
-                        className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
-                      >
-                        {Object.values(ReclamationStatus).map((reclamationStatus) => (
-                          <option key={reclamationStatus} value={reclamationStatus}>
-                            {STATUS_LABELS[reclamationStatus]}
-                          </option>
-                        ))}
-                      </select>
-                    </Field>
-                    <Field label="Napomena (vidljiva interno)">
-                      <Textarea name="note" rows={2} />
-                    </Field>
-                    <div className="flex items-end justify-end">
-                      <SubmitButton size="sm">Sačuvaj</SubmitButton>
-                    </div>
-                  </form>
-
-                  {reclamation.events.length > 0 ? (
-                    <details className="hidden">
-                      <summary className="cursor-pointer">
-                        Istorija statusa ({reclamation.events.length})
-                      </summary>
-                      <ul className="mt-2 space-y-1">
-                        {reclamation.events.map((event) => (
-                          <li key={event.id}>
-                            {event.createdAt.toLocaleString("sr-Latn-RS")} ·{" "}
-                            {STATUS_LABELS[event.status]}
-                            {event.note ? ` — ${event.note}` : ""}
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
-                  ) : null}
                 </Card>
               ))
             )}
@@ -968,8 +458,4 @@ function FilterLink({
 
 function formatInteger(value: number) {
   return value.toLocaleString("sr-Latn-RS");
-}
-
-function dateOnly(value: Date | null) {
-  return value?.toISOString().slice(0, 10) ?? "";
 }

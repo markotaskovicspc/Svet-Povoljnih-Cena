@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import type { AdminNavGroup } from "@/lib/admin/nav";
@@ -19,9 +19,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ArrowDown, ArrowUp, MenuIcon, Settings2 } from "lucide-react";
+import { ArrowDown, ArrowUp, LoaderCircle, MenuIcon, Settings2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { activeAdminNavHref } from "@/lib/admin/nav";
+
+function NavigationPending() {
+  const { pending } = useLinkStatus();
+  return (
+    <span role="status" className="ml-auto inline-flex size-4 shrink-0">
+      {pending ? <><LoaderCircle aria-hidden className="size-4 motion-safe:animate-spin" /><span className="sr-only">Učitavanje…</span></> : null}
+    </span>
+  );
+}
 
 function AdminNavContent({
   nav,
@@ -66,14 +75,15 @@ function AdminNavContent({
                 onClick={onNavigate}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "rounded-lg px-2 py-1.5 transition-colors",
+                  "flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors",
                   item.nested && "ml-3 border-l border-border/70 pl-3 text-xs",
                   active
                     ? "bg-walnut/10 text-walnut"
                     : "text-ink-700 hover:bg-muted-bg hover:text-ink-900",
                 )}
               >
-                {item.label}
+                <span>{item.label}</span>
+                <NavigationPending />
               </Link>
             );
           })}
