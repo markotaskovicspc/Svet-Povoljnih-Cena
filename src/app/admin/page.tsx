@@ -1,9 +1,8 @@
-import Link from "next/link";
-import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { getDashboardData } from "@/lib/admin/dashboard-data";
 import { requireAdminAction } from "@/lib/admin";
 import { formatRsd } from "@/lib/format";
-import { resolveReportPeriod, type ReportPeriod } from "@/lib/admin/report-period";
+import { resolveReportPeriod } from "@/lib/admin/report-period";
 import {
   cleanDashboardContext,
   dashboardContextFromSavedColumns,
@@ -24,62 +23,6 @@ export const metadata = {
 };
 
 type DashboardParams = Partial<DashboardFilterContext> & { forbidden?: string };
-
-type WarehouseStockRow = {
-  id: string;
-  code: string;
-  name: string;
-  total_qty: number;
-  sku_count: number;
-  stock_value: number;
-  total_volume: number;
-  occupied_pallet_places: number;
-  missing_pallet_sku_count: number;
-};
-
-type IncomingSummary = {
-  order_count: number;
-  remaining_qty: number;
-  value_rsd: number;
-  total_volume: number;
-};
-
-type VisitSummary = {
-  active_now: number;
-  today: number;
-  daily_average_30d: number;
-};
-
-type ConversionSummary = {
-  visitors: number;
-  purchasers: number;
-  purchase_value: number;
-  cart_buyers: number;
-  converted_cart_buyers: number;
-};
-
-type FiscalTurnoverSummary = {
-  today_net: number;
-  period_net: number;
-};
-
-type LowStockRow = {
-  id: string;
-  sku: string;
-  name: string;
-  qty: number;
-  incoming_stock: number;
-};
-
-type DashboardTopProduct = {
-  sku: string;
-  name: string;
-  qty: number;
-};
-
-function periodFilter(period: ReportPeriod) {
-  return { gte: period.start, lt: period.endExclusive };
-}
 
 function formatVolume(value: number) {
   return `${value.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 2 })} m³`;
@@ -140,269 +83,21 @@ export default async function AdminDashboard({
   const selectedWarehouse = warehouses.find((warehouse) => warehouse.id === warehouseId);
   const warehouseLabel = selectedWarehouse?.name ?? "Svi magacini";
 
-  const orderWarehouseWhere: Prisma.OrderWhereInput = warehouseId
-    ? { items: { some: { warehouseId } } }
-    : {};
-  const reclamationWarehouseWhere: Prisma.ReclamationWhereInput = warehouseId
-    ? { warehouseId }
-    : {};
-  const fiscalWarehouseSql = warehouseId
-    ? Prisma.sql`AND f."warehouseId" = ${warehouseId}`
-    : Prisma.empty;
-  const orderItemWarehouseSql = warehouseId
-    ? Prisma.sql`AND oi."warehouseId" = ${warehouseId}`
-    : Prisma.empty;
-  const stockWarehouseSql = warehouseId
-    ? Prisma.sql`AND w.id = ${warehouseId}`
-    : Prisma.empty;
-  const purchaseWarehouseSql = warehouseId
-    ? Prisma.sql`AND po."receivingWarehouseId" = ${warehouseId}`
-    : Prisma.empty;
-
-  const [
-    ordersTodaySummary,
-    ordersInPeriodSummary,
-    fiscalRows,
-    reclamationCount,
-    topProducts,
-    warehouseStockRows,
-    incomingRows,
-    visitRows,
-    conversionRows,
-    lowStock,
-  ] = await Promise.all([
-    db.order.aggregate({
-      where: {
-        createdAt: periodFilter(todayPeriod),
-        ...orderWarehouseWhere,
-      },
-      _count: { _all: true },
-      _sum: { total: true, shipping: true },
-    }),
-    db.order.aggregate({
-      where: {
-        createdAt: periodFilter(ordersPeriod),
-        ...orderWarehouseWhere,
-      },
-      _count: { _all: true },
-      _sum: { total: true, shipping: true },
-    }),
-    db.$queryRaw<FiscalTurnoverSummary[]>(Prisma.sql`
-      SELECT
-        COALESCE(SUM(
-          CASE
-            WHEN f."issuedAt" >= ${todayPeriod.start}
-              AND f."issuedAt" < ${todayPeriod.endExclusive}
-            THEN CASE WHEN f.kind = 'SALE' THEN f."totalGross" ELSE -f."totalGross" END
-            ELSE 0
-          END
-        ), 0)::double precision AS today_net,
-        COALESCE(SUM(
-          CASE
-            WHEN f."issuedAt" >= ${fiscalPeriod.start}
-              AND f."issuedAt" < ${fiscalPeriod.endExclusive}
-            THEN CASE WHEN f.kind = 'SALE' THEN f."totalGross" ELSE -f."totalGross" END
-            ELSE 0
-          END
-        ), 0)::double precision AS period_net
-      FROM "FiscalDocument" f
-      WHERE f.status = 'ISSUED'
-        AND f.kind IN ('SALE', 'REFUND')
-        AND (
-          (f."issuedAt" >= ${todayPeriod.start} AND f."issuedAt" < ${todayPeriod.endExclusive})
-          OR
-          (f."issuedAt" >= ${fiscalPeriod.start} AND f."issuedAt" < ${fiscalPeriod.endExclusive})
-        )
-        ${fiscalWarehouseSql}
-    `),
-    db.reclamation.count({
-      where: {
-        createdAt: periodFilter(reclamationsPeriod),
-        ...reclamationWarehouseWhere,
-      },
-    }),
-    db.$queryRaw<DashboardTopProduct[]>(Prisma.sql`
-      SELECT
-        oi.sku,
-        oi.name,
-        COALESCE(SUM(oi.qty), 0)::int AS qty
-      FROM "OrderItem" oi
-      JOIN "Order" o ON o.id = oi."orderId"
-      WHERE o.status <> 'OTKAZANO'
-        AND o."createdAt" >= ${topProductsPeriod.start}
-        AND o."createdAt" < ${topProductsPeriod.endExclusive}
-        ${orderItemWarehouseSql}
-      GROUP BY oi.sku, oi.name
-      ORDER BY qty DESC, oi.sku ASC
-      LIMIT 10
-    `),
-    db.$queryRaw<WarehouseStockRow[]>(Prisma.sql`
-      SELECT
-        w.id,
-        w.code,
-        w.name,
-        COALESCE(SUM(GREATEST(ws.qty, 0)), 0)::int AS total_qty,
-        COUNT(DISTINCT CASE WHEN ws.qty > 0 THEN ws."productId" END)::int AS sku_count,
-        COALESCE(SUM(GREATEST(ws.qty, 0) * COALESCE(p.cogs, 0)), 0)::double precision AS stock_value,
-        COALESCE(SUM(
-          GREATEST(ws.qty, 0)
-          * CASE
-              WHEN p."containerQty" > 0
-                THEN 69.0 / p."containerQty"
-              WHEN p."packQty" > 0
-                AND p."packWidthCm" > 0
-                AND p."packDepthCm" > 0
-                AND p."packHeightCm" > 0
-                THEN p."packWidthCm"
-                  * p."packDepthCm"
-                  * p."packHeightCm"
-                  / 1000000.0
-                  / p."packQty"
-              ELSE 0
-            END
-        ), 0)::double precision AS total_volume,
-        COALESCE(SUM(
-          CASE
-            WHEN ws.qty > 0 AND p."palletQty" > 0
-            THEN CEIL(ws.qty::numeric / p."palletQty")
-            ELSE 0
-          END
-        ), 0)::int AS occupied_pallet_places,
-        COUNT(DISTINCT CASE
-          WHEN ws.qty > 0 AND (p."palletQty" IS NULL OR p."palletQty" <= 0)
-          THEN ws."productId"
-        END)::int AS missing_pallet_sku_count
-      FROM "Warehouse" w
-      LEFT JOIN "WarehouseStock" ws ON ws."warehouseId" = w.id
-      LEFT JOIN "Product" p ON p.id = ws."productId"
-      WHERE w.active = true
-      GROUP BY w.id, w.code, w.name
-      ORDER BY w.name ASC
-    `),
-    db.$queryRaw<IncomingSummary[]>(Prisma.sql`
-      SELECT
-        COUNT(DISTINCT po.id)::int AS order_count,
-        COALESCE(SUM(GREATEST(poi.qty - poi."receivedQty", 0)), 0)::int AS remaining_qty,
-        COALESCE(SUM(
-          GREATEST(poi.qty - poi."receivedQty", 0)
-          * poi."purchasePrice" * po."exchangeRate"
-        ), 0)::double precision AS value_rsd,
-        COALESCE(SUM(
-          CASE WHEN poi.qty > 0 THEN COALESCE(poi."totalVolume", 0)
-            * GREATEST(poi.qty - poi."receivedQty", 0)::numeric / poi.qty
-          ELSE 0 END
-        ), 0)::double precision AS total_volume
-      FROM "PurchaseOrder" po
-      LEFT JOIN "PurchaseOrderItem" poi ON poi."purchaseOrderId" = po.id
-      WHERE po.status IN ('DRAFT', 'SENT', 'CONFIRMED') ${purchaseWarehouseSql}
-    `),
-    db.$queryRaw<VisitSummary[]>(Prisma.sql`
-      WITH days AS (
-        SELECT generate_series(
-          ((${now}::timestamptz AT TIME ZONE 'Europe/Belgrade')::date - 29),
-          (${now}::timestamptz AT TIME ZONE 'Europe/Belgrade')::date,
-          interval '1 day'
-        )::date AS day
-      ), daily AS (
-        SELECT
-          d.day,
-          COUNT(DISTINCT COALESCE(a."sessionId", a."anonymousId"))::double precision AS visits
-        FROM days d
-        LEFT JOIN "AnalyticsEvent" a
-          ON a.type = 'PAGE_VIEW'
-          AND a."occurredAt" >= d.day::timestamp AT TIME ZONE 'Europe/Belgrade'
-          AND a."occurredAt" < (d.day + 1)::timestamp AT TIME ZONE 'Europe/Belgrade'
-        GROUP BY d.day
-      )
-      SELECT
-        (SELECT COUNT(DISTINCT COALESCE("sessionId", "anonymousId"))
-          FROM "AnalyticsEvent"
-          WHERE type = 'PAGE_VIEW'
-            AND "occurredAt" >= ${new Date(now.getTime() - 300_000)})::int AS active_now,
-        (SELECT COUNT(DISTINCT COALESCE("sessionId", "anonymousId"))
-          FROM "AnalyticsEvent"
-          WHERE type = 'PAGE_VIEW'
-            AND "occurredAt" >= ${todayPeriod.start}
-            AND "occurredAt" < ${todayPeriod.endExclusive})::int AS today,
-        COALESCE((SELECT AVG(visits) FROM daily), 0)::double precision AS daily_average_30d
-    `),
-    db.$queryRaw<ConversionSummary[]>(Prisma.sql`
-      WITH visitors AS (
-        SELECT DISTINCT a."anonymousId"
-        FROM "AnalyticsEvent" a
-        WHERE a.type = 'PAGE_VIEW'
-          AND a."occurredAt" >= ${analyticsPeriod.start}
-          AND a."occurredAt" < ${analyticsPeriod.endExclusive}
-      ), attributed AS (
-        SELECT DISTINCT ON (c."orderId")
-          c."orderId",
-          c."anonymousId",
-          COALESCE(c.value, 0)::double precision AS value
-        FROM "AnalyticsEvent" c
-        WHERE c.type = 'CHECKOUT_COMPLETED'
-          AND c."orderId" IS NOT NULL
-          AND c."occurredAt" >= ${analyticsPeriod.start}
-          AND c."occurredAt" < ${analyticsPeriod.endExclusive}
-          AND EXISTS (
-            SELECT 1
-            FROM "AnalyticsEvent" v
-            WHERE v.type = 'PAGE_VIEW'
-              AND v."anonymousId" = c."anonymousId"
-              AND v."occurredAt" <= c."occurredAt"
-              AND v."occurredAt" >= c."occurredAt" - interval '30 days'
-          )
-        ORDER BY c."orderId", c."occurredAt" ASC
-      ), cart_buyers AS (
-        SELECT
-          a."anonymousId",
-          MIN(a."occurredAt") AS first_cart_at
-        FROM "AnalyticsEvent" a
-        WHERE a.type = 'ADD_TO_CART'
-          AND a."occurredAt" >= ${analyticsPeriod.start}
-          AND a."occurredAt" < ${analyticsPeriod.endExclusive}
-        GROUP BY a."anonymousId"
-      ), converted_cart_buyers AS (
-        SELECT DISTINCT carts."anonymousId"
-        FROM cart_buyers carts
-        JOIN "AnalyticsEvent" c
-          ON c."anonymousId" = carts."anonymousId"
-          AND c.type = 'CHECKOUT_COMPLETED'
-          AND c."occurredAt" >= carts.first_cart_at
-          AND c."occurredAt" <= carts.first_cart_at + interval '30 days'
-      )
-      SELECT
-        (SELECT COUNT(*) FROM visitors)::int AS visitors,
-        (SELECT COUNT(DISTINCT "anonymousId") FROM attributed)::int AS purchasers,
-        COALESCE((SELECT SUM(value) FROM attributed), 0)::double precision AS purchase_value,
-        (SELECT COUNT(*) FROM cart_buyers)::int AS cart_buyers,
-        (SELECT COUNT(*) FROM converted_cart_buyers)::int AS converted_cart_buyers
-    `),
-    db.$queryRaw<LowStockRow[]>(Prisma.sql`
-      SELECT
-        p.id,
-        p.sku,
-        p.name,
-        COALESCE(SUM(CASE WHEN w.id IS NOT NULL THEN ws.qty ELSE 0 END), 0)::int AS qty,
-        p."incomingStock"::int AS incoming_stock
-      FROM "Product" p
-      LEFT JOIN "WarehouseStock" ws ON ws."productId" = p.id
-      LEFT JOIN "Warehouse" w
-        ON w.id = ws."warehouseId" AND w.active = true ${stockWarehouseSql}
-      WHERE p."isActive" = true
-      GROUP BY p.id, p.sku, p.name, p."incomingStock"
-      HAVING COALESCE(SUM(CASE WHEN w.id IS NOT NULL THEN ws.qty ELSE 0 END), 0) <= 2
-      ORDER BY qty ASC, p.name ASC
-      LIMIT 8
-    `),
-  ]);
+  const {
+    orderSummary, fiscalRows, reclamationCount, topProducts,
+    warehouseStockRows, incomingRows, visitRows, conversionRows, lowStock,
+  } = await getDashboardData({
+    now, warehouseId, todayPeriod, ordersPeriod, fiscalPeriod,
+    reclamationsPeriod, topProductsPeriod, analyticsPeriod,
+  });
 
   const fiscal = fiscalRows[0] ?? { today_net: 0, period_net: 0 };
-  const ordersToday = ordersTodaySummary._count._all;
-  const ordersTodayAmount = Number(ordersTodaySummary._sum.total ?? 0);
-  const ordersTodayShipping = Number(ordersTodaySummary._sum.shipping ?? 0);
-  const ordersInPeriod = ordersInPeriodSummary._count._all;
-  const ordersInPeriodAmount = Number(ordersInPeriodSummary._sum.total ?? 0);
-  const ordersInPeriodShipping = Number(ordersInPeriodSummary._sum.shipping ?? 0);
+  const ordersToday = orderSummary.today_count;
+  const ordersTodayAmount = orderSummary.today_total;
+  const ordersTodayShipping = orderSummary.today_shipping;
+  const ordersInPeriod = orderSummary.period_count;
+  const ordersInPeriodAmount = orderSummary.period_total;
+  const ordersInPeriodShipping = orderSummary.period_shipping;
   const incoming = incomingRows[0] ?? {
     order_count: 0,
     remaining_qty: 0,
@@ -471,12 +166,12 @@ export default async function AdminDashboard({
 
         <div className="space-y-2">
           <div className="flex flex-wrap gap-2">
-            <Link href={orderExport} className="rounded-lg border border-border px-3 py-2 text-sm text-ink-700">
+            <a href={orderExport} className="rounded-lg border border-border px-3 py-2 text-sm text-ink-700">
               XLSX porudžbine
-            </Link>
-            <Link href={fiscalExport} className="rounded-lg border border-border px-3 py-2 text-sm text-ink-700">
+            </a>
+            <a href={fiscalExport} className="rounded-lg border border-border px-3 py-2 text-sm text-ink-700">
               XLSX fiskalizovane porudžbine
-            </Link>
+            </a>
           </div>
           <p className="text-xs text-ink-500">
             Fiskalizovani XLSX prati izdate prodajne dokumente; refundacije umanjuju neto kartice, ali nisu zasebni redovi izvoza porudžbina.

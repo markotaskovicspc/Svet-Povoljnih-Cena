@@ -83,6 +83,12 @@ export async function GET(
 ) {
   const { module: slug } = await context.params;
   await requireAdminAction(allowedRolesForErpModule(slug));
+  // Downloads are expensive and must only be prepared for an explicit request.
+  // Old open admin tabs may still contain Next links that prefetch this route.
+  const purpose = `${request.headers.get("purpose") ?? ""} ${request.headers.get("sec-purpose") ?? ""}`;
+  if (request.headers.get("next-router-prefetch") === "1" || /\bprefetch\b/i.test(purpose)) {
+    return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+  }
   const search = new URL(request.url).searchParams;
   const requestedSearchColumn = search.get("searchColumn") ?? "";
   const fiscalStatus = search.get("fiscalStatus");
