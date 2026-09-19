@@ -1,5 +1,8 @@
 import "server-only";
 import { runNewsletterBatches } from "./batch-runner";
+import { newsletterDeliveryPolicy } from "./delivery-policy";
+import { withNewsletterDeliveryPacing } from "./delivery-pacing";
+import { BackgroundJobDeferredError } from "@/lib/background-job-deferral";
 
 import {
   NewsletterCampaignStatus,
@@ -39,6 +42,7 @@ import {
 } from "./content";
 
 const editableStatuses = new Set<NewsletterCampaignStatus>(["DRAFT", "IN_REVIEW"]);
+export class NewsletterSendPausedError extends Error {}
 const twoPersonThreshold = () => {
   const value = Number.parseInt(process.env.NEWSLETTER_TWO_PERSON_APPROVAL_THRESHOLD ?? "1000", 10);
   return Number.isFinite(value) ? Math.max(1, value) : 1_000;
@@ -307,45 +311,7 @@ export async function cancelNewsletterCampaign(campaignId: string, actorId: stri
   });
 }
 
-export async function retryNewsletterCampaign(campaignId: string, actorId: string) {
-  const campaign = await db.newsletterCampaign.findUniqueOrThrow({ where: { id: campaignId } });
-  if (!["FAILED", "PARTIAL_FAILED"].includes(campaign.status)) {
-    throw new Error("Ponovno slanje je dozvoljeno samo za kampanju sa greškom.");
-  }
-  const now = new Date();
-  await db.$transaction([
-    db.newsletterCampaign.update({
-      where: { id: campaignId },
-      data: {
-        status: "SCHEDULED",
-        scheduledAt: now,
-        failureReason: null,
-        updatedById: actorId,
-      },
-    }),
-    db.backgroundJob.upsert({
-      where: { idempotencyKey: `newsletter-send:${campaignId}` },
-      create: {
-        kind: "NEWSLETTER_CAMPAIGN_SEND",
-        payload: { campaignId },
-        idempotencyKey: `newsletter-send:${campaignId}`,
-        maxAttempts: 8,
-        availableAt: now,
-      },
-      update: {
-        payload: { campaignId },
-        status: "QUEUED",
-        attempts: 0,
-        maxAttempts: 8,
-        availableAt: now,
-        lockedAt: null,
-        completedAt: null,
-        lastError: null,
-      },
-    }),
-  ]);
-  return { scheduledAt: now };
-}
+export { retryNewsletterCampaign } from "./retry";
 
 export async function duplicateNewsletterCampaign(campaignId: string, actorId: string) {
   const source = await db.newsletterCampaign.findUniqueOrThrow({ where: { id: campaignId } });
@@ -585,7 +551,7 @@ export async function sendNewsletterCampaign(campaignId: string, options: { defe
   const recipients = await finalEligibleRecipients(
     campaignId,
     campaign.includeContactsWithoutConsent,
-    cfg.provider === "ses" ? sesNewsletterBatchSize() : undefined,
+    cfg.provider === "ses" ? newsletterDeliveryPolicy().batchSize : undefined,
     filter,
   );
   if (!recipients.length) {
@@ -639,7 +605,9 @@ export async function sendNewsletterCampaign(campaignId: string, options: { defe
     if (!cfg.sesCredentialsConfigured) {
       throw new Error("Amazon SES pristup nije konfigurisan.");
     }
-    return sendSesNewsletterBatch({ campaign, recipients, rendered, cfg, deferContinuation: options.deferContinuation });
+    return withNewsletterDeliveryPacing(cfg.sesRegion, () =>
+      sendSesNewsletterBatch({ campaign, recipients, rendered, cfg, deferContinuation: options.deferContinuation }),
+    );
   }
   if (!cfg.apiKey) throw new Error("Email provider pristup nije konfigurisan.");
   if (cfg.provider !== "resend") throw new Error("Newsletter Broadcast slanje zahteva Resend provider.");
@@ -798,6 +766,7 @@ function isMissingResendSegment(error: unknown) {
 }
 
 export async function failNewsletterCampaign(campaignId: string, error: unknown) {
+  if (error instanceof BackgroundJobDeferredError) return;
   const message = error instanceof Error ? error.message : String(error);
   await db.newsletterCampaign.updateMany({
     where: {
@@ -1051,7 +1020,7 @@ async function sendSesNewsletterBatch(args: {
         where: { id: { in: recipients.map((row) => row.id) }, status: "FAILED", failureReason: "ses:delivery_unknown" },
         data: { failureReason: result.error.slice(0, 4000) },
       });
-      throw new Error(`Amazon SES je odbio ovu grupu poruka: nedostaje AWS dozvola ses:SendBulkEmail za izabranog pošiljaoca. Ova grupa nije poslata. ${result.error}`);
+      throw new NewsletterSendPausedError(`Amazon SES je odbio ovu grupu poruka: nedostaje AWS dozvola ses:SendBulkEmail za izabranog pošiljaoca. Ova grupa nije poslata. ${result.error}`);
     }
     // Explicit throttling is safe to retry automatically.
     if (/^ses:(TooManyRequestsException|ThrottlingException)\b/.test(result.error)) {
@@ -1059,8 +1028,9 @@ async function sendSesNewsletterBatch(args: {
         where: { id: { in: recipients.map((row) => row.id) }, status: "FAILED", failureReason: "ses:delivery_unknown" },
         data: { status: "QUEUED", failureReason: result.error.slice(0, 4000) },
       });
+      throw new Error(`SES je privremeno ograničio brzinu slanja. Pokušaj će biti ponovljen kasnije. ${result.error}`);
     }
-    throw new Error(`SES prijem nije potvrđen. Poruke sa nepoznatim ishodom neće se automatski ponavljati. ${result.error}`);
+    throw new NewsletterSendPausedError(`SES prijem nije potvrđen. Poruke sa nepoznatim ishodom neće se automatski ponavljati. ${result.error}`);
   }
 
   const recipientByEmail = new Map(
@@ -1146,7 +1116,7 @@ async function enqueueSesNewsletterContinuation(campaignId: string, cursor: stri
       payload: { campaignId },
       idempotencyKey,
       maxAttempts: 8,
-      availableAt: new Date(Date.now() + 60_000),
+      availableAt: new Date(Date.now() + newsletterDeliveryPolicy().intervalMs),
     },
     update: {},
   });
@@ -1191,11 +1161,6 @@ function isRetryableSesRecipientError(error: string | null) {
     "ACCOUNT_DAILY_QUOTA_EXCEEDED",
     "TRANSIENT_FAILURE",
   ].some((code) => error.includes(`ses:${code}`)));
-}
-
-function sesNewsletterBatchSize() {
-  const value = Number.parseInt(process.env.SES_NEWSLETTER_BATCH_SIZE ?? "", 10);
-  return Number.isFinite(value) ? Math.min(Math.max(value, 1), 50) : 10;
 }
 
 async function markCampaignAccepted(campaignId: string) {

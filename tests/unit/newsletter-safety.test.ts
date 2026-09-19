@@ -15,6 +15,7 @@ vi.mock("@/lib/db", () => ({
     backgroundJob: { upsert: mocks.jobs },
   },
 }));
+vi.mock("@/lib/newsletter/delivery-pacing", () => ({ withNewsletterDeliveryPacing: (_region: string, send: () => Promise<unknown>) => send() }));
 vi.mock("@/lib/email/config", () => ({ getEmailConfig: () => ({ provider: "ses", sesCredentialsConfigured: true, sesRegion: "eu-central-1", sesConfigurationSet: "test", sesSnsTopicArn: "test", baseUrl: "https://example.com", marketingFrom: "test@example.com" }) }));
 vi.mock("@/lib/email/ses", () => ({ dispatchSesBulk: mocks.bulk }));
 vi.mock("@/lib/email/tracking", () => ({ trackedDispatch: mocks.tracked }));
@@ -24,7 +25,7 @@ vi.mock("@/lib/newsletter/content", async () => {
   return { newsletterContentSchema: z.array(z.unknown()), defaultNewsletterContent: () => [], renderNewsletterCampaign: mocks.render };
 });
 import { builtInNewsletterAudiences, matchesAudienceFilter, resolveNewsletterAudience } from "@/lib/newsletter/audience";
-import { saveCampaignSchema, sendNewsletterCampaign, sendNewsletterCampaignTest } from "@/lib/newsletter/campaigns";
+import { saveCampaignSchema, sendNewsletterCampaign, sendNewsletterCampaignTest, NewsletterSendPausedError } from "@/lib/newsletter/campaigns";
 import { recordSesNewsletterEvent } from "@/lib/newsletter/ses-events";
 
 const contact = { id: "c1", email: "guest@example.com", firstName: null, lastName: null, language: "sr-Latn", status: "ACTIVE", subscribedAt: new Date(), userId: null, tags: [], source: "footer" };
@@ -78,14 +79,14 @@ describe("newsletter audience and send safeguards", () => {
       expect(mocks.behavior.mock.calls[0][0].sql).toContain("ses:delivery_unknown");
       return { ok: false, error: "ses:TimeoutError response lost" };
     });
-    await expect(sendNewsletterCampaign("campaign1")).rejects.toThrow("neće se automatski ponavljati");
+    await expect(sendNewsletterCampaign("campaign1")).rejects.toBeInstanceOf(NewsletterSendPausedError);
     expect(mocks.updateMany.mock.calls.some(([arg]) => arg.data.status === "QUEUED")).toBe(false);
   });
   it("records explicit AWS permission rejection as failed without requeueing or claiming an unknown outcome", async () => {
     mocks.behavior.mockResolvedValue([{ id: "r1" }]);
     const error = "ses:AccessDeniedException status=403 requestId=test retryable=false message=not authorized to perform ses:SendBulkEmail";
     mocks.bulk.mockResolvedValue({ ok: false, error });
-    await expect(sendNewsletterCampaign("campaign1")).rejects.toThrow("Ova grupa nije poslata");
+    await expect(sendNewsletterCampaign("campaign1")).rejects.toBeInstanceOf(NewsletterSendPausedError);
     expect(mocks.updateMany).toHaveBeenCalledWith({
       where: { id: { in: ["r1"] }, status: "FAILED", failureReason: "ses:delivery_unknown" },
       data: { failureReason: error },

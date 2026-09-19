@@ -13,7 +13,7 @@ import { NewsletterContactOverview } from "@/components/admin/newsletter-contact
 beforeEach(() => vi.clearAllMocks());
 
 it("keeps all known addresses separate from consent and send eligibility", async () => {
-  mocks.query.mockResolvedValue([{ total: 70000n, activeConsent: 334n, eligible: 330n, legacyConsentMissingContact: 12n }]);
+  mocks.query.mockResolvedValue([{ total: BigInt(70000), activeConsent: BigInt(334), eligible: BigInt(330), legacyConsentMissingContact: BigInt(12) }]);
   const counts = await getNewsletterContactOverview();
   expect(counts).toEqual({ total: 70000, activeConsent: 334, withoutActiveConsent: 69666, eligible: 330, legacyConsentMissingContact: 12 });
   const html = renderToStaticMarkup(<NewsletterContactOverview counts={counts} />);
@@ -27,7 +27,7 @@ it("keeps all known addresses separate from consent and send eligibility", async
 });
 
 it("shows an empty database honestly and does not warn about missing migration", async () => {
-  mocks.query.mockResolvedValue([{ total: 0n, activeConsent: 0n, eligible: 0n, legacyConsentMissingContact: 0n }]);
+  mocks.query.mockResolvedValue([{ total: BigInt(0), activeConsent: BigInt(0), eligible: BigInt(0), legacyConsentMissingContact: BigInt(0) }]);
   const counts = await getNewsletterContactOverview();
   expect(counts).toEqual({ total: 0, activeConsent: 0, withoutActiveConsent: 0, eligible: 0, legacyConsentMissingContact: 0 });
   const html = renderToStaticMarkup(<NewsletterContactOverview counts={counts} />);

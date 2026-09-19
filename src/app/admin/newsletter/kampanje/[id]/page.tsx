@@ -7,6 +7,8 @@ import { getEmailConfig } from "@/lib/email/config";
 import { builtInNewsletterAudiences, selectedNewsletterAudiences } from "@/lib/newsletter/audience";
 import { getNewsletterContactOverview } from "@/lib/newsletter/contact-overview";
 import { NewsletterContactOverview } from "@/components/admin/newsletter-contact-overview";
+import { newsletterDeliveryPolicy } from "@/lib/newsletter/delivery-policy";
+import { newsletterRetrySummary } from "@/lib/newsletter/retry";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { Card, CardTitle, StatCard } from "@/components/admin/card";
 import { DataTable } from "@/components/admin/data-table";
@@ -73,7 +75,7 @@ export default async function NewsletterCampaignPage({
 }) {
   const admin = await requireAdminAction(["ADS"]);
   const { id } = await params;
-  const [campaign, savedAudiences, products, recipients, contactOverview] = await Promise.all([
+  const [campaign, savedAudiences, products, recipients, contactOverview, retrySummary] = await Promise.all([
     db.newsletterCampaign.findUnique({
       where: { id },
       include: {
@@ -90,6 +92,7 @@ export default async function NewsletterCampaignPage({
     }),
     db.newsletterCampaignRecipient.findMany({ where: { campaignId: id }, orderBy: { updatedAt: "desc" }, take: 200 }),
     getNewsletterContactOverview(),
+    newsletterRetrySummary(id),
   ]);
   if (!campaign) notFound();
   const audiences = [...builtInNewsletterAudiences, ...savedAudiences.map((audience) => ({ ...audience, description: "" }))];
@@ -148,7 +151,7 @@ export default async function NewsletterCampaignPage({
         </div>
 
         <a href="#test-email" className="inline-flex rounded-lg border border-border px-4 py-2 text-sm font-medium text-walnut hover:bg-muted-bg">Pošalji test na određenu adresu</a>
-        <WorkflowCard campaign={campaign} currentAdminId={admin.id} />
+        <WorkflowCard campaign={campaign} currentAdminId={admin.id} retrySummary={retrySummary} />
 
         {editable ? (
           <Card>
@@ -211,6 +214,12 @@ export default async function NewsletterCampaignPage({
                   </p>
                 </Field>
                 <p className="text-sm text-ink-600 lg:col-span-2">Sve grupe uključuju samo kontakte sa zabeleženom saglasnošću. Odjavljeni kontakti, odbijene adrese i prijave spama automatski se izostavljaju.</p>
+                <label className="flex items-start gap-3 rounded-xl border border-border/70 p-3 text-sm text-ink-500 lg:col-span-2">
+                  <input type="checkbox" disabled aria-describedby="no-consent-unavailable" className="mt-1" />
+                  <span>Uključi kontakte bez saglasnosti — nije aktivno
+                    <span id="no-consent-unavailable" className="mt-1 block text-xs">Nije dostupno za marketinško slanje preko SES-a. Slanje u paketima ne zamenjuje saglasnost.</span>
+                  </span>
+                </label>
               </div>
               <details className="rounded-xl border border-border/70 p-4">
                 <summary className="cursor-pointer text-sm font-medium">Pošiljalac i reply-to (opciono)</summary>
@@ -304,6 +313,7 @@ export default async function NewsletterCampaignPage({
 function WorkflowCard({
   campaign,
   currentAdminId,
+  retrySummary,
 }: {
   campaign: {
     id: string;
@@ -318,12 +328,18 @@ function WorkflowCard({
     includeContactsWithoutConsent: boolean;
   };
   currentAdminId: string;
+  retrySummary: Awaited<ReturnType<typeof newsletterRetrySummary>>;
 }) {
+  const pacing = newsletterDeliveryPolicy();
   const threshold = Number.parseInt(process.env.NEWSLETTER_TWO_PERSON_APPROVAL_THRESHOLD ?? "1000", 10) || 1_000;
   const needsSecondAdmin = (campaign.recipients ?? 0) >= threshold && campaign.createdById === currentAdminId;
   return (
     <Card>
       <CardTitle description="Tok je: nacrt → provera → odobrenje → zakazivanje/slanje. Podobnost kontakata se proverava ponovo neposredno pre slanja.">Kontrola slanja</CardTitle>
+      <p className="mb-4 rounded-xl bg-muted-bg p-3 text-sm">Postepeno slanje: najviše {pacing.batchSize} mejlova po paketu, sa najmanje {pacing.intervalMs / 1000} sekundi razmaka. Tempo se deli između newsletter kampanja; obrada reda i SES ograničenja mogu produžiti slanje.</p>
+      {campaign.status === "FAILED" || campaign.status === "PARTIAL_FAILED" ? (
+        <p className="mb-4 text-sm text-ink-600">Čeka slanje: {retrySummary.queued}. Potvrđeno odbijeno, može ponovo: {retrySummary.retryable}. Nepoznat ishod, potrebna provera SES-a: {retrySummary.unknown}. Već prihvaćene poruke se ne ponavljaju.</p>
+      ) : null}
       <div className="mb-4 flex flex-wrap items-center gap-2 text-xs">
         {(["DRAFT", "IN_REVIEW", "APPROVED", "SCHEDULED", "SENT"] as NewsletterCampaignStatus[]).map((step, index) => (
           <span key={step} className={cn("rounded-full px-3 py-1", workflowReached(campaign.status, step) ? "bg-walnut text-white" : "bg-muted-bg text-ink-500")}>{index + 1}. {campaignLabel[step]}</span>
@@ -375,9 +391,9 @@ function WorkflowCard({
             <SubmitButton
               variant="outline"
               pendingLabel="Vraćam u red…"
-              confirm="Ponovo pokušati slanje iste kampanje? Idempotency zaštita sprečava duplikat ako je provider već prihvatio prethodni pokušaj."
+              confirm="Nastaviti slanje postojećoj listi i ponoviti samo potvrđeno odbijene poruke? Već prihvaćene poruke i nepoznati ishodi neće biti ponovljeni."
             >
-              Ponovi slanje
+              Ponovi samo neposlate
             </SubmitButton>
           </AdminActionForm>
         ) : null}
