@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NewsletterImageField } from "@/components/admin/newsletter-image-field";
 import { Textarea } from "@/components/ui/textarea";
 
 type Block =
@@ -45,9 +46,11 @@ function normalizeBlocks(input: unknown): Block[] {
 }
 
 export function NewsletterBlockEditor({
+  campaignId,
   initialContent,
   products,
 }: {
+  campaignId: string;
   initialContent: unknown;
   products: Array<{ sku: string; name: string }>;
 }) {
@@ -102,7 +105,16 @@ export function NewsletterBlockEditor({
             {block.type === "text" ? <Textarea value={block.text} onChange={(event) => update(block.id, { text: event.target.value })} rows={5} placeholder="Tekst poruke" /> : null}
             {block.type === "image" ? (
               <div className="grid gap-2 md:grid-cols-2">
-                <Input value={block.url} onChange={(event) => update(block.id, { url: event.target.value })} placeholder="https://… URL slike" />
+                <div className="md:col-span-2">
+                  <NewsletterImageField campaignId={campaignId} url={block.url}
+                    onUrlChange={(url) => update(block.id, { url })}
+                    onUploaded={(url, filename) => setBlocks((current) => current.map((item) =>
+                      item.id === block.id && item.type === "image" ? {
+                        ...item, url,
+                        alt: item.alt || filename.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").slice(0, 240) || "Slika",
+                      } : item,
+                    ))} />
+                </div>
                 <Input value={block.alt} onChange={(event) => update(block.id, { alt: event.target.value })} placeholder="Opis slike (alt)" />
                 <Input className="md:col-span-2" value={block.href} onChange={(event) => update(block.id, { href: event.target.value })} placeholder="Opcioni link slike" />
               </div>

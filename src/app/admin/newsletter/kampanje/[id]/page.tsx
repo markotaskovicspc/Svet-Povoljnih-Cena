@@ -232,6 +232,7 @@ export default async function NewsletterCampaignPage({
                 </div>
               </details>
               <NewsletterBlockEditor
+                campaignId={campaign.id}
                 initialContent={campaign.content}
                 products={products.map((product) => ({ sku: product.sku, name: product.shortName ?? product.name }))}
               />
