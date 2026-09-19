@@ -49,6 +49,10 @@ describe("Amazon SES bulk transport", () => {
       BulkEmailEntries: [
         {
           Destination: { ToAddresses: ["prvi@example.com"] },
+          ReplacementHeaders: [
+            { Name: "List-Unsubscribe", Value: "<https://example.com/u/1>" },
+            { Name: "List-Unsubscribe-Post", Value: "List-Unsubscribe=One-Click" },
+          ],
           ReplacementEmailContent: {
             ReplacementTemplate: {
               ReplacementTemplateData: JSON.stringify({

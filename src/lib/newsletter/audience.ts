@@ -9,6 +9,8 @@ export const audienceFieldSchema = z.enum([
   "tag",
   "subscribedAt",
   "registered",
+  "hasPurchased",
+  "abandonedCheckout",
   "city",
   "language",
   "orderCount",
@@ -106,6 +108,8 @@ export type AudienceProfile = {
   tags: string[];
   subscribedAt: Date | null;
   registered: boolean;
+  hasPurchased?: boolean;
+  abandonedCheckout?: boolean;
   cities: string[];
   orderCount: number;
   totalSpend: number;
@@ -125,6 +129,7 @@ export type AudienceRecipient = Pick<
 
 type ResolveNewsletterAudienceOptions = {
   includeContactsWithoutConsent?: boolean;
+  restrictContactIds?: string[];
 };
 
 export function matchesAudienceFilter(profile: AudienceProfile, rawFilter: unknown) {
@@ -173,6 +178,7 @@ export async function resolveNewsletterAudience(
   options: ResolveNewsletterAudienceOptions = {},
   limit = maximumAudienceContacts(),
 ) {
+  // Legacy callers may still supply this flag; it never grants marketing consent.
   const filter = newsletterAudienceFilterSchema.parse(rawFilter ?? {});
   const savedFilters = [
     filter,
@@ -186,10 +192,11 @@ export async function resolveNewsletterAudience(
   const safeLimit = Math.min(Math.max(Math.trunc(limit), 1), 250_000);
   const contacts = await db.marketingContact.findMany({
     where: {
-      ...(options.includeContactsWithoutConsent
-        ? { status: { in: ["ACTIVE" as const, "PENDING" as const] } }
-        : { status: "ACTIVE" as const, subscribedAt: { not: null } }),
-      ...(filter.manualContactIds.length ? { id: { in: filter.manualContactIds } } : {}),
+      status: "ACTIVE" as const, subscribedAt: { not: null },
+      AND: [
+        ...(filter.manualContactIds.length ? [{ id: { in: filter.manualContactIds } }] : []),
+        ...(options.restrictContactIds ? [{ id: { in: options.restrictContactIds } }] : []),
+      ],
     },
     take: safeLimit + 1,
     orderBy: { subscribedAt: "asc" },
@@ -198,6 +205,30 @@ export async function resolveNewsletterAudience(
     throw new Error(
       `Publika prelazi bezbedni limit od ${safeLimit.toLocaleString("sr-Latn-RS")} kontakata. Sužite filter pre slanja.`,
     );
+  }
+  const behavior = new Map<string, { registered: boolean; hasPurchased: boolean; abandonedCheckout: boolean }>();
+  if (contacts.length && ["registered", "hasPurchased", "abandonedCheckout"].some((field) => fields.has(field as z.infer<typeof audienceFieldSchema>))) {
+    const rows = await db.$queryRaw<Array<{ contactId: string; registered: boolean; hasPurchased: boolean; abandonedCheckout: boolean }>>(Prisma.sql`
+      SELECT c."id" AS "contactId",
+        EXISTS (SELECT 1 FROM ${databaseIdentifier("User")} u
+          WHERE u."deletedAt" IS NULL AND (u."id" = c."userId" OR lower(u."email") = lower(c."email"))) AS "registered",
+        EXISTS (SELECT 1 FROM ${databaseIdentifier("Order")} o
+          WHERE (o."userId" = c."userId" OR lower(o."guestEmail") = lower(c."email")
+            OR o."userId" IN (SELECT u."id" FROM ${databaseIdentifier("User")} u WHERE lower(u."email") = lower(c."email")))
+            AND o."status" NOT IN ('KREIRANO', 'OTKAZANO', 'VRACENO')) AS "hasPurchased",
+        EXISTS (SELECT 1 FROM ${databaseIdentifier("CheckoutSession")} cs
+          WHERE (cs."userId" = c."userId" OR lower(cs."guestEmail") = lower(c."email")
+            OR cs."userId" IN (SELECT u."id" FROM ${databaseIdentifier("User")} u WHERE lower(u."email") = lower(c."email")))
+            AND cs."orderId" IS NULL AND cs."status" IN ('ACTIVE', 'ABANDONED') AND cs."lineCount" > 0
+            AND cs."lastActivityAt" < NOW() - INTERVAL '1 hour'
+            AND cs."lastActivityAt" >= NOW() - INTERVAL '30 days'
+        ) AND NOT EXISTS (SELECT 1 FROM ${databaseIdentifier("Order")} o
+          WHERE (o."userId" = c."userId" OR lower(o."guestEmail") = lower(c."email")
+            OR o."userId" IN (SELECT u."id" FROM ${databaseIdentifier("User")} u WHERE lower(u."email") = lower(c."email")))
+            AND o."status" NOT IN ('OTKAZANO', 'VRACENO')) AS "abandonedCheckout"
+      FROM ${databaseIdentifier("MarketingContact")} c WHERE c."id" IN (${Prisma.join(contacts.map((contact) => contact.id))})
+    `);
+    for (const row of rows) behavior.set(row.contactId, row);
   }
   const userIds = unique(contacts.map((contact) => contact.userId).filter(isString));
   const needsOrderStats = (["orderCount", "totalSpend", "lastPurchaseAt"] as const).some((field) => fields.has(field));
@@ -275,10 +306,10 @@ export async function resolveNewsletterAudience(
   const recipients: AudienceRecipient[] = [];
   let excludedSuppressed = 0;
   let excludedRules = 0;
-  let matchedWithoutConsent = 0;
+  const matchedWithoutConsent = 0;
 
   for (const contact of contacts) {
-    if (contact.status !== "ACTIVE" && contact.status !== "PENDING") continue;
+    if (contact.status !== "ACTIVE" || !contact.subscribedAt) continue;
     if (suppressed.has(contact.email.toLowerCase())) {
       excludedSuppressed += 1;
       continue;
@@ -298,7 +329,9 @@ export async function resolveNewsletterAudience(
       source: contact.source,
       tags: contact.tags,
       subscribedAt: contact.subscribedAt,
-      registered: Boolean(contact.userId),
+      registered: behavior.get(contact.id)?.registered ?? Boolean(contact.userId),
+      hasPurchased: behavior.get(contact.id)?.hasPurchased ?? false,
+      abandonedCheckout: behavior.get(contact.id)?.abandonedCheckout ?? false,
       cities: contact.userId ? cities.get(contact.userId) ?? [] : [],
       orderCount: stats?._count._all ?? 0,
       totalSpend: Number(stats?._sum.total ?? 0),
@@ -322,7 +355,7 @@ export async function resolveNewsletterAudience(
       language: contact.language,
       status: contact.status,
     });
-    if (contact.status === "PENDING") matchedWithoutConsent += 1;
+
   }
   return {
     filter,
@@ -429,6 +462,8 @@ function ruleValue(profile: AudienceProfile, field: z.infer<typeof audienceField
     case "tag": return profile.tags;
     case "subscribedAt": return profile.subscribedAt;
     case "registered": return profile.registered;
+    case "hasPurchased": return profile.hasPurchased ?? false;
+    case "abandonedCheckout": return profile.abandonedCheckout ?? false;
     case "city": return profile.cities;
     case "language": return profile.language;
     case "orderCount": return profile.orderCount;
@@ -447,7 +482,7 @@ function normalize(value: unknown) {
 }
 
 function operatorsForField(field: z.infer<typeof audienceFieldSchema>) {
-  if (field === "registered") return ["is_true", "is_false"];
+  if (["registered", "hasPurchased", "abandonedCheckout"].includes(field)) return ["is_true", "is_false"];
   if (field === "subscribedAt" || field === "lastPurchaseAt") return ["before", "after"];
   if (field === "orderCount" || field === "totalSpend") return ["gte", "lte", "equals"];
   return ["equals", "not_equals", "contains", "not_contains"];
@@ -496,3 +531,16 @@ function groupRows<T>(rows: T[], key: (row: T) => string | null) {
 export function audienceFilterJson(filter: NewsletterAudienceFilter): Prisma.InputJsonValue {
   return filter as Prisma.InputJsonValue;
 }
+
+/** Stable built-in audiences are snapshotted just like saved custom segments. */
+export const builtInNewsletterAudiences = [
+  { id: "builtin:subscribers", name: "Svi prijavljeni na newsletter", description: "Samo kontakti sa potvrđenom saglasnošću.", rules: [] },
+  { id: "builtin:registered", name: "Registrovani korisnici", description: "Korisnici sa nalogom i saglasnošću za promocije.", rules: [{ id: "registered", field: "registered", operator: "is_true" }] },
+  { id: "builtin:buyers", name: "Postojeći kupci", description: "Kupci sa nalogom i gosti koji su kupili, uz saglasnost.", rules: [{ id: "buyers", field: "hasPurchased", operator: "is_true" }] },
+  { id: "builtin:abandoned", name: "Nezavršena kupovina", description: "Checkout pre 1 h–30 dana, bez porudžbine i uz newsletter saglasnost. Dozvola za podsetnik korpe nije dovoljna.", rules: [{ id: "abandoned", field: "abandonedCheckout", operator: "is_true" }] },
+  { id: "builtin:registered-no-purchase", name: "Registrovani bez kupovine", description: "Imaju nalog i saglasnost, još nisu kupili.", rules: [{ id: "registered", field: "registered", operator: "is_true" }, { id: "no-purchase", field: "hasPurchased", operator: "is_false" }] },
+].map(({ rules, ...audience }) => ({
+  ...audience,
+  estimatedCount: null,
+  filter: newsletterAudienceFilterSchema.parse({ groups: rules.length ? [{ id: audience.id, logic: "AND", rules }] : [] }),
+}));

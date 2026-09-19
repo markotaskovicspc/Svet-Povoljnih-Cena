@@ -379,7 +379,7 @@ test.describe("newsletter admin acceptance", () => {
     await acceptanceExpect(contactRow).toContainText(xlsxListName);
   });
 
-  test("an explicit warning allows pending contacts from multiple audiences without changing consent", async ({ context, page }) => {
+  test("multiple audiences exclude pending contacts and preserve their consent status", async ({ context, page }) => {
     await prepareContext(context);
     await login(page);
     const csvAudience = await db.newsletterAudience.findUniqueOrThrow({ where: { name: `Lista — ${csvListName}` } });
@@ -395,15 +395,9 @@ test.describe("newsletter admin acceptance", () => {
     await editor.locator('input[name="subject"]').fill(`${tag} upozorenje`);
     await editor.locator(`input[name="audienceIds"][value="${csvAudience.id}"]`).check();
     await editor.locator(`input[name="audienceIds"][value="${xlsxAudience.id}"]`).check();
-    await editor.locator('input[name="includeContactsWithoutConsent"]').check();
+    await acceptanceExpect(editor.locator('input[name="includeContactsWithoutConsent"]')).toHaveCount(0);
     await editor.getByRole("button", { name: "Sačuvaj novu verziju" }).click();
     await acceptanceExpect(editor.getByRole("status")).toContainText("Nacrt i nova verzija su sačuvani");
-    await acceptanceExpect(
-      page.locator('main [role="alert"]').filter({
-        hasText: "može uključiti kontakte bez zabeležene saglasnosti",
-      }),
-    ).toBeVisible();
-
     await acceptanceExpect.poll(async () => db.newsletterCampaign.findUnique({
       where: { id: overrideCampaignId },
       select: {
@@ -411,8 +405,8 @@ test.describe("newsletter admin acceptance", () => {
         versions: { orderBy: { version: "desc" }, take: 1, select: { includeContactsWithoutConsent: true } },
       },
     })).toEqual({
-      includeContactsWithoutConsent: true,
-      versions: [{ includeContactsWithoutConsent: true }],
+      includeContactsWithoutConsent: false,
+      versions: [{ includeContactsWithoutConsent: false }],
     });
 
     page.once("dialog", (dialog) => dialog.accept());
@@ -421,9 +415,9 @@ test.describe("newsletter admin acceptance", () => {
       where: { id: overrideCampaignId },
       select: { recipients: true, status: true, audienceBreakdown: true },
     })).toMatchObject({
-      recipients: 3,
+      recipients: 2,
       status: "IN_REVIEW",
-      audienceBreakdown: { matchedWithoutConsent: 1 },
+      audienceBreakdown: { matchedWithoutConsent: 0 },
     });
 
     await context.clearCookies();
@@ -439,17 +433,17 @@ test.describe("newsletter admin acceptance", () => {
     await expect(sendNewsletterCampaign(overrideCampaignId)).resolves.toMatchObject({
       ok: true,
       simulated: true,
-      recipients: 3,
+      recipients: 2,
     });
     await expect(db.newsletterCampaign.findUnique({
       where: { id: overrideCampaignId }, select: { status: true, delivered: true },
-    })).resolves.toEqual({ status: "SENT", delivered: 3 });
+    })).resolves.toEqual({ status: "SENT", delivered: 2 });
     await expect(db.newsletterCampaignRecipient.findUnique({
       where: {
         campaignId_email: { campaignId: overrideCampaignId, email: importEmails.pending },
       },
       select: { status: true, consentStatusAtSelection: true },
-    })).resolves.toEqual({ status: "DELIVERED", consentStatusAtSelection: "PENDING" });
+    })).resolves.toBeNull();
     await expect(db.marketingContact.findUnique({
       where: { email: importEmails.pending }, select: { status: true },
     })).resolves.toEqual({ status: "PENDING" });

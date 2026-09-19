@@ -241,8 +241,8 @@ export async function sendNewsletterTestAction(
 ) {
   return campaignAction(formData, "newsletter.campaign.test", async (id) => {
     const email = value(formData, "email");
-    await sendNewsletterCampaignTest(id, email);
-    return { message: `Test poruka je poslata na ${email}.`, diff: { email } };
+    const result = await sendNewsletterCampaignTest(id, email, value(formData, "savedVersion") || undefined);
+    return { message: result.provider === "none" ? "Test je samo simuliran; email provider nije podešen." : `Provider je prihvatio test poruku za ${email}. Proverite inbox i spam pre slanja grupama.`, diff: { email, provider: result.provider } };
   });
 }
 

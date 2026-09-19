@@ -19,6 +19,8 @@ const fields = [
   ["tag", "Uvezena lista"],
   ["subscribedAt", "Datum prijave"],
   ["registered", "Ima nalog"],
+  ["hasPurchased", "Kupovao (uključuje goste)"],
+  ["abandonedCheckout", "Nezavršena kupovina (1 h–30 dana)"],
   ["city", "Grad kupovine"],
   ["language", "Jezik"],
   ["orderCount", "Broj kupovina"],
@@ -56,7 +58,7 @@ function id(prefix: string) {
 }
 
 function operatorsFor(field: string) {
-  if (field === "registered") return ["is_true", "is_false"];
+  if (["registered", "hasPurchased", "abandonedCheckout"].includes(field)) return ["is_true", "is_false"];
   if (field === "subscribedAt" || field === "lastPurchaseAt") return ["before", "after"];
   if (field === "orderCount" || field === "totalSpend") return ["gte", "lte", "equals"];
   return ["equals", "not_equals", "contains", "not_contains"];

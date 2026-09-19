@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getEmailConfig } from "@/lib/email/config";
+import { recordSesNewsletterEvent } from "@/lib/newsletter/ses-events";
 import { recordProviderEvent } from "@/lib/email/tracking";
 import {
   isTrustedSnsUrl,
@@ -77,6 +78,7 @@ export async function POST(req: Request) {
     providerMessageId,
     payload: event as Prisma.InputJsonValue,
   });
+  await recordSesNewsletterEvent(eventType, providerMessageId, event.mail);
   return NextResponse.json({ ok: true, duplicate: recorded.duplicate });
 }
 
@@ -86,6 +88,7 @@ type SesEvent = {
   mail?: {
     messageId?: string;
     destination?: string[];
+    tags?: Record<string, string[]>;
   };
   bounce?: { bouncedRecipients?: Array<{ emailAddress?: string }> };
   complaint?: { complainedRecipients?: Array<{ emailAddress?: string }> };

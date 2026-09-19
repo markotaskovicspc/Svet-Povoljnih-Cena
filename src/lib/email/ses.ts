@@ -31,6 +31,7 @@ export interface SesDispatchConfig {
 export interface SesBulkRecipient {
   email: string;
   templateData: Record<string, string>;
+  recipientId?: string;
 }
 
 export interface SesBulkInput {
@@ -116,7 +117,7 @@ export async function dispatchSesBulk(
 
   try {
     const output = (await sendWithTimeout(
-      clientFor(config.region),
+      clientFor(config.region, true),
       new SendBulkEmailCommand({
         FromEmailAddress: input.from,
         ReplyToAddresses: optionalAddresses(input.replyTo),
@@ -132,6 +133,11 @@ export async function dispatchSesBulk(
         },
         BulkEmailEntries: input.recipients.map((recipient) => ({
           Destination: { ToAddresses: [recipient.email] },
+          ReplacementHeaders: recipient.templateData.unsubscribeUrl ? [
+            { Name: "List-Unsubscribe", Value: `<${recipient.templateData.unsubscribeUrl}>` },
+            { Name: "List-Unsubscribe-Post", Value: "List-Unsubscribe=One-Click" },
+          ] : undefined,
+          ReplacementTags: recipient.recipientId ? sesTags({ ...input.tags, recipient: recipient.recipientId }) : undefined,
           ReplacementEmailContent: {
             ReplacementTemplate: {
               ReplacementTemplateData: JSON.stringify(recipient.templateData),
@@ -176,15 +182,17 @@ export async function dispatchSesBulk(
   }
 }
 
-function clientFor(region: string): SesClientLike {
+function clientFor(region: string, bulk = false): SesClientLike {
   if (clientOverride) return clientOverride;
   const normalizedRegion = region.trim();
   if (!normalizedRegion) throw new Error("ses:missing_config region");
-  const existing = clients.get(normalizedRegion);
+  const cacheKey = `${normalizedRegion}:${bulk ? "bulk" : "single"}`;
+  const existing = clients.get(cacheKey);
   if (existing) return existing;
   const client = new SESv2Client({
     region: normalizedRegion,
-    maxAttempts: maxAttempts(),
+    // SES bulk has no provider idempotency key. Never retry an ambiguous send.
+    maxAttempts: bulk ? 1 : maxAttempts(),
     ...(process.env.AWS_ROLE_ARN?.trim()
       ? {
           credentials: awsCredentialsProvider({
@@ -193,7 +201,7 @@ function clientFor(region: string): SesClientLike {
         }
       : {}),
   }) as SesClientLike;
-  clients.set(normalizedRegion, client);
+  clients.set(cacheKey, client);
   return client;
 }
 

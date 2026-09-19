@@ -6,7 +6,7 @@ import {
   Prisma,
 } from "@prisma/client";
 import { z } from "zod";
-import { db } from "@/lib/db";
+import { databaseIdentifier, db } from "@/lib/db";
 import { getEmailConfig } from "@/lib/email/config";
 import { dispatchSesBulk } from "@/lib/email/ses";
 import { trackedDispatch } from "@/lib/email/tracking";
@@ -25,6 +25,7 @@ import {
 } from "@/lib/email/resend-broadcasts";
 import {
   audienceFilterJson,
+  builtInNewsletterAudiences,
   combineNewsletterAudiences,
   emptyAudienceFilter,
   newsletterAudienceFilterSchema,
@@ -52,7 +53,7 @@ export const saveCampaignSchema = z.object({
   replyTo: z.union([z.literal(""), z.email()]).optional().default(""),
   audienceIds: z.array(z.string().min(1)).max(20).default([]),
   audienceMode: z.enum(["DYNAMIC", "FIXED"]).default("DYNAMIC"),
-  includeContactsWithoutConsent: z.boolean().default(false),
+  includeContactsWithoutConsent: z.boolean().default(false).transform(() => false),
   topicKey: z.string().trim().min(1).max(60).default("promotions"),
   content: newsletterContentSchema,
 });
@@ -106,9 +107,11 @@ export async function saveNewsletterCampaign(
     throw new Error("Zakazana ili poslata kampanja ne može da se menja. Otkažite je ili napravite kopiju.");
   }
   const audienceIds = Array.from(new Set(input.audienceIds));
-  const audienceRows = audienceIds.length
-    ? await db.newsletterAudience.findMany({ where: { id: { in: audienceIds } } })
-    : [];
+  const customIds = audienceIds.filter((id) => !id.startsWith("builtin:"));
+  const audienceRows: Array<{ id: string; name: string; filter: unknown }> = [
+    ...builtInNewsletterAudiences.filter((audience) => audienceIds.includes(audience.id)),
+    ...(customIds.length ? await db.newsletterAudience.findMany({ where: { id: { in: customIds } } }) : []),
+  ];
   if (audienceRows.length !== audienceIds.length) {
     throw new Error("Jedna od izabranih publika više ne postoji.");
   }
@@ -138,7 +141,7 @@ export async function saveNewsletterCampaign(
         fromName: input.fromName || null,
         fromEmail: input.fromEmail || null,
         replyTo: input.replyTo || null,
-        audienceId: audiences.length === 1 ? audiences[0]!.id : null,
+        audienceId: audiences.length === 1 && !audiences[0]!.id.startsWith("builtin:") ? audiences[0]!.id : null,
         audienceMode: input.audienceMode,
         includeContactsWithoutConsent: input.includeContactsWithoutConsent,
         audienceFilterSnapshot: audienceFilterJson(audienceFilter),
@@ -364,7 +367,7 @@ export async function duplicateNewsletterCampaign(campaignId: string, actorId: s
       replyTo: source.replyTo,
       audienceId: source.audienceId,
       audienceMode: source.audienceMode,
-      includeContactsWithoutConsent: source.includeContactsWithoutConsent,
+      includeContactsWithoutConsent: false,
       audienceFilterSnapshot: source.audienceFilterSnapshot as Prisma.InputJsonValue | undefined,
       topicKey: source.topicKey,
       createdById: actorId,
@@ -378,7 +381,7 @@ export async function duplicateNewsletterCampaign(campaignId: string, actorId: s
           html: rendered.html,
           text: rendered.text,
           audienceFilter: source.audienceFilterSnapshot as Prisma.InputJsonValue | undefined,
-          includeContactsWithoutConsent: source.includeContactsWithoutConsent,
+          includeContactsWithoutConsent: false,
           createdById: actorId,
         },
       },
@@ -402,9 +405,12 @@ export async function saveCampaignAsTemplate(campaignId: string, name: string, a
   });
 }
 
-export async function sendNewsletterCampaignTest(campaignId: string, emailRaw: string) {
+export async function sendNewsletterCampaignTest(campaignId: string, emailRaw: string, savedVersion?: string) {
   const email = z.email().parse(emailRaw.trim().toLowerCase());
   const campaign = await db.newsletterCampaign.findUniqueOrThrow({ where: { id: campaignId } });
+  if (savedVersion && campaign.updatedAt.toISOString() !== savedVersion) {
+    throw new Error("Kampanja je u međuvremenu promenjena. Osvežite pregled pre slanja testa.");
+  }
   const rendered = await renderNewsletterCampaign({
     subject: campaign.subject,
     previewText: campaign.previewText,
@@ -468,6 +474,8 @@ export async function preflightNewsletterCampaign(campaignId: string, requirePro
     if (cfg.provider === "ses") {
       if (!cfg.sesCredentialsConfigured) errors.push("Amazon SES pristup nije konfigurisan.");
       if (!cfg.sesRegion) errors.push("Amazon SES region nije konfigurisan.");
+      if (!cfg.sesConfigurationSet || !cfg.sesSnsTopicArn) errors.push("SES praćenje odbijenih poruka i prijava spama nije konfigurisano (configuration set / SNS).");
+      if (!cfg.baseUrl.startsWith("https://")) errors.push("Link za odjavu mora koristiti HTTPS.");
     } else if (cfg.provider === "resend") {
       if (!cfg.apiKey) errors.push("Resend nije konfigurisan.");
       if (!cfg.promotionsTopicId) errors.push("Resend promotions topic nije konfigurisan.");
@@ -577,6 +585,7 @@ export async function sendNewsletterCampaign(campaignId: string) {
     campaignId,
     campaign.includeContactsWithoutConsent,
     cfg.provider === "ses" ? sesNewsletterBatchSize() : undefined,
+    filter,
   );
   if (!recipients.length) {
     const queued = await db.newsletterCampaignRecipient.count({
@@ -889,8 +898,9 @@ async function replaceCampaignRecipients(
 
 async function finalEligibleRecipients(
   campaignId: string,
-  includeContactsWithoutConsent: boolean,
+  _includeContactsWithoutConsent: boolean,
   limit?: number,
+  filter?: unknown,
 ) {
   const rows = await db.newsletterCampaignRecipient.findMany({
     where: {
@@ -901,9 +911,9 @@ async function finalEligibleRecipients(
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     ...(limit ? { take: limit } : {}),
   });
-  const isAllowedStatus = (status: string | undefined) =>
-    status === "ACTIVE" || (includeContactsWithoutConsent && status === "PENDING");
-  const inactive = rows.filter((row) => !isAllowedStatus(row.contact?.status));
+  const isAllowedStatus = (contact: typeof rows[number]["contact"]) =>
+    contact?.status === "ACTIVE" && Boolean(contact.subscribedAt);
+  const inactive = rows.filter((row) => !isAllowedStatus(row.contact));
   if (inactive.length) {
     await db.newsletterCampaignRecipient.updateMany({
       where: { id: { in: inactive.map((row) => row.id) } },
@@ -914,7 +924,33 @@ async function finalEligibleRecipients(
       },
     });
   }
-  const active = rows.filter((row) => isAllowedStatus(row.contact?.status));
+  let active = rows.filter((row) => isAllowedStatus(row.contact));
+  if (active.length && filter) {
+    const parsed = newsletterAudienceFilterSchema.parse(filter);
+    // Recheck segment membership for every batch, including a checkout completed after scheduling.
+    const current = await resolveNewsletterAudience(parsed, { restrictContactIds: active.map((row) => row.contactId).filter((id): id is string => Boolean(id)) });
+    const ids = new Set(current.recipients.map((contact) => contact.id));
+    const excluded = active.filter((row) => !row.contactId || !ids.has(row.contactId));
+    if (excluded.length) await db.newsletterCampaignRecipient.updateMany({
+      where: { id: { in: excluded.map((row) => row.id) }, status: "QUEUED" },
+      data: { status: "FAILED", failureReason: "Kontakt više ne pripada izabranoj grupi." },
+    });
+    active = active.filter((row) => row.contactId && ids.has(row.contactId));
+  }
+  // Avoid stacking multiple newsletter campaigns on the same contact within a day.
+  if (active.length) {
+    const recent = await db.newsletterCampaignRecipient.findMany({
+      where: { campaignId: { not: campaignId }, email: { in: active.map((row) => row.email) }, sentAt: { gte: new Date(Date.now() - 86_400_000) } },
+      select: { email: true },
+    });
+    const emails = new Set(recent.map((row) => row.email.toLowerCase()));
+    const excluded = active.filter((row) => emails.has(row.email.toLowerCase()));
+    if (excluded.length) await db.newsletterCampaignRecipient.updateMany({
+      where: { id: { in: excluded.map((row) => row.id) }, status: "QUEUED" },
+      data: { status: "FAILED", failureReason: "Ograničenje: najviše jedna newsletter kampanja u 24 h." },
+    });
+    active = active.filter((row) => !emails.has(row.email.toLowerCase()));
+  }
   const suppressed = new Set((await db.emailSuppression.findMany({
     where: { email: { in: active.map((row) => row.email) } },
     select: { email: true },
@@ -942,6 +978,37 @@ async function sendSesNewsletterBatch(args: {
   rendered: Awaited<ReturnType<typeof renderNewsletterCampaign>>;
   cfg: ReturnType<typeof getEmailConfig>;
 }) {
+  if (process.env.NODE_ENV === "production" && (!args.cfg.sesConfigurationSet || !args.cfg.sesSnsTopicArn || !args.cfg.baseUrl.startsWith("https://"))) {
+    throw new Error("Slanje je zaustavljeno: podesite SES configuration set, SNS povratne događaje i HTTPS odjavu.");
+  }
+  const [complaints, bounces, sent] = await Promise.all([
+    db.newsletterCampaignRecipient.count({ where: { campaignId: args.campaign.id, status: "COMPLAINED" } }),
+    db.newsletterCampaignRecipient.count({ where: { campaignId: args.campaign.id, status: "BOUNCED" } }),
+    db.newsletterCampaignRecipient.count({ where: { campaignId: args.campaign.id, sentAt: { not: null } } }),
+  ]);
+  if (complaints > 0 || (bounces >= 3 && bounces / Math.max(sent, 1) >= 0.03)) {
+    throw new Error("Zaštita reputacije: slanje je zaustavljeno zbog prijave spama ili visokog broja odbijenih poruka. Proverite publiku pre nastavka.");
+  }
+  // Persist an ambiguity marker BEFORE the network request. A worker crash or lost
+  // response must never put possibly accepted messages back in the send queue.
+  const claimed = await db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    UPDATE ${databaseIdentifier("NewsletterCampaignRecipient")} r
+    SET "status" = 'FAILED', "failureReason" = 'ses:delivery_unknown', "updatedAt" = NOW()
+    WHERE r."id" IN (${Prisma.join(args.recipients.map((recipient) => recipient.id))}) AND r."status" = 'QUEUED'
+      AND EXISTS (SELECT 1 FROM ${databaseIdentifier("MarketingContact")} c
+        WHERE c."id" = r."contactId" AND c."status" = 'ACTIVE' AND c."subscribedAt" IS NOT NULL AND lower(c."email") = lower(r."email"))
+      AND NOT EXISTS (SELECT 1 FROM ${databaseIdentifier("EmailSuppression")} s WHERE lower(s."email") = lower(r."email"))
+      AND EXISTS (SELECT 1 FROM ${databaseIdentifier("NewsletterCampaign")} c
+        WHERE c."id" = r."campaignId" AND c."status" IN ('PREPARING', 'SENDING', 'PARTIAL_FAILED', 'FAILED'))
+    RETURNING r."id"
+  `);
+  const claimedIds = new Set(claimed.map((row) => row.id));
+  const recipients = args.recipients.filter((row) => claimedIds.has(row.id));
+  if (!recipients.length) {
+    const remaining = await db.newsletterCampaignRecipient.count({ where: { campaignId: args.campaign.id, status: "QUEUED" } });
+    if (remaining) await enqueueSesNewsletterContinuation(args.campaign.id, `claim-${args.recipients.at(-1)?.id}`);
+    return { ok: true as const, duplicate: true as const };
+  }
   await db.newsletterCampaign.update({
     where: { id: args.campaign.id },
     data: { status: "SENDING", failureReason: null },
@@ -954,7 +1021,8 @@ async function sendSesNewsletterBatch(args: {
       subject: args.campaign.subject,
       html: args.rendered.html,
       text: args.rendered.text,
-      recipients: args.recipients.map((recipient) => ({
+      recipients: recipients.map((recipient) => ({
+        recipientId: recipient.id,
         email: recipient.email,
         templateData: {
           unsubscribeUrl: buildEmailUnsubscribeUrl({
@@ -970,10 +1038,19 @@ async function sendSesNewsletterBatch(args: {
       configurationSet: args.cfg.sesConfigurationSet,
     },
   );
-  if (!result.ok) throw new Error(result.error);
+  if (!result.ok) {
+    // Only explicit request throttling proves SES accepted none of this batch.
+    if (/^ses:(TooManyRequestsException|ThrottlingException)\b/.test(result.error)) {
+      await db.newsletterCampaignRecipient.updateMany({
+        where: { id: { in: recipients.map((row) => row.id) }, status: "FAILED", failureReason: "ses:delivery_unknown" },
+        data: { status: "QUEUED", failureReason: result.error.slice(0, 4000) },
+      });
+    }
+    throw new Error(`SES prijem nije potvrđen. Poruke sa nepoznatim ishodom neće se automatski ponavljati. ${result.error}`);
+  }
 
   const recipientByEmail = new Map(
-    args.recipients.map((recipient) => [recipient.email.toLowerCase(), recipient]),
+    recipients.map((recipient) => [recipient.email.toLowerCase(), recipient]),
   );
   const retryable: string[] = [];
   const now = new Date();
@@ -984,8 +1061,8 @@ async function sendSesNewsletterBatch(args: {
         throw new Error("Amazon SES je vratio rezultat za nepoznatog primaoca.");
       }
       if (providerResult.ok) {
-        return db.newsletterCampaignRecipient.update({
-          where: { id: recipient.id },
+        return db.newsletterCampaignRecipient.updateMany({
+          where: { id: recipient.id, status: "FAILED", failureReason: "ses:delivery_unknown" },
           data: {
             status: "SENT",
             providerMessageId: providerResult.id,
@@ -996,16 +1073,16 @@ async function sendSesNewsletterBatch(args: {
       }
       if (isRetryableSesRecipientError(providerResult.error)) {
         retryable.push(providerResult.error ?? "ses:retryable_failure");
-        return db.newsletterCampaignRecipient.update({
-          where: { id: recipient.id },
+        return db.newsletterCampaignRecipient.updateMany({
+          where: { id: recipient.id, status: "FAILED", failureReason: "ses:delivery_unknown" },
           data: {
             status: "QUEUED",
             failureReason: (providerResult.error ?? "ses:retryable_failure").slice(0, 4_000),
           },
         });
       }
-      return db.newsletterCampaignRecipient.update({
-        where: { id: recipient.id },
+      return db.newsletterCampaignRecipient.updateMany({
+        where: { id: recipient.id, status: "FAILED", failureReason: "ses:delivery_unknown" },
         data: {
           status: "FAILED",
           failureReason: (providerResult.error ?? "ses:permanent_failure").slice(0, 4_000),
@@ -1027,7 +1104,7 @@ async function sendSesNewsletterBatch(args: {
   if (remaining) {
     await enqueueSesNewsletterContinuation(
       args.campaign.id,
-      args.recipients.at(-1)?.id ?? `remaining-${remaining}`,
+      recipients.at(-1)?.id ?? `remaining-${remaining}`,
     );
     return {
       ok: true as const,
@@ -1049,6 +1126,7 @@ async function enqueueSesNewsletterContinuation(campaignId: string, cursor: stri
       payload: { campaignId },
       idempotencyKey,
       maxAttempts: 8,
+      availableAt: new Date(Date.now() + 60_000),
     },
     update: {},
   });
@@ -1076,7 +1154,7 @@ async function finalizeSesNewsletterCampaign(campaignId: string) {
     data: {
       status: failed ? "PARTIAL_FAILED" : "SENT",
       sentAt: now,
-      failureReason: failed ? `${failed} SES poruka nije prihvaćeno.` : null,
+      failureReason: failed ? `${failed} poruka je izostavljeno, odbijeno ili nema potvrđen ishod. Proverite listu primalaca; nepoznati ishodi se ne ponavljaju automatski.` : null,
     },
   });
   return {
@@ -1097,7 +1175,7 @@ function isRetryableSesRecipientError(error: string | null) {
 
 function sesNewsletterBatchSize() {
   const value = Number.parseInt(process.env.SES_NEWSLETTER_BATCH_SIZE ?? "", 10);
-  return Number.isFinite(value) ? Math.min(Math.max(value, 1), 50) : 50;
+  return Number.isFinite(value) ? Math.min(Math.max(value, 1), 50) : 10;
 }
 
 async function markCampaignAccepted(campaignId: string) {

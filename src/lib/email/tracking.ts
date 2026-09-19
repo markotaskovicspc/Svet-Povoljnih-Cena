@@ -130,6 +130,7 @@ export async function recordProviderEvent(input: ProviderEventInput) {
       })
     : null;
 
+  let duplicate = false;
   try {
     await db.emailProviderEvent.create({
       data: {
@@ -143,13 +144,14 @@ export async function recordProviderEvent(input: ProviderEventInput) {
     });
   } catch (err) {
     if (isUniqueConstraint(err)) {
-      return { ok: true as const, duplicate: true as const };
+      duplicate = true;
+    } else {
+      throw err;
     }
-    throw err;
   }
 
   const status = statusForProviderEvent(input.type);
-  if (message && status) {
+  if (message && status && !duplicate) {
     await db.emailMessage.update({
       where: { id: message.id },
       data: { status },
@@ -157,8 +159,7 @@ export async function recordProviderEvent(input: ProviderEventInput) {
   }
 
   if (isSuppressingEvent(input.type)) {
-    const email = extractRecipient(input.payload);
-    if (email) {
+    for (const email of suppressionRecipients(input.payload)) {
       await db.emailSuppression.upsert({
         where: { email },
         create: {
@@ -178,7 +179,7 @@ export async function recordProviderEvent(input: ProviderEventInput) {
     }
   }
 
-  return { ok: true as const, duplicate: false as const };
+  return { ok: true as const, duplicate };
 }
 
 export async function isEmailSuppressed(email: string) {
@@ -262,4 +263,17 @@ function extractRecipient(payload: Prisma.InputJsonValue) {
 
 function isUniqueConstraint(err: unknown) {
   return err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002";
+}
+
+/** Suppress only recipients identified by the bounce/complaint, never an unrelated To address. */
+export function suppressionRecipients(payload: Prisma.InputJsonValue): string[] {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return [];
+  const root = payload as Record<string, unknown>;
+  const bounce = root.bounce as { bounceType?: string; bouncedRecipients?: Array<{ emailAddress?: string }> } | undefined;
+  const complaint = root.complaint as { complainedRecipients?: Array<{ emailAddress?: string }> } | undefined;
+  if (bounce?.bounceType === "Transient") return [];
+  const affected = bounce?.bouncedRecipients ?? complaint?.complainedRecipients;
+  if (affected?.length) return [...new Set(affected.flatMap((row) => typeof row.emailAddress === "string" ? [row.emailAddress.trim().toLowerCase()] : []))];
+  const fallback = extractRecipient(payload);
+  return fallback ? [fallback] : [];
 }

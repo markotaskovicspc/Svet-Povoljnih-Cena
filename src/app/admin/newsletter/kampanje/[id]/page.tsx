@@ -4,13 +4,14 @@ import type { NewsletterCampaignStatus, NewsletterRecipientStatus } from "@prism
 import { requireAdminAction } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { getEmailConfig } from "@/lib/email/config";
-import { selectedNewsletterAudiences } from "@/lib/newsletter/audience";
+import { builtInNewsletterAudiences, selectedNewsletterAudiences } from "@/lib/newsletter/audience";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { Card, CardTitle, StatCard } from "@/components/admin/card";
 import { DataTable } from "@/components/admin/data-table";
 import { Field } from "@/components/admin/field";
 import { NewsletterBlockEditor } from "@/components/admin/newsletter-block-editor";
 import { NewsletterEmailPreview } from "@/components/admin/newsletter-email-preview";
+import { NewsletterTestSend } from "@/components/admin/newsletter-test-send";
 import { NewsletterScheduleField } from "@/components/admin/newsletter-schedule-field";
 import { PageHeader } from "@/components/admin/page-header";
 import { SubmitButton } from "@/components/admin/submit-button";
@@ -70,7 +71,7 @@ export default async function NewsletterCampaignPage({
 }) {
   const admin = await requireAdminAction(["ADS"]);
   const { id } = await params;
-  const [campaign, audiences, products, recipients] = await Promise.all([
+  const [campaign, savedAudiences, products, recipients] = await Promise.all([
     db.newsletterCampaign.findUnique({
       where: { id },
       include: {
@@ -88,6 +89,7 @@ export default async function NewsletterCampaignPage({
     db.newsletterCampaignRecipient.findMany({ where: { campaignId: id }, orderBy: { updatedAt: "desc" }, take: 200 }),
   ]);
   if (!campaign) notFound();
+  const audiences = [...builtInNewsletterAudiences, ...savedAudiences.map((audience) => ({ ...audience, description: "" }))];
   const actorIds = Array.from(new Set([campaign.createdById, campaign.updatedById, campaign.approvedById, ...campaign.versions.map((version) => version.createdById)].filter((value): value is string => Boolean(value))));
   const actors = actorIds.length ? await db.adminUser.findMany({ where: { id: { in: actorIds } }, select: { id: true, email: true, firstName: true, lastName: true } }) : [];
   const actorName = new Map(actors.map((actor) => [actor.id, [actor.firstName, actor.lastName].filter(Boolean).join(" ") || actor.email]));
@@ -129,7 +131,7 @@ export default async function NewsletterCampaignPage({
         ) : null}
         {campaign.includeContactsWithoutConsent ? (
           <div role="alert" className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
-            <strong>Upozorenje:</strong> ova kampanja može uključiti kontakte bez zabeležene saglasnosti.
+            <strong>Upozorenje:</strong> stara opcija za kontakte bez saglasnosti više se ne primenjuje. Slanje uključuje samo potvrđene prijave.
             Izričito odjavljene, potisnute i provider opt-out adrese ostaju isključene.
           </div>
         ) : null}
@@ -141,6 +143,7 @@ export default async function NewsletterCampaignPage({
           <StatCard label="Kliknuto" value={(campaign.clicked ?? 0).toLocaleString("sr-Latn-RS")} hint={rate(campaign.clicked ?? 0, campaign.delivered ?? 0)} />
         </div>
 
+        <a href="#test-email" className="inline-flex rounded-lg border border-border px-4 py-2 text-sm font-medium text-walnut hover:bg-muted-bg">Pošalji test na određenu adresu</a>
         <WorkflowCard campaign={campaign} currentAdminId={admin.id} />
 
         {editable ? (
@@ -187,9 +190,9 @@ export default async function NewsletterCampaignPage({
                         <span>
                           <strong className="font-medium text-ink-900">{audience.name}</strong>
                           <span className="block text-xs text-ink-500">
-                            {typeof audience.estimatedCount === "number"
+                            {audience.description || (typeof audience.estimatedCount === "number"
                               ? `do ${audience.estimatedCount.toLocaleString("sr-Latn-RS")} kontakata`
-                              : "broj još nije izračunat"}
+                              : "broj još nije izračunat")}
                           </span>
                         </span>
                       </label>
@@ -203,25 +206,7 @@ export default async function NewsletterCampaignPage({
                     {" "}ili <Link href="/admin/newsletter?view=audiences" className="font-medium text-walnut hover:underline">napravi novi segment</Link>.
                   </p>
                 </Field>
-                <Field label="Dozvola kontakata" className="lg:col-span-2">
-                  <label
-                    key={`missing-consent:${campaign.updatedAt.getTime()}`}
-                    className="flex cursor-pointer items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-ink-900"
-                  >
-                    <input
-                      type="checkbox"
-                      name="includeContactsWithoutConsent"
-                      defaultChecked={campaign.includeContactsWithoutConsent}
-                      className="mt-0.5 size-4 accent-[#123f5a]"
-                    />
-                    <span>
-                      <strong>Uključi kontakte bez zabeležene saglasnosti</strong>
-                      <span className="mt-1 block text-xs leading-5 text-ink-600">
-                        Ako je označeno, kontakti na čekanju iz izabranih publika mogu dobiti ovu kampanju uz upozorenje pre slanja. Njihov status saglasnosti se ne menja. Izričite odjave, potiskivanja i provider opt-out se uvek poštuju.
-                      </span>
-                    </span>
-                  </label>
-                </Field>
+                <p className="text-sm text-ink-600 lg:col-span-2">Sve grupe uključuju samo kontakte sa zabeleženom saglasnošću. Odjavljeni kontakti, odbijene adrese i prijave spama automatski se izostavljaju.</p>
               </div>
               <details className="rounded-xl border border-border/70 p-4">
                 <summary className="cursor-pointer text-sm font-medium">Pošiljalac i reply-to (opciono)</summary>
@@ -238,6 +223,7 @@ export default async function NewsletterCampaignPage({
               />
               <div className="flex flex-wrap items-center gap-3">
                 <SubmitButton pendingLabel="Čuvam i proveravam…">Sačuvaj novu verziju</SubmitButton>
+                <a href="#test-email" className="text-sm font-medium text-walnut underline">Pošalji test na svoju adresu</a>
                 <span className="text-xs text-ink-500">Posle čuvanja, donji tačan HTML pregled će biti osvežen.</span>
               </div>
             </AdminActionForm>
@@ -254,14 +240,10 @@ export default async function NewsletterCampaignPage({
           <NewsletterEmailPreview html={campaign.html ?? ""} />
         </Card>
 
-        <div className="grid gap-6 xl:grid-cols-2">
+        <div id="test-email" className="grid scroll-mt-6 gap-6 xl:grid-cols-2">
           <Card>
-            <CardTitle description="Test koristi trenutno sačuvanu verziju i nikad ne menja status kampanje.">Test mejl</CardTitle>
-            <AdminActionForm action={sendNewsletterTestAction} className="flex flex-wrap items-end gap-3" id="newsletter-campaign-test-send" testId="newsletter-campaign-test-send">
-              <input type="hidden" name="id" value={campaign.id} />
-              <Field label="Adresa za test" className="min-w-64 flex-1"><Input name="email" type="email" required defaultValue={admin.email ?? ""} /></Field>
-              <SubmitButton variant="outline" pendingLabel="Šaljem…">Pošalji test</SubmitButton>
-            </AdminActionForm>
+            <CardTitle description="Prvo sačuvajte izmene. Test šalje poslednju sačuvanu verziju samo na unetu adresu, bez slanja grupama.">Pošalji test pre slanja grupama</CardTitle>
+            <NewsletterTestSend key={campaign.updatedAt.toISOString()} campaignId={campaign.id} savedVersion={campaign.updatedAt.toISOString()} email={admin.email ?? ""} action={sendNewsletterTestAction} />
             {cfg.provider === "none" ? <p className="mt-3 text-xs text-warning">Provider je „none“: test će biti evidentiran kao simulirano slanje.</p> : null}
           </Card>
           <Card>
@@ -349,9 +331,7 @@ function WorkflowCard({
             <input type="hidden" name="id" value={campaign.id} />
             <SubmitButton
               pendingLabel="Proveravam publiku i sadržaj…"
-              confirm={campaign.includeContactsWithoutConsent
-                ? "Kampanja je podešena da uključi kontakte bez zabeležene saglasnosti. Nastaviti na proveru?"
-                : undefined}
+
             >
               Pošalji na proveru
             </SubmitButton>
