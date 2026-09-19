@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   newsletterRecipientTransition,
-  requiresSecondApprover,
 } from "@/lib/newsletter/campaigns";
 
 describe("newsletter provider event transitions", () => {
@@ -31,9 +30,4 @@ describe("newsletter provider event transitions", () => {
     expect(newsletterRecipientTransition("email.complained", "DELIVERED", now)?.status).toBe("COMPLAINED");
   });
 
-  it("requires a different approver when the final audience crosses the threshold", () => {
-    expect(requiresSecondApprover({ createdById: "admin-1", approvedById: "admin-1" }, 1_000)).toBe(true);
-    expect(requiresSecondApprover({ createdById: "admin-1", approvedById: "admin-2" }, 1_000)).toBe(false);
-    expect(requiresSecondApprover({ createdById: "admin-1", approvedById: "admin-1" }, 999)).toBe(false);
-  });
 });

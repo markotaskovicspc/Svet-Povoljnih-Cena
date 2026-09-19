@@ -631,6 +631,11 @@ export function CheckoutFlow({
       .json()
       .catch(() => null)) as CreateOrderApiResponse | null;
     if (!response.ok || !result?.ok) {
+      if (result && !result.ok && typeof result.error === "object" &&
+          result.error?.code === "CHECKOUT_SESSION_MISMATCH") {
+        clearCheckoutSessionId();
+        setCheckoutSessionId(getCheckoutSessionId());
+      }
       setSubmitError(
         readCreateOrderError(
           result,
@@ -1400,7 +1405,7 @@ function readCreateOrderError(
     case "PAYMENT_UNAVAILABLE":
       return "Izabrani način plaćanja trenutno nije dostupan. Izaberite drugi način plaćanja.";
     case "CHECKOUT_SESSION_MISMATCH":
-      return "Podaci su promenjeni nakon što je porudžbina već evidentirana. Osvežite stranicu i proverite postojeću porudžbinu pre novog pokušaja.";
+      return "Prethodna porudžbina je već evidentirana. Korpa nije poslata ponovo. Proverite podatke; sledećom potvrdom kreirate novu porudžbinu.";
     case "DELIVERY_UNAVAILABLE":
       return "Dostava za ovu korpu trenutno ne može tačno da se obračuna. Proverite korpu ili kontaktirajte podršku.";
     case "EMPTY_CART":

@@ -42,9 +42,10 @@ import {
   getActivePricingRules,
   pricingRuleInputsForProduct,
 } from "@/lib/pricing/rules";
-import { isProductAvailableOnWeb } from "@/lib/web-storefront-availability";
+import { isProductAvailableOnWeb, webStorefrontProductWhere } from "@/lib/web-storefront-availability";
+import { resolveRetailPrice } from "@/lib/pricing/retail-price";
+import { checkoutReplaySelect, checkoutRequestMatchesOrder } from "@/lib/checkout/replay";
 import { upsertWebCustomer } from "@/lib/customer-master-sync.server";
-import { checkoutBusinessIdentityMatchesOrder } from "@/lib/checkout/business-policy";
 import { isFirstPurchaseDiscountEligible } from "@/lib/checkout/first-purchase.server";
 import { resolveDocumentBuyerAddress } from "@/lib/document-buyer";
 import type { CreateOrderInput } from "@/lib/checkout/order-schema";
@@ -96,6 +97,8 @@ export interface CreateOrderResult {
   firstPurchaseDiscount: number;
   savedCardDiscount: number;
 }
+
+class CheckoutSessionMismatchError extends Error {}
 
 class StockReservationError extends Error {
   constructor(readonly sku: string) {
@@ -174,11 +177,7 @@ async function ensureCheckoutSessionForOrder(args: {
       shippingMethod: input.shippingMethod,
       paymentMethod: input.paymentMethod,
     },
-    update: {
-      userId,
-      guestEmail: userId ? null : (input.guestEmail ?? null),
-      identity: userId ? "login" : "guest",
-    },
+    update: {},
   });
 }
 
@@ -250,7 +249,7 @@ async function saveLatestCheckoutAddress(
 async function findLockedCheckoutSessionOrder(
   tx: Prisma.TransactionClient,
   checkoutSessionId: string,
-): Promise<CreatedOrder | null> {
+) {
   const rows = await tx.$queryRaw<Array<{ orderId: string | null }>>`
     SELECT "orderId" AS "orderId"
     FROM "CheckoutSession"
@@ -264,6 +263,7 @@ async function findLockedCheckoutSessionOrder(
     .findUnique({
       where: { id: orderId },
       select: {
+        ...checkoutReplaySelect,
         id: true,
         number: true,
         total: true,
@@ -325,6 +325,7 @@ export async function createOrder(
       select: {
         order: {
           select: {
+            ...checkoutReplaySelect,
             id: true,
             number: true,
             total: true,
@@ -337,29 +338,14 @@ export async function createOrder(
             voucherDiscount: true,
             firstPurchaseDiscount: true,
             savedCardDiscount: true,
-            shipCompanyName: true,
-            shipPib: true,
-            billCompanyName: true,
-            billPib: true,
             supplierFulfillments: { select: { id: true } },
-            items: {
-              select: {
-                qty: true,
-                productId: true,
-                product: {
-                  select: {
-                    supplier: { select: { integrationKey: true } },
-                  },
-                },
-              },
-            },
           },
         },
       },
     });
     if (existingSession?.order) {
       const existing = existingSession.order;
-      if (!checkoutBusinessIdentityMatchesOrder(input, existing)) {
+      if (!checkoutRequestMatchesOrder(input, userId, existing)) {
         return {
           ok: false,
           error: { code: "CHECKOUT_SESSION_MISMATCH" },
@@ -396,7 +382,7 @@ export async function createOrder(
 
   const skus = input.lines.map((l) => l.sku);
   const products = await db.product.findMany({
-    where: { sku: { in: skus } },
+    where: { ...webStorefrontProductWhere(), sku: { in: skus } },
     select: {
       id: true,
       sku: true,
@@ -405,6 +391,7 @@ export async function createOrder(
       sizeLabel: true,
       colorPrimary: true,
       colorSecondary: true,
+      deletedAt: true,
       isActive: true,
       availableWebManual: true,
       availableWebAuto: true,
@@ -416,6 +403,10 @@ export async function createOrder(
       supplierApprovalStatus: true,
       lastSupplierStockSyncAt: true,
       fullPrice: true,
+      priceListEntries: {
+        where: { priceList: { active: true, kind: "RETAIL" } },
+        include: { priceList: true },
+      },
       salePrice: true,
       discountPct: true,
       loyaltyPrice: true,
@@ -462,10 +453,16 @@ export async function createOrder(
   });
   const bySku = new Map(products.map((p) => [p.sku, p]));
 
+  const pricingAt = new Date();
+  const retailBySku = new Map(products.map(p => [
+    p.sku, resolveRetailPrice(p.priceListEntries, p.fullPrice, pricingAt),
+  ]));
+
   // Pre-validate against fresh stock + activity.
   for (const line of input.lines) {
     const p = bySku.get(line.sku);
-    if (!p || !isProductAvailableOnWeb(p)) {
+    const retail = retailBySku.get(line.sku);
+    if (!p || !isProductAvailableOnWeb(p) || retail?.source.type !== "PRICE_LIST" || !(retail.price > 0)) {
       return { ok: false, error: { code: "INACTIVE", sku: line.sku } };
     }
     const rabaluxAvailability = resolveRabaluxAvailability({
@@ -503,7 +500,7 @@ export async function createOrder(
       sku: line.sku,
       qty: line.qty,
       product: {
-        fullPrice: num(p.fullPrice),
+        fullPrice: retailBySku.get(line.sku)!.price,
         salePrice: p.salePrice ? num(p.salePrice) : null,
         discountPct: p.discountPct,
         loyaltyPrice: null,
@@ -750,11 +747,6 @@ export async function createOrder(
   let created: CreatedOrder & { reusedExisting: boolean };
   try {
     created = await db.$transaction(async (tx) => {
-      const customer = await upsertWebCustomer(tx, {
-        userId,
-        guestEmail: input.guestEmail,
-        address: customerBuyerAddress,
-      });
       if (input.checkoutSessionId) {
         await ensureCheckoutSessionForOrder({ tx, input, userId, total });
         const existingOrder = await findLockedCheckoutSessionOrder(
@@ -762,33 +754,19 @@ export async function createOrder(
           input.checkoutSessionId,
         );
         if (existingOrder) {
-          await saveLatestCheckoutAddress(tx, userId, {
-            firstName: ship.firstName,
-            lastName: ship.lastName,
-            phone: ship.phone,
-            street: shipStreet,
-            houseNumber: ship.houseNumber,
-            city: xExpressTown?.name ?? ship.city,
-            postalCode: xExpressTown?.postalCode ?? ship.postalCode,
-            xExpressTownId: xExpressTown?.id ?? null,
-            xExpressStreetId: xExpressStreet?.id ?? null,
-            country: ship.country,
-            companyName: shipIsBusiness ? (ship.companyName ?? null) : null,
-            pib: shipIsBusiness ? (ship.pib ?? null) : null,
-          });
-          await tx.order.update({
-            where: { id: existingOrder.id },
-            data: {
-              customerId: customer.id,
-              publicAccessTokenHash: hashOrderAccessToken(accessToken),
-              publicAccessTokenCreatedAt: new Date(),
-            },
-          });
-          await recordCheckoutCompleted(tx, input, existingOrder);
+          if (!checkoutRequestMatchesOrder(input, userId, existingOrder)) {
+            throw new CheckoutSessionMismatchError();
+          }
           await queueCheckoutFollowUp(tx, existingOrder.id, accessToken);
           return { ...existingOrder, reusedExisting: true };
         }
       }
+
+      const customer = await upsertWebCustomer(tx, {
+        userId,
+        guestEmail: input.guestEmail,
+        address: customerBuyerAddress,
+      });
 
       if (voucherInput) {
         const lockedVoucher = await validateVoucherForCheckout(
@@ -1108,6 +1086,9 @@ export async function createOrder(
       };
     });
   } catch (err) {
+    if (err instanceof CheckoutSessionMismatchError) {
+      return { ok: false, error: { code: "CHECKOUT_SESSION_MISMATCH" } };
+    }
     if (err instanceof StockReservationError) {
       return { ok: false, error: { code: "OUT_OF_STOCK", sku: err.sku } };
     }

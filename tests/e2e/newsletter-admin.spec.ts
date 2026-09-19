@@ -176,20 +176,10 @@ test.describe("newsletter admin acceptance", () => {
       })).toEqual({ status: "DRAFT" });
     });
 
-    await test.step("creator cannot approve a threshold campaign, but a second admin can", async () => {
-      await page.getByRole("button", { name: "Pošalji na proveru" }).click();
-      const approveButton = page.getByRole("button", { name: "Odobri kampanju" });
-      await acceptanceExpect(approveButton).toBeDisabled();
-      await acceptanceExpect(page.getByText(/odobrenje mora dati drugi administrator/)).toBeVisible();
-
-      await context.clearCookies();
-      await prepareContext(context);
-      await login(page, reviewerEmail, reviewerPassword, `/admin/newsletter/kampanje/${campaignId}`);
-      await acceptanceExpect(page.getByRole("button", { name: "Odobri kampanju" })).toBeEnabled();
-      await page.getByRole("button", { name: "Odobri kampanju" }).click();
-      await acceptanceExpect(page.getByRole("button", { name: "Pošalji odmah" })).toBeVisible();
+    await test.step("creator can directly send after automatic validation", async () => {
+      await acceptanceExpect(page.getByRole("button", { name: "Pošalji kampanju", exact: true })).toBeEnabled();
       page.once("dialog", (dialog) => dialog.accept());
-      await page.getByRole("button", { name: "Pošalji odmah" }).click();
+      await page.getByRole("button", { name: "Pošalji kampanju", exact: true }).click();
       await acceptanceExpect(page.getByText(/Zakazana · verzija 2/)).toBeVisible();
 
       const secret = process.env.BACKGROUND_JOBS_CRON_SECRET;
@@ -387,7 +377,7 @@ test.describe("newsletter admin acceptance", () => {
     await editor.locator('input[name="subject"]').fill(`${tag} upozorenje`);
     await editor.locator(`input[name="audienceIds"][value="${csvAudience.id}"]`).check();
     await editor.locator(`input[name="audienceIds"][value="${xlsxAudience.id}"]`).check();
-    await acceptanceExpect(editor.locator('input[name="includeContactsWithoutConsent"]')).toHaveCount(0);
+    await acceptanceExpect(editor.locator('input[name="includeContactsWithoutConsent"]')).not.toBeChecked();
     await editor.getByRole("button", { name: "Sačuvaj novu verziju" }).click();
     await acceptanceExpect(editor.getByRole("status")).toContainText("Nacrt i nova verzija su sačuvani");
     await acceptanceExpect.poll(async () => db.newsletterCampaign.findUnique({
@@ -401,22 +391,8 @@ test.describe("newsletter admin acceptance", () => {
       versions: [{ includeContactsWithoutConsent: false }],
     });
 
-    await page.getByRole("button", { name: "Pošalji na proveru" }).click();
-    await acceptanceExpect.poll(async () => db.newsletterCampaign.findUnique({
-      where: { id: overrideCampaignId },
-      select: { recipients: true, status: true, audienceBreakdown: true },
-    })).toMatchObject({
-      recipients: 2,
-      status: "IN_REVIEW",
-      audienceBreakdown: { matchedWithoutConsent: 0 },
-    });
-
-    await context.clearCookies();
-    await prepareContext(context);
-    await login(page, reviewerEmail, reviewerPassword, `/admin/newsletter/kampanje/${overrideCampaignId}`);
-    await page.getByRole("button", { name: "Odobri kampanju" }).click();
     page.once("dialog", (dialog) => dialog.accept());
-    await page.getByRole("button", { name: "Pošalji odmah" }).click();
+    await page.getByRole("button", { name: "Pošalji kampanju", exact: true }).click();
     await acceptanceExpect.poll(async () => db.newsletterCampaign.findUnique({
       where: { id: overrideCampaignId }, select: { status: true },
     })).toEqual({ status: "SCHEDULED" });
@@ -458,17 +434,8 @@ test.describe("newsletter admin acceptance", () => {
     await editor.locator(`input[name="audienceIds"][value="${xlsxAudience.id}"]`).check();
     await editor.getByRole("button", { name: "Sačuvaj novu verziju" }).click();
     await acceptanceExpect(editor.getByRole("status")).toContainText("Nacrt i nova verzija su sačuvani");
-    await page.getByRole("button", { name: "Pošalji na proveru" }).click();
-    await acceptanceExpect.poll(async () => db.newsletterCampaign.findUnique({
-      where: { id: multiCampaignId }, select: { recipients: true, status: true },
-    })).toEqual({ recipients: 2, status: "IN_REVIEW" });
-
-    await context.clearCookies();
-    await prepareContext(context);
-    await login(page, reviewerEmail, reviewerPassword, `/admin/newsletter/kampanje/${multiCampaignId}`);
-    await page.getByRole("button", { name: "Odobri kampanju" }).click();
     page.once("dialog", (dialog) => dialog.accept());
-    await page.getByRole("button", { name: "Pošalji odmah" }).click();
+    await page.getByRole("button", { name: "Pošalji kampanju", exact: true }).click();
     await acceptanceExpect(page.getByText(/Zakazana · verzija 2/)).toBeVisible();
     page.once("dialog", (dialog) => dialog.accept());
     await page.getByRole("button", { name: "Otkaži" }).click();
@@ -520,7 +487,7 @@ test.describe("newsletter admin acceptance", () => {
     await acceptanceExpect(usedAudienceDelete.getByRole("alert")).toContainText("ne može da se obriše");
   });
 
-  test("invalid draft cannot enter review and an unused audience can be removed", async ({ context, page }) => {
+  test("invalid draft cannot be sent and an unused audience can be removed", async ({ context, page }) => {
     await prepareContext(context);
     await login(page);
     await page.goto("/admin/newsletter", { waitUntil: "domcontentloaded" });
@@ -528,7 +495,8 @@ test.describe("newsletter admin acceptance", () => {
     await acceptanceExpect(page).toHaveURL(/\/admin\/newsletter\/kampanje\/[^/]+$/);
     const invalidCampaignId = page.url().split("/").pop()!;
     campaignIds.add(invalidCampaignId);
-    await page.getByRole("button", { name: "Pošalji na proveru" }).click();
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "Pošalji kampanju", exact: true }).click();
     await acceptanceExpect(page.getByText("Izaberite bar jednu publiku kampanje.", { exact: true })).toBeVisible();
     expect(await db.newsletterCampaign.findUnique({
       where: { id: invalidCampaignId }, select: { status: true },

@@ -3,6 +3,8 @@ import "server-only";
 import { Prisma, StockMovementKind } from "@prisma/client";
 import { syncProductChannelAvailability } from "@/lib/channel-availability.server";
 
+import { resolveStoredWarehouseBalance } from "@/lib/reservation-stock";
+
 const DEFAULT_WAREHOUSE_CODE = "DC";
 const DEFAULT_WAREHOUSE_NAME = "Distributivni centar";
 
@@ -232,7 +234,7 @@ export async function reconcileWarehouseInventory(
     update: {},
     select: { qty: true },
   });
-  const reservations = await tx.orderItem.aggregate({
+  const reservations = await tx.orderItem.findMany({
     where: {
       productId: input.productId,
       warehouseReservedQty: { gt: 0 },
@@ -243,12 +245,23 @@ export async function reconcileWarehouseInventory(
         status: { notIn: ["ISPORUCENO", "OTKAZANO", "VRACENO"] },
       },
     },
-    _sum: { warehouseReservedQty: true },
+    select: { warehouseReservedQty: true, stockMovements: { select: { qty: true } } },
   });
-  const reservedQty = reservations._sum.warehouseReservedQty ?? 0;
-  const expectedPhysicalQty = current.qty + reservedQty;
-  const targetAvailableQty = Math.max(0, input.countedQty - reservedQty);
-  const delta = targetAvailableQty - current.qty;
+  const balance = resolveStoredWarehouseBalance({
+    storedQty: current.qty,
+    orderReservations: reservations.map(item => ({
+      qty: item.warehouseReservedQty,
+      debited: item.stockMovements.reduce((sum, movement) => sum + movement.qty, 0) < 0,
+    })),
+  });
+  const expectedPhysicalQty = balance.physical;
+  // Only old reservations have already debited WarehouseStock. New ones are
+  // subtracted by channel availability and must not reduce this physical count.
+  if (input.countedQty < balance.legacyDebitedReserved) {
+    throw new Error("Prebrojano stanje je manje od ranije skinutih rezervacija. Prvo usaglasite rezervacije.");
+  }
+  const targetStoredQty = input.countedQty - balance.legacyDebitedReserved;
+  const delta = targetStoredQty - current.qty;
 
   let warehouseBalance = current.qty;
   let productBalance = product.stock;
@@ -260,7 +273,7 @@ export async function reconcileWarehouseInventory(
           productId: input.productId,
         },
       },
-      data: { qty: targetAvailableQty },
+      data: { qty: targetStoredQty },
       select: { qty: true },
     });
     const updatedProduct = await tx.product.updateMany({

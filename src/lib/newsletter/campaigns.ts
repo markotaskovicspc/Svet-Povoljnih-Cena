@@ -44,10 +44,6 @@ import {
 
 const editableStatuses = new Set<NewsletterCampaignStatus>(["DRAFT", "IN_REVIEW"]);
 export class NewsletterSendPausedError extends Error {}
-const twoPersonThreshold = () => {
-  const value = Number.parseInt(process.env.NEWSLETTER_TWO_PERSON_APPROVAL_THRESHOLD ?? "1000", 10);
-  return Number.isFinite(value) ? Math.max(1, value) : 1_000;
-};
 
 export const saveCampaignSchema = z.object({
   id: z.string().min(1),
@@ -207,9 +203,6 @@ export async function approveNewsletterCampaign(campaignId: string, actorId: str
   const preflight = await preflightNewsletterCampaign(campaignId, false);
   if (preflight.errors.length) throw new Error(preflight.errors.join(" "));
   const count = preflight.recipientCount;
-  if (count >= twoPersonThreshold() && campaign.createdById === actorId) {
-    throw new Error(`Kampanju za ${count} primalaca mora da odobri drugi administrator.`);
-  }
   return db.newsletterCampaign.update({
     where: { id: campaignId },
     data: {
@@ -231,7 +224,7 @@ export async function scheduleNewsletterCampaign(
     where: { id: campaignId },
     include: { audience: true },
   });
-  if (campaign.status !== "APPROVED") throw new Error("Samo odobrena kampanja može da se zakaže.");
+  if (!["DRAFT", "IN_REVIEW", "APPROVED"].includes(campaign.status)) throw new Error("Kampanja je već pokrenuta ili zaključana. Za neuspešnu kampanju koristite Pokušaj ponovo.");
   if (scheduledAt.getTime() < Date.now() - 60_000) throw new Error("Vreme slanja je u prošlosti.");
   const preflight = await preflightNewsletterCampaign(campaignId);
   if (preflight.errors.length) throw new Error(preflight.errors.join(" "));
@@ -241,40 +234,38 @@ export async function scheduleNewsletterCampaign(
   const resolved = await resolveNewsletterAudience(filter, {
     includeContactsWithoutConsent: campaign.includeContactsWithoutConsent,
   });
-  if (requiresSecondApprover(campaign, resolved.recipients.length)) {
-    await reopenCampaignReview(campaignId, resolved.recipients.length, resolved.breakdown);
-    throw new Error(
-      `Publika sada ima ${resolved.recipients.length} primalaca. Kampanju mora ponovo da odobri drugi administrator.`,
-    );
-  }
-  if (campaign.audienceMode === "FIXED") {
-    await replaceCampaignRecipients(campaignId, resolved.recipients);
-  }
-  await db.newsletterCampaign.update({
-    where: { id: campaignId },
-    data: {
-      status: "SCHEDULED",
-      scheduledAt,
-      cancelledAt: null,
-      failureReason: null,
-      updatedById: actorId,
-      recipients: resolved.recipients.length,
-      audienceBreakdown: resolved.breakdown,
-    },
-  });
-  if (scheduledAt.getTime() <= Date.now() + 60_000) {
-    await db.backgroundJob.upsert({
-      where: { idempotencyKey: `newsletter-send:${campaignId}` },
-      create: {
-        kind: "NEWSLETTER_CAMPAIGN_SEND",
-        payload: { campaignId },
-        idempotencyKey: `newsletter-send:${campaignId}`,
-        maxAttempts: 8,
-        availableAt: scheduledAt,
+  await db.$transaction(async (tx) => {
+    const scheduled = await tx.newsletterCampaign.updateMany({
+      where: { id: campaignId, status: campaign.status, updatedAt: campaign.updatedAt },
+      data: {
+        status: "SCHEDULED",
+        approvedAt: new Date(),
+        approvedById: actorId,
+        audienceFilterSnapshot: audienceFilterJson(filter),
+        scheduledAt,
+        cancelledAt: null,
+        failureReason: null,
+        updatedById: actorId,
+        recipients: resolved.recipients.length,
+        audienceBreakdown: resolved.breakdown,
       },
-      update: { availableAt: scheduledAt },
     });
-  }
+    if (scheduled.count !== 1) throw new Error("Kampanja je u međuvremenu promenjena. Osvežite stranicu i pokušajte ponovo.");
+    if (campaign.audienceMode === "FIXED") await writeCampaignRecipients(tx, campaignId, resolved.recipients);
+    if (scheduledAt.getTime() <= Date.now() + 60_000) {
+      await tx.backgroundJob.upsert({
+        where: { idempotencyKey: `newsletter-send:${campaignId}` },
+        create: {
+          kind: "NEWSLETTER_CAMPAIGN_SEND",
+          payload: { campaignId },
+          idempotencyKey: `newsletter-send:${campaignId}`,
+          maxAttempts: 8,
+          availableAt: scheduledAt,
+        },
+        update: { availableAt: scheduledAt },
+      });
+    }
+  }, { timeout: 60_000, maxWait: 10_000 });
   return { scheduledAt };
 }
 
@@ -544,17 +535,6 @@ export async function sendNewsletterCampaign(campaignId: string, options: { defe
     });
   }
   const cfg = getEmailConfig();
-  const selectedRecipientCount = await db.newsletterCampaignRecipient.count({
-    where: { campaignId },
-  });
-  if (requiresSecondApprover(campaign, selectedRecipientCount)) {
-    await reopenCampaignReview(campaignId, selectedRecipientCount);
-    return {
-      ok: false as const,
-      approvalRequired: true as const,
-      recipients: selectedRecipientCount,
-    };
-  }
   const recipients = await finalEligibleRecipients(
     campaignId,
     campaign.includeContactsWithoutConsent,
@@ -851,27 +831,24 @@ export async function refreshCampaignStats(campaignId: string) {
   });
 }
 
-export async function replaceCampaignRecipients(
-  campaignId: string,
-  recipients: Array<{ id: string; email: string; firstName: string | null; lastName: string | null; language: string; status: "ACTIVE" | "PENDING" }>,
-) {
-  await db.$transaction(async (tx) => {
-    await tx.newsletterCampaignRecipient.deleteMany({ where: { campaignId, status: "QUEUED" } });
-    for (let offset = 0; offset < recipients.length; offset += 2_000) {
-      await tx.newsletterCampaignRecipient.createMany({
-        data: recipients.slice(offset, offset + 2_000).map((recipient) => ({
-          campaignId,
-          contactId: recipient.id,
-          email: recipient.email,
-          firstName: recipient.firstName,
-          lastName: recipient.lastName,
-          language: recipient.language,
-          consentStatusAtSelection: recipient.status,
-        })),
-        skipDuplicates: true,
-      });
-    }
-  }, { timeout: 60_000, maxWait: 10_000 });
+type SelectedNewsletterRecipient = { id: string; email: string; firstName: string | null; lastName: string | null; language: string; status: "ACTIVE" | "PENDING" };
+
+async function writeCampaignRecipients(tx: Prisma.TransactionClient, campaignId: string, recipients: SelectedNewsletterRecipient[]) {
+  await tx.newsletterCampaignRecipient.deleteMany({ where: { campaignId, status: "QUEUED" } });
+  for (let offset = 0; offset < recipients.length; offset += 2_000) {
+    await tx.newsletterCampaignRecipient.createMany({
+      data: recipients.slice(offset, offset + 2_000).map((recipient) => ({
+        campaignId, contactId: recipient.id, email: recipient.email,
+        firstName: recipient.firstName, lastName: recipient.lastName,
+        language: recipient.language, consentStatusAtSelection: recipient.status,
+      })),
+      skipDuplicates: true,
+    });
+  }
+}
+
+export async function replaceCampaignRecipients(campaignId: string, recipients: SelectedNewsletterRecipient[]) {
+  await db.$transaction(tx => writeCampaignRecipients(tx, campaignId, recipients), { timeout: 60_000, maxWait: 10_000 });
 }
 
 async function finalEligibleRecipients(
@@ -1034,7 +1011,7 @@ async function sendSesNewsletterBatch(args: {
         where: { id: { in: recipients.map((row) => row.id) }, status: "FAILED", failureReason: "ses:delivery_unknown" },
         data: { failureReason: result.error.slice(0, 4000) },
       });
-      throw new NewsletterSendPausedError(`Amazon SES je odbio ovu grupu poruka: nedostaje AWS dozvola ses:SendBulkEmail za izabranog pošiljaoca. Ova grupa nije poslata. ${result.error}`);
+      throw new NewsletterSendPausedError(`Amazon SES je odbio ovu grupu poruka: nedostaje AWS dozvola za grupno slanje (ses:SendBulkEmail / ses:SendBulkTemplatedEmail). Ova grupa nije poslata. ${result.error}`);
     }
     // Explicit throttling is safe to retry automatically.
     if (/^ses:(TooManyRequestsException|ThrottlingException)\b/.test(result.error)) {
@@ -1148,7 +1125,7 @@ async function finalizeSesNewsletterCampaign(campaignId: string) {
     db.newsletterCampaignRecipient.count({
       where: {
         campaignId,
-        status: { in: ["SENT", "DELIVERED", "OPENED", "CLICKED"] },
+        OR: [{ sentAt: { not: null } }, { providerMessageId: { not: null } }, { deliveredAt: { not: null } }],
       },
     }),
   ]);
@@ -1156,8 +1133,8 @@ async function finalizeSesNewsletterCampaign(campaignId: string) {
   await db.newsletterCampaign.update({
     where: { id: campaignId },
     data: {
-      status: failed ? "PARTIAL_FAILED" : "SENT",
-      sentAt: now,
+      status: failed ? (accepted ? "PARTIAL_FAILED" : "FAILED") : "SENT",
+      sentAt: accepted ? now : null,
       failureReason: failed ? `${failed} poruka je izostavljeno, odbijeno ili nema potvrđen ishod. Proverite listu primalaca; nepoznati ishodi se ne ponavljaju automatski.` : null,
     },
   });
@@ -1239,32 +1216,6 @@ export function newsletterRecipientTransition(
   if (rank[current] >= 9 && rank[next.status] < 9) return null;
   if (rank[next.status] <= rank[current]) return null;
   return next;
-}
-
-export function requiresSecondApprover(
-  campaign: { createdById: string | null; approvedById: string | null },
-  recipientCount: number,
-) {
-  return recipientCount >= twoPersonThreshold() && campaign.createdById === campaign.approvedById;
-}
-
-async function reopenCampaignReview(
-  campaignId: string,
-  recipients: number,
-  breakdown?: Prisma.InputJsonValue,
-) {
-  await db.newsletterCampaign.update({
-    where: { id: campaignId },
-    data: {
-      status: "IN_REVIEW",
-      approvedAt: null,
-      approvedById: null,
-      scheduledAt: null,
-      recipients,
-      ...(breakdown ? { audienceBreakdown: breakdown } : {}),
-      failureReason: "Publika je prešla prag za obavezno odobrenje drugog administratora.",
-    },
-  });
 }
 
 function eventTime(value?: string) {

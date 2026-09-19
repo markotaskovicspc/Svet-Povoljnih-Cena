@@ -1,4 +1,5 @@
 import "server-only";
+import { uniqueFamilyCards } from "./family-cards";
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import {
@@ -346,6 +347,20 @@ async function getTabPictogramsByHref() {
   return byHref;
 }
 
+async function listHomeFamilyCards(input: ListProductsInput) {
+  const limit = input.limit ?? 12;
+  let products: Product[] = [];
+  let cursor: string | undefined;
+  // Bound query cost while filling slots vacated by repeated family members.
+  for (let page = 0; page < 3; page++) {
+    const result = await listProducts({ ...input, cursor, limit: Math.min(limit * 3, 72), includeTotal: false });
+    products = uniqueFamilyCards([...products, ...result.items], limit);
+    if (products.length >= limit || !result.nextCursor) break;
+    cursor = result.nextCursor;
+  }
+  return products;
+}
+
 async function resolveSlot(slot: HomeSlotForRender) {
   if (!slot.enabled) return null;
 
@@ -361,7 +376,7 @@ async function resolveSlot(slot: HomeSlotForRender) {
     }
 
     const presentation = actionPresentation[action.kind];
-    const products = await listProducts({
+    const products = await listHomeFamilyCards({
       actionSlug: action.slug,
       limit,
       includeTotal: false,
@@ -373,7 +388,7 @@ async function resolveSlot(slot: HomeSlotForRender) {
       href: presentation.href,
       icon: presentation.icon,
       campaignSticker: presentation.campaignSticker,
-      products: products.items,
+      products,
     };
   }
 
@@ -381,7 +396,7 @@ async function resolveSlot(slot: HomeSlotForRender) {
     ? landingByKey.get(slot.landingPageKey)
     : undefined;
   if (landing) {
-    const products = await listProducts({
+    const products = await listHomeFamilyCards({
       ...landing.query,
       limit,
       includeTotal: false,
@@ -393,7 +408,7 @@ async function resolveSlot(slot: HomeSlotForRender) {
       href: landing.href,
       icon: landing.icon,
       campaignSticker: landing.campaignSticker,
-      products: products.items,
+      products,
     };
   }
 
@@ -404,14 +419,14 @@ async function resolveSlot(slot: HomeSlotForRender) {
   if (!page) return null;
 
   const products = await getProductsBySkus(
-    landingPageProductSkus(page.snapshot).slice(0, limit),
+    landingPageProductSkus(page.snapshot).slice(0, 300),
   );
 
   return {
     slotKey: slot.slotKey,
     title: slot.titleOverride?.trim() || page.snapshot.title,
     href: `/ponuda/${encodeURIComponent(page.slug)}`,
-    products,
+    products: uniqueFamilyCards(products, limit),
   };
 }
 
@@ -489,7 +504,7 @@ async function loadHomeLayout(): Promise<HomeLayout> {
 
 const getHomeLayoutAcrossRequests = unstable_cache(
   loadHomeLayout,
-  ["storefront-home-layout-v1"],
+  ["storefront-home-layout-v2-family"],
   {
     revalidate: 60,
     tags: ["storefront-home"],

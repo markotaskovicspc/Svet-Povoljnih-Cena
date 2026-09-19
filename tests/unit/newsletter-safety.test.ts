@@ -138,3 +138,32 @@ describe("newsletter audience and send safeguards", () => {
     expect(mocks.bulk).not.toHaveBeenCalled();
   });
 });
+
+it("includes guest purchase amounts, cities, vouchers and products in advanced filters", async () => {
+  mocks.behavior.mockImplementation(async (query) => query.sql.includes('WITH matched_orders')
+    ? [{contactId:"c1",sku:"GUEST-SKU",categoryPath:"odeca"}]
+    : [{contactId:"c1",orderCount:2,totalSpend:50000,lastPurchaseAt:new Date(),cities:["Beograd"],vouchers:["WELCOME"]}]);
+  const result = await resolveNewsletterAudience({groups:[{id:"g",rules:[
+    {id:"n",field:"orderCount",operator:"gte",value:2},
+    {id:"s",field:"totalSpend",operator:"gte",value:40000},
+    {id:"c",field:"city",operator:"equals",value:"Beograd"},
+    {id:"v",field:"voucher",operator:"equals",value:"WELCOME"},
+    {id:"p",field:"purchasedSku",operator:"equals",value:"GUEST-SKU"},
+  ]}]});
+  expect(result.recipients.map(r=>r.id)).toEqual(["c1"]);
+  for(const [query] of mocks.behavior.mock.calls) {
+    expect(query.sql).toContain('lower(o."guestEmail") = lower(c."email")');
+    expect(query.sql).toContain("'KREIRANO', 'OTKAZANO', 'VRACENO'");
+  }
+});
+it("does not stamp an all-failed SES campaign as accepted", async () => {
+  mocks.recipients.mockResolvedValue([]);
+  mocks.recipientCount.mockImplementation(async ({where}) => {
+    if (where.status === "QUEUED") return 0;
+    if (where.OR?.some((item: {sentAt?:unknown})=>item.sentAt)) return 0;
+    if (where.status?.in?.includes("FAILED")) return 10;
+    return 10;
+  });
+  await sendNewsletterCampaign("campaign1");
+  expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({status:"FAILED",sentAt:null})}));
+});

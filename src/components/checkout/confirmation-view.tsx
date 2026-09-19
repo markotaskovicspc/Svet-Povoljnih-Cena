@@ -24,9 +24,8 @@ import { PurchaseAnalytics } from "@/components/analytics/first-party-analytics"
 import { CancelOrderButton } from "@/components/orders/cancel-order-button";
 
 /**
- * `/checkout/potvrda` view. Reads the placed order from the checkout store
- * (set during onSubmit in `CheckoutFlow`) and renders payment-specific blocks.
- * If no order is in the store (e.g. direct visit), bounces back to /korpa.
+ * Renders the server-authorized order and its payment-specific blocks.
+ * Missing or invalid access returns the buyer to the cart.
  */
 export function ConfirmationView({
   initialOrder,
@@ -40,9 +39,10 @@ export function ConfirmationView({
   paymentMessage?: string;
 }) {
   const router = useRouter();
-  const storedOrder = useCheckout((s) => s.lastOrder);
   const resetProgress = useCheckout((s) => s.resetProgress);
-  const order = storedOrder ?? initialOrder ?? null;
+  // The server has verified the order token and loaded the current values.
+  // Never replace those with an old order still held by a mounted client store.
+  const order = initialOrder ?? null;
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });

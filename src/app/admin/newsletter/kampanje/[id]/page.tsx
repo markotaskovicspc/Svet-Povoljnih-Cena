@@ -22,7 +22,6 @@ import { SubmitButton } from "@/components/admin/submit-button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
-  approveNewsletterCampaignAction,
   cancelNewsletterCampaignAction,
   deleteNewsletterCampaignDraftAction,
   duplicateNewsletterCampaignAction,
@@ -32,14 +31,13 @@ import {
   scheduleNewsletterCampaignAction,
   sendNewsletterCampaignNowAction,
   sendNewsletterTestAction,
-  submitNewsletterReviewAction,
 } from "../../actions";
 
 export const dynamic = "force-dynamic";
 
 const campaignLabel: Record<NewsletterCampaignStatus, string> = {
   DRAFT: "Nacrt",
-  IN_REVIEW: "Na proveri",
+  IN_REVIEW: "Spremna za slanje",
   APPROVED: "Odobrena",
   SCHEDULED: "Zakazana",
   PREPARING: "Priprema primalaca",
@@ -137,6 +135,7 @@ export default async function NewsletterCampaignPage({
         }
       />
       <main className="space-y-6 px-4 py-6 md:px-8">
+        <WorkflowCard campaign={campaign} retrySummary={retrySummary} />
         <NewsletterContactOverview counts={contactOverview} />
         {campaign.failureReason ? (
           <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
@@ -158,7 +157,6 @@ export default async function NewsletterCampaignPage({
         </div>
 
         <a href="#test-email" className="inline-flex rounded-lg border border-border px-4 py-2 text-sm font-medium text-walnut hover:bg-muted-bg">Pošalji test na određenu adresu</a>
-        <WorkflowCard campaign={campaign} currentAdminId={admin.id} retrySummary={retrySummary} />
 
         {editable ? (
           <Card>
@@ -319,7 +317,6 @@ export default async function NewsletterCampaignPage({
 
 function WorkflowCard({
   campaign,
-  currentAdminId,
   retrySummary,
 }: {
   campaign: {
@@ -334,56 +331,30 @@ function WorkflowCard({
     audienceBreakdown: unknown;
     includeContactsWithoutConsent: boolean;
   };
-  currentAdminId: string;
   retrySummary: Awaited<ReturnType<typeof newsletterRetrySummary>>;
 }) {
   const pacing = newsletterDeliveryPolicy();
-  const threshold = Number.parseInt(process.env.NEWSLETTER_TWO_PERSON_APPROVAL_THRESHOLD ?? "1000", 10) || 1_000;
-  const needsSecondAdmin = (campaign.recipients ?? 0) >= threshold && campaign.createdById === currentAdminId;
   return (
     <Card>
-      <CardTitle description="Tok je: nacrt → provera → odobrenje → zakazivanje/slanje. Podobnost kontakata se proverava ponovo neposredno pre slanja.">Kontrola slanja</CardTitle>
+      <CardTitle description="Administrator može odmah pokrenuti slanje ili izabrati termin. Sadržaj i primaoci proveravaju se automatski pre slanja. Šalje se poslednja sačuvana verzija.">Kontrola slanja</CardTitle>
       <p className="mb-4 rounded-xl bg-muted-bg p-3 text-sm">Postepeno slanje: najviše {pacing.batchSize} mejlova po paketu, sa najmanje {pacing.intervalMs / 1000} sekundi razmaka. Tempo se deli između newsletter kampanja; obrada reda i SES ograničenja mogu produžiti slanje.</p>
       {campaign.status === "FAILED" || campaign.status === "PARTIAL_FAILED" ? (
         <p className="mb-4 text-sm text-ink-600">Čeka slanje: {retrySummary.queued}. Potvrđeno odbijeno, može ponovo: {retrySummary.retryable}. Nepoznat ishod, potrebna provera SES-a: {retrySummary.unknown}. Već prihvaćene poruke se ne ponavljaju.</p>
       ) : null}
-      <div className="mb-4 flex flex-wrap items-center gap-2 text-xs">
-        {(["DRAFT", "IN_REVIEW", "APPROVED", "SCHEDULED", "SENT"] as NewsletterCampaignStatus[]).map((step, index) => (
-          <span key={step} className={cn("rounded-full px-3 py-1", workflowReached(campaign.status, step) ? "bg-walnut text-white" : "bg-muted-bg text-ink-500")}>{index + 1}. {campaignLabel[step]}</span>
-        ))}
-      </div>
+      <p className="mb-4 text-sm">Status: <strong>{campaignLabel[campaign.status]}</strong> · Primaoci: <strong>{campaign.recipients?.toLocaleString("sr-Latn-RS") ?? "proveriće se pre slanja"}</strong></p>
       <div className="flex flex-wrap items-end gap-3">
-        {campaign.status === "DRAFT" ? (
-          <AdminActionForm action={submitNewsletterReviewAction}>
-            <input type="hidden" name="id" value={campaign.id} />
-            <SubmitButton
-              pendingLabel="Proveravam publiku i sadržaj…"
-
-            >
-              Pošalji na proveru
-            </SubmitButton>
-          </AdminActionForm>
-        ) : null}
-        {campaign.status === "IN_REVIEW" ? (
-          <div>
-            <AdminActionForm action={approveNewsletterCampaignAction}>
-              <input type="hidden" name="id" value={campaign.id} />
-              <SubmitButton disabled={needsSecondAdmin}>Odobri kampanju</SubmitButton>
-            </AdminActionForm>
-            {needsSecondAdmin ? <p className="mt-1 text-xs text-warning">Za {campaign.recipients} primalaca odobrenje mora dati drugi administrator.</p> : null}
-          </div>
-        ) : null}
-        {campaign.status === "APPROVED" ? (
+        {["DRAFT", "IN_REVIEW", "APPROVED"].includes(campaign.status) ? (
           <>
-            <AdminActionForm action={scheduleNewsletterCampaignAction} className="min-w-80">
+            <AdminActionForm action={sendNewsletterCampaignNowAction}>
+              <input type="hidden" name="id" value={campaign.id} />
+              <SubmitButton className="min-h-12 px-6 text-base" pendingLabel="Proveravam i pokrećem…" confirm={`Poslati poslednju sačuvanu verziju kampanje za ${campaign.recipients == null ? "izabranu publiku" : `${campaign.recipients} primalaca`}?${campaign.includeContactsWithoutConsent ? " Uključeni su i kontakti bez zabeležene saglasnosti." : ""} Slanje ide postepeno.`}>Pošalji kampanju</SubmitButton>
+            </AdminActionForm>
+            <AdminActionForm action={scheduleNewsletterCampaignAction} className="w-full sm:w-auto sm:min-w-80">
               <input type="hidden" name="id" value={campaign.id} />
               <NewsletterScheduleField defaultIso={campaign.scheduledAt?.toISOString()} />
               <SubmitButton className="mt-2" pendingLabel="Zakazujem…">Zakaži</SubmitButton>
             </AdminActionForm>
-            <AdminActionForm action={sendNewsletterCampaignNowAction}>
-              <input type="hidden" name="id" value={campaign.id} />
-              <SubmitButton variant="outline" confirm={`Staviti kampanju za ${campaign.recipients ?? 0} primalaca u red za slanje odmah?`}>Pošalji odmah</SubmitButton>
-            </AdminActionForm>
+
           </>
         ) : null}
         {campaign.status === "APPROVED" || campaign.status === "SCHEDULED" ? (
@@ -420,8 +391,9 @@ function WorkflowCard({
         ) : null}
       </div>
       {campaign.scheduledAt ? <p className="mt-4 text-sm text-ink-700">Zakazano: <strong>{formatDate(campaign.scheduledAt)}</strong></p> : null}
-      {campaign.sentAt ? <p className="mt-2 text-sm text-ink-700">Prihvaćeno za slanje: <strong>{formatDate(campaign.sentAt)}</strong></p> : null}
-      {campaign.audienceBreakdown ? <pre className="mt-4 overflow-auto rounded-lg bg-muted-bg p-3 text-xs text-ink-700">{JSON.stringify(campaign.audienceBreakdown, null, 2)}</pre> : null}
+      {campaign.sentAt && retrySummary.accepted > 0 ? <p className="mt-2 text-sm text-ink-700">Prihvaćeno za slanje: <strong>{formatDate(campaign.sentAt)}</strong></p> : null}
+      <p className="mt-4 text-sm">SES prihvatio: <strong>{retrySummary.accepted}</strong> · Čeka: <strong>{retrySummary.queued}</strong> · Greške: <strong>{retrySummary.failed}</strong>. Prihvatanje nije potvrda isporuke.</p>
+      {campaign.audienceBreakdown ? <details className="mt-4"><summary className="cursor-pointer text-sm">Detalji izabrane publike</summary><pre className="mt-4 overflow-auto rounded-lg bg-muted-bg p-3 text-xs text-ink-700">{JSON.stringify(campaign.audienceBreakdown, null, 2)}</pre></details> : null}
     </Card>
   );
 }
@@ -430,11 +402,6 @@ function StatusPill({ status, label }: { status: string; label: string }) {
   const good = status === "SENT" || status === "DELIVERED" || status === "OPENED" || status === "CLICKED";
   const bad = status === "FAILED" || status === "BOUNCED" || status === "COMPLAINED";
   return <span className={cn("inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium", good ? "bg-success/15 text-success" : bad ? "bg-destructive/15 text-destructive" : "bg-muted-bg text-ink-700")}>{label}</span>;
-}
-
-function workflowReached(current: NewsletterCampaignStatus, step: NewsletterCampaignStatus) {
-  const rank: Partial<Record<NewsletterCampaignStatus, number>> = { DRAFT: 0, IN_REVIEW: 1, APPROVED: 2, SCHEDULED: 3, PREPARING: 3, SENDING: 4, SENT: 4 };
-  return (rank[current] ?? -1) >= (rank[step] ?? 99);
 }
 
 function formatDate(date: Date) {

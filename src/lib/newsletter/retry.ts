@@ -19,12 +19,14 @@ export function retryableNewsletterRecipientWhere(campaignId: string): Prisma.Ne
 }
 
 export async function newsletterRetrySummary(campaignId: string) {
-  const [queued, retryable, unknown] = await Promise.all([
+  const [queued, retryable, unknown, accepted, failed] = await Promise.all([
     db.newsletterCampaignRecipient.count({ where: { campaignId, status: "QUEUED" } }),
     db.newsletterCampaignRecipient.count({ where: retryableNewsletterRecipientWhere(campaignId) }),
     db.newsletterCampaignRecipient.count({ where: { campaignId, status: "FAILED", failureReason: "ses:delivery_unknown" } }),
+    db.newsletterCampaignRecipient.count({ where: { campaignId, OR: [{ sentAt: { not: null } }, { providerMessageId: { not: null } }, { deliveredAt: { not: null } }] } }),
+    db.newsletterCampaignRecipient.count({ where: { campaignId, status: "FAILED" } }),
   ]);
-  return { queued, retryable, unknown };
+  return { queued, retryable, unknown, accepted, failed };
 }
 
 export async function retryNewsletterCampaign(campaignId: string, actorId: string, options: { retryUnknownAcknowledged?: boolean } = {}) {

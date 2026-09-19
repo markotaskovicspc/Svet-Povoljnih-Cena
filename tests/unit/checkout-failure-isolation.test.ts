@@ -37,6 +37,8 @@ const product = {
   availableWebAuto: true, articleStatus: "ACTIVE", dcAvailableQty: 10, stock: 10,
   fullPrice: 999, salePrice: null, discountPct: null, supplier: null,
   categories: [], media: [], actionPrices: [],
+  priceListEntries: [{ price: 999, validFrom: new Date("2026-01-01"), validTo: null,
+    priceList: { id: "mp", code: "MP", name: "MP", active: true, validFrom: null, validTo: null } }],
 };
 const input = {
   guestEmail: "checkout-test@example.com", lines: [{ sku: "TEST", qty: 1 }],
@@ -116,7 +118,7 @@ it("still rejects unavailable stock without saving an order", async () => {
 
 it("returns the existing order on replay even if queue repair fails", async () => {
   await POST(request());
-  mocks.session.mockResolvedValue({ order: { ...committed.order, supplierFulfillments: [], items: [],
+  mocks.session.mockResolvedValue({ order: { ...committed.order, supplierFulfillments: [], items: [{ sku: "TEST", qty: 1, withAssembly: false }],
     voucherDiscount: 0, firstPurchaseDiscount: 0, savedCardDiscount: 0,
   } });
   mocks.repairJob.mockRejectedValue(new Error("Queue unavailable"));

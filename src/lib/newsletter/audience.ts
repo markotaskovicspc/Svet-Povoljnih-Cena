@@ -1,6 +1,6 @@
 import "server-only";
 
-import { OrderStatus, Prisma, type MarketingContact } from "@prisma/client";
+import { Prisma, type MarketingContact } from "@prisma/client";
 import { z } from "zod";
 import { databaseIdentifier, db } from "@/lib/db";
 
@@ -233,7 +233,6 @@ export async function resolveNewsletterAudience(
     `);
     for (const row of rows) behavior.set(row.contactId, row);
   }
-  const userIds = unique(contacts.map((contact) => contact.userId).filter(isString));
   const needsOrderStats = (["orderCount", "totalSpend", "lastPurchaseAt"] as const).some((field) => fields.has(field));
   const needsCity = fields.has("city");
   const needsVoucher = fields.has("voucher");
@@ -249,39 +248,32 @@ export async function resolveNewsletterAudience(
         .filter(Boolean),
     )),
   ]);
-  const validOrderWhere: Prisma.OrderWhereInput = {
-    userId: { in: userIds },
-    status: { notIn: [OrderStatus.KREIRANO, OrderStatus.OTKAZANO, OrderStatus.VRACENO] },
-  };
-  const [orderStatsRows, cityRows, voucherRows, productRows, engagementRows] = await Promise.all([
-    userIds.length && needsOrderStats
-      ? db.order.groupBy({
-          by: ["userId"],
-          where: validOrderWhere,
-          _count: { _all: true },
-          _sum: { total: true },
-          _max: { createdAt: true },
-        })
+  // Resolve purchase history by contact email as well as userId, including
+  // guest orders and accounts created after the purchase. Each join yields
+  // one row per contact/order, even when multiple identity clauses match.
+  const contactOrders = Prisma.sql`
+    FROM ${databaseIdentifier("MarketingContact")} c
+    JOIN ${orderTable} o ON (o."userId" = c."userId"
+      OR lower(o."guestEmail") = lower(c."email")
+      OR o."userId" IN (SELECT u."id" FROM ${databaseIdentifier("User")} u WHERE lower(u."email") = lower(c."email")))
+    WHERE c."id" IN (${Prisma.join(contacts.length ? contacts.map(c => c.id) : [""])})
+      AND o."status" NOT IN ('KREIRANO', 'OTKAZANO', 'VRACENO')
+  `;
+  const [orderStatsRows, productRows, engagementRows] = await Promise.all([
+    contacts.length && (needsOrderStats || needsCity || needsVoucher)
+      ? db.$queryRaw<Array<{ contactId: string; orderCount: number; totalSpend: Prisma.Decimal; lastPurchaseAt: Date | null; cities: string[]; vouchers: string[] }>>(Prisma.sql`
+          SELECT c."id" AS "contactId", count(*)::int AS "orderCount",
+            sum(o."total") AS "totalSpend", max(o."createdAt") AS "lastPurchaseAt",
+            array_remove(array_agg(DISTINCT o."shipCity"), NULL) AS cities,
+            array_remove(array_agg(DISTINCT o."voucherCode"), NULL) AS vouchers
+          ${contactOrders} GROUP BY c."id"
+        `)
       : Promise.resolve([]),
-    userIds.length && needsCity
-      ? db.order.groupBy({
-          by: ["userId", "shipCity"],
-          where: validOrderWhere,
-        })
-      : Promise.resolve([]),
-    userIds.length && needsVoucher
-      ? db.order.groupBy({
-          by: ["userId", "voucherCode"],
-          where: { ...validOrderWhere, voucherCode: { not: null } },
-        })
-      : Promise.resolve([]),
-    userIds.length && needsProducts
-      ? db.$queryRaw<Array<{ userId: string; sku: string; categoryPath: string | null }>>(Prisma.sql`
-          SELECT DISTINCT o."userId" AS "userId", oi."sku", oi."categoryPath"
-          FROM ${orderItemTable} oi
-          JOIN ${orderTable} o ON o."id" = oi."orderId"
-          WHERE o."userId" IN (${Prisma.join(userIds)})
-            AND o."status" NOT IN ('KREIRANO', 'OTKAZANO', 'VRACENO')
+    contacts.length && needsProducts
+      ? db.$queryRaw<Array<{ contactId: string; sku: string; categoryPath: string | null }>>(Prisma.sql`
+          WITH matched_orders AS (SELECT c."id" AS "contactId", o."id" AS "orderId" ${contactOrders})
+          SELECT DISTINCT m."contactId", oi."sku", oi."categoryPath"
+          FROM matched_orders m JOIN ${orderItemTable} oi ON oi."orderId" = m."orderId"
         `)
       : Promise.resolve([]),
     contacts.length && engagementCampaignIds.length
@@ -294,11 +286,9 @@ export async function resolveNewsletterAudience(
         })
       : Promise.resolve([]),
   ]);
-  const orderStats = new Map(orderStatsRows.map((row) => [row.userId, row]));
-  const cities = groupValues(cityRows, (row) => row.userId, (row) => row.shipCity);
-  const vouchers = groupValues(voucherRows, (row) => row.userId, (row) => row.voucherCode);
-  const purchasedSkus = groupValues(productRows, (row) => row.userId, (row) => row.sku);
-  const purchasedCategories = groupValues(productRows, (row) => row.userId, (row) => row.categoryPath);
+  const orderStats = new Map(orderStatsRows.map((row) => [row.contactId, row]));
+  const purchasedSkus = groupValues(productRows, (row) => row.contactId, (row) => row.sku);
+  const purchasedCategories = groupValues(productRows, (row) => row.contactId, (row) => row.categoryPath);
   const engagement = groupRows(engagementRows, (row) => row.contactId);
   const suppressed = new Set(
     (await db.emailSuppression.findMany({
@@ -320,11 +310,7 @@ export async function resolveNewsletterAudience(
       excludedSuppressed += 1;
       continue;
     }
-    const stats = contact.userId ? orderStats.get(contact.userId) as {
-      _count: { _all: number };
-      _sum: { total: Prisma.Decimal | null };
-      _max: { createdAt: Date | null };
-    } | undefined : undefined;
+    const stats = orderStats.get(contact.id);
     const recipientEvents = engagement.get(contact.id) ?? [];
     const profile: AudienceProfile = {
       contactId: contact.id,
@@ -338,13 +324,13 @@ export async function resolveNewsletterAudience(
       registered: behavior.get(contact.id)?.registered ?? Boolean(contact.userId),
       hasPurchased: behavior.get(contact.id)?.hasPurchased ?? false,
       abandonedCheckout: behavior.get(contact.id)?.abandonedCheckout ?? false,
-      cities: contact.userId ? cities.get(contact.userId) ?? [] : [],
-      orderCount: stats?._count._all ?? 0,
-      totalSpend: Number(stats?._sum.total ?? 0),
-      lastPurchaseAt: stats?._max.createdAt ?? null,
-      purchasedSkus: contact.userId ? purchasedSkus.get(contact.userId) ?? [] : [],
-      purchasedCategories: contact.userId ? purchasedCategories.get(contact.userId) ?? [] : [],
-      vouchers: contact.userId ? vouchers.get(contact.userId) ?? [] : [],
+      cities: stats?.cities ?? [],
+      orderCount: stats?.orderCount ?? 0,
+      totalSpend: Number(stats?.totalSpend ?? 0),
+      lastPurchaseAt: stats?.lastPurchaseAt ?? null,
+      purchasedSkus: purchasedSkus.get(contact.id) ?? [],
+      purchasedCategories: purchasedCategories.get(contact.id) ?? [],
+      vouchers: stats?.vouchers ?? [],
       openedCampaignIds: unique(recipientEvents.filter((row) => row.status === "OPENED" || row.status === "CLICKED").map((row) => row.campaignId)),
       clickedCampaignIds: unique(recipientEvents.filter((row) => row.status === "CLICKED").map((row) => row.campaignId)),
       receivedCampaignIds: unique(recipientEvents.map((row) => row.campaignId)),
@@ -505,10 +491,6 @@ function maximumAudienceContacts() {
 
 function unique(values: string[]) {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
-}
-
-function isString(value: string | null): value is string {
-  return typeof value === "string" && value.length > 0;
 }
 
 function groupValues<T>(

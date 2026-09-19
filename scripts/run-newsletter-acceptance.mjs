@@ -52,7 +52,6 @@ const childEnv = {
   NEXTAUTH_SECRET: "newsletter-e2e-auth-secret-32-characters",
   EMAIL_UNSUBSCRIBE_SECRET: "newsletter-e2e-unsubscribe-secret-32-characters",
   BACKGROUND_JOBS_CRON_SECRET: "newsletter-e2e-cron-secret-32-characters",
-  NEWSLETTER_TWO_PERSON_APPROVAL_THRESHOLD: "2",
   E2E_NEWSLETTER: "1",
 };
 

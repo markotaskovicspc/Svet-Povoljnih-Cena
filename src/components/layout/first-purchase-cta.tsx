@@ -22,7 +22,8 @@ export function FirstPurchaseCta() {
     if (closedUntil > Date.now()) return;
 
     const timeout = window.setTimeout(() => {
-      setMinimized(window.localStorage.getItem(MINIMIZED_KEY) === "true");
+      // Keep product browsing unobstructed on phones; expand only on request.
+      setMinimized(window.matchMedia("(max-width: 639px)").matches || window.localStorage.getItem(MINIMIZED_KEY) === "true");
       setVisible(true);
     }, SHOW_DELAY_MS);
     return () => window.clearTimeout(timeout);
