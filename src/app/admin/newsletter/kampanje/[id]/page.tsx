@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { newsletterCampaignLabels as campaignLabel, newsletterCount, newsletterRate, newsletterMetricExplanation } from "@/lib/newsletter/reporting";
 import { NewsletterStatsRefresh } from "@/components/admin/newsletter-stats-refresh";
+import { NewsletterBounces } from "@/components/admin/newsletter-bounces";
 import {
   cancelNewsletterCampaignAction,
   deleteNewsletterCampaignDraftAction,
@@ -155,7 +156,7 @@ export default async function NewsletterCampaignPage({
           <dl className="flex flex-wrap gap-x-6 gap-y-2 rounded-xl border border-border/60 bg-surface p-4 text-sm">
             <div><dt className="inline text-ink-500">SES prihvatio: </dt><dd className="inline font-medium">{newsletterCount(retrySummary.accepted)}</dd></div>
             <div><dt className="inline text-ink-500">Čeka slanje: </dt><dd className="inline font-medium">{newsletterCount(retrySummary.queued)}</dd></div>
-            <div><dt className="inline text-ink-500">Odbijena isporuka (bounce): </dt><dd className="inline font-medium">{newsletterCount(campaign.bounced)}</dd></div>
+            <div><dt className="inline text-ink-500">Odbijena isporuka (bounce): </dt><dd className="inline font-medium"><NewsletterBounces campaignId={campaign.id} count={campaign.bounced} /></dd></div>
             <div><dt className="inline text-ink-500">Prijave spama: </dt><dd className="inline font-medium">{newsletterCount(campaign.complained)}</dd></div>
             <div><dt className="inline text-ink-500">Odjave: </dt><dd className="inline font-medium">{newsletterCount(campaign.unsubscribed)}</dd></div>
           </dl>
