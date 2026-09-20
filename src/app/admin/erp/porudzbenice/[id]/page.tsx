@@ -32,6 +32,7 @@ import {
   purchaseOrderCapacityWarnings,
   purchaseOrderSendDate,
   purchaseOrderSupplierEmailIssue,
+  purchaseOrderGoodsTotal,
 } from "@/lib/admin/purchase-order";
 import { renderPurchaseOrderSupplierEmail } from "@/lib/admin/purchase-order-email";
 import { db } from "@/lib/db";
@@ -395,6 +396,9 @@ export default async function PurchaseOrderEditorPage({
   if (!order) notFound();
 
   const locked = Boolean(order.lockedAt);
+  const goodsTotal = purchaseOrderGoodsTotal(order.items.map((item) => ({
+    qty: item.qty, purchasePrice: Number(item.purchasePrice),
+  })));
   const capacityWarnings = purchaseOrderCapacityWarnings({
     totalVolumeM3: Number(order.totalVolume ?? 0),
     totalWeightKg: Number(order.totalWeight ?? 0),
@@ -670,7 +674,7 @@ export default async function PurchaseOrderEditorPage({
               <dt className="text-ink-500">Ukupna težina</dt>
               <dd className="text-right tabular-nums">{fmt(num(order.totalWeight), 3)} kg</dd>
               <dt className="text-ink-500">Ukupna cena</dt>
-              <dd className="text-right tabular-nums">{fmt(num(order.totalPrice))} {order.currency}</dd>
+              <dd className="text-right tabular-nums">{fmt(goodsTotal)} {order.currency}</dd>
               <dt className="text-ink-500">Transport</dt>
               <dd className="text-right tabular-nums">{fmt(num(order.freightCost))} {order.freightCurrency}</dd>
               <dt className="text-ink-500">
@@ -711,14 +715,14 @@ export default async function PurchaseOrderEditorPage({
             <div className="border-b border-border/60 px-5 py-4">
               <h2 className="text-base font-semibold text-ink-900">Artikli porudžbenice</h2>
               <p className="text-sm text-ink-500">
-                Šifra povlači važeću cenu i matične podatke. Nabavna cena, količina, procenjena carina i kalkulativna MPC mogu da se koriguju do knjiženja. Stvarne troškove i COGS potvrđuje prijemnica.
+                Šifra povlači važeću cenu i matične podatke. Nabavna cena, količina, procenjena carina i kalkulativna MPC mogu da se koriguju do knjiženja. Stvarne troškove i COGS potvrđuje prijemnica. Ukupna cena je zbir sačuvanih stavki; posle izmene cene ili količine kliknite „Snimi” u tom redu.
               </p>
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-[1900px] text-sm">
                 <thead className="bg-muted-bg/70 text-left text-xs uppercase tracking-[0.08em] text-ink-500">
                   <tr>
-                    {["Foto", "Šifra", "Dobavljač / naziv", "Atributi / dezen", "Nabavna cena", "Valuta / paritet / važi od", "MOQ / kom-pak", "Količina", "Zapremina / težina", "Carina % (procena)", "Kalk. MPC", "BM% (procena)", "Dobavljačev naziv / sertifikati / bar-kod", ""].map((label) => (
+                    {["Foto", "Šifra", "Dobavljač / naziv", "Atributi / dezen", "Nabavna cena", "Valuta / paritet / važi od", "MOQ / kom-pak", "Količina", "Iznos", "Zapremina / težina", "Carina % (procena)", "Kalk. MPC", "BM% (procena)", "Dobavljačev naziv / sertifikati / bar-kod", ""].map((label) => (
                       <th key={label} className="whitespace-nowrap px-3 py-3">{label}</th>
                     ))}
                   </tr>
@@ -754,13 +758,14 @@ export default async function PurchaseOrderEditorPage({
                           <p>{item.attributes ?? "—"}</p>
                           <p className="text-ink-500">{item.pattern ?? "—"}</p>
                         </td>
-                        <td colSpan={8} className="p-0">
+                        <td colSpan={9} className="p-0">
                           {locked ? (
-                            <div className="grid grid-cols-[150px_190px_120px_120px_170px_120px_120px_110px] items-center">
+                            <div className="grid grid-cols-[150px_190px_120px_120px_150px_170px_120px_120px_110px] items-center">
                               <span className="px-3 py-2 text-right tabular-nums">{fmt(num(item.purchasePrice))}</span>
                               <span className="px-3 py-2">{item.currency} · {item.parity ?? "—"} · {dtLocal(item.priceValidFrom)}</span>
                               <span className="px-3 py-2">{item.moq ?? "—"} / {item.packQty ?? "—"}</span>
                               <span className="px-3 py-2 text-right">{item.qty}</span>
+                              <span className="px-3 py-2 text-right tabular-nums">{fmt(Number(item.purchasePrice) * item.qty)} {item.currency}</span>
                               <span className="px-3 py-2 text-right">{formatLogisticsVolume(num(item.totalVolume))} m³ / {fmt(num(item.totalWeight), 3)} kg</span>
                               <span className="px-3 py-2 text-right">{fmt(num(item.customsRate))}</span>
                               <span className="px-3 py-2 text-right">{fmt(num(item.calcRetailPrice))}</span>
@@ -770,7 +775,7 @@ export default async function PurchaseOrderEditorPage({
                             <AdminActionForm action={updateLine}>
                               <input type="hidden" name="id" value={item.id} />
                               <input type="hidden" name="poId" value={order.id} />
-                              <div className="grid grid-cols-[150px_190px_120px_120px_170px_120px_120px_110px] items-center">
+                              <div className="grid grid-cols-[150px_190px_120px_120px_150px_170px_120px_120px_110px] items-center">
                                 <div className="px-2 py-2"><Input aria-label={`Nabavna cena ${item.sku}`} name="purchasePrice" type="number" min={0} step="0.01" defaultValue={num(item.purchasePrice) ?? 0} /></div>
                                 <span className="px-3 py-2">{item.currency} · {item.parity ?? "—"} · {dtLocal(item.priceValidFrom)}</span>
                                 <span className="px-3 py-2">{item.moq ?? "—"} / {item.packQty ?? "—"}</span>
@@ -786,6 +791,7 @@ export default async function PurchaseOrderEditorPage({
                                   />
                                   {invalidPack ? <span className="mt-1 block text-[10px] text-danger">Nije deljivo sa {item.packQty}</span> : null}
                                 </div>
+                                <span className="px-3 py-2 text-right tabular-nums">{fmt(Number(item.purchasePrice) * item.qty)} {item.currency}</span>
                                 <span className="px-3 py-2 text-right">{formatLogisticsVolume(num(item.totalVolume))} m³ / {fmt(num(item.totalWeight), 3)} kg</span>
                                 <div className="px-2 py-2"><Input aria-label={`Carinska stopa ${item.sku}`} name="customsRate" type="number" min={0} max={100} step="0.01" defaultValue={num(item.customsRate) ?? ""} /></div>
                                 <div className="px-2 py-2"><Input aria-label={`Kalkulativna MPC ${item.sku}`} name="calcRetailPrice" type="number" min={0} step="0.01" defaultValue={num(item.calcRetailPrice) ?? ""} /></div>
@@ -816,7 +822,7 @@ export default async function PurchaseOrderEditorPage({
                     );
                   })}
                   {!order.items.length ? (
-                    <tr><td colSpan={14} className="px-4 py-10 text-center text-ink-500">Još nema stavki.</td></tr>
+                    <tr><td colSpan={15} className="px-4 py-10 text-center text-ink-500">Još nema stavki.</td></tr>
                   ) : null}
                 </tbody>
               </table>

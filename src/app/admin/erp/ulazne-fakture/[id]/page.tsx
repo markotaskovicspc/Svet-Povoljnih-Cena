@@ -17,6 +17,7 @@ import {
 import { PageHeader } from "@/components/admin/page-header";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { Input } from "@/components/ui/input";
+import { InboundInvoicePendingItems } from "@/components/admin/inbound-invoice-pending-items";
 import { Textarea } from "@/components/ui/textarea";
 import {
   cancelInboundInvoice,
@@ -1018,7 +1019,16 @@ export default async function InboundInvoicePage({
                   </p>
                 </div>
               </div>
-              <div className="overflow-x-auto">
+              {goodsReconciliation && !goodsReconciliation.lineValuesRsd ? (
+                <InboundInvoicePendingItems
+                  purchaseOrderId={invoice.purchaseOrder.id}
+                  currency={invoice.purchaseOrder.currency}
+                  items={invoice.purchaseOrder.items.map((item) => ({
+                    id: item.id, sku: item.sku, name: item.name,
+                    qty: item.qty, purchasePrice: Number(item.purchasePrice),
+                  }))}
+                />
+              ) : <div className="overflow-x-auto">
                 <table className="min-w-[1120px] text-sm">
                   <thead className="bg-muted-bg/70 text-left text-xs uppercase tracking-[0.08em] text-ink-500">
                     <tr>
@@ -1074,7 +1084,7 @@ export default async function InboundInvoicePage({
                     })}
                   </tbody>
                 </table>
-              </div>
+              </div>}
               <p className="mt-4 text-xs text-ink-500">
                 Finalni COGS = (postojeća količina × postojeći COGS + količina sa fakture × COGS te nabavke) / ukupna količina. Komanda „Proknjiži” obračunava COGS i knjiži količinu u izabrani magacin bez duplog obračuna.
               </p>

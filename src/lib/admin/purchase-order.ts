@@ -1,6 +1,11 @@
 import type { PurchaseOrderStatus } from "@prisma/client";
 import { grossMarginPct } from "@/lib/pricing/gross-margin";
 
+/** Derive the displayed goods total from the same saved lines as the table. */
+export function purchaseOrderGoodsTotal(lines: readonly { qty: number; purchasePrice: number }[]) {
+  return Number(lines.reduce((sum, line) => sum + line.qty * line.purchasePrice, 0).toFixed(2));
+}
+
 export type PurchaseOrderLineCalculationInput = {
   id: string;
   qty: number;
