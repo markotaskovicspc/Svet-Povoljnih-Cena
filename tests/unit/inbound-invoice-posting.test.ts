@@ -69,7 +69,18 @@ describe("receipt goods reconciliation before accounting mutations", () => {
     expect(mocks.recompute).toHaveBeenCalledWith("po");
   });
 
-  it("saves the authoritative RSD amount and calculates FX on the server", async () => {
+  it.each(["USD", "EUR"])("accepts an RSD receipt linked to %s prices before posting", async (currency) => {
+    const invoice = receipt();
+    invoice.currency = "RSD";
+    invoice.value = decimal(1_717_177);
+    invoice.purchaseOrder.currency = currency;
+    mocks.read.mockResolvedValue(invoice);
+    mocks.recompute.mockRejectedValueOnce(new Error("Reached normal posting checks"));
+    await expect(postInboundInvoice("receipt", "admin")).rejects.toThrow("Reached normal posting checks");
+    expect(mocks.recompute).toHaveBeenCalledWith("po");
+  });
+
+  it("saves receipt amounts in RSD even when an older form submits foreign currency", async () => {
     mocks.orderRead.mockResolvedValue({ status: "DRAFT", supplierId: "supplier", supplier: { enabled: true } });
     mocks.warehouseRead.mockResolvedValue({ id: "dc", active: true });
     mocks.linkedRead.mockResolvedValue(null);
@@ -81,7 +92,7 @@ describe("receipt goods reconciliation before accounting mutations", () => {
       customsValueRsd: 42_439, transportValueRsd: 393_345, otherRelatedCostsRsd: 29_555, notes: null,
     });
     expect(mocks.write).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
-      currency: "USD", value: 16_992, exchangeRate: 101.057968, invoiceValueRsd: 1_717_177, netValue: 2_182_516,
+      currency: "RSD", value: 1_717_177, exchangeRate: 1, invoiceValueRsd: 1_717_177, netValue: 2_182_516,
     }) }));
   });
 });

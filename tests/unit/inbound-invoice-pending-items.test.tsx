@@ -15,7 +15,7 @@ const items = [[5.66, 120], [7.64, 90], [9, 100], [11.5, 200], [16.5, 200], [31,
 describe("receipt lines while COGS is blocked", () => {
   it("keeps all eight source lines visible without inventing a dinar COGS", () => {
     const reconciliation = reconcileInboundGoods({
-      invoiceCurrency: "RSD", orderCurrency: "USD", invoiceValue: 1_717_177,
+      invoiceCurrency: "EUR", orderCurrency: "USD", invoiceValue: 1_717_177,
       invoiceValueRsd: 1_717_177, lines: items,
     });
     expect(reconciliation.error).toContain("Valuta fakture");

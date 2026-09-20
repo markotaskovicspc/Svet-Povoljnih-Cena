@@ -17,6 +17,7 @@ import {
 import { PageHeader } from "@/components/admin/page-header";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { Input } from "@/components/ui/input";
+import { InboundInvoiceCogsTable } from "@/components/admin/inbound-invoice-cogs-table";
 import { InboundInvoicePendingItems } from "@/components/admin/inbound-invoice-pending-items";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -976,13 +977,15 @@ export default async function InboundInvoicePage({
         <Card>
           <CardTitle description={locked
             ? "Prikaz ranijeg obračuna. Stvarna carina raspoređuje se po carinskim stopama, a transport i ostali vezani troškovi po zapremini artikla."
-            : "Vrednost robe = nabavna cena × količina × kurs sa fakture. Stvarna carina raspoređuje se po carinskim stopama, a transport i ostali vezani troškovi po zapremini artikla."}>
+            : "Dinarska vrednost robe sa prijemnice raspoređuje se srazmerno nabavnim vrednostima iz porudžbenice. Stvarna carina raspoređuje se po carinskim stopama, a transport i ostali vezani troškovi po zapremini artikla."}>
             COGS obračun po šifri
           </CardTitle>
           {goodsReconciliation ? (
             <div className="mb-4 space-y-2 text-sm">
               {goodsReconciliation.exchangeRate != null && Number(invoice.value) > 0 ? (
-                <p>Kurs obračuna: {fmt(Number(invoice.invoiceValueRsd))} RSD ÷ {fmt(Number(invoice.value))} {invoice.currency} = <strong>{fmt(goodsReconciliation.exchangeRate, 6)}</strong> RSD/{invoice.currency}.</p>
+                <p>{invoice.currency === "RSD" && invoice.purchaseOrder?.currency !== "RSD" ? "Odnos za raspodelu" : "Kurs obračuna"}: {fmt(Number(invoice.invoiceValueRsd))} RSD ÷ {fmt(invoice.currency === "RSD" ? goodsReconciliation.orderValue : Number(invoice.value))} {invoice.purchaseOrder?.currency} = <strong>{fmt(goodsReconciliation.exchangeRate, 6)}</strong> RSD/{invoice.purchaseOrder?.currency}.
+                  {invoice.currency === "RSD" && invoice.purchaseOrder?.currency !== "RSD" ? " Izračunato iz unete dinarske vrednosti robe i zbira nabavnih cena; nije potvrda zvaničnog kursa. Proverite oba iznosa prema dokumentaciji." : null}
+                </p>
               ) : null}
               {goodsReconciliation.error ? (
                 <div role="alert" className="rounded-lg border border-warning/40 bg-warning/10 p-3">
@@ -1026,65 +1029,33 @@ export default async function InboundInvoicePage({
                   items={invoice.purchaseOrder.items.map((item) => ({
                     id: item.id, sku: item.sku, name: item.name,
                     qty: item.qty, purchasePrice: Number(item.purchasePrice),
+                    customsRatePct: effectiveCustomsRate(item, invoice.purchaseOrder?.lockedAt ?? null),
                   }))}
                 />
-              ) : <div className="overflow-x-auto">
-                <table className="min-w-[1120px] text-sm">
-                  <thead className="bg-muted-bg/70 text-left text-xs uppercase tracking-[0.08em] text-ink-500">
-                    <tr>
-                      <th className="px-3 py-3">Šifra</th>
-                      <th className="px-3 py-3">Naziv</th>
-                      <th className="px-3 py-3 text-right">Količina</th>
-                      <th className="px-3 py-3 text-right">Vrednost robe</th>
-                      <th className="px-3 py-3 text-right">Stvarna carina</th>
-                      <th className="px-3 py-3 text-right">Transport po zapremini</th>
-                      <th className="px-3 py-3 text-right">Ostali vezani troškovi</th>
-                      <th className="px-3 py-3 text-right">COGS novog prijema / kom</th>
-                      <th className="px-3 py-3 text-right">Postojeće stanje / COGS</th>
-                      <th className="px-3 py-3 text-right">Finalni COGS / kom</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/60">
-                    {cogsRows.map((row) => {
-                      const product = productBySku.get(row.sku);
-                      const snapshot = cogsSnapshot.get(row.sku);
-                      const existingQty = snapshot?.stock ?? product?.stock ?? 0;
-                      const existingCogs =
-                        snapshot
-                          ? snapshot.cogs ?? row.incomingUnitCogsRsd
-                          : product?.cogs == null
-                            ? row.incomingUnitCogsRsd
-                            : Number(product.cogs);
-                      const finalCogs =
-                        (locked ||
-                          invoice.purchaseOrder?.status ===
-                            PurchaseOrderStatus.RECEIVED) &&
-                        product?.cogs != null
-                          ? Number(product.cogs)
-                          : weightedAverageCogs({
-                              existingQty,
-                              existingUnitCogs: existingCogs,
-                              incomingQty: row.qty,
-                              incomingUnitCogs: row.incomingUnitCogsRsd,
-                            });
-                      return (
-                        <tr key={row.sku}>
-                          <td className="px-3 py-3 font-medium">{row.sku}</td>
-                          <td className="px-3 py-3">{product?.name ?? "—"}</td>
-                          <td className="px-3 py-3 text-right tabular-nums">{row.qty}</td>
-                          <td className="px-3 py-3 text-right tabular-nums">{fmt(row.invoiceValueRsd)} RSD</td>
-                          <td className="px-3 py-3 text-right tabular-nums">{fmt(row.customsRsd)} RSD</td>
-                          <td className="px-3 py-3 text-right tabular-nums">{fmt(row.transportRsd)} RSD</td>
-                          <td className="px-3 py-3 text-right tabular-nums">{fmt(row.otherRelatedCostsRsd)} RSD</td>
-                          <td className="px-3 py-3 text-right font-medium tabular-nums">{fmt(row.incomingUnitCogsRsd)} RSD</td>
-                          <td className="px-3 py-3 text-right tabular-nums">{existingQty} × {fmt(existingCogs)} RSD</td>
-                          <td className="px-3 py-3 text-right font-semibold tabular-nums">{fmt(finalCogs)} RSD</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>}
+              ) : <InboundInvoiceCogsTable
+                purchaseCurrency={invoice.purchaseOrder.currency}
+                rows={cogsRows.map((row) => {
+                  const product = productBySku.get(row.sku);
+                  const snapshot = cogsSnapshot.get(row.sku);
+                  const existingQty = snapshot?.stock ?? product?.stock ?? 0;
+                  const existingCogs = snapshot
+                    ? snapshot.cogs ?? row.incomingUnitCogsRsd
+                    : product?.cogs == null ? row.incomingUnitCogsRsd : Number(product.cogs);
+                  const finalCogs = (locked || invoice.purchaseOrder?.status === PurchaseOrderStatus.RECEIVED) && product?.cogs != null
+                    ? Number(product.cogs)
+                    : weightedAverageCogs({ existingQty, existingUnitCogs: existingCogs, incomingQty: row.qty, incomingUnitCogs: row.incomingUnitCogsRsd });
+                  const sourceItems = invoice.purchaseOrder!.items.filter(item => item.sku === row.sku);
+                  return {
+                    ...row, name: product?.name ?? sourceItems[0]?.name ?? "—",
+                    purchasePrices: sourceItems.map(item => Number(item.purchasePrice)),
+                    customsRates: sourceItems.map(item => effectiveCustomsRate(item, invoice.purchaseOrder?.lockedAt ?? null)),
+                    existingQty, existingCogs, finalCogs,
+                  };
+                })}
+              />}
+              <Link href={`/admin/erp/porudzbenice/${invoice.purchaseOrder.id}`} className="mt-3 inline-block text-sm text-walnut hover:underline">
+                Otvori porudžbenicu i proveri nabavne cene i carinske stope →
+              </Link>
               <p className="mt-4 text-xs text-ink-500">
                 Finalni COGS = (postojeća količina × postojeći COGS + količina sa fakture × COGS te nabavke) / ukupna količina. Komanda „Proknjiži” obračunava COGS i knjiži količinu u izabrani magacin bez duplog obračuna.
               </p>

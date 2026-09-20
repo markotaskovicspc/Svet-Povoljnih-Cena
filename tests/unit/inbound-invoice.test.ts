@@ -62,7 +62,7 @@ describe("ERP module 5 inbound invoices and COGS", () => {
   });
 
   it("does not infer FX from mismatched currencies or an empty invoice value", () => {
-    const input = { invoiceValue: 100, invoiceValueRsd: 100, invoiceCurrency: "RSD" as const, orderCurrency: "USD" as const, lines: [{ qty: 1, purchasePrice: 1 }] };
+    const input = { invoiceValue: 100, invoiceValueRsd: 100, invoiceCurrency: "EUR" as const, orderCurrency: "USD" as const, lines: [{ qty: 1, purchasePrice: 1 }] };
     expect(reconcileInboundGoods(input)).toMatchObject({ lineValuesRsd: null, error: expect.stringContaining("Valuta fakture") });
     expect(reconcileInboundGoods({ ...input, invoiceCurrency: "USD", invoiceValue: 0 })).toMatchObject({ lineValuesRsd: null, error: expect.stringContaining("nulte vrednosti") });
   });

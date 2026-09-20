@@ -16,10 +16,12 @@ describe("receipt FX fields", () => {
     }));
     const input = (name: string) => html.match(new RegExp(`<input[^>]*name="${name}"[^>]*>`))?.[0];
     expect(input("invoiceValueRsd")).toContain('value="1717177"');
-    expect(input("invoiceValueRsd")).not.toMatch(/\sreadonly=/i);
-    expect(input("exchangeRate")).toContain('value="101.057968"');
-    expect(input("exchangeRate")).toMatch(/\sreadonly=/i);
+    expect(input("invoiceValue")).toContain('value="1717177"');
+    expect(input("invoiceValue")).not.toMatch(/\sreadonly=/i);
+    expect(input("exchangeRate")).toContain('value="1"');
+
     expect(input("netValue")).toContain('value="2182516"');
-    expect(html).toContain('value="RSD_VALUE" selected=""');
+    expect(input("currency")).toContain('value="RSD"');
+    expect(html).not.toContain('Način unosa kursa');
   });
 });

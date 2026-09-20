@@ -154,8 +154,8 @@ export function resolveInboundInvoiceFx(input: {
   return { exchangeRate, invoiceValueRsd };
 }
 
-/** Convert goods with the invoice's actual FX; never hide a missing line or
- * mismatched invoice total by spreading the difference over all products. */
+/** RSD receipts carry the authoritative goods value; foreign PO prices provide
+ * allocation weights. Legacy foreign invoices still reconcile in their currency. */
 export function reconcileInboundGoods(input: {
   invoiceValue: number;
   invoiceValueRsd: number;
@@ -176,6 +176,27 @@ export function reconcileInboundGoods(input: {
   const format = (value: number) => value.toLocaleString("sr-Latn-RS", {
     minimumFractionDigits: 2, maximumFractionDigits: 2,
   });
+  if (input.invoiceCurrency === "RSD" && input.orderCurrency !== "RSD") {
+    if (roundMoney(input.invoiceValue) !== roundMoney(input.invoiceValueRsd)) {
+      return {
+        orderValue, exchangeRate: null, lineValuesRsd: null, differenceRsd: null,
+        error: "Vrednost dinarske prijemnice i vrednost robe u RSD moraju biti iste.",
+      };
+    }
+    if ((orderValue === 0) !== (input.invoiceValueRsd === 0)) {
+      return {
+        orderValue, exchangeRate: null, lineValuesRsd: null, differenceRsd: null,
+        error: "Unesite vrednost robe u RSD i nabavne cene u porudžbenici; raspodela nije moguća iz nulte vrednosti.",
+      };
+    }
+    return {
+      orderValue,
+      // An allocation ratio, not a separately verified bank/customs FX rate.
+      exchangeRate: orderValue > 0 ? input.invoiceValueRsd / orderValue : null,
+      lineValuesRsd: allocateMoneyByShares(input.invoiceValueRsd, values),
+      differenceRsd: 0, error: null,
+    };
+  }
   if (input.invoiceCurrency !== input.orderCurrency) {
     return {
       orderValue, exchangeRate: null, lineValuesRsd: null, differenceRsd: null,

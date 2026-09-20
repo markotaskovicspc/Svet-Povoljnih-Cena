@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { InboundCustomsRates } from "@/components/admin/inbound-invoice-cogs-table";
 import { purchaseOrderGoodsTotal } from "@/lib/admin/purchase-order";
 
 type Item = {
@@ -7,6 +8,7 @@ type Item = {
   name: string;
   qty: number;
   purchasePrice: number;
+  customsRatePct?: number | null;
 };
 
 const money = (value: number) => value.toLocaleString("sr-Latn-RS", {
@@ -34,6 +36,7 @@ export function InboundInvoicePendingItems({ items, currency, purchaseOrderId }:
               <th className="px-3 py-3">Naziv</th>
               <th className="px-3 py-3 text-right">Nabavna cena ({currency})</th>
               <th className="px-3 py-3 text-right">Količina</th>
+              <th className="px-3 py-3 text-right">Carinska stopa</th>
               <th className="px-3 py-3 text-right">Vrednost robe ({currency})</th>
             </tr>
           </thead>
@@ -44,15 +47,17 @@ export function InboundInvoicePendingItems({ items, currency, purchaseOrderId }:
                 <td className="px-3 py-3">{item.name}</td>
                 <td className="px-3 py-3 text-right tabular-nums">{money(item.purchasePrice)}</td>
                 <td className="px-3 py-3 text-right tabular-nums">{item.qty}</td>
+                <td className="px-3 py-3 text-right tabular-nums"><InboundCustomsRates rates={[item.customsRatePct ?? null]} /></td>
                 <td className="px-3 py-3 text-right tabular-nums">{money(item.purchasePrice * item.qty)}</td>
               </tr>
             ))}
-            {!items.length ? <tr><td colSpan={5} className="px-3 py-6">Porudžbenica nema stavke.</td></tr> : null}
+            {!items.length ? <tr><td colSpan={6} className="px-3 py-6">Porudžbenica nema stavke.</td></tr> : null}
           </tbody>
           <tfoot className="border-t border-border font-semibold">
             <tr>
               <td colSpan={3} className="px-3 py-3">Ukupno</td>
               <td className="px-3 py-3 text-right tabular-nums">{items.reduce((sum, item) => sum + item.qty, 0)}</td>
+              <td />
               <td className="px-3 py-3 text-right tabular-nums">{money(purchaseOrderGoodsTotal(items))} {currency}</td>
             </tr>
           </tfoot>

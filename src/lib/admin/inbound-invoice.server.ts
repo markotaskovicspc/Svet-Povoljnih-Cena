@@ -155,7 +155,7 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
   if (!number) throw new Error("Broj prijemnice je obavezan.");
   if (!input.purchaseOrderId) throw new Error("Veza sa dokumentom je obavezna.");
   if (!input.warehouseId) throw new Error("Magacin prijema je obavezan.");
-  const { exchangeRate, invoiceValueRsd } = resolveInboundInvoiceFx(input);
+  const { invoiceValueRsd } = resolveInboundInvoiceFx(input);
   const amounts = calculateInboundInvoiceAmounts({
     invoiceValueRsd,
     customsValueRsd: input.customsValueRsd,
@@ -218,9 +218,11 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
         purchaseOrderId: input.purchaseOrderId,
         warehouseId: warehouse.id,
         type: InboundInvoiceType.COGS,
-        currency: input.currency,
-        exchangeRate,
-        value: input.invoiceValue,
+        // Normalize only an explicitly saved, unlocked receipt. Existing posted
+        // documents and foreign purchase-order prices remain untouched.
+        currency: ErpCurrency.RSD,
+        exchangeRate: 1,
+        value: amounts.invoiceValueRsd,
         invoiceValueRsd: amounts.invoiceValueRsd,
         customsValueRsd: amounts.customsValueRsd,
         transportValueRsd: amounts.transportValueRsd,
