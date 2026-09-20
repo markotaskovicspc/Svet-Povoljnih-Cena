@@ -542,7 +542,7 @@ export default async function PurchaseOrderEditorPage({
 
         <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[minmax(620px,0.9fr)_minmax(0,1.1fr)]">
           <Card>
-            <CardTitle description="Dobavljački podaci, rokovi, transport i valute. Magacin prijema bira se na prijemnici.">
+            <CardTitle description="Ovde se čuvaju dobavljač, rokovi, transport i valute. Cene i količine se čuvaju dugmetom „Sačuvaj artikal” u tabeli. Magacin prijema bira se na prijemnici.">
               Zaglavlje
             </CardTitle>
             {locked ? (
@@ -662,7 +662,7 @@ export default async function PurchaseOrderEditorPage({
                 </Field>
                 {!locked ? (
                   <div className="flex justify-end md:col-span-2">
-                    <SubmitButton>Sačuvaj zaglavlje</SubmitButton>
+                    <SubmitButton>Sačuvaj samo zaglavlje</SubmitButton>
                   </div>
                 ) : null}
               </fieldset>
@@ -715,21 +715,22 @@ export default async function PurchaseOrderEditorPage({
             <div className="border-b border-border/60 px-5 py-4">
               <h2 className="text-base font-semibold text-ink-900">Artikli porudžbenice</h2>
               <p className="text-sm text-ink-500">
-                Šifra povlači važeću cenu i matične podatke. Nabavna cena, količina, procenjena carina i kalkulativna MPC mogu da se koriguju do knjiženja. Stvarne troškove i COGS potvrđuje prijemnica. Ukupna cena je zbir sačuvanih stavki; posle izmene cene ili količine kliknite „Snimi” u tom redu.
+                Šifra povlači važeću cenu i matične podatke. Nabavna cena, količina, procenjena carina i kalkulativna MPC mogu da se koriguju do knjiženja. Stvarne troškove i COGS potvrđuje prijemnica. Ukupna cena je zbir sačuvanih stavki; posle izmene cene ili količine kliknite „Sačuvaj artikal” u tom redu. Dugme ostaje vidljivo na desnoj ivici tabele.
               </p>
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-[1900px] text-sm">
                 <thead className="bg-muted-bg/70 text-left text-xs uppercase tracking-[0.08em] text-ink-500">
                   <tr>
-                    {["Foto", "Šifra", "Dobavljač / naziv", "Atributi / dezen", "Nabavna cena", "Valuta / paritet / važi od", "MOQ / kom-pak", "Količina", "Iznos", "Zapremina / težina", "Carina % (procena)", "Kalk. MPC", "BM% (procena)", "Dobavljačev naziv / sertifikati / bar-kod", ""].map((label) => (
-                      <th key={label} className="whitespace-nowrap px-3 py-3">{label}</th>
+                    {["Foto", "Šifra", "Dobavljač / naziv", "Atributi / dezen", "Nabavna cena", "Valuta / paritet / važi od", "MOQ / kom-pak", "Količina", "Iznos", "Zapremina / težina", "Carina % (procena)", "Kalk. MPC", "BM% (procena)", "Dobavljačev naziv / sertifikati / bar-kod", "Radnje"].map((label) => (
+                      <th key={label} className={label === "Radnje" ? "sticky right-0 z-10 min-w-40 bg-background px-3 py-3 shadow-[-4px_0_6px_-4px_rgb(0_0_0/0.2)]" : "whitespace-nowrap px-3 py-3"}>{label}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
                   {order.items.map((item) => {
                     const invalidPack = !isPackQuantityValid(item.qty, item.packQty);
+                    const lineFormId = `purchase-order-line-${item.id}`;
                     const photo = item.product?.media[0]?.url
                       ? resolveSupabaseStorageUrl(item.product.media[0].url)
                       : null;
@@ -772,16 +773,15 @@ export default async function PurchaseOrderEditorPage({
                               <span className="px-3 py-2 text-right">{fmt(num(item.bmPct))}%</span>
                             </div>
                           ) : (
-                            <AdminActionForm action={updateLine}>
-                              <input type="hidden" name="id" value={item.id} />
-                              <input type="hidden" name="poId" value={order.id} />
+                            <div>
                               <div className="grid grid-cols-[150px_190px_120px_120px_150px_170px_120px_120px_110px] items-center">
-                                <div className="px-2 py-2"><Input aria-label={`Nabavna cena ${item.sku}`} name="purchasePrice" type="number" min={0} step="0.01" defaultValue={num(item.purchasePrice) ?? 0} /></div>
+                                <div className="px-2 py-2"><Input aria-label={`Nabavna cena ${item.sku}`} form={lineFormId} name="purchasePrice" type="number" min={0} step="0.01" defaultValue={num(item.purchasePrice) ?? 0} /></div>
                                 <span className="px-3 py-2">{item.currency} · {item.parity ?? "—"} · {dtLocal(item.priceValidFrom)}</span>
                                 <span className="px-3 py-2">{item.moq ?? "—"} / {item.packQty ?? "—"}</span>
                                 <div className="px-2 py-2">
                                   <Input
                                     aria-label={`Količina ${item.sku}`}
+                                    form={lineFormId}
                                     name="qty"
                                     type="number"
                                     min={1}
@@ -793,14 +793,13 @@ export default async function PurchaseOrderEditorPage({
                                 </div>
                                 <span className="px-3 py-2 text-right tabular-nums">{fmt(Number(item.purchasePrice) * item.qty)} {item.currency}</span>
                                 <span className="px-3 py-2 text-right">{formatLogisticsVolume(num(item.totalVolume))} m³ / {fmt(num(item.totalWeight), 3)} kg</span>
-                                <div className="px-2 py-2"><Input aria-label={`Carinska stopa ${item.sku}`} name="customsRate" type="number" min={0} max={100} step="0.01" defaultValue={num(item.customsRate) ?? ""} /></div>
-                                <div className="px-2 py-2"><Input aria-label={`Kalkulativna MPC ${item.sku}`} name="calcRetailPrice" type="number" min={0} step="0.01" defaultValue={num(item.calcRetailPrice) ?? ""} /></div>
+                                <div className="px-2 py-2"><Input aria-label={`Carinska stopa ${item.sku}`} form={lineFormId} name="customsRate" type="number" min={0} max={100} step="0.01" defaultValue={num(item.customsRate) ?? ""} /></div>
+                                <div className="px-2 py-2"><Input aria-label={`Kalkulativna MPC ${item.sku}`} form={lineFormId} name="calcRetailPrice" type="number" min={0} step="0.01" defaultValue={num(item.calcRetailPrice) ?? ""} /></div>
                                 <div className="flex items-center justify-end gap-2 px-2 py-2">
                                   <span>{fmt(currentFinancialsByItemId.get(item.id)?.bmPct ?? num(item.bmPct))}%</span>
-                                  <SubmitButton size="xs" variant="outline" pendingLabel="…">Snimi</SubmitButton>
                                 </div>
                               </div>
-                            </AdminActionForm>
+                            </div>
                           )}
                         </td>
                         <td className="max-w-64 px-3 py-2 text-xs">
@@ -808,14 +807,23 @@ export default async function PurchaseOrderEditorPage({
                           <p className="text-ink-500">{item.certificates ?? "—"}</p>
                           <p className="font-mono text-ink-500">{item.barcode ?? "—"}</p>
                         </td>
-                        <td className="px-3 py-2">
+                        <td className="sticky right-0 z-10 min-w-40 bg-background px-3 py-2 align-top shadow-[-4px_0_6px_-4px_rgb(0_0_0/0.2)]">
                           {!locked ? (
-                            <form action={deleteLine}>
-                              <input type="hidden" name="id" value={item.id} />
-                              <ConfirmSubmitButton size="xs" confirm="Obrisati stavku?" pendingLabel="…">
-                                Obriši
-                              </ConfirmSubmitButton>
-                            </form>
+                            <div className="space-y-2">
+                              <AdminActionForm id={lineFormId} action={updateLine} preserveValues>
+                                <input type="hidden" name="id" value={item.id} />
+                                <input type="hidden" name="poId" value={order.id} />
+                                <SubmitButton size="sm" pendingLabel="Čuvanje…" aria-label={`Sačuvaj artikal ${item.sku}`}>
+                                  Sačuvaj artikal
+                                </SubmitButton>
+                              </AdminActionForm>
+                              <form action={deleteLine}>
+                                <input type="hidden" name="id" value={item.id} />
+                                <ConfirmSubmitButton size="xs" confirm="Obrisati stavku?" pendingLabel="…">
+                                  Obriši
+                                </ConfirmSubmitButton>
+                              </form>
+                            </div>
                           ) : null}
                         </td>
                       </tr>

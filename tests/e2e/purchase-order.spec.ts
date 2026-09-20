@@ -296,7 +296,7 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
 
     await test.step("header saves controlled supplier, loading, transport, currency and dates", async () => {
       const header = page.locator("form").filter({
-        has: page.getByRole("button", { name: "Sačuvaj zaglavlje" }),
+        has: page.getByRole("button", { name: "Sačuvaj samo zaglavlje" }),
       });
       const supplierSelect = header.locator('[name="supplierId"]');
       const loadingLocationSelect = header.locator('[name="loadingLocationId"]');
@@ -333,7 +333,7 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
       await header.locator('[name="freightCost"]').fill("100");
       await header.locator('[name="freightCurrency"]').selectOption("EUR");
       await header.locator('[name="freightExchangeRate"]').fill("120");
-      await header.getByRole("button", { name: "Sačuvaj zaglavlje" }).click();
+      await header.getByRole("button", { name: "Sačuvaj samo zaglavlje" }).click();
       await expect(header.getByRole("status")).toBeVisible();
       await expect(header.locator('[name="deliveryDate"]')).toHaveValue(
         "2026-08-05",
@@ -441,7 +441,19 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
       await page.getByLabel(`Nabavna cena ${fixture.sku}`).fill("11");
       await page.getByLabel(`Carinska stopa ${fixture.sku}`).fill("12");
       await page.getByLabel(`Kalkulativna MPC ${fixture.sku}`).fill("4000");
-      await quantity.locator("xpath=ancestor::form").getByRole("button", { name: "Snimi" }).click();
+      const saveLine = page.getByRole("button", { name: `Sačuvaj artikal ${fixture.sku}`, exact: true });
+      const tableScroll = saveLine.locator("xpath=ancestor::table/parent::div");
+      await tableScroll.evaluate((element) => { element.scrollLeft = 0; });
+      const [saveBox, scrollBox] = await Promise.all([saveLine.boundingBox(), tableScroll.boundingBox()]);
+      expect(saveBox).not.toBeNull();
+      expect(scrollBox).not.toBeNull();
+      expect(saveBox!.x).toBeGreaterThanOrEqual(scrollBox!.x);
+      expect(saveBox!.x + saveBox!.width).toBeLessThanOrEqual(scrollBox!.x + scrollBox!.width + 1);
+      // Inputs outside the sticky form must still belong to that form.
+      const formId = await quantity.getAttribute("form");
+      expect(formId).toBeTruthy();
+      await expect(saveLine.locator("xpath=ancestor::form")).toHaveAttribute("id", formId!);
+      await saveLine.click();
       await expect(page.getByText("Nije deljivo sa 4")).toHaveCount(0);
       const item = await db.purchaseOrderItem.findFirstOrThrow({
         where: { purchaseOrderId: purchaseOrderId! },
@@ -582,7 +594,7 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
       });
       expect(posted.lockedAt).not.toBeNull();
       expect(posted.postedAt).not.toBeNull();
-      await expect(page.getByRole("button", { name: "Sačuvaj zaglavlje" })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Sačuvaj samo zaglavlje" })).toHaveCount(0);
       await expect(page.getByRole("button", { name: "Dodaj", exact: true })).toHaveCount(0);
     });
 
