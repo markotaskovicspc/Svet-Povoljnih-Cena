@@ -31,6 +31,7 @@ import {
   calculatePurchaseOrderInvoiceDefaults,
   calculateCogsBySku,
   groupActualInboundCostsBySku,
+  reconcileInboundGoods,
   weightedAverageCogs,
 } from "@/lib/admin/inbound-invoice";
 import { goodsReceiptMasterWarnings } from "@/lib/admin/goods-receipt-readiness";
@@ -62,6 +63,8 @@ const invoiceSchema = z.object({
   type: z.literal("COGS"),
   currency: z.nativeEnum(ErpCurrency),
   exchangeRate: z.coerce.number().positive().max(100_000),
+  exchangeRateSource: z.enum(["RATE", "RSD_VALUE"]).default("RATE"),
+  invoiceValueRsd: z.coerce.number().nonnegative().max(1_000_000_000).optional(),
   invoiceValue: z.coerce.number().nonnegative().max(1_000_000_000),
   customsValueRsd: z.coerce.number().nonnegative().max(1_000_000_000),
   transportValueRsd: z.coerce.number().nonnegative().max(1_000_000_000),
@@ -187,6 +190,8 @@ async function saveAction(_state: AdminActionState, formData: FormData) {
         warehouseId: data.warehouseId,
         currency: data.currency,
         exchangeRate: data.exchangeRate,
+        exchangeRateSource: data.exchangeRateSource,
+        invoiceValueRsd: data.invoiceValueRsd,
         invoiceValue: data.invoiceValue,
         customsValueRsd: data.customsValueRsd,
         transportValueRsd: data.transportValueRsd,
@@ -535,10 +540,22 @@ export default async function InboundInvoicePage({
       invoice.transportValueRsd != null &&
       invoice.otherRelatedCostsRsd != null,
   );
+  const goodsReconciliation = !locked && invoice.purchaseOrder && hasActualCostBreakdown
+    ? reconcileInboundGoods({
+        invoiceValue: Number(invoice.value),
+        invoiceValueRsd: Number(invoice.invoiceValueRsd),
+        invoiceCurrency: invoice.currency,
+        orderCurrency: invoice.purchaseOrder.currency,
+        lines: invoice.purchaseOrder.items.map((item) => ({
+          qty: item.qty, purchasePrice: Number(item.purchasePrice),
+        })),
+      })
+    : null;
   const actualCogsRows =
     invoice.purchaseOrder && hasActualCostBreakdown
-      ? groupActualInboundCostsBySku(
+      ? goodsReconciliation && !goodsReconciliation.lineValuesRsd ? [] : groupActualInboundCostsBySku(
           allocateActualInboundCosts({
+            goodsValuesRsd: goodsReconciliation?.lineValuesRsd ?? undefined,
             costs: {
               invoiceValueRsd: Number(invoice.invoiceValueRsd),
               customsValueRsd: Number(invoice.customsValueRsd),
@@ -956,9 +973,24 @@ export default async function InboundInvoicePage({
         </Card>
 
         <Card>
-          <CardTitle description="Vrednost robe se raspoređuje po nabavnoj vrednosti, stvarna carina proporcionalno po carinskim stopama stavki, a transport i ostali vezani troškovi po zapremini artikla.">
+          <CardTitle description={locked
+            ? "Prikaz ranijeg obračuna. Stvarna carina raspoređuje se po carinskim stopama, a transport i ostali vezani troškovi po zapremini artikla."
+            : "Vrednost robe = nabavna cena × količina × kurs sa fakture. Stvarna carina raspoređuje se po carinskim stopama, a transport i ostali vezani troškovi po zapremini artikla."}>
             COGS obračun po šifri
           </CardTitle>
+          {goodsReconciliation ? (
+            <div className="mb-4 space-y-2 text-sm">
+              {goodsReconciliation.exchangeRate != null && Number(invoice.value) > 0 ? (
+                <p>Kurs obračuna: {fmt(Number(invoice.invoiceValueRsd))} RSD ÷ {fmt(Number(invoice.value))} {invoice.currency} = <strong>{fmt(goodsReconciliation.exchangeRate, 6)}</strong> RSD/{invoice.currency}.</p>
+              ) : null}
+              {goodsReconciliation.error ? (
+                <div role="alert" className="rounded-lg border border-warning/40 bg-warning/10 p-3">
+                  <p>{goodsReconciliation.error}</p>
+                  {goodsReconciliation.differenceRsd != null ? <p className="mt-1">Neraspoređena razlika vrednosti robe: {fmt(goodsReconciliation.differenceRsd)} RSD. Prikaz je preliminaran; knjiženje nije dozvoljeno dok se iznosi ne usklade.</p> : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           {invoice.purchaseOrder ? (
             <>
               <div className="mb-4 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">

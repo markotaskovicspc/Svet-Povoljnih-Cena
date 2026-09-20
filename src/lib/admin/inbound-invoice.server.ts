@@ -15,10 +15,11 @@ import {
   allocateActualInboundCosts,
   allocateInvoiceCostsByOrderValue,
   calculateInboundInvoiceAmounts,
-  calculateInboundInvoiceValueRsd,
+  resolveInboundInvoiceFx,
   calculateLinkedInvoiceAdjustmentRsd,
   calculatePurchaseOrderInvoiceDefaults,
   resolveInboundReceiptWarehouse,
+  reconcileInboundGoods,
   validateInboundInvoiceTotals,
   weightedAverageCogs,
 } from "@/lib/admin/inbound-invoice";
@@ -32,6 +33,8 @@ export type SaveInboundInvoiceInput = {
   warehouseId: string;
   currency: ErpCurrency;
   exchangeRate: number;
+  exchangeRateSource?: "RATE" | "RSD_VALUE";
+  invoiceValueRsd?: number;
   invoiceValue: number;
   customsValueRsd: number;
   transportValueRsd: number;
@@ -47,6 +50,28 @@ function utcDateOnly(value: Date) {
   return new Date(
     Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()),
   );
+}
+
+function assertReceiptGoodsMatch(invoice: {
+  invoiceValueRsd: Prisma.Decimal | null;
+  value: Prisma.Decimal;
+  currency: ErpCurrency;
+  purchaseOrder: {
+    currency: ErpCurrency;
+    items: Array<{ qty: number; purchasePrice: Prisma.Decimal }>;
+  } | null;
+}) {
+  if (invoice.invoiceValueRsd == null || !invoice.purchaseOrder) return;
+  const reconciliation = reconcileInboundGoods({
+    invoiceValue: Number(invoice.value),
+    invoiceValueRsd: Number(invoice.invoiceValueRsd),
+    invoiceCurrency: invoice.currency,
+    orderCurrency: invoice.purchaseOrder.currency,
+    lines: invoice.purchaseOrder.items.map((item) => ({
+      qty: item.qty, purchasePrice: Number(item.purchasePrice),
+    })),
+  });
+  if (reconciliation.error) throw new Error(reconciliation.error);
 }
 
 type CogsBookingSnapshot = {
@@ -130,13 +155,7 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
   if (!number) throw new Error("Broj prijemnice je obavezan.");
   if (!input.purchaseOrderId) throw new Error("Veza sa dokumentom je obavezna.");
   if (!input.warehouseId) throw new Error("Magacin prijema je obavezan.");
-  const exchangeRate =
-    input.currency === ErpCurrency.RSD ? 1 : input.exchangeRate;
-  const invoiceValueRsd = calculateInboundInvoiceValueRsd({
-    invoiceValue: input.invoiceValue,
-    currency: input.currency,
-    exchangeRate,
-  });
+  const { exchangeRate, invoiceValueRsd } = resolveInboundInvoiceFx(input);
   const amounts = calculateInboundInvoiceAmounts({
     invoiceValueRsd,
     customsValueRsd: input.customsValueRsd,
@@ -292,6 +311,7 @@ export async function lockInboundInvoice(id: string) {
       await recomputeIncomingStockForPurchaseOrders(tx, [invoice.purchaseOrder.id]);
       return tx.inboundInvoice.findUniqueOrThrow({ where: { id } });
     }
+    assertReceiptGoodsMatch(invoice);
     validateInboundInvoiceTotals({
       netValue: Number(invoice.netValue),
       vatValue: Number(invoice.vatValue),
@@ -332,12 +352,18 @@ export async function postInboundInvoice(id: string, actorId: string) {
     where: { id },
     select: {
       id: true,
+      lockedAt: true,
+      value: true,
+      currency: true,
+      invoiceValueRsd: true,
       status: true,
       purchaseOrderId: true,
       warehouseId: true,
       warehouse: { select: { id: true, name: true, active: true } },
       purchaseOrder: {
         select: {
+          currency: true,
+          items: { select: { qty: true, purchasePrice: true } },
           supplier: { select: { integrationKey: true } },
           receivingWarehouse: {
             select: { id: true, name: true, active: true },
@@ -358,6 +384,9 @@ export async function postInboundInvoice(id: string, actorId: string) {
       "Rabalux roba ide direktno kupcu i ne sme da se knjiži kroz magacinsku prijemnicu. Poseban računovodstveni tok još nije potvrđen.",
     );
   }
+  // Check before changing warehouse, locking the PO or receiving any stock.
+  // Already posted receipts retain their historical accounting on retries.
+  if (!invoice.lockedAt) assertReceiptGoodsMatch(invoice);
   const {
     postPurchaseOrder,
     receivePurchaseOrder,

@@ -129,6 +129,83 @@ export function calculateInboundInvoiceValueRsd(input: {
   return roundMoney(input.invoiceValue * exchangeRate);
 }
 
+export function resolveInboundInvoiceFx(input: {
+  currency: InboundInvoiceCurrency;
+  invoiceValue: number;
+  exchangeRate: number;
+  exchangeRateSource?: "RATE" | "RSD_VALUE";
+  invoiceValueRsd?: number;
+}) {
+  if (input.exchangeRateSource !== "RSD_VALUE" || input.currency === "RSD") {
+    return {
+      exchangeRate: input.currency === "RSD" ? 1 : input.exchangeRate,
+      invoiceValueRsd: calculateInboundInvoiceValueRsd(input),
+    };
+  }
+  if (!Number.isFinite(input.invoiceValue) || input.invoiceValue <= 0 ||
+      input.invoiceValueRsd == null || !Number.isFinite(input.invoiceValueRsd) || input.invoiceValueRsd <= 0) {
+    throw new Error("Za obračun kursa unesite pozitivnu vrednost fakture u valuti i u RSD.");
+  }
+  const invoiceValueRsd = roundMoney(input.invoiceValueRsd);
+  const exchangeRate = Math.round(invoiceValueRsd / input.invoiceValue * 1_000_000) / 1_000_000;
+  if (exchangeRate <= 0 || exchangeRate > 100_000) throw new Error("Kurs prema RSD je van dozvoljenog opsega.");
+  // Preserve the authoritative RSD cents instead of multiplying a rounded FX
+  // back into the invoice (which can lose cents on larger foreign invoices).
+  return { exchangeRate, invoiceValueRsd };
+}
+
+/** Convert goods with the invoice's actual FX; never hide a missing line or
+ * mismatched invoice total by spreading the difference over all products. */
+export function reconcileInboundGoods(input: {
+  invoiceValue: number;
+  invoiceValueRsd: number;
+  invoiceCurrency: InboundInvoiceCurrency;
+  orderCurrency: InboundInvoiceCurrency;
+  lines: Array<{ qty: number; purchasePrice: number }>;
+}) {
+  assertNonnegativeMoney(input.invoiceValue, "Vrednost fakture");
+  assertNonnegativeMoney(input.invoiceValueRsd, "Vrednost fakture u RSD");
+  const values = input.lines.map((line) => {
+    if (!Number.isInteger(line.qty) || line.qty <= 0) {
+      throw new Error("Količina stavke mora biti ceo broj veći od nule.");
+    }
+    assertNonnegativeMoney(line.purchasePrice, "Nabavna cena");
+    return line.purchasePrice * line.qty;
+  });
+  const orderValue = roundMoney(values.reduce((sum, value) => sum + value, 0));
+  const format = (value: number) => value.toLocaleString("sr-Latn-RS", {
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  });
+  if (input.invoiceCurrency !== input.orderCurrency) {
+    return {
+      orderValue, exchangeRate: null, lineValuesRsd: null, differenceRsd: null,
+      error: `Valuta fakture (${input.invoiceCurrency}) i nabavnih cena (${input.orderCurrency}) nije ista. Uskladite valutu i vrednost fakture sa porudžbenicom pre knjiženja.`,
+    };
+  }
+  if (input.invoiceValue === 0 && (input.invoiceValueRsd !== 0 || orderValue !== 0)) {
+    return {
+      orderValue, exchangeRate: null, lineValuesRsd: null, differenceRsd: null,
+      error: "Unesite vrednost robe sa fakture; kurs se ne može izračunati iz nulte vrednosti.",
+    };
+  }
+  const exchangeRate = input.invoiceValue > 0
+    ? input.invoiceValueRsd / input.invoiceValue
+    : 1;
+  const differenceValue = roundMoney(input.invoiceValue - orderValue);
+  const error = differenceValue !== 0
+    ? `Zbir stavki porudžbenice je ${format(orderValue)} ${input.orderCurrency}, a vrednost fakture ${format(input.invoiceValue)} ${input.invoiceCurrency} (razlika ${format(differenceValue)} ${input.invoiceCurrency}). Uskladite cene, količine ili vrednost robe sa fakture pre knjiženja. Razlika se ne dodaje automatski artiklima.`
+    : null;
+  // When totals match, distribute only rounding cents. Otherwise show the
+  // actual conversion and leave the discrepancy explicit; posting is blocked.
+  const lineValuesRsd = error
+    ? values.map((value) => roundMoney(value * exchangeRate))
+    : allocateMoneyByShares(input.invoiceValueRsd, values);
+  return {
+    orderValue, exchangeRate, lineValuesRsd, error,
+    differenceRsd: roundMoney(input.invoiceValueRsd - lineValuesRsd.reduce((sum, value) => sum + value, 0)),
+  };
+}
+
 export function assertInboundCostVolumeReady(
   lines: Array<{ sku: string; qty: number; totalVolumeM3?: number | null }>,
 ) {
@@ -335,6 +412,8 @@ export function allocateActualInboundCosts(input: {
   costs: InboundInvoiceCostBreakdown;
   otherCostsBasis: InboundCostAllocationBasis;
   lines: ActualInboundCostLine[];
+  /** Explicit goods conversion for the unposted receipt preview. */
+  goodsValuesRsd?: number[];
 }): ActualInboundCostAllocationLine[] {
   calculateInboundInvoiceAmounts(input.costs);
   if (!input.lines.length) return [];
@@ -361,7 +440,11 @@ export function allocateActualInboundCosts(input: {
     Math.max(line.totalWeightKg ?? 0, 0),
   );
 
-  const invoiceAllocations = allocateMoneyByShares(
+  if (input.goodsValuesRsd && input.goodsValuesRsd.length !== input.lines.length) {
+    throw new Error("Obračun robe ne odgovara broju stavki prijemnice.");
+  }
+  input.goodsValuesRsd?.forEach((value) => assertNonnegativeMoney(value, "Vrednost robe"));
+  const invoiceAllocations = input.goodsValuesRsd ?? allocateMoneyByShares(
     input.costs.invoiceValueRsd,
     normalisedShares(values, values),
   );

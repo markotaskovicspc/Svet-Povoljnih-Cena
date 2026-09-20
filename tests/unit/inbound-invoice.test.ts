@@ -14,9 +14,65 @@ import {
   resolveInboundReceiptWarehouse,
   validateInboundInvoiceTotals,
   weightedAverageCogs,
+  reconcileInboundGoods,
+  resolveInboundInvoiceFx,
 } from "@/lib/admin/inbound-invoice";
 
 describe("ERP module 5 inbound invoices and COGS", () => {
+  it("derives the rate from both invoice amounts without losing the saved RSD cent", () => {
+    expect(resolveInboundInvoiceFx({ currency: "USD", invoiceValue: 16_992, invoiceValueRsd: 1_717_177, exchangeRate: 1, exchangeRateSource: "RSD_VALUE" }))
+      .toEqual({ exchangeRate: 101.057968, invoiceValueRsd: 1_717_177 });
+    expect(resolveInboundInvoiceFx({ currency: "USD", invoiceValue: 16_992, invoiceValueRsd: 1_717_177, exchangeRate: 100, exchangeRateSource: "RATE" }))
+      .toEqual({ exchangeRate: 100, invoiceValueRsd: 1_699_200 });
+    expect(() => resolveInboundInvoiceFx({ currency: "USD", invoiceValue: 0, invoiceValueRsd: 100, exchangeRate: 1, exchangeRateSource: "RSD_VALUE" })).toThrow("pozitivnu vrednost");
+  });
+
+  it("shows invoice FX instead of silently inflating Marko's goods value when totals disagree", () => {
+    // UF-2026-0025: first line is 5.66 USD × 120. The other lines are
+    // represented by their aggregate here, not fabricated individual SKUs.
+    const lines = [{ qty: 120, purchasePrice: 5.66 }, { qty: 1, purchasePrice: 15_237.6 }];
+    const reconciliation = reconcileInboundGoods({
+      invoiceValue: 16_992, invoiceValueRsd: 1_717_177,
+      invoiceCurrency: "USD", orderCurrency: "USD", lines,
+    });
+    expect(reconciliation.orderValue).toBe(15_916.8);
+    expect(reconciliation.exchangeRate).toBeCloseTo(101.0579684557, 8);
+    expect(reconciliation.lineValuesRsd?.[0]).toBe(68_638.57);
+    expect(reconciliation.error).toContain("1.075,20 USD");
+    expect(reconciliation.differenceRsd).toBeGreaterThan(100_000);
+    const input = {
+      costs: { invoiceValueRsd: 1_717_177, customsValueRsd: 0, transportValueRsd: 0, otherRelatedCostsRsd: 0 },
+      otherCostsBasis: "VOLUME" as const,
+      lines: lines.map((line, index) => ({ id: String(index), sku: String(index), qty: line.qty, purchaseValueRsd: line.qty * line.purchasePrice })),
+    };
+    // Reproduce the exact old screenshot, then verify the corrected preview.
+    expect(allocateActualInboundCosts(input)[0].invoiceValueRsd).toBe(73_275.19);
+    expect(allocateActualInboundCosts({ ...input, goodsValuesRsd: reconciliation.lineValuesRsd! })[0].invoiceValueRsd).toBe(68_638.57);
+  });
+
+  it("reconciles matching foreign totals to the last cent without changing cost shares", () => {
+    const result = reconcileInboundGoods({
+      invoiceValue: 3, invoiceValueRsd: 100,
+      invoiceCurrency: "EUR", orderCurrency: "EUR",
+      lines: [1, 1, 1].map((purchasePrice) => ({ qty: 1, purchasePrice })),
+    });
+    expect(result.error).toBeNull();
+    expect(result.lineValuesRsd).toEqual([33.33, 33.33, 33.34]);
+    expect(result.differenceRsd).toBe(0);
+  });
+
+  it("does not infer FX from mismatched currencies or an empty invoice value", () => {
+    const input = { invoiceValue: 100, invoiceValueRsd: 100, invoiceCurrency: "RSD" as const, orderCurrency: "USD" as const, lines: [{ qty: 1, purchasePrice: 1 }] };
+    expect(reconcileInboundGoods(input)).toMatchObject({ lineValuesRsd: null, error: expect.stringContaining("Valuta fakture") });
+    expect(reconcileInboundGoods({ ...input, invoiceCurrency: "USD", invoiceValue: 0 })).toMatchObject({ lineValuesRsd: null, error: expect.stringContaining("nulte vrednosti") });
+  });
+
+  it("handles domestic and free goods without inventing an exchange-rate difference", () => {
+    for (const amount of [0, 100]) {
+      expect(reconcileInboundGoods({ invoiceValue: amount, invoiceValueRsd: amount, invoiceCurrency: "RSD", orderCurrency: "RSD", lines: [{ qty: 2, purchasePrice: amount / 2 }] })).toMatchObject({ error: null, exchangeRate: 1, lineValuesRsd: [amount], differenceRsd: 0 });
+    }
+  });
+
   it("accepts small transport packages and allocates costs in their actual volume ratio", () => {
     const lines = [2, 4].map((width, index) => ({
       id: String(index), sku: String(index), qty: 24, purchaseValueRsd: 1000,
