@@ -43,11 +43,9 @@ export default async function PickupBatchPrintPage({
               sku: true,
               name: true,
               qty: true,
-              supplierName: true,
               product: {
                 select: {
                   barcode: true,
-                  supplier: { select: { name: true } },
                 },
               },
             },
@@ -116,7 +114,6 @@ export default async function PickupBatchPrintPage({
               <th className="py-2">Interna šifra</th>
               <th className="px-2 py-2">Bar kod</th>
               <th className="px-2 py-2">Naziv artikla</th>
-              <th className="px-2 py-2">Dobavljač</th>
               <th className="py-2 pl-2 text-right">Komada</th>
               <th className="py-2 pl-2 text-right">Paketa</th>
             </tr>
@@ -128,7 +125,6 @@ export default async function PickupBatchPrintPage({
                 <td className="py-3 font-mono font-bold">{row.sku}</td>
                 <td className="px-2 py-3"><PickingBarcode value={row.barcode} /></td>
                 <td className="px-2 py-3">{row.name}</td>
-                <td className="px-2 py-3">{row.supplierName ?? "—"}</td>
                 <td className="py-3 pl-2 text-right text-lg font-bold">{row.quantity}</td>
                 <td className="py-3 pl-2 text-right">{row.packageCount}</td>
               </tr>

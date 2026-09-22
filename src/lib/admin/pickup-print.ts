@@ -12,10 +12,8 @@ export type PickupPrintLine = {
     sku: string;
     name: string;
     qty: number;
-    supplierName?: string | null;
     product?: {
       barcode: string | null;
-      supplier: { name: string } | null;
     } | null;
   } | null;
 };
@@ -25,7 +23,6 @@ export type PickupPrintRow = {
   sku: string;
   name: string;
   barcode: string | null;
-  supplierName: string | null;
   quantity: number;
   packageCount: number;
 };
@@ -62,10 +59,6 @@ export function buildPickupPrintRows(
       barcode: isPartReplacement
         ? null
         : line.orderItem?.product?.barcode?.trim() || null,
-      supplierName:
-        line.orderItem?.supplierName?.trim() ||
-        line.orderItem?.product?.supplier?.name.trim() ||
-        null,
       quantity: 0,
       packageCount: 0,
     };

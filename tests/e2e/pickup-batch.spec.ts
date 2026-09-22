@@ -666,7 +666,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       await expect(page.getByRole("cell", { name: `Kratki Z ${runId}`, exact: true })).toBeVisible();
       await expect(page.getByRole("cell", { name: `Kratki A ${runId}`, exact: true })).toBeVisible();
       await expect(page.getByRole("columnheader", { name: "Bar kod", exact: true })).toBeVisible();
-      await expect(page.getByRole("columnheader", { name: "Dobavljač", exact: true })).toBeVisible();
+      await expect(page.getByRole("columnheader", { name: "Dobavljač", exact: true })).toHaveCount(0);
       for (const [name, prefix, quantity] of [
         [`Kratki Z ${runId}`, "861", "2"],
         [`Kratki A ${runId}`, "862", "3"],
@@ -675,8 +675,8 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         const barcode = `${prefix}${runId.replace(/\D/g, "").slice(-10).padStart(10, "0")}`;
         await expect(row.getByRole("cell").nth(2)).toHaveText(barcode);
         await expect(row.getByRole("img", { name: `Bar kod ${barcode}`, exact: true })).toBeVisible();
-        await expect(row.getByRole("cell", { name: fixture.supplierName, exact: true })).toBeVisible();
-        await expect(row.getByRole("cell").nth(5)).toHaveText(quantity);
+        await expect(row.getByRole("cell", { name: fixture.supplierName, exact: true })).toHaveCount(0);
+        await expect(row.getByRole("cell").nth(4)).toHaveText(quantity);
       }
       await expect(page.getByText("Interne magacinske etikete", { exact: true })).toHaveCount(0);
       await expect(page.locator("article")).toHaveCount(0);
