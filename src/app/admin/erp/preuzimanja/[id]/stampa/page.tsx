@@ -42,6 +42,13 @@ export default async function PickupBatchPrintPage({
               sku: true,
               name: true,
               qty: true,
+              supplierName: true,
+              product: {
+                select: {
+                  barcode: true,
+                  supplier: { select: { name: true } },
+                },
+              },
             },
           },
         },
@@ -95,24 +102,28 @@ export default async function PickupBatchPrintPage({
             <dt>Paketa</dt><dd className="font-bold">{batch.lines.length}</dd>
           </dl>
         </header>
-        <table className="mt-5 w-full border-collapse text-sm">
+        <table className="mt-5 w-full border-collapse text-sm print:text-xs">
           <thead>
             <tr className="border-y-2 border-black text-left">
               <th className="w-12 py-2">✓</th>
               <th className="py-2">Interna šifra</th>
-              <th className="py-2">Naziv artikla</th>
-              <th className="py-2 text-right">Komada</th>
-              <th className="py-2 text-right">Paketa</th>
+              <th className="px-2 py-2">Bar kod</th>
+              <th className="px-2 py-2">Naziv artikla</th>
+              <th className="px-2 py-2">Dobavljač</th>
+              <th className="py-2 pl-2 text-right">Komada</th>
+              <th className="py-2 pl-2 text-right">Paketa</th>
             </tr>
           </thead>
           <tbody>
             {picking.map((row) => (
-              <tr key={row.key} className="border-b border-black/30 align-top">
+              <tr key={row.key} className="break-inside-avoid border-b border-black/30 align-top">
                 <td className="py-3"><span className="inline-block size-5 border border-black" /></td>
                 <td className="py-3 font-mono font-bold">{row.sku}</td>
-                <td className="py-3">{row.name}</td>
-                <td className="py-3 text-right text-lg font-bold">{row.quantity}</td>
-                <td className="py-3 text-right">{row.packageCount}</td>
+                <td className="whitespace-nowrap px-2 py-3 font-mono">{row.barcode ?? "—"}</td>
+                <td className="px-2 py-3">{row.name}</td>
+                <td className="px-2 py-3">{row.supplierName ?? "—"}</td>
+                <td className="py-3 pl-2 text-right text-lg font-bold">{row.quantity}</td>
+                <td className="py-3 pl-2 text-right">{row.packageCount}</td>
               </tr>
             ))}
           </tbody>

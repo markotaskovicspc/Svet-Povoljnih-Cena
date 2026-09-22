@@ -8,7 +8,11 @@ describe("pickup picking print", () => {
         id: "line-1",
         lineGroupKey: "order:1:X_EXPRESS",
         quantity: 2,
-        orderItem: { id: "item-1", sku: "100", name: "Ergo Lux", qty: 2 },
+        orderItem: {
+          id: "item-1", sku: "100", name: "Ergo Lux", qty: 2,
+          supplierName: "Dobavljač sa porudžbine",
+          product: { barcode: "0012345678905", supplier: { name: "Novi dobavljač" } },
+        },
       },
       {
         id: "line-2",
@@ -26,7 +30,11 @@ describe("pickup picking print", () => {
         id: "line-4",
         lineGroupKey: "order:2:X_EXPRESS",
         quantity: 1,
-        orderItem: { id: "item-3", sku: "200", name: "Urban Seat", qty: 1 },
+        orderItem: {
+          id: "item-3", sku: "200", name: "Urban Seat", qty: 1,
+          supplierName: " ",
+          product: { barcode: null, supplier: { name: "Dobavljač sa artikla" } },
+        },
       },
     ]);
 
@@ -35,6 +43,8 @@ describe("pickup picking print", () => {
         key: "sku:100",
         sku: "100",
         name: "Ergo Lux",
+        barcode: "0012345678905",
+        supplierName: "Dobavljač sa porudžbine",
         quantity: 5,
         packageCount: 3,
       },
@@ -42,6 +52,8 @@ describe("pickup picking print", () => {
         key: "sku:200",
         sku: "200",
         name: "Urban Seat",
+        barcode: null,
+        supplierName: "Dobavljač sa artikla",
         quantity: 1,
         packageCount: 1,
       },
@@ -62,6 +74,8 @@ describe("pickup picking print", () => {
       expect.objectContaining({
         sku: "—",
         name: "Artikal više nije povezan sa porudžbinom",
+        barcode: null,
+        supplierName: null,
         quantity: 0,
         packageCount: 1,
       }),
@@ -84,6 +98,8 @@ describe("pickup picking print", () => {
           sku: "110081",
           name: "Kancelarijska stolica ERGO LUX",
           qty: 1,
+          supplierName: "Dobavljač stolice",
+          product: { barcode: "8601234567890", supplier: null },
         },
       },
     ]);
@@ -93,6 +109,8 @@ describe("pickup picking print", () => {
         key: "part:reclamation:1:X_EXPRESS",
         sku: "DEO ZA 110081",
         name: "ukrasna maska — NE SLATI CEO ARTIKAL (Kancelarijska stolica ERGO LUX)",
+        barcode: null,
+        supplierName: "Dobavljač stolice",
         quantity: 1,
         packageCount: 1,
       },

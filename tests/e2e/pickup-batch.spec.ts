@@ -38,6 +38,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
     skuZ: `QA-PICKUP-Z-${runId}`.slice(0, 90),
     skuOther: `QA-PICKUP-O-${runId}`.slice(0, 90),
     collection: `QA kolekcija preuzimanja ${runId}`,
+    supplierName: `QA dobavljač preuzimanja ${runId}`,
   };
 
   let db: PrismaClient;
@@ -655,6 +656,20 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       await expect(page.locator("html")).toHaveAttribute("data-qa-print-called", "yes");
       await expect(page.getByText(`Kratki Z ${runId}`, { exact: true })).toBeVisible();
       await expect(page.getByText(`Kratki A ${runId}`, { exact: true })).toBeVisible();
+      await expect(page.getByRole("columnheader", { name: "Bar kod", exact: true })).toBeVisible();
+      await expect(page.getByRole("columnheader", { name: "Dobavljač", exact: true })).toBeVisible();
+      for (const [name, prefix, quantity] of [
+        [`Kratki Z ${runId}`, "861", "2"],
+        [`Kratki A ${runId}`, "862", "3"],
+      ]) {
+        const row = page.getByRole("row").filter({ hasText: name });
+        await expect(row.getByRole("cell", {
+          name: `${prefix}${runId.replace(/\D/g, "").slice(-10).padStart(10, "0")}`,
+          exact: true,
+        })).toBeVisible();
+        await expect(row.getByRole("cell", { name: fixture.supplierName, exact: true })).toBeVisible();
+        await expect(row.getByRole("cell").nth(5)).toHaveText(quantity);
+      }
       await expect(page.getByText("Interne magacinske etikete", { exact: true })).toHaveCount(0);
       await expect(page.locator("article")).toHaveCount(0);
       await page.emulateMedia({ media: "print" });
@@ -1138,6 +1153,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
             warehouseId,
             warehouseReservedQty: qty,
             collectionName: fixture.collection,
+            supplierName: fixture.supplierName,
             shortDescriptionSnapshot: product.shortDescription,
             shortNameSnapshot: product.shortName,
             attribute1: product.attribute1,
