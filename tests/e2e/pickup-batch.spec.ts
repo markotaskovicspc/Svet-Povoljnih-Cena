@@ -283,11 +283,14 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       await expect(
         page.getByRole("heading", { name: "Automatski izbor kurira" }),
       ).toBeVisible();
+      const routingCard = page
+        .getByRole("heading", { name: "Automatski izbor kurira" })
+        .locator("..").locator("..");
       await expect(
-        page.getByText("Paket je do 30 kg i svaka strana je do 60 cm."),
+        routingCard.getByText("Paket je do 30 kg i svaka strana je do 60 cm."),
       ).toBeVisible();
       await expect(
-        page.getByText(/bar jedna strana preko 60 cm/),
+        routingCard.getByText(/bar jedna strana preko 60 cm/),
       ).toBeVisible();
       await expect(page.getByLabel("Kurirska služba")).toHaveCount(0);
       await page.goto("/admin/erp/preuzimanja", {
@@ -364,7 +367,9 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
           hasText: "Učitano paketa: 5 iz 1 porudžbina",
         }),
       ).toBeVisible();
-      await expect(page.getByRole("status")).toContainText(
+      await expect(page.getByRole("status").filter({
+        hasText: "Učitano paketa: 5 iz 1 porudžbina",
+      })).toContainText(
         `1 koje čekaju potvrdu plaćanja (${fixture.pendingBankOrder})`,
       );
       const [batch, orders] = await Promise.all([
@@ -430,7 +435,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         "Izvor",
         "Artikli za picking",
         "Paketa",
-        "Stvarne mere paketa",
+        "Mere i spremnost paketa",
       ]) {
         await expect(
           page.getByRole("columnheader", { name: header, exact: true }),
@@ -452,8 +457,11 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
 
     await test.step("cele dimenzije paketa prolaze HTML validaciju i čuvaju se", async () => {
       const firstRow = page.locator("tbody tr").first();
-      await firstRow.locator("summary").click();
+      if (await firstRow.locator("details").getAttribute("open") === null) {
+        await firstRow.locator("summary").click();
+      }
       const packageForm = firstRow.locator('form:has(input[name="lineId"])').first();
+      await expect(packageForm).toBeVisible();
       const lineId = await packageForm.locator('input[name="lineId"]').getAttribute("value");
       expect(lineId).toBeTruthy();
       await packageForm.getByLabel("kg", { exact: true }).fill("1.25");
@@ -529,8 +537,8 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       await page.goto("/admin/erp/preuzimanja", {
         waitUntil: "domcontentloaded",
       });
-      await expect(page.getByText(firstBatchNumber, { exact: true })).toBeVisible();
-      await expect(page.getByText(secondBatchNumber, { exact: true })).toBeVisible();
+      await expect(page.getByRole("table").getByText(firstBatchNumber, { exact: true })).toBeVisible();
+      await expect(page.getByRole("table").getByText(secondBatchNumber, { exact: true })).toBeVisible();
 
       const downloadPromise = page.waitForEvent("download");
       await page.getByRole("button", { name: "Excel", exact: true }).click();
@@ -543,6 +551,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         undefined,
         "Status",
         "Broj naloga",
+        "Brojevi naloga / pošiljki kurira",
         "Kurirska služba",
         "Datum naloga",
         "Broj redova",
@@ -601,7 +610,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       );
       expect(response.status()).toBe(400);
       expect((await response.json()).error).toContain(
-        "Nalog nema nijedan paket za MyGLS adresnicu",
+        "Nalog nema aktivnih paketa za slanje kuriru.",
       );
       expect(
         (
@@ -654,8 +663,8 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       );
       await expect(page.getByRole("heading", { name: "Zbirna picking lista" })).toBeVisible();
       await expect(page.locator("html")).toHaveAttribute("data-qa-print-called", "yes");
-      await expect(page.getByText(`Kratki Z ${runId}`, { exact: true })).toBeVisible();
-      await expect(page.getByText(`Kratki A ${runId}`, { exact: true })).toBeVisible();
+      await expect(page.getByRole("cell", { name: `Kratki Z ${runId}`, exact: true })).toBeVisible();
+      await expect(page.getByRole("cell", { name: `Kratki A ${runId}`, exact: true })).toBeVisible();
       await expect(page.getByRole("columnheader", { name: "Bar kod", exact: true })).toBeVisible();
       await expect(page.getByRole("columnheader", { name: "Dobavljač", exact: true })).toBeVisible();
       for (const [name, prefix, quantity] of [
@@ -804,9 +813,9 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       const myGlsBatchId = pickupBatchIdFromUrl(page.url());
       batchIds.push(myGlsBatchId);
       await page.getByRole("button", { name: "Učitaj porudžbine", exact: true }).click();
-      await expect(page.getByRole("status")).toContainText(
-        "Učitano paketa: 2 iz 1 porudžbina",
-      );
+      await expect(page.getByRole("status").filter({
+        hasText: "Učitano paketa: 2 iz 1 porudžbina",
+      })).toBeVisible();
       const myGlsLines = await db.pickupBatchLine.findMany({
         where: { batchId: myGlsBatchId },
       });
@@ -898,7 +907,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       await page.goto(`/admin/erp/reklamacije-dnevnik/${partReclamation.id}`, {
         waitUntil: "domcontentloaded",
       });
-      const replacementQty = page.getByLabel("Celih artikala za slanje");
+      const replacementQty = page.getByRole("spinbutton", { name: "Celih artikala za slanje" });
       await expect(replacementQty).toHaveAttribute("min", "0");
       await expect(replacementQty).toHaveValue("0");
       await acceptConfirmation(
@@ -966,10 +975,13 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       const returnRow = page.getByRole("row").filter({
         has: page.getByText(reclamation.number, { exact: true }),
       });
-      const warehouseSelect = returnRow.getByLabel("Magacin oštećene robe");
+      const warehouseSelect = returnRow.getByRole("combobox", { name: "Magacin prijema", exact: true });
       await expect(warehouseSelect.getByRole("option", { name: /Magacin oštećene robe/ })).toHaveCount(1);
-      await expect(warehouseSelect.getByRole("option", { name: /QA drugi magacin/ })).toHaveCount(0);
-      await expect(warehouseSelect.locator("option:not([disabled])")).toHaveCount(1);
+      await expect(warehouseSelect.getByRole("option", { name: /QA drugi magacin/ })).toHaveCount(1);
+      const activeWarehouses = await db.warehouse.findMany({ where: { active: true }, select: { id: true } });
+      expect(await warehouseSelect.locator("option:not([disabled])").evaluateAll(
+        (options) => options.map((option) => (option as HTMLOptionElement).value).sort(),
+      )).toEqual(activeWarehouses.map((warehouse) => warehouse.id).sort());
       await warehouseSelect.selectOption(returnWarehouse.id);
       await acceptConfirmation(
         page,
@@ -1038,9 +1050,9 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       await page
         .getByRole("button", { name: "Učitaj porudžbine", exact: true })
         .click();
-      await expect(page.getByRole("status")).toContainText(
-        "Učitano paketa: 1 iz 1 porudžbina",
-      );
+      await expect(page.getByRole("status").filter({
+        hasText: "Učitano paketa: 1 iz 1 porudžbina",
+      })).toBeVisible();
       expect(
         await db.pickupBatchLine.count({
           where: { batchId: myGlsBatchId, orderId: pendingBankOrderId },

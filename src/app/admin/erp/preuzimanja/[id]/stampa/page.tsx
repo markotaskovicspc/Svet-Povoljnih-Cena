@@ -96,10 +96,16 @@ export default async function PickupBatchPrintPage({
         <header className="border-b-2 border-black pb-4">
           <p className="text-xs font-bold uppercase tracking-[0.16em]">Svet povoljnih cena · magacin</p>
           <h1 className="mt-1 text-3xl font-bold">Zbirna picking lista</h1>
-          <dl className="mt-3 grid grid-cols-2 gap-x-8 gap-y-1 text-sm sm:grid-cols-3">
-            <dt>Nalog</dt><dd className="font-bold">{batch.number}</dd>
-            <dt>Kurir</dt><dd className="font-bold">{providerLabel(batch.provider)}</dd>
-            <dt>Paketa</dt><dd className="font-bold">{batch.lines.length}</dd>
+          <dl className="mt-3 grid grid-cols-3 gap-x-8 gap-y-1 text-sm">
+            <div>
+              <dt>Nalog</dt><dd className="font-bold">{batch.number}</dd>
+            </div>
+            <div>
+              <dt>Kurir</dt><dd className="font-bold">{providerLabel(batch.provider)}</dd>
+            </div>
+            <div>
+              <dt>Paketa</dt><dd className="font-bold">{batch.lines.length}</dd>
+            </div>
           </dl>
         </header>
         <table className="mt-5 w-full border-collapse text-sm print:text-xs">
