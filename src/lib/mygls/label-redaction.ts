@@ -105,6 +105,16 @@ function contentStreams(
   });
 }
 
+/** Text coordinates in the unrotated MyGLS recipient/content/sender column. */
+export function readMyGlsPageText(document: PDFDocument, page: ReturnType<PDFDocument["getPage"]>) {
+  const contents = page.node.Contents();
+  if (!contents) return [];
+  const fontMaps = readFontMaps(page.node.Resources());
+  return contentStreams(document, contents).flatMap((stream) =>
+    readTextBlocks(Buffer.from(decodePDFRawStream(stream).decode()).toString("latin1"), fontMaps),
+  );
+}
+
 function readFontMaps(
   resources: PDFDict | undefined,
 ) {
@@ -157,32 +167,44 @@ function readTextBlocks(
   const blocks: TextBlock[] = [];
   for (const match of content.matchAll(/\bBT\b[\s\S]*?\bET\b/g)) {
     const body = match[0];
-    const position = readTextPosition(body);
-    const operand = [...body.matchAll(/(\((?:\\[\s\S]|[^\\)])*\)|<([0-9A-Fa-f\s]+)>)\s*Tj\b/g)].at(-1);
-    if (!position || !operand || match.index == null || operand.index == null) continue;
-    const fontName = [...body.matchAll(/\/([^\s/]+)\s+[-+]?\d*\.?\d+\s+Tf\b/g)].at(-1)?.[1];
-    const bytes = operand[2]
-      ? Buffer.from(operand[2].replace(/\s/g, ""), "hex")
-      : decodePdfLiteral(operand[1]!.slice(1, -1));
-    const decoded = decodeText(bytes, fontName ? fontMaps.get(fontName) : undefined);
-    blocks.push({
-      start: match.index + operand.index,
-      end: match.index + operand.index + operand[1]!.length,
-      x: position.x,
-      y: position.y,
-      text: decoded,
-    });
+    let x = 0;
+    let y = 0;
+    let leading = 0;
+    let fontName: string | undefined;
+    const number = "[-+]?\\d*\\.?\\d+";
+    const operators = new RegExp(
+      `(/[^\\s/]+)\\s+${number}\\s+Tf\\b|` +
+      `((?:${number}\\s+){6})Tm\\b|` +
+      `(${number})\\s+(${number})\\s+T[dD]\\b|` +
+      `(${number})\\s+TL\\b|(T\\*)|` +
+      `(\\((?:\\\\[\\s\\S]|[^\\\\)])*\\)|<([0-9A-Fa-f\\s]+)>)\\s*Tj\\b`, "g",
+    );
+    for (const operand of body.matchAll(operators)) {
+      if (operand[1]) { fontName = operand[1].slice(1); continue; }
+      if (operand[2]) {
+        const matrix = operand[2].trim().split(/\s+/).map(Number);
+        x = matrix[4]!; y = matrix[5]!; continue;
+      }
+      if (operand[3] != null) {
+        x += Number(operand[3]); y += Number(operand[4]);
+        if (operand[0].endsWith("TD")) leading = -Number(operand[4]);
+        continue;
+      }
+      if (operand[5] != null) { leading = Number(operand[5]); continue; }
+      if (operand[6]) { y -= leading; continue; }
+      if (!operand[7]) continue;
+      const bytes = operand[8]
+        ? Buffer.from(operand[8].replace(/\s/g, ""), "hex")
+        : decodePdfLiteral(operand[7].slice(1, -1));
+      blocks.push({
+        start: match.index! + operand.index!,
+        end: match.index! + operand.index! + operand[7].length,
+        x, y,
+        text: decodeText(bytes, fontName ? fontMaps.get(fontName) : undefined),
+      });
+    }
   }
   return blocks;
-}
-
-function readTextPosition(body: string) {
-  const td = [...body.matchAll(/([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)\s+Td\b/g)].at(-1);
-  if (td) return { x: Number(td[1]), y: Number(td[2]) };
-  const tm = [...body.matchAll(
-    /[-+]?\d*\.?\d+\s+[-+]?\d*\.?\d+\s+[-+]?\d*\.?\d+\s+[-+]?\d*\.?\d+\s+([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)\s+Tm\b/g,
-  )].at(-1);
-  return tm ? { x: Number(tm[1]), y: Number(tm[2]) } : null;
 }
 
 function decodeText(bytes: Buffer, mapping?: ReadonlyMap<number, string>) {

@@ -14,6 +14,8 @@ import type { MyGlsConfig } from "./config";
 import { MyGlsConfigError, toMyGlsDate } from "./config";
 import type { MyGlsAddress, MyGlsParcel, MyGlsService } from "./types";
 import { courierAddressParts } from "@/lib/address/house-number";
+import { myGlsArticleContent } from "./article-content";
+export { myGlsArticleContent } from "./article-content";
 
 type OrderForMyGlsPayload = {
   id: string;
@@ -37,7 +39,13 @@ type OrderForMyGlsPayload = {
   glsDeliveryPointPostalCode?: string | null;
   notes?: string | null;
   user?: { email?: string | null } | null;
-  items: { qty: number; name: string }[];
+  items: {
+    id?: string;
+    qty: number;
+    name: string;
+    sku?: string;
+    product?: { barcode: string | null } | null;
+  }[];
 };
 
 type BuildMyGlsParcelArgs = {
@@ -67,7 +75,18 @@ export function buildMyGlsParcelForOrder(
 
   const recipientName = `${order.shipFirstName} ${order.shipLastName}`.trim();
   const contactEmail = order.user?.email ?? order.guestEmail ?? null;
-  const packages = completePackages(args.packages);
+  const packages = completePackages(args.packages).map((pkg) => {
+    const item = order.items.find((item) => item.id && item.id === pkg.orderItemId);
+    // A replacement part has its own description, not the whole article's EAN.
+    const isCustomReplacement = purpose === "RECLAMATION_REPLACEMENT" &&
+      pkg.content?.trim() && pkg.content.trim() !== item?.name.trim();
+    return {
+      ...pkg,
+      content: item && !isCustomReplacement
+        ? myGlsArticleContent(item)
+        : pkg.content,
+    };
+  });
   const packageContents = [
     ...new Set(packages.map((pkg) => pkg.content?.trim()).filter(Boolean)),
   ];
@@ -256,7 +275,7 @@ function normalizePhone(value: string) {
 
 function buildContent(order: OrderForMyGlsPayload, fallback: string) {
   const itemNames = order.items
-    .map((item) => item.name)
+    .map(myGlsArticleContent)
     .filter(Boolean)
     .slice(0, 3);
   return (itemNames.join(", ") || fallback).slice(0, 120);

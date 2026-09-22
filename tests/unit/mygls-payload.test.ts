@@ -3,6 +3,7 @@ import type { MyGlsConfig } from "@/lib/mygls/config";
 import {
   buildMyGlsParcelForOrder,
   buildMyGlsParcelsForOrder,
+  myGlsArticleContent,
 } from "@/lib/mygls/payload";
 
 const config: MyGlsConfig = {
@@ -77,6 +78,36 @@ const packages = [
 ];
 
 describe("MyGLS reclamation payload", () => {
+  it("prints each article's SKU and EAN on its own label even when package names are stale", () => {
+    const items = [
+      { id: "item-1", name: "Komjuter sto LOFT", sku: "210027", qty: 1, product: { barcode: "0012345678905" } },
+      { id: "item-2", name: "Stolica", sku: "110081", qty: 1, product: { barcode: "8601234567890" } },
+    ];
+    const parcels = buildMyGlsParcelsForOrder({ cfg: config, order: { ...order, items }, packages: [
+      { ...packages[0]!, orderItemId: "item-2", content: "Stari naziv" },
+      { ...packages[1]!, orderItemId: "item-1" },
+    ] });
+    expect(parcels.map((parcel) => parcel.Content)).toEqual([
+      "Stolica / Sifra: 110081 / EAN: 8601234567890",
+      "Komjuter sto LOFT / Sifra: 210027 / EAN: 0012345678905",
+    ]);
+    expect(parcels.map((parcel) => parcel.ParcelPropertyList?.[0]?.Content)).toEqual(parcels.map((parcel) => parcel.Content));
+    expect(parcels.map((parcel) => parcel.CODAmount)).toEqual([12_000, 0]);
+  });
+
+  it("keeps full identifiers and leading zeros when shortening a long article name", () => {
+    const content = myGlsArticleContent({ name: "Dugačak naziv ".repeat(30), qty: 1, sku: "001234", product: { barcode: "0012345678905" } });
+    expect(content.length).toBeLessThanOrEqual(120);
+    expect(content).toMatch(/\.\.\. \/ Sifra: 001234 \/ EAN: 0012345678905$/);
+    expect(myGlsArticleContent({ name: "Sto", qty: 1, sku: "0001", product: null })).toBe("Sto / Sifra: 0001");
+  });
+
+  it("does not put the complete article barcode on a replacement part", () => {
+    const parcel = buildMyGlsParcelForOrder({ cfg: config, order: { ...order, items: [
+      { id: "item-1", name: "Stolica", qty: 1, sku: "110081", product: { barcode: "8601234567890" } },
+    ] }, packages: [{ ...packages[0]!, content: "Naslon stolice" }], purpose: "RECLAMATION_REPLACEMENT" });
+    expect(parcel.Content).toBe("Naslon stolice");
+  });
   it("reverses pickup and delivery and suppresses COD for a return", () => {
     const parcel = buildMyGlsParcelForOrder({
       cfg: config,

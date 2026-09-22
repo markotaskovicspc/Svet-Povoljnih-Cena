@@ -40,6 +40,16 @@ describe("MyGLS sender contact redaction", () => {
     const result = await redactMyGlsSenderContactPdf(bytes);
     expect(result).toEqual({ bytes, redactedCount: 0 });
   });
+
+  it("redacts a contact when the provider keeps multiple lines in one text block", async () => {
+    const source = await PDFDocument.create();
+    const page = source.addPage([841.89, 595.276]);
+    const font = await source.embedFont(StandardFonts.Helvetica);
+    page.drawText(`Posiljalac:\n${CONTACT}`, { x: 262, y: 389, size: 8, lineHeight: 10, font });
+    const result = await redactMyGlsSenderContactPdf(await source.save());
+    expect(result.redactedCount).toBe(1);
+    expect(await decodedContent(result.bytes)).not.toContain(Buffer.from(CONTACT).toString("hex").toUpperCase());
+  });
 });
 
 async function decodedContent(bytes: Uint8Array) {

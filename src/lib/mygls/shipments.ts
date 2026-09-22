@@ -219,7 +219,10 @@ async function prepareMyGlsShipmentForOrder(
     include: {
       user: { select: { email: true } },
       items: {
-        select: { id: true, qty: true, name: true, withAssembly: true },
+        select: {
+          id: true, qty: true, name: true, sku: true, withAssembly: true,
+          product: { select: { barcode: true } },
+        },
       },
       payments: {
         orderBy: { createdAt: "desc" },
