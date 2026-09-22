@@ -674,7 +674,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         const row = page.getByRole("row").filter({ hasText: name });
         const barcode = `${prefix}${runId.replace(/\D/g, "").slice(-10).padStart(10, "0")}`;
         await expect(row.getByRole("cell").nth(2)).toHaveText(barcode);
-        await expect(row.getByRole("img", { name: `Bar kod ${barcode}`, exact: true })).toBeVisible();
+        await expect(row.getByRole("cell").nth(2).locator("strong")).toHaveCSS("font-weight", "700");
         await expect(row.getByRole("cell", { name: fixture.supplierName, exact: true })).toHaveCount(0);
         await expect(row.getByRole("cell").nth(4)).toHaveText(quantity);
       }
@@ -683,7 +683,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       await page.emulateMedia({ media: "print" });
       await expect(page.locator("aside")).toBeHidden();
       await expect(page.getByText("Prijavljen kao", { exact: false })).toBeHidden();
-      await expect(page.getByRole("img", { name: /^Bar kod / })).toHaveCount(2);
+      await expect(page.getByRole("img", { name: /^Bar kod / })).toHaveCount(0);
       await page.pdf({ path: test.info().outputPath("picking-list.pdf"), format: "A4", printBackground: true });
       await page.emulateMedia({ media: "screen" });
     });
