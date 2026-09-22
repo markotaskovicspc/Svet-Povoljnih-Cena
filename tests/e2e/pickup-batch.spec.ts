@@ -672,10 +672,9 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         [`Kratki A ${runId}`, "862", "3"],
       ]) {
         const row = page.getByRole("row").filter({ hasText: name });
-        await expect(row.getByRole("cell", {
-          name: `${prefix}${runId.replace(/\D/g, "").slice(-10).padStart(10, "0")}`,
-          exact: true,
-        })).toBeVisible();
+        const barcode = `${prefix}${runId.replace(/\D/g, "").slice(-10).padStart(10, "0")}`;
+        await expect(row.getByRole("cell").nth(2)).toHaveText(barcode);
+        await expect(row.getByRole("img", { name: `Bar kod ${barcode}`, exact: true })).toBeVisible();
         await expect(row.getByRole("cell", { name: fixture.supplierName, exact: true })).toBeVisible();
         await expect(row.getByRole("cell").nth(5)).toHaveText(quantity);
       }
@@ -684,6 +683,8 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       await page.emulateMedia({ media: "print" });
       await expect(page.locator("aside")).toBeHidden();
       await expect(page.getByText("Prijavljen kao", { exact: false })).toBeHidden();
+      await expect(page.getByRole("img", { name: /^Bar kod / })).toHaveCount(2);
+      await page.pdf({ path: test.info().outputPath("picking-list.pdf"), format: "A4", printBackground: true });
       await page.emulateMedia({ media: "screen" });
     });
 

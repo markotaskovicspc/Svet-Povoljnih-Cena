@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { PrintPageButton } from "@/components/admin/print-page-button";
 import { AutoPrintOnLoad } from "@/components/admin/auto-print-on-load";
 import { buildPickupPrintRows } from "@/lib/admin/pickup-print";
+import { PickingBarcode } from "@/components/admin/picking-barcode";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -125,7 +126,7 @@ export default async function PickupBatchPrintPage({
               <tr key={row.key} className="break-inside-avoid border-b border-black/30 align-top">
                 <td className="py-3"><span className="inline-block size-5 border border-black" /></td>
                 <td className="py-3 font-mono font-bold">{row.sku}</td>
-                <td className="whitespace-nowrap px-2 py-3 font-mono">{row.barcode ?? "—"}</td>
+                <td className="px-2 py-3"><PickingBarcode value={row.barcode} /></td>
                 <td className="px-2 py-3">{row.name}</td>
                 <td className="px-2 py-3">{row.supplierName ?? "—"}</td>
                 <td className="py-3 pl-2 text-right text-lg font-bold">{row.quantity}</td>
