@@ -21,6 +21,7 @@ import {
   isXExpressCashOnDelivery,
 } from "./payload";
 import { buildXExpressLabelData } from "./labels";
+import { buildXExpressArticleLabels } from "./article-labels";
 import {
   normalizeOrderItemIds,
   readShipmentAssignment,
@@ -86,10 +87,12 @@ export async function createXExpressShipmentForOrder(
         select: {
           id: true,
           name: true,
+          sku: true,
           qty: true,
           withAssembly: true,
           product: {
             select: {
+              barcode: true,
               packQty: true,
               packGrossWeightKg: true,
               grossWeightKg: true,
@@ -260,6 +263,9 @@ export async function createXExpressShipmentForOrder(
       },
       reference: shipmentId,
       packages: payload.Packages,
+      articleLabels: buildXExpressArticleLabels({
+        codes: allocated, packages: options.packages, items: shipmentItems, purpose,
+      }),
       labelData: buildXExpressLabelData({
         payload,
         pickupTown,

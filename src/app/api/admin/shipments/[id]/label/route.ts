@@ -3,6 +3,7 @@ import { requireAdminAction } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { downloadMyGlsLabelPdf, MYGLS_PROVIDER } from "@/lib/mygls";
 import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
+import { xExpressLabelItemSelect } from "@/lib/x-express/article-labels";
 import { renderXExpressLabelsHtml } from "@/lib/x-express/labels";
 import { fulfillmentPaymentReadiness } from "@/lib/payments/fulfillment-readiness";
 
@@ -32,7 +33,7 @@ export async function GET(
           shipCity: true,
           shipPostalCode: true,
           notes: true,
-          items: { select: { name: true, qty: true } },
+          items: { select: xExpressLabelItemSelect },
         },
       },
     },

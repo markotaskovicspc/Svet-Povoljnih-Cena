@@ -342,7 +342,7 @@ function providerContent(value: string, max: number, fallback: string) {
     "Roba";
 }
 
-function sanitizeProviderContent(value: string, max: number) {
+export function sanitizeProviderContent(value: string, max: number) {
   return cleanWhitespace(value)
     .replace(/&/g, " i ")
     .replace(/\+/g, " plus ")

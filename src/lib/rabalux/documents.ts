@@ -11,6 +11,7 @@ import {
 } from "@/lib/email/pdf";
 import { downloadMyGlsLabelPdf, MYGLS_PROVIDER } from "@/lib/mygls";
 import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
+import { xExpressLabelItemSelect } from "@/lib/x-express/article-labels";
 import { renderXExpressLabelsHtml } from "@/lib/x-express/labels";
 import { renderPrintHtmlPdf } from "@/lib/pdf/print-html";
 
@@ -169,7 +170,7 @@ export async function buildRabaluxShipmentAttachments(args: {
           shipCity: true,
           shipPostalCode: true,
           notes: true,
-          items: { select: { name: true, qty: true } },
+          items: { select: xExpressLabelItemSelect },
         },
       },
     },

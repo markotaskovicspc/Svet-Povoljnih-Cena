@@ -26,7 +26,7 @@ describe("X Express printable PDF", () => {
         shipCity: "Novi Sad",
         shipPostalCode: "21000",
         notes: "Pozvati pre isporuke",
-        items: [{ name: "Rabalux plafonjera", qty: count }],
+        items: [{ id: "lamp", name: "Rabalux plafonjera", sku: "001234", product: { barcode: "0012345678905" }, qty: count }],
       },
     });
     const buffer = await renderPrintHtmlPdf(html);

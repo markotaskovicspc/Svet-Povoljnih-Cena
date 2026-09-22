@@ -10,6 +10,7 @@ import {
 import { usableMyGlsLabelWhere } from "@/lib/mygls/labels";
 import { mergePdfDocuments } from "@/lib/pdf/merge";
 import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
+import { xExpressLabelItemSelect } from "@/lib/x-express/article-labels";
 import { renderXExpressBatchLabelsHtml } from "@/lib/x-express/labels";
 import { fulfillmentPaymentReadiness } from "@/lib/payments/fulfillment-readiness";
 
@@ -140,7 +141,7 @@ export async function GET(
           shipCity: true,
           shipPostalCode: true,
           notes: true,
-          items: { select: { name: true, qty: true } },
+          items: { select: xExpressLabelItemSelect },
         },
       },
     },
@@ -211,9 +212,15 @@ export async function GET(
       const contents = batch.lines
         .filter((line) => shipmentMatchesLine(shipment, line))
         .sort((left, right) => left.packageNo - right.packageNo)
-        .map((line) => line.orderItem?.name?.trim() || "Roba");
+        .map((line) => line.purpose === "RECLAMATION_REPLACEMENT" ? "" : line.orderItem?.name?.trim() || "Roba");
       return [shipment.id, contents];
     }),
+  );
+  const packageOrderItemIdsByShipmentId = Object.fromEntries(
+    shipments.map((shipment) => [shipment.id, batch.lines
+      .filter((line) => shipmentMatchesLine(shipment, line))
+      .sort((left, right) => left.packageNo - right.packageNo)
+      .map((line) => line.orderItemId)]),
   );
   let html: string;
   try {
@@ -221,6 +228,7 @@ export async function GET(
       title: batch.number,
       autoPrint: true,
       packageContentsByShipmentId,
+      packageOrderItemIdsByShipmentId,
     });
   } catch (error) {
     return labelConflict(

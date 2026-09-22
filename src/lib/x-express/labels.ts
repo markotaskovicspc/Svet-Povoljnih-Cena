@@ -1,11 +1,13 @@
 import "server-only";
 
-import { Prisma, type PaymentMethod } from "@prisma/client";
+import { Prisma, type PaymentMethod, type ShipmentPurpose } from "@prisma/client";
+import JsBarcode from "jsbarcode";
 import { num } from "@/lib/api/_helpers";
 import { formatDateTime, formatRsd } from "@/lib/format";
 import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 import type { XExpressCreateOrderPayload } from "./types";
 import { normalizeXExpressRouteCode } from "./client";
+import { resolveXExpressArticleLabel, type XExpressArticleItem, type XExpressArticleLabel } from "./article-labels";
 
 const CODE128_PATTERNS = [
   "212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312",
@@ -30,6 +32,7 @@ const X_EXPRESS_TRACKING_CODE = /^[A-Z]{3}\d{10}$/;
 
 export type XExpressLabelShipment = {
   id: string;
+  purpose?: ShipmentPurpose;
   trackingNo: string | null;
   packageCount: number;
   providerParcelNumbers: Prisma.JsonValue | null;
@@ -49,7 +52,7 @@ export type XExpressLabelShipment = {
     shipCity: string;
     shipPostalCode: string;
     notes: string | null;
-    items: Array<{ name: string; qty: number }>;
+    items: XExpressArticleItem[];
   };
 };
 
@@ -137,6 +140,7 @@ export function renderXExpressBatchLabelsHtml(
     title?: string;
     autoPrint?: boolean;
     packageContentsByShipmentId?: Readonly<Record<string, readonly string[]>>;
+    packageOrderItemIdsByShipmentId?: Readonly<Record<string, readonly (string | null)[]>>;
   } = {},
 ) {
   if (!shipments.length) {
@@ -147,6 +151,7 @@ export function renderXExpressBatchLabelsHtml(
     renderShipmentLabels(
       shipment,
       options.packageContentsByShipmentId?.[shipment.id],
+      options.packageOrderItemIdsByShipmentId?.[shipment.id],
     ),
   );
   const sheets = chunkLabels(labels, 4);
@@ -176,6 +181,19 @@ export function renderXExpressBatchLabelsHtml(
     .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; margin-top: 2.5mm; font-size: 9px; line-height: 1.2; overflow-wrap: anywhere; }
     .note { margin-top: 2mm; font-size: 8.5px; line-height: 1.15; white-space: pre-wrap; }
     .stamp { margin-top: auto; display: flex; justify-content: space-between; gap: 2mm; border-top: 1px solid #000; padding-top: 1.2mm; font-size: 7px; line-height: 1.1; font-weight: 700; }
+    .label > * { flex-shrink: 0; }
+    .label:has(.article) .sender { min-height: 10mm; }
+    .label:has(.article) .recipient { min-height: 26mm; font-size: 13px; padding: 1.5mm; }
+    .label:has(.article) .recipient strong { font-size: 15px; }
+    .label:has(.article) .route { margin-top: 1mm; }
+    .label:has(.article) .route-code, .label:has(.article) .pkg { font-size: 24px; }
+    .label:has(.article) .meta { margin-top: 1.5mm; font-size: 8px; }
+    .label:has(.article) .note { margin-top: 1mm; font-size: 8px; }
+    .article { display: grid; grid-template-columns: 1fr 46mm; gap: 2mm; align-items: center; min-height: 16mm; margin-top: 1.5mm; padding-top: 1mm; border-top: 1px solid #000; font-size: 9px; line-height: 1.15; }
+    .article-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; font-weight: 700; }
+    .article-sku { margin-top: 1mm; overflow-wrap: anywhere; }
+    .article-barcode { text-align: center; font-size: 8px; }
+    .article-barcode svg { display: block; width: 46mm; height: 9mm; margin: 1mm auto; }
     @media print { body { width: 210mm; background: white; } .screen-note { display: none; } .sheet { margin: 0; page-break-after: always; break-after: page; } .sheet:last-of-type { page-break-after: auto; break-after: auto; } }
   </style>
 </head>
@@ -204,6 +222,7 @@ function chunkLabels(labels: readonly string[], size: number) {
 function renderShipmentLabels(
   shipment: XExpressLabelShipment,
   packageContents?: readonly string[],
+  packageOrderItemIds?: readonly (string | null)[],
 ) {
   const trackingCodes = readTrackingCodes(shipment);
   const count = Math.max(1, shipment.packageCount || trackingCodes.length || 1);
@@ -221,6 +240,9 @@ function renderShipmentLabels(
       `X Express pošiljka ${shipment.id} nema sadržaj za svih ${count} paketa.`,
     );
   }
+  if (packageOrderItemIds && packageOrderItemIds.length !== count) {
+    throw new Error(`X Express pošiljka ${shipment.id} nema identitet artikla za svih ${count} paketa.`);
+  }
   return trackingCodes.map((code, index) =>
     renderLabel(
       shipment,
@@ -228,6 +250,7 @@ function renderShipmentLabels(
       index + 1,
       count,
       packageContents?.[index],
+      packageOrderItemIds?.[index],
     ),
   );
 }
@@ -238,6 +261,7 @@ function renderLabel(
   index: number,
   count: number,
   packageContentOverride?: string,
+  orderItemId?: string | null,
 ) {
   const order = shipment.order;
   const labelData = readLabelData(shipment.rawCreateResponse);
@@ -267,6 +291,10 @@ function renderLabel(
       .join(", ")
       .slice(0, 80) || "Roba");
   const note = truncateLabelText(order.notes?.trim() || "", 120);
+  const article = resolveXExpressArticleLabel({
+    raw: shipment.rawCreateResponse, code: trackingCode, items: order.items,
+    content, orderItemId, purpose: shipment.purpose,
+  });
   const sender = labelData?.sender;
   const recipient = labelData?.recipient;
   const senderAddress = sender
@@ -291,13 +319,31 @@ function renderLabel(
     <div class="code">${escapeHtml(trackingCode)}</div>
     <div class="recipient">Primalac:<strong>${escapeHtml(recipientName)}<br />${escapeHtml(recipientAddress)}<br />${escapeHtml(recipientPostalCity)}<br />${escapeHtml(recipient?.phone ?? order.shipPhone)}</strong></div>
     <div class="route"><span class="route-code">${escapeHtml(route)}</span><span class="pkg">${index}/${count}</span></div>
+    ${article && (article.sku || article.barcode) ? renderArticle(article) : ""}
     <div class="meta">
-      <div><strong>API referenca:</strong> ${escapeHtml(reference)}<br /><strong>Porudžbina:</strong> ${escapeHtml(order.number)}<br /><strong>Sadržaj:</strong> ${escapeHtml(content)}</div>
+      <div><strong>API referenca:</strong> ${escapeHtml(reference)}<br /><strong>Porudžbina:</strong> ${escapeHtml(order.number)}${article && (article.sku || article.barcode) ? "" : `<br /><strong>Sadržaj:</strong> ${escapeHtml(article?.name || content)}`}</div>
       <div><strong>Uslugu plaća:</strong> ${escapeHtml(payer)}<br /><strong>Vrsta usluge:</strong> ${escapeHtml(serviceType)}<br /><strong>Otkupnina:</strong> ${escapeHtml(formatRsd(codAmount))}<br /><strong>Masa:</strong> ${escapeHtml(formatMass(packageData?.mass))}</div>
     </div>
     <div class="note"><strong>Napomena:</strong><br />${escapeHtml(note)}</div>
     <div class="stamp"><span>X Express specifikacija v1.5</span><span>štampa: ${escapeHtml(formatDateTime(new Date()))}</span></div>
   </section>`;
+}
+
+function renderArticle(article: XExpressArticleLabel) {
+  let barcode = "";
+  if (article.barcode) {
+    const encoded: { encodings?: Array<{ data: string }> } = {};
+    let valid = false;
+    JsBarcode(encoded, article.barcode, { format: "CODE128", displayValue: false, valid: (result) => { valid = result; } });
+    const bits = valid ? encoded.encodings?.map((part) => part.data).join("") : null;
+    if (bits && bits.length + 20 <= 220) {
+      const bars = Array.from(bits, (bit, x) => bit === "1" ? `<rect x="${x + 10}" y="0" width="1" height="40" />` : "").join("");
+      barcode = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${bits.length + 20} 40" preserveAspectRatio="none" role="img" aria-label="Barkod artikla ${escapeHtml(article.barcode)}"><rect width="100%" height="100%" fill="white" />${bars}</svg>`;
+    } else {
+      barcode = "<div>Barkod nije moguće prikazati</div>";
+    }
+  }
+  return `<div class="article"><div><div class="article-name">${escapeHtml(article.name)}</div>${article.sku ? `<div class="article-sku"><strong>Šifra:</strong> ${escapeHtml(article.sku)}</div>` : ""}</div><div class="article-barcode">${article.barcode ? `<strong>Barkod artikla</strong>${barcode}<span>EAN: ${escapeHtml(article.barcode)}</span>` : "EAN nije unet"}</div></div>`;
 }
 
 function readLabelData(raw: Prisma.JsonValue | null): XExpressLabelData | null {
