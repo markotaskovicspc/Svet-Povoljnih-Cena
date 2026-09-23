@@ -117,7 +117,7 @@ describe("package routing", () => {
     ).toEqual({ kind: "invalid_dimensions" });
   });
 
-  it("requires complete dimensions and package weight", () => {
+  it.each([0, null, undefined])("routes a small package with weight %s into X Express picking", (weight) => {
     expect(
       resolveCourierProvider({
         shippingMethod: "KURIR",
@@ -126,9 +126,31 @@ describe("package routing", () => {
           packWidthCm: 30,
           packDepthCm: 20,
           packHeightCm: 10,
+          packGrossWeightKg: weight,
         }],
       }),
-    ).toEqual({ kind: "invalid_dimensions" });
+    ).toEqual({ kind: "single", provider: "X_EXPRESS" });
+  });
+
+  it("keeps mixed orders together on MyGLS even when a small package has no weight", () => {
+    const small = { withAssembly: false, packWidthCm: 17, packDepthCm: 17, packHeightCm: 25, packGrossWeightKg: 0 };
+    for (const large of [
+      { ...small, packHeightCm: 61 },
+      { ...small, packGrossWeightKg: 31 },
+    ]) {
+      for (const items of [[small, large], [large, small]]) {
+        expect(resolveCourierProvider({ shippingMethod: "KURIR", items })).toEqual({ kind: "single", provider: "MYGLS" });
+      }
+    }
+  });
+
+  it.each([-1, NaN, Infinity])("does not accept invalid weight %s", (weight) => {
+    expect(resolveCourierProvider({ shippingMethod: "KURIR", items: [{ withAssembly: false, packWidthCm: 17, packDepthCm: 17, packHeightCm: 25, packGrossWeightKg: weight }] })).toEqual({ kind: "invalid_dimensions" });
+  });
+
+  it("does not route an empty order or missing dimensions using the zero-weight rule", () => {
+    expect(resolveCourierProvider({ shippingMethod: "KURIR", items: [] })).toEqual({ kind: "invalid_dimensions" });
+    expect(resolveCourierProvider({ shippingMethod: "KURIR", items: [{ withAssembly: false, packWidthCm: 0, packDepthCm: 17, packHeightCm: 25, packGrossWeightKg: 0 }] })).toEqual({ kind: "invalid_dimensions" });
   });
 
   it("routes an order with different package sizes entirely to MyGLS", () => {

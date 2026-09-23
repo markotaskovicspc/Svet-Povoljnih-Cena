@@ -251,4 +251,8 @@ describe("physical courier packages", () => {
     expect(() => requireCompleteXExpressPackages([{ ...base, weightKg: 30, heightCm: 60 }])).not.toThrow();
     expect(hasKnownXExpressHardLimitViolation({ ...base, depthCm: 61 })).toBe(true);
   });
+
+  it.each([0, null])("still requires actual weight before creating an X Express label (weight %s)", (weightKg) => {
+    expect(() => requireCompleteXExpressPackages([{ packageNo: 1, weightKg, widthCm: 17, depthCm: 17, heightCm: 25 }])).toThrow("težina");
+  });
 });

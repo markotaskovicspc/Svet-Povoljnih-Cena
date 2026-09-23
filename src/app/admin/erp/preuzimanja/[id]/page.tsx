@@ -837,7 +837,7 @@ export default async function PickupBatchPage({
 
         <Card>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <CardTitle description={`Učitavaju se sve neučitane, nefiskalizovane DC porudžbine koje po stvarnoj težini i dimenzijama pripadaju kuriru ${myGls ? "MyGLS (preko 30 kg, bar jedna stranica preko 60 cm ili porudžbina sa različitim veličinama paketa)" : "X Express (svi paketi do 30 kg i do 60 cm po svakoj strani)"}. Cela porudžbina ostaje u jednom nalogu, pa picking lista prikazuje sve njene artikle. Zamene ulaze u isti picking tok. MyGLS volumetrijska dimenzija preko 300 cm može imati doplatu, ali ne blokira adresnicu.`}>
+            <CardTitle description={`Učitavaju se sve neučitane, nefiskalizovane DC porudžbine koje po stvarnoj težini i dimenzijama pripadaju kuriru ${myGls ? "MyGLS (preko 30 kg ili bar jedna stranica preko 60 cm)" : "X Express (paketi do 60 cm po svakoj strani, sa težinom do 30 kg ili bez upisane težine)"}. Težina 0 ili prazno polje ne blokira ulazak u picking; stvarnu težinu unesite pre potvrde spremnosti i kreiranja adresnice. Poznato prekoračenje granice šalje celu porudžbinu u MyGLS. Cela porudžbina ostaje u jednom nalogu. Zamene ulaze u isti picking tok. MyGLS volumetrijska dimenzija preko 300 cm može imati doplatu, ali ne blokira adresnicu.`}>
               Zajednička picking lista
             </CardTitle>
             {editing ? (
@@ -1001,6 +1001,11 @@ export default async function PickupBatchPage({
                                     ) : null}
                                   </div>
                                 )}
+                                {row.weightKg == null || row.weightKg <= 0 ? (
+                                  <p className="mt-2 text-xs font-medium text-warning">
+                                    Artikal {row.sku || row.shortName}: nedostaje težina paketa. Paket je u picking nalogu; unesite stvarnu težinu pre potvrde spremnosti i kreiranja adresnice.
+                                  </p>
+                                ) : null}
                                 {!row.deferredAt && (editable || row.warehouseReadyAt) ? (
                                   <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-muted-bg/60 p-2">
                                     <span className={row.warehouseReadyAt ? "text-xs font-semibold text-success" : "text-xs font-semibold text-warning"}>

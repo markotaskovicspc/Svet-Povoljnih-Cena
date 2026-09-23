@@ -377,6 +377,7 @@ export async function rescheduleDeferredPickupPackage(
 export async function loadEligibleOrders(
   batchId: string,
   actorId: string,
+  onlyOrderIds?: readonly string[],
 ) {
   return db.$transaction(async (tx) => {
     await lockBatch(tx, batchId);
@@ -407,7 +408,8 @@ export async function loadEligibleOrders(
     >(Prisma.sql`
       SELECT orders."id", orders."number", orders."paymentMethod"
       FROM "Order" AS orders
-      WHERE (
+      WHERE ${onlyOrderIds ? (onlyOrderIds.length ? Prisma.sql`orders."id" IN (${Prisma.join([...onlyOrderIds])})` : Prisma.sql`FALSE`) : Prisma.sql`TRUE`}
+        AND (
           orders."status" = 'KREIRANO'
           OR (
             orders."status" = 'U_PRIPREMI'

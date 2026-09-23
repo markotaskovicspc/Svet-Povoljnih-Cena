@@ -49,9 +49,10 @@ function expandedPackages(order: PackageRouteInput) {
  * Resolves one provider for an order or a selected set of lines. If any
  * physical package exceeds the X Express weight or dimension limit, the whole
  * set stays together on MyGLS so one order has one picking list and one COD.
- * Automatic routing is deliberately blocked when a catalogue dimension or
- * package weight is missing: treating unknown measurements as zero could send
- * a large parcel to the wrong courier.
+ * A missing/zero catalogue weight no longer blocks picking: packages within
+ * the known dimension limits default to X Express. The missing weight is kept
+ * on the package and must be entered before readiness or label creation.
+ * Missing dimensions and invalid weights still block automatic routing.
  */
 export function resolveCourierProvider(
   order: PackageRouteInput,
@@ -63,11 +64,11 @@ export function resolveCourierProvider(
       item.packDepthCm,
       item.packHeightCm,
     ].map(Number);
-    const weightKg = Number(item.packGrossWeightKg);
+    const weightKg = Number(item.packGrossWeightKg ?? 0);
     if (
       dimensions.some((value) => !Number.isFinite(value) || value <= 0) ||
       !Number.isFinite(weightKg) ||
-      weightKg <= 0
+      weightKg < 0
     ) {
       return { kind: "invalid_dimensions" };
     }
