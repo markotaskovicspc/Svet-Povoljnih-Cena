@@ -50,6 +50,14 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Prepare Supabase API roles in the isolated database
+        # Production already has these roles. Migration security statements
+        # also need them in the otherwise plain PostgreSQL service used by CI.
+        env:
+          POSTGRES_CONTAINER_ID: ${{ job.services.postgres.id }}
+        run: |
+          docker exec "$POSTGRES_CONTAINER_ID" psql -U postgres -d spc_test -v ON_ERROR_STOP=1 \
+            -c 'CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN;'
       - run: npm run db:deploy
       - name: Seed isolated role fixtures
         run: |

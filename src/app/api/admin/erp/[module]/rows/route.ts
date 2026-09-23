@@ -77,11 +77,11 @@ export async function GET(
   const articleSelection = { query, searchColumn: requestedSearchColumn, searchColumns, filters, sorting };
   if (slug === "artikli" && !useDatabasePagination && supportsArticleGridSelection(articleSelection)) {
     const selected = await selectArticleGridPage(articleSelection, start, pageSize);
-    const module = await getErpModule(slug, {
+    const selectedModule = await getErpModule(slug, {
       take: pageSize, articleIds: selected.ids,
       warehouseId: search.get("warehouseId"), includeLookupOptions: false,
     });
-    const byId = new Map(module?.rows.map((row) => [row.id, row]));
+    const byId = new Map(selectedModule?.rows.map((row) => [row.id, row]));
     return NextResponse.json({
       rows: selected.ids.flatMap((id) => { const row = byId.get(id); return row ? [row] : []; }),
       page, pageSize, total: selected.total,

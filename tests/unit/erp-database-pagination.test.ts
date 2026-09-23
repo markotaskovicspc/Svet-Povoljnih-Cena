@@ -60,8 +60,8 @@ it("reports a paginated first-page total without declaring the whole list comple
 });
 
 it("does not load products or warehouses for an empty article selection", async () => {
-  const module = await getErpModule("artikli", { articleIds: [], take: 25, includeLookupOptions: false });
-  expect(module?.rows).toEqual([]);
+  const erpModule = await getErpModule("artikli", { articleIds: [], take: 25, includeLookupOptions: false });
+  expect(erpModule?.rows).toEqual([]);
   expect(mocks.db.product.findMany).not.toHaveBeenCalled();
   expect(mocks.db.warehouse.findMany).not.toHaveBeenCalled();
 });
