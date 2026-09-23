@@ -31,6 +31,9 @@ export async function GET(
       provider: true,
       labelsCreatedAt: true,
       lines: {
+        // Match label creation: deferred packages stay in the batch for history,
+        // but must not enter payment checks, missing-label checks or printing.
+        where: { deferredAt: null },
         orderBy: [{ orderId: "asc" }, { packageNo: "asc" }],
         select: {
           orderId: true,
@@ -48,7 +51,7 @@ export async function GET(
     return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
   }
   if (!batch.lines.length) {
-    return labelConflict("Nalog nema pakete za štampu.");
+    return labelConflict("Nalog nema aktivne pakete za štampu.", batch.id);
   }
   if (batch.provider !== MYGLS_PROVIDER && batch.provider !== X_EXPRESS_PROVIDER) {
     return labelConflict("Kurirska služba nije podešena na nalogu.", batch.id);
