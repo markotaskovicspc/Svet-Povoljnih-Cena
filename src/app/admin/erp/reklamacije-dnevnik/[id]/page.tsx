@@ -1,3 +1,4 @@
+import { parseReturnPickupCoordinates } from "@/lib/x-express/return";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -252,7 +253,8 @@ async function createShipmentAction(_state: AdminActionState, formData: FormData
       if (!id || !["RECLAMATION_RETURN", "RECLAMATION_REPLACEMENT"].includes(purpose) || !Number.isInteger(packageCount) || packageCount < 1 || packageCount > 99) {
         return { ok: false as const, error: "Kurirski zahtev nije ispravan." };
       }
-      const shipment = await createReclamationShipment({ reclamationId: id, purpose, packageCount, actorId });
+      const returnPickupCoordinates = parseReturnPickupCoordinates(String(formData.get("pickupCoordinates") ?? ""));
+      const shipment = await createReclamationShipment({ reclamationId: id, purpose, packageCount, actorId, returnPickupCoordinates });
       refresh(id);
       return {
         ok: true as const,
@@ -306,10 +308,10 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
       include: {
         photos: true,
         events: { orderBy: { createdAt: "desc" } },
-        order: { select: { number: true } },
+        order: { select: { number: true, shipStreet: true, shipCity: true, shipPostalCode: true } },
         orderItem: { select: { name: true, qty: true } },
         product: { select: { name: true } },
-        warehouse: { select: { id: true, code: true, name: true } },
+        warehouse: { select: { id: true, code: true, name: true, address: true, city: true } },
         shipments: {
           where: { purpose: { not: "ORDER_DELIVERY" } },
           orderBy: { createdAt: "desc" },
@@ -421,7 +423,10 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
         <Card>
           <CardTitle description="Kod zamene kreirajte oba naloga: povrat starog artikla i isporuku novog. Kod običnog povrata kreira se samo preuzimanje od kupca.">Kurirski tok</CardTitle>
           <div className="grid gap-4 lg:grid-cols-2">
-            {(["RECLAMATION_RETURN", "RECLAMATION_REPLACEMENT"] as const).map((purpose) => {
+            {(["RECLAMATION_RETURN", "RECLAMATION_REPLACEMENT"] as const).filter((purpose) =>
+              purpose === "RECLAMATION_RETURN" || reclamation.resolution !== "POVRAT_NOVCA" ||
+              reclamation.shipments.some((shipment) => shipment.purpose === purpose && shipment.status !== "FAILED")
+            ).map((purpose) => {
               const shipment = reclamation.shipments.find((row) => row.purpose === purpose && row.status !== "FAILED");
               return (
                 <div key={purpose} className="rounded-lg border border-border p-4">
@@ -429,11 +434,19 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
                   {shipment ? (
                     <div className="mt-2 text-sm">
                       <p>
-                        {shipment.provider ?? "Kurir"} · <strong>{shipment.status}</strong>
+                        {shipment.provider ?? "Kurir"} · <strong>{shipment.provider === "X_EXPRESS" && !shipment.providerShipmentId ? "Pripremljeno — kurir nije potvrdio nalog" : SHIPMENT_STATUS_LABEL[shipment.status]}</strong>
                         {shipment.trackingNo ? ` · ${shipment.trackingNo}` : ""}
                       </p>
                       {shipment.syncError ? <p className="mt-2 text-destructive">{shipment.syncError}</p> : null}
                       <div className="mt-3 flex flex-wrap gap-2">
+                        {purpose === "RECLAMATION_RETURN" && shipment.provider === "X_EXPRESS" && !shipment.providerShipmentId && shipment.providerStatusCode === "LOCAL_PREPARED" ? (
+                          <AdminActionForm action={createShipmentAction}>
+                            <input type="hidden" name="id" value={reclamation.id} />
+                            <input type="hidden" name="purpose" value={purpose} />
+                            <input type="hidden" name="packageCount" value={shipment.packageCount} />
+                            <SubmitButton size="xs" confirm="Poslati postojeći pripremljen nalog za preuzimanje X Express-u?">Pošalji pripremljen nalog</SubmitButton>
+                          </AdminActionForm>
+                        ) : null}
                         <a href={`/api/admin/shipments/${shipment.id}/label`} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center rounded-lg border border-border px-3 text-xs font-medium">
                           Otvori / ponovo štampaj adresnicu
                         </a>
@@ -471,6 +484,17 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
                     <AdminActionForm action={createShipmentAction} className="mt-3 flex flex-wrap items-end gap-2">
                       <input type="hidden" name="id" value={reclamation.id} />
                       <input type="hidden" name="purpose" value={purpose} />
+                      <div className="w-full space-y-1 text-sm">
+                        <p>Preuzimanje: {reclamation.order.shipStreet}, {reclamation.order.shipPostalCode} {reclamation.order.shipCity}</p>
+                        <p>Odredište: {reclamation.warehouse ? `${reclamation.warehouse.name} · ${reclamation.warehouse.address ?? "Adresa nije uneta"}, ${reclamation.warehouse.city ?? ""}` : "Izaberite magacin"}</p>
+                        <p>Otkupnina: 0 RSD. X Express prevoz plaćamo mi po ugovoru.</p>
+                      </div>
+                      <div className="w-full">
+                        <Field label="Lokacija kupca (za X Express)">
+                          <input name="pickupCoordinates" type="text" placeholder="44.812345, 20.461234" autoComplete="off" className="h-9 w-full rounded-lg border border-input bg-transparent px-2" />
+                        </Field>
+                        <p className="mt-1 text-xs text-ink-500">U Google Maps pronađite tačnu adresu kupca, kliknite desnim tasterom na mesto preuzimanja i kopirajte koordinate. Unesite lokaciju kupca, ne magacina. Za GLS ovo polje nije potrebno.</p>
+                      </div>
                       <Field label="Broj paketa">
                         <input name="packageCount" type="number" min={1} max={99} defaultValue={1} className="h-9 w-24 rounded-lg border border-input bg-transparent px-2" />
                       </Field>

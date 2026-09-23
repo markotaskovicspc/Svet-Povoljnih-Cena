@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   adjustInventory: vi.fn(),
   updateReclamation: vi.fn(),
   findReclamation: vi.fn(),
+  announce: vi.fn(),
   insideTransaction: false,
 }));
 
@@ -30,6 +31,7 @@ vi.mock("@/lib/courier/registry", () => ({
   createShipmentForOrder: mocks.createShipmentForOrder,
   preflightShipmentForOrder: vi.fn(),
 }));
+vi.mock("@/lib/x-express/shipments", () => ({ announceXExpressShipment: mocks.announce }));
 vi.mock("@/lib/inventory", () => ({
   adjustInventory: mocks.adjustInventory,
   ensureDefaultWarehouse: vi.fn(),
@@ -100,5 +102,52 @@ describe("reclamation shipment transaction boundary", () => {
         data: expect.objectContaining({ warehouseStatus: "HANDED_OVER" }),
       }),
     );
+  });
+
+  it("creates only a zero-COD pickup for a refund without requiring a replacement or issuing stock", async () => {
+    const reclamation = await mocks.findReclamation();
+    mocks.findReclamation.mockResolvedValue({
+      ...reclamation, resolution: "POVRAT_NOVCA", replacementQty: 0,
+      warehouseStatus: "NOT_REQUESTED", pickupBatchLines: [],
+    });
+    const coordinates = { latitude: 44.81, longitude: 20.46 };
+    await createReclamationShipment({
+      reclamationId: "reclamation-1", purpose: "RECLAMATION_RETURN",
+      returnPickupCoordinates: coordinates, packageCount: 2,
+    });
+    expect(mocks.createShipmentForOrder).toHaveBeenCalledExactlyOnceWith("order-1", expect.objectContaining({
+      purpose: "RECLAMATION_RETURN", codAmount: 0,
+      returnPickupCoordinates: coordinates, packageCount: 2,
+    }));
+    expect(mocks.adjustInventory).not.toHaveBeenCalled();
+    expect(mocks.updateReclamation).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ warehouseStatus: "REQUESTED" }),
+    }));
+  });
+
+  it("does not report an uncertain earlier pickup request as booked or send it twice", async () => {
+    const reclamation = await mocks.findReclamation();
+    mocks.findReclamation.mockResolvedValue({ ...reclamation, shipments: [{
+      id: "prepared", provider: "X_EXPRESS", status: "CREATED",
+      providerShipmentId: null, providerStatusCode: "LOCAL_ANNOUNCEMENT_FAILED",
+    }] });
+    await expect(createReclamationShipment({
+      reclamationId: "reclamation-1", purpose: "RECLAMATION_RETURN",
+    })).rejects.toThrow(/nije potvrdio preuzimanje/);
+    expect(mocks.createShipmentForOrder).not.toHaveBeenCalled();
+    expect(mocks.announce).not.toHaveBeenCalled();
+    expect(mocks.updateReclamation).not.toHaveBeenCalled();
+  });
+
+  it("announces a prepared return using its existing shipment and tracking number", async () => {
+    const reclamation = await mocks.findReclamation();
+    const prepared = { id: "prepared", provider: "X_EXPRESS", status: "CREATED", providerShipmentId: null, providerStatusCode: "LOCAL_PREPARED" };
+    mocks.findReclamation.mockResolvedValue({ ...reclamation, shipments: [prepared] });
+    mocks.announce.mockResolvedValue({ ...prepared, providerShipmentId: "provider-guid" });
+    await expect(createReclamationShipment({
+      reclamationId: "reclamation-1", purpose: "RECLAMATION_RETURN",
+    })).resolves.toMatchObject({ id: "prepared", providerShipmentId: "provider-guid" });
+    expect(mocks.createShipmentForOrder).not.toHaveBeenCalled();
+    expect(mocks.announce).toHaveBeenCalledExactlyOnceWith("prepared");
   });
 });

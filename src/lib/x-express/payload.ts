@@ -12,6 +12,7 @@ import type {
   XExpressAddressCheckPayload,
   XExpressCreateOrderPayload,
 } from "./types";
+import { requireReturnPickupCoordinates, type XExpressPickupCoordinates, type XExpressReturnDestination } from "./return";
 import { courierAddressParts } from "@/lib/address/house-number";
 
 type OrderForPayload = {
@@ -127,15 +128,17 @@ export function buildXExpressCreateOrderPayload(args: {
   townId: number;
   officialStreetName?: string | null;
   purpose?: ShipmentPurpose;
+  returnPickupCoordinates?: XExpressPickupCoordinates;
+  returnDestination?: XExpressReturnDestination;
   packageMasses?: number[];
   packageContents?: string[];
 }): XExpressCreateOrderPayload {
   const { cfg, order } = args;
   const purpose = args.purpose ?? "ORDER_DELIVERY";
-  if (purpose === "RECLAMATION_RETURN") {
-    throw new XExpressConfigError(
-      "X Express povrat od kupca zahteva tačne pickup koordinate kupca. Koristite MyGLS ili ručni nalog dok koordinate nisu evidentirane.",
-    );
+  const reverse = purpose === "RECLAMATION_RETURN";
+  const coordinates = reverse ? requireReturnPickupCoordinates(args.returnPickupCoordinates) : null;
+  if (reverse && !args.returnDestination) {
+    throw new XExpressConfigError("Adresa magacina za povrat nije potvrđena.");
   }
   const cod =
     purpose === "ORDER_DELIVERY" &&
@@ -189,7 +192,7 @@ export function buildXExpressCreateOrderPayload(args: {
       50,
       "Nepoznata ulica",
     ),
-    StreetNumber: deliveryStreet.providerHouseNumber,
+    StreetNumber: reverse ? normalizeXExpressStreetNumber(deliveryStreet.originalHouseNumber) : deliveryStreet.providerHouseNumber,
     // X Express treats Address.Description as part of the address. Customer
     // notes stay on the order and our local label so they cannot invalidate
     // the provider waybill address.
@@ -223,7 +226,7 @@ export function buildXExpressCreateOrderPayload(args: {
     Description: providerDescription("Povrat pošiljke", 50, "Povrat pošiljke"),
   };
 
-  return {
+  const payload: XExpressCreateOrderPayload = {
     ContractCode: cfg.contractCode,
     Reference: providerReference(args.reference),
     Sender: {
@@ -287,6 +290,51 @@ export function buildXExpressCreateOrderPayload(args: {
       ),
     })),
   };
+  if (reverse) {
+    const destination = args.returnDestination!;
+    const warehouseName = providerName(destination.name, 50, "Magacin");
+    const warehousePhone = normalizeXExpressPhone(destination.phone);
+    const warehouseContact = {
+      Name: providerName(destination.contactName, 50, warehouseName),
+      Phone: warehousePhone,
+    };
+    const warehouseEmail = optionalProviderEmail(destination.email || "");
+    const customerContact = { Name: recipientName, Phone: recipientPhone };
+    payload.Sender = payload.Recipient;
+    payload.Recipient = {
+      Name: warehouseName, Phone: warehousePhone,
+      ...(warehouseEmail ? { Email: warehouseEmail } : {}),
+    };
+    // Provider contract: 1 = ordering party by invoice (not sender cash).
+    payload.ServicePayerId = 1;
+    payload.Waypoints = [
+      {
+        WaypointType: "PICKUP",
+        Address: {
+          ...deliveryAddress,
+          Latitude: coordinates!.latitude, Longitude: coordinates!.longitude,
+          Description: providerDescription(`Preuzimanje - kućni broj (${deliveryStreet.originalHouseNumber})`, 50, "Preuzimanje povrata"),
+        },
+        Contact: customerContact,
+      },
+      {
+        WaypointType: "DELIVERY",
+        Address: {
+          Name: warehouseName, TownId: destination.townId,
+          StreetName: providerName(destination.streetName, 50, "Magacin"),
+          StreetNumber: normalizeXExpressStreetNumber(destination.streetNumber),
+          Description: "Prijem povrata od kupca",
+        },
+        Contact: warehouseContact,
+      },
+      {
+        WaypointType: "RETURN",
+        Address: { ...deliveryAddress, Description: "Povrat posiljaocu ako isporuka ne uspe" },
+        Contact: customerContact,
+      },
+    ];
+  }
+  return payload;
 }
 
 function distributePackageMasses(

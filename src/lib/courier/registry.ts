@@ -1,4 +1,5 @@
 import "server-only";
+import { requireReturnPickupCoordinates, type XExpressPickupCoordinates } from "@/lib/x-express/return";
 
 import {
   Prisma,
@@ -94,6 +95,7 @@ export function adapterFromSlug(slug: string): CourierAdapter | null {
  * shipment is returned unchanged.
  */
 type ShipmentCreationOptions = {
+  returnPickupCoordinates?: XExpressPickupCoordinates;
   packageCount?: number;
   packages?: readonly PhysicalPackage[];
   pickupDate?: Date;
@@ -343,10 +345,12 @@ async function processShipmentForOrder(
       }
       return createMyGlsShipmentForOrder(order.id, myGlsOptions);
     }
+    if (purpose === "RECLAMATION_RETURN") requireReturnPickupCoordinates(options.returnPickupCoordinates);
     if (mode === "preflight") return;
     const shipment = await createXExpressShipmentForOrder(order.id, {
+      returnPickupCoordinates: options.returnPickupCoordinates,
       packageCount: options.packageCount ?? derivedPackageCount,
-      packages,
+      packages: purpose === "RECLAMATION_RETURN" && !options.packages ? undefined : packages,
       purpose,
       reclamationId: reclamation?.id,
       orderItemIds: requestedOrderItemIds,

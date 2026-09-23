@@ -1,4 +1,6 @@
 import "server-only";
+import { courierAddressParts } from "@/lib/address/house-number";
+import { requireReturnPickupCoordinates, type XExpressPickupCoordinates, type XExpressReturnDestination } from "./return";
 
 import { randomUUID } from "node:crypto";
 import {
@@ -19,6 +21,7 @@ import {
   buildXExpressAddressCheckPayload,
   buildXExpressCreateOrderPayload,
   isXExpressCashOnDelivery,
+  normalizeXExpressStreetNumber,
 } from "./payload";
 import { buildXExpressLabelData } from "./labels";
 import { buildXExpressArticleLabels } from "./article-labels";
@@ -39,6 +42,7 @@ import { rabaluxCourierAvailableAt } from "@/lib/rabalux/dispatch-policy";
 export async function createXExpressShipmentForOrder(
   orderId: string,
   options: {
+    returnPickupCoordinates?: XExpressPickupCoordinates;
     packageCount?: number;
     packages?: readonly PhysicalPackage[];
     purpose?: ShipmentPurpose;
@@ -59,11 +63,6 @@ export async function createXExpressShipmentForOrder(
     ),
   );
   const purpose = options.purpose ?? "ORDER_DELIVERY";
-  if (purpose === "RECLAMATION_RETURN") {
-    throw new XExpressConfigError(
-      "X Express povrat od kupca zahteva tačne pickup koordinate kupca. Koristite MyGLS ili ručni nalog dok koordinate nisu evidentirane.",
-    );
-  }
   const reclamation =
     purpose === "ORDER_DELIVERY"
       ? null
@@ -147,7 +146,7 @@ export async function createXExpressShipmentForOrder(
   const assignmentOrderItemIds = normalizeOrderItemIds(
     shipmentItems.map((item) => item.id),
   );
-  const codAmount =
+  const codAmount = purpose !== "ORDER_DELIVERY" ? 0 :
     Number.isFinite(options.codAmount) && Number(options.codAmount) >= 0
       ? Number(options.codAmount)
       : Number(order.total);
@@ -183,6 +182,14 @@ export async function createXExpressShipmentForOrder(
       codAmount > 0,
     options.pickupOverride,
   );
+
+  const reverse = purpose === "RECLAMATION_RETURN";
+  const returnPickupCoordinates = reverse
+    ? requireReturnPickupCoordinates(options.returnPickupCoordinates)
+    : undefined;
+  const returnDestination = reverse
+    ? await resolveXExpressReturnDestination(reclamation!.warehouseId, cfg)
+    : undefined;
 
   const reusableCodes = readParcelNumbers(existing?.providerParcelNumbers);
   const allocated =
@@ -239,12 +246,18 @@ export async function createXExpressShipmentForOrder(
       houseNumber: order.shipHouseNumber,
       officialStreetName: officialStreet?.name,
     });
+    if (reverse) {
+      const address = courierAddressParts(order.shipStreet, order.shipHouseNumber)!;
+      addressCheckPayload.StreetNumber = normalizeXExpressStreetNumber(address.originalHouseNumber);
+    }
     const addressCheck = await client.checkAddress(addressCheckPayload);
     const payload = buildXExpressCreateOrderPayload({
       cfg,
       reference: shipmentId,
       trackingCodes: allocated,
       purpose,
+      returnPickupCoordinates,
+      returnDestination,
       order: { ...order, total: codAmount, items: shipmentItems },
       townId,
       officialStreetName: officialStreet?.name,
@@ -253,9 +266,17 @@ export async function createXExpressShipmentForOrder(
         options.packageMasses,
       packageContents: options.packages?.map((pkg) => pkg.content ?? ""),
     });
+    // The route on the label is the destination depot, not the customer's
+    // pickup depot. Check both endpoints before saving a usable return label.
+    const destinationCheck = returnDestination
+      ? await client.checkAddress({
+          ...payload.Waypoints.find((waypoint) => waypoint.WaypointType === "DELIVERY")!.Address,
+        })
+      : addressCheck;
     const labelUrl = `/api/admin/shipments/${shipmentId}/label`;
     const rawCreateResponse = withShipmentAssignment({
-      addressCheck: addressCheck.raw,
+      addressCheck: destinationCheck.raw,
+      ...(reverse ? { pickupAddressCheck: addressCheck.raw } : {}),
       createOrderPayload: payload,
       xExpressAnnouncement: {
         state: "PREPARED",
@@ -268,9 +289,9 @@ export async function createXExpressShipmentForOrder(
       }),
       labelData: buildXExpressLabelData({
         payload,
-        pickupTown,
-        deliveryCity: location?.name ?? order.shipCity,
-        deliveryPostalCode: location?.postalCode ?? order.shipPostalCode,
+        pickupTown: reverse ? { name: location?.name ?? order.shipCity, postalCode: location?.postalCode ?? order.shipPostalCode } : pickupTown,
+        deliveryCity: returnDestination?.city ?? location?.name ?? order.shipCity,
+        deliveryPostalCode: returnDestination?.postalCode ?? location?.postalCode ?? order.shipPostalCode,
       }),
     }, {
       orderItemIds: assignmentOrderItemIds,
@@ -292,7 +313,7 @@ export async function createXExpressShipmentForOrder(
       status: "CREATED" as const,
       providerStatusCode: "LOCAL_PREPARED",
       providerParcelNumbers: allocated as Prisma.InputJsonValue,
-      providerRouteCode: addressCheck.area,
+      providerRouteCode: destinationCheck.area,
       providerRouteName: null,
       rawCreateResponse: rawCreateResponse as unknown as Prisma.InputJsonValue,
       syncError: null,
@@ -654,4 +675,37 @@ function readParcelNumbers(value: Prisma.JsonValue | null | undefined) {
     .filter((item): item is string => typeof item === "string")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+/** Return destination follows the selected warehouse, never an unrelated pickup config. */
+async function resolveXExpressReturnDestination(
+  warehouseId: string | null,
+  cfg: XExpressConfig,
+): Promise<XExpressReturnDestination> {
+  const warehouse = warehouseId ? await db.warehouse.findFirst({
+    where: { id: warehouseId, active: true },
+    select: { name: true, address: true, city: true, phone: true, email: true },
+  }) : null;
+  const street = warehouse?.address
+    ? courierAddressParts(warehouse.address.split(",")[0]!.trim()) : null;
+  if (!warehouse?.city || !street) {
+    throw new XExpressConfigError("Magacin za povrat mora imati grad, ulicu i kućni broj. Dopunite adresu magacina.");
+  }
+  const towns = await db.xExpressTown.findMany({
+    where: { active: true, name: { equals: warehouse.city.trim(), mode: "insensitive" } },
+    select: { id: true, name: true, postalCode: true },
+    take: 2,
+  });
+  if (towns.length !== 1) {
+    throw new XExpressConfigError("Grad magacina za povrat nije jednoznačno pronađen u X Express šifarniku. Proverite grad magacina.");
+  }
+  const town = towns[0]!;
+  return {
+    name: warehouse.name, townId: town.id, city: town.name,
+    postalCode: town.postalCode ?? "",
+    streetName: street.street, streetNumber: street.originalHouseNumber,
+    contactName: warehouse.name,
+    phone: warehouse.phone || cfg.pickup.contactPhone,
+    email: warehouse.email || cfg.pickup.contactEmail,
+  };
 }

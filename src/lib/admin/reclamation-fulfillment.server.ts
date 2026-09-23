@@ -1,4 +1,6 @@
 import "server-only";
+import type { XExpressPickupCoordinates } from "@/lib/x-express/return";
+import { announceXExpressShipment } from "@/lib/x-express/shipments";
 
 import type {
   ReclamationWarehouseStatus,
@@ -28,6 +30,7 @@ const RECLAMATION_PURPOSES: ShipmentPurpose[] = [
 type ReclamationShipmentOptions = {
   reclamationId: string;
   purpose: ShipmentPurpose;
+  returnPickupCoordinates?: XExpressPickupCoordinates;
   packageCount?: number;
   packages?: readonly PhysicalPackage[];
   pickupDate?: Date;
@@ -96,6 +99,7 @@ export async function preflightReclamationShipment(
     packages: args.packages,
     pickupDate: args.pickupDate,
     provider: args.provider,
+    returnPickupCoordinates: args.returnPickupCoordinates,
     codAmount: 0,
   });
 }
@@ -139,7 +143,7 @@ export async function createReclamationShipment(args: ReclamationShipmentOptions
   // one-connection pool, so a nested client query would wait on the connection
   // held by its parent transaction until `timeout exceeded when trying to
   // connect`. Provider I/O also must not keep a database transaction open.
-  const shipment =
+  let shipment =
     existing && existing.status !== "FAILED"
       ? existing
       : await createShipmentForOrder(reclamation.orderId, {
@@ -149,8 +153,19 @@ export async function createReclamationShipment(args: ReclamationShipmentOptions
           packages: args.packages,
           pickupDate: args.pickupDate,
           provider: args.provider,
+          returnPickupCoordinates: args.returnPickupCoordinates,
           codAmount: 0,
         });
+
+  if (args.purpose === "RECLAMATION_RETURN" && shipment.provider === "X_EXPRESS" && !shipment.providerShipmentId) {
+    if (shipment.providerStatusCode === "LOCAL_PREPARED") {
+      shipment = await announceXExpressShipment(shipment.id);
+    } else {
+      // An earlier request may have reached the courier even if its response
+      // was lost. Do not claim a booking or automatically send it again.
+      throw new Error("X Express još nije potvrdio preuzimanje. Proverite postojeći broj pošiljke kod kurira pre ponovnog slanja.");
+    }
+  }
 
   await db.$transaction(async (tx) => {
     if (

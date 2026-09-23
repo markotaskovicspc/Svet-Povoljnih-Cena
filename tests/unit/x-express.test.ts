@@ -31,6 +31,7 @@ import {
 } from "@/lib/x-express/webhook";
 import { inferXExpressShipmentStatus } from "@/lib/x-express/status";
 import { isXExpressAnnouncementPaymentReady } from "@/lib/x-express/payment";
+import { parseReturnPickupCoordinates } from "@/lib/x-express/return";
 
 const config: XExpressConfig = {
   enabled: true,
@@ -305,7 +306,58 @@ describe("X Express official API contract", () => {
         officialStreetName: "Bulevar oslobođenja",
         purpose: "RECLAMATION_RETURN",
       }),
-    ).toThrow(/pickup koordinate kupca/);
+    ).toThrow(/Lokacija kupca/);
+  });
+
+  it("returns the customer's parcel to the selected warehouse without charging the customer", () => {
+    const payload = buildXExpressCreateOrderPayload({
+      cfg: { ...config, servicePayerId: 2 },
+      reference: "reclamation-return-1",
+      trackingCodes: ["AAA0850300001", "AAA0850300002"],
+      order,
+      townId: 791113,
+      purpose: "RECLAMATION_RETURN",
+      returnPickupCoordinates: { latitude: 44.12345, longitude: 20.12345 },
+      returnDestination: {
+        name: "Magacin ostecene robe", townId: 123456,
+        city: "Stara Pazova", postalCode: "22300",
+        streetName: "Evropska", streetNumber: "bb",
+        contactName: "Prijem povrata", phone: "0651234567",
+      },
+    });
+    expect(payload.Sender).toMatchObject({ Name: "Petar Petrović", Phone: "381642223344" });
+    expect(payload.Recipient).toEqual({ Name: "Magacin ostecene robe", Phone: "381651234567" });
+    expect(payload.ServicePayerId).toBe(1);
+    expect(payload.Options).toBeUndefined();
+    expect(payload.Packages).toHaveLength(2);
+    expect(payload.Waypoints[0]).toMatchObject({
+      WaypointType: "PICKUP",
+      Address: { TownId: 791113, StreetNumber: "10A", Latitude: 44.12345, Longitude: 20.12345 },
+      Contact: { Phone: "381642223344" },
+    });
+    expect(payload.Waypoints[1]).toMatchObject({
+      WaypointType: "DELIVERY",
+      Address: { TownId: 123456, StreetName: "Evropska", StreetNumber: "bb" },
+      Contact: { Name: "Prijem povrata", Phone: "381651234567" },
+    });
+    expect(payload.Waypoints[2]).toMatchObject({
+      WaypointType: "RETURN", Address: { TownId: 791113, StreetNumber: "10A" },
+    });
+    const label = buildXExpressLabelData({
+      payload, pickupTown: { name: "Beograd", postalCode: "11000" },
+      deliveryCity: "Stara Pazova", deliveryPostalCode: "22300",
+    });
+    expect(label.sender).toMatchObject({ name: "Petar Petrović", city: "Beograd" });
+    expect(label.recipient).toMatchObject({ name: "Magacin ostecene robe", city: "Stara Pazova" });
+    expect(label.codAmount).toBe(0);
+  });
+
+  it("accepts copied map coordinates and rejects missing, malformed or invalid locations", () => {
+    expect(parseReturnPickupCoordinates(" 44.812345, 20.461234 ")).toEqual({ latitude: 44.812345, longitude: 20.461234 });
+    expect(parseReturnPickupCoordinates("")).toBeUndefined();
+    for (const value of ["adresa", "0, 0", "91, 20", "44, 181", "NaN, 20", "44,20,12", "44.12foo, 20"]) {
+      expect(() => parseReturnPickupCoordinates(value)).toThrow(/Lokacija kupca/);
+    }
   });
 
   it("normalizes Serbian phone and splits street number", () => {
