@@ -423,6 +423,9 @@ export default async function PickupBatchPage({
       lines: {
         include: {
           order: { select: { id: true, number: true } },
+          shipment: {
+            select: { trackingNo: true, providerOrderId: true },
+          },
           reclamation: {
             select: {
               number: true,
@@ -466,6 +469,8 @@ export default async function PickupBatchPage({
           select: {
             id: true,
             orderId: true,
+            trackingNo: true,
+            providerOrderId: true,
             provider: true,
             purpose: true,
             reclamationId: true,
@@ -527,6 +532,7 @@ export default async function PickupBatchPage({
   const showCourierHandoverStatus =
     batch.status === "BOOKED" ||
     batch.status === "PICKED_UP" ||
+    rows.some((row) => Boolean(row.courierOrderNumber)) ||
     rows.some((row) => Boolean(row.deferredAt));
   const legacyCompleteHandover =
     batch.status === "PICKED_UP" && handoverProgress.pickedUpPackages === 0;
@@ -1080,6 +1086,21 @@ export default async function PickupBatchPage({
                                 Istorijski status naloga
                               </span>
                             ) : null}
+                            {group.courierOrderNumbers.length ? (
+                              <div className="mt-2 text-xs">
+                                <span className="block text-ink-500">
+                                  Broj kurirskog naloga
+                                </span>
+                                {group.courierOrderNumbers.map((number) => (
+                                  <span
+                                    key={number}
+                                    className="mt-1 block select-all break-all font-mono font-semibold text-ink-700"
+                                  >
+                                    {number}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
                           </div>
                         </td>
                       ) : null}
@@ -1152,6 +1173,7 @@ function pickupLineRow(line: {
   deferredAt: Date | null;
   rescheduledAt: Date | null;
   shipmentId: string | null;
+  shipment: { trackingNo: string | null; providerOrderId: string | null } | null;
   warehouseReadyAt: Date | null;
   warehouseReadyById: string | null;
   order: { id: string; number: string };
@@ -1189,7 +1211,10 @@ function pickupLineRow(line: {
       collection: { name: string } | null;
     } | null;
   } | null;
-}, provider: string | null, shipments: Parameters<typeof pickupCourierSnapshot>[0]["shipments"]) {
+}, provider: string | null, shipments: readonly (Parameters<typeof pickupCourierSnapshot>[0]["shipments"][number] & {
+  trackingNo: string | null;
+  providerOrderId: string | null;
+})[]) {
   const item = line.orderItem;
   const product = item?.product;
   const weightKg = measureNumber(line.weightKg);
@@ -1207,6 +1232,14 @@ function pickupLineRow(line: {
     courierPickedUpAt: line.courierPickedUpAt,
     shipments,
   });
+  const shipment = line.shipmentId
+    ? line.shipment
+    : shipments.find((candidate) => candidate.id === courier?.shipmentId);
+  const courierOrderNumber =
+    (provider === "X_EXPRESS" ? shipment?.providerOrderId?.trim() : null) ||
+    line.providerParcelNumber?.trim() ||
+    shipment?.trackingNo?.trim() ||
+    null;
   return {
     lineId: line.id,
     lineGroupKey: line.lineGroupKey,
@@ -1246,6 +1279,7 @@ function pickupLineRow(line: {
     deferredAt: line.deferredAt,
     rescheduledAt: line.rescheduledAt,
     shipmentId: line.shipmentId,
+    courierOrderNumber,
     warehouseReadyAt: line.warehouseReadyAt,
     warehouseReadyById: line.warehouseReadyById,
     courierStatus: line.providerStatusCode ?? courier?.status ?? null,
@@ -1341,6 +1375,9 @@ function aggregatePickupGroups(rows: ReturnType<typeof pickupLineRow>[]) {
       ...group,
       rows: group.rows.sort((left, right) => left.packageNo - right.packageNo),
       items: [...items.values()],
+      courierOrderNumbers: [...new Set(
+        group.rows.flatMap((row) => row.courierOrderNumber ? [row.courierOrderNumber] : []),
+      )],
       completePackageCount: group.rows.filter((row) => row.measurementsComplete)
         .length,
       courierPickedUp:
