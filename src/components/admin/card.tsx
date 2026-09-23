@@ -42,11 +42,13 @@ export function CardTitle({
 export function StatCard({
   label,
   value,
+  amount,
   hint,
   tone = "default",
 }: {
   label: string;
   value: string;
+  amount?: string;
   hint?: string;
   tone?: "default" | "success" | "warning" | "danger";
 }) {
@@ -71,6 +73,11 @@ export function StatCard({
       >
         {value}
       </p>
+      {amount ? (
+        <p className="mt-2 text-2xl font-semibold leading-tight tabular-nums text-ink-900">
+          {amount}
+        </p>
+      ) : null}
       {hint ? <p className="mt-1 text-xs text-ink-500">{hint}</p> : null}
     </Card>
   );

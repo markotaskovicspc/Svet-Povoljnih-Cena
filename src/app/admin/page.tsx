@@ -197,8 +197,8 @@ async function OperationalCards({ data, input, warehouseLabel }: OperationalSect
   );
   return <>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <StatCard label="Porudžbine danas" value={String(ordersToday)} hint={`${formatRsd(ordersTodayAmount)} · dostava ${formatRsd(ordersTodayShipping)} · ${warehouseLabel}`} />
-            <StatCard label="Porudžbine u periodu" value={String(ordersInPeriod)} hint={`${formatRsd(ordersInPeriodAmount)} · dostava ${formatRsd(ordersInPeriodShipping)} · ${ordersPeriod.label} · ${warehouseLabel}`} />
+            <StatCard label="Porudžbine danas" value={String(ordersToday)} amount={formatRsd(ordersTodayAmount)} hint={`Dostava ${formatRsd(ordersTodayShipping)} · ${warehouseLabel}`} />
+            <StatCard label="Porudžbine u periodu" value={String(ordersInPeriod)} amount={formatRsd(ordersInPeriodAmount)} hint={`Dostava ${formatRsd(ordersInPeriodShipping)} · ${ordersPeriod.label} · ${warehouseLabel}`} />
             <StatCard label="Promet danas (neto fiskalizovano)" value={formatRsd(fiscal.today_net)} hint={warehouseLabel} />
             <StatCard label="Promet u periodu (neto fiskalizovano)" value={formatRsd(fiscal.period_net)} hint={`${fiscalPeriod.label} · ${warehouseLabel}`} />
           </div>
@@ -304,7 +304,7 @@ async function OperationalTables({ data, input, warehouseLabel }: OperationalSec
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
           <Card>
-            <CardTitle description={`${topProductsPeriod.label} · ${warehouseLabel}`}>
+            <CardTitle description={`${topProductsPeriod.label} · ${warehouseLabel} · Po finansijskoj vrednosti, opadajuće. Prodajna cena × količina, pre dodatnih popusta na porudžbinu, bez dostave i montaže.`}>
               Top proizvodi
             </CardTitle>
             <DataTable
@@ -312,6 +312,7 @@ async function OperationalTables({ data, input, warehouseLabel }: OperationalSec
                 { key: "sku", label: "SKU" },
                 { key: "name", label: "Naziv" },
                 { key: "qty", label: "Komada", align: "right" },
+                { key: "value", label: "Finansijska vrednost", align: "right" },
               ]}
               rows={topProducts.map((product) => ({
                 id: `${product.sku}-${product.name}`,
@@ -319,6 +320,7 @@ async function OperationalTables({ data, input, warehouseLabel }: OperationalSec
                   sku: <span className="font-mono text-xs">{product.sku}</span>,
                   name: product.name,
                   qty: product.qty,
+                  value: <span className="whitespace-nowrap font-semibold tabular-nums">{formatRsd(product.value_rsd)}</span>,
                 },
               }))}
               empty="Nema neotkazanih porudžbina u periodu."

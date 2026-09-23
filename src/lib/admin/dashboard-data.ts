@@ -52,6 +52,7 @@ type DashboardTopProduct = {
   sku: string;
   name: string;
   qty: number;
+  value_rsd: number;
 };
 
 
@@ -159,7 +160,8 @@ export function buildDashboardDataQuery(input: DashboardDataInput, section: "all
       SELECT
         oi.sku,
         oi.name,
-        COALESCE(SUM(oi.qty), 0)::int AS qty
+        COALESCE(SUM(oi.qty), 0)::int AS qty,
+        COALESCE(SUM(oi.qty * oi."unitPriceSale"), 0)::double precision AS value_rsd
       FROM "OrderItem" oi
       JOIN "Order" o ON o.id = oi."orderId"
       WHERE o.status <> 'OTKAZANO'
@@ -167,7 +169,7 @@ export function buildDashboardDataQuery(input: DashboardDataInput, section: "all
         AND o."createdAt" < ${topProductsPeriod.endExclusive}
         ${orderItemWarehouseSql}
       GROUP BY oi.sku, oi.name
-      ORDER BY qty DESC, oi.sku ASC
+      ORDER BY value_rsd DESC, qty DESC, oi.sku ASC, oi.name ASC
       LIMIT 10
     ) result) AS "topProducts",
     (SELECT COALESCE(json_agg(result), '[]'::json) FROM (
