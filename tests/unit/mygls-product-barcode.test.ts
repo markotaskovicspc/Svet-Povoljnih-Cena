@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PDFDocument, StandardFonts } from "pdf-lib";
-import { addMyGlsProductBarcodes } from "@/lib/mygls/product-barcode";
+import { addMyGlsProductBarcodes, MyGlsProductBarcodeLayoutError } from "@/lib/mygls/product-barcode";
 import { readMyGlsPageText } from "@/lib/mygls/label-redaction";
 import { myGlsArticleContent } from "@/lib/mygls/article-content";
 
@@ -61,5 +61,37 @@ describe("GLS article barcodes", () => {
   it("rejects an unknown provider layout instead of overlapping courier data", async () => {
     await expect(addMyGlsProductBarcodes(await labelPdf(["Sto / EAN: 0012345678905"], false)))
       .rejects.toThrow("raspored adresnice nije prepoznat");
+  });
+
+  it("fits the actual September 23 GLS baselines below the privacy notice", async () => {
+    const doc = await PDFDocument.create();
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    const page = doc.addPage([841.89, 595.276]);
+    for (const [x, senderY, contentY, code] of [
+      [199, 389.0338, 427.8444, "AN1TEBG5XL"],
+      [597, 389.0338, 426.0338, "8605078600262"],
+      [197, 89.03381, 126.0338, "8605078600262"],
+    ] as const) {
+      page.drawText("Primalac:", { x, y: senderY + 163, font, size: 8 });
+      page.drawText("Posiljalac:", { x: x + 63, y: senderY, font, size: 8 });
+      page.drawText("Politika privatnosti", { x, y: senderY + 73.8106, font, size: 5 });
+      page.drawText(`Artikal / Sifra: 110083 / EAN: ${code}`, { x, y: contentY, font, size: 6 });
+    }
+    const original = await doc.save();
+    const result = await addMyGlsProductBarcodes(original);
+    expect(result.barcodeCount).toBe(3);
+    const before = await PDFDocument.load(original);
+    const after = await PDFDocument.load(result.bytes);
+    expect(readMyGlsPageText(after, after.getPage(0)).map((b) => b.text))
+      .toEqual(readMyGlsPageText(before, before.getPage(0)).map((b) => b.text));
+    expect((await addMyGlsProductBarcodes(result.bytes)).bytes).toEqual(result.bytes);
+  });
+
+  it("rejects decoration when provider text leaves no safe space", async () => {
+    const doc = await PDFDocument.load(await labelPdf(["Sto / EAN: 0012345678905"]));
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    doc.getPage(0).drawText("Provider notice", { x: 199, y: 440, font, size: 8 });
+    await expect(addMyGlsProductBarcodes(await doc.save()))
+      .rejects.toBeInstanceOf(MyGlsProductBarcodeLayoutError);
   });
 });

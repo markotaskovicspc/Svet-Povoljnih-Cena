@@ -4,6 +4,8 @@ import { readMyGlsPageText } from "./label-redaction";
 
 const MARKER = PDFName.of("SPCArticleBarcodesV1");
 
+export class MyGlsProductBarcodeLayoutError extends Error {}
+
 /**
  * Decorate the provider's content area only. Match each article using the EAN
  * printed in that very label, never response order or a neighbouring package.
@@ -43,13 +45,22 @@ export async function addMyGlsProductBarcodes(source: Uint8Array) {
         valid: (result) => { valid = result; },
       });
       const bits = valid ? encoded.encodings?.map((part) => part.data).join("") : null;
-      if (!bits) throw new Error("Barkod artikla nije moguće prikazati na GLS adresnici.");
+      if (!bits) throw new MyGlsProductBarcodeLayoutError("Barkod artikla nije moguće prikazati na GLS adresnici.");
       const x = recipient.x;
-      const y = sender.y + 46;
-      const height = 23;
+      // GLS varies the article baseline with its chosen font/layout. Keep ten
+      // points above the actual text, while staying inside the verified slot
+      // and below any provider text (including the privacy notice).
+      const y = Math.max(sender.y + 46, ...contentBlocks.map((block) => block.y + 10));
+      const ceiling = Math.min(
+        sender.y + 69,
+        ...blocks
+          .filter((block) => block.x >= x - 2 && block.x < x + 210 && block.y >= y)
+          .map((block) => block.y - 5),
+      );
+      const height = Math.min(23, ceiling - y);
       const moduleWidth = Math.min(1.2, 210 / (bits.length + 20));
-      if (moduleWidth < 0.7 || contentBlocks.some((block) => block.y > y - 10)) {
-        throw new Error("GLS adresnica nema dovoljno mesta za čitljiv barkod artikla.");
+      if (moduleWidth < 0.7 || height < 18) {
+        throw new MyGlsProductBarcodeLayoutError("GLS adresnica nema dovoljno mesta za čitljiv barkod artikla.");
       }
       // Ten-module quiet zones stay entirely inside the content column.
       page.drawRectangle({ x, y, width: (bits.length + 20) * moduleWidth, height, color: rgb(1, 1, 1) });
@@ -64,7 +75,7 @@ export async function addMyGlsProductBarcodes(source: Uint8Array) {
     }
     const expected = blocks.filter((block) => /\bEAN:/.test(block.text)).length;
     if (pageCount !== expected) {
-      throw new Error("GLS raspored adresnice nije prepoznat za dodavanje barkoda artikla.");
+      throw new MyGlsProductBarcodeLayoutError("GLS raspored adresnice nije prepoznat za dodavanje barkoda artikla.");
     }
     if (pageCount) page.node.set(MARKER, document.context.obj(true));
   }
