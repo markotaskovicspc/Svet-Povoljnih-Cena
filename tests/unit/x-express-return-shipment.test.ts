@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   reclamation: vi.fn(), order: vi.fn(), warehouse: vi.fn(), towns: vi.fn(),
-  town: vi.fn(), create: vi.fn(), allocate: vi.fn(), checkAddress: vi.fn(),
+  town: vi.fn(), create: vi.fn(), allocate: vi.fn(), checkAddress: vi.fn(), geocode: vi.fn(),
 }));
 vi.mock("@/lib/db", () => ({ db: {
   reclamation: { findUnique: mocks.reclamation }, order: { findUnique: mocks.order },
@@ -12,6 +12,7 @@ vi.mock("@/lib/db", () => ({ db: {
   $transaction: async (fn: (tx: object) => unknown) => fn({}),
 } }));
 vi.mock("@/lib/x-express/code", () => ({ allocateXExpressTrackingCode: mocks.allocate }));
+vi.mock("@/lib/address/google-geocoding", () => ({ geocodePickupAddress: mocks.geocode }));
 vi.mock("@/lib/x-express/client", async (original) => ({
   ...await original<typeof import("@/lib/x-express/client")>(),
   XExpressClient: class { checkAddress = mocks.checkAddress; },
@@ -36,6 +37,7 @@ const options = {
 describe("X Express reclamation return preparation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.geocode.mockReset().mockResolvedValue({ latitude: 44.82, longitude: 20.47 });
     mocks.reclamation.mockResolvedValue({ id: "r1", orderId: "o1", orderItemId: "i1", quantity: 1, warehouseId: "w1" });
     mocks.order.mockResolvedValue({
       id: "o1", number: "SPC-1", shippingMethod: "KURIR", paymentMethod: "POUZECE_GOTOVINA", total: 5000,
@@ -77,12 +79,26 @@ describe("X Express reclamation return preparation", () => {
     await expect(createXExpressShipmentForOrder("o1", { ...options, returnPickupCoordinates: undefined })).resolves.toMatchObject({ id: "existing" });
     expect(mocks.checkAddress).not.toHaveBeenCalled();
     expect(mocks.allocate).not.toHaveBeenCalled();
+    expect(mocks.geocode).not.toHaveBeenCalled();
   });
 
-  it("requires pickup coordinates before allocating tracking codes", async () => {
-    await expect(createXExpressShipmentForOrder("o1", { ...options, returnPickupCoordinates: undefined })).rejects.toThrow(/Lokacija kupca/);
+  it("automatically resolves coordinates and retains the zero-COD return direction and package count", async () => {
+    await createXExpressShipmentForOrder("o1", { ...options, returnPickupCoordinates: undefined });
+    expect(mocks.geocode).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ shipStreet: "Prva 10", shipCity: "Beograd" }));
+    const payload = mocks.create.mock.calls[0][0].data.rawCreateResponse.createOrderPayload;
+    expect(payload.Waypoints[0].Address).toMatchObject({ Latitude: 44.82, Longitude: 20.47, TownId: 100 });
+    expect(payload.Waypoints.find((p: { WaypointType: string }) => p.WaypointType === "DELIVERY").Address.TownId).toBe(200);
+    expect(payload.Options).toBeUndefined();
+    expect(payload.Packages).toHaveLength(2);
+    expect(payload.ServicePayerId).toBe(1);
+  });
+
+  it("stops an unresolved address before allocating tracking codes or contacting the courier", async () => {
+    mocks.geocode.mockRejectedValue(new Error("Proverite ulicu, kućni broj i mesto."));
+    await expect(createXExpressShipmentForOrder("o1", { ...options, returnPickupCoordinates: undefined })).rejects.toThrow(/Proverite ulicu/);
     expect(mocks.allocate).not.toHaveBeenCalled();
     expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.checkAddress).not.toHaveBeenCalled();
   });
 
   it("does not silently send the return to the configured outbound pickup address", async () => {

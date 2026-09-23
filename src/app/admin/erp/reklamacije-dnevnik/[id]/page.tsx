@@ -1,4 +1,4 @@
-import { parseReturnPickupCoordinates } from "@/lib/x-express/return";
+import { formatStreetAddress } from "@/lib/address/house-number";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -253,8 +253,7 @@ async function createShipmentAction(_state: AdminActionState, formData: FormData
       if (!id || !["RECLAMATION_RETURN", "RECLAMATION_REPLACEMENT"].includes(purpose) || !Number.isInteger(packageCount) || packageCount < 1 || packageCount > 99) {
         return { ok: false as const, error: "Kurirski zahtev nije ispravan." };
       }
-      const returnPickupCoordinates = parseReturnPickupCoordinates(String(formData.get("pickupCoordinates") ?? ""));
-      const shipment = await createReclamationShipment({ reclamationId: id, purpose, packageCount, actorId, returnPickupCoordinates });
+      const shipment = await createReclamationShipment({ reclamationId: id, purpose, packageCount, actorId });
       refresh(id);
       return {
         ok: true as const,
@@ -308,7 +307,7 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
       include: {
         photos: true,
         events: { orderBy: { createdAt: "desc" } },
-        order: { select: { number: true, shipStreet: true, shipCity: true, shipPostalCode: true } },
+        order: { select: { number: true, shipStreet: true, shipHouseNumber: true, shipCity: true, shipPostalCode: true } },
         orderItem: { select: { name: true, qty: true } },
         product: { select: { name: true } },
         warehouse: { select: { id: true, code: true, name: true, address: true, city: true } },
@@ -485,16 +484,11 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
                       <input type="hidden" name="id" value={reclamation.id} />
                       <input type="hidden" name="purpose" value={purpose} />
                       <div className="w-full space-y-1 text-sm">
-                        <p>Preuzimanje: {reclamation.order.shipStreet}, {reclamation.order.shipPostalCode} {reclamation.order.shipCity}</p>
+                        <p>Preuzimanje: {formatStreetAddress(reclamation.order.shipStreet, reclamation.order.shipHouseNumber ?? "")}, {reclamation.order.shipPostalCode} {reclamation.order.shipCity}</p>
                         <p>Odredište: {reclamation.warehouse ? `${reclamation.warehouse.name} · ${reclamation.warehouse.address ?? "Adresa nije uneta"}, ${reclamation.warehouse.city ?? ""}` : "Izaberite magacin"}</p>
                         <p>Otkupnina: 0 RSD. X Express prevoz plaćamo mi po ugovoru.</p>
                       </div>
-                      <div className="w-full">
-                        <Field label="Lokacija kupca (za X Express)">
-                          <input name="pickupCoordinates" type="text" placeholder="44.812345, 20.461234" autoComplete="off" className="h-9 w-full rounded-lg border border-input bg-transparent px-2" />
-                        </Field>
-                        <p className="mt-1 text-xs text-ink-500">U Google Maps pronađite tačnu adresu kupca, kliknite desnim tasterom na mesto preuzimanja i kopirajte koordinate. Unesite lokaciju kupca, ne magacina. Za GLS ovo polje nije potrebno.</p>
-                      </div>
+                      <p className="w-full text-xs text-ink-500">Za X Express lokacija preuzimanja se automatski pronalazi iz adrese kupca preko <span translate="no">Google Maps</span>. Ako adresa nije dovoljno precizna, nalog se neće poslati i dobićete poruku da proverite ulicu, broj i mesto.</p>
                       <Field label="Broj paketa">
                         <input name="packageCount" type="number" min={1} max={99} defaultValue={1} className="h-9 w-24 rounded-lg border border-input bg-transparent px-2" />
                       </Field>

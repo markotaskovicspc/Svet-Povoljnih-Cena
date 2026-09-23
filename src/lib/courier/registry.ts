@@ -1,5 +1,6 @@
 import "server-only";
 import { requireReturnPickupCoordinates, type XExpressPickupCoordinates } from "@/lib/x-express/return";
+import { geocodePickupAddress } from "@/lib/address/google-geocoding";
 
 import {
   Prisma,
@@ -345,8 +346,13 @@ async function processShipmentForOrder(
       }
       return createMyGlsShipmentForOrder(order.id, myGlsOptions);
     }
-    if (purpose === "RECLAMATION_RETURN") requireReturnPickupCoordinates(options.returnPickupCoordinates);
-    if (mode === "preflight") return;
+    if (mode === "preflight") {
+      if (purpose === "RECLAMATION_RETURN") {
+        if (options.returnPickupCoordinates) requireReturnPickupCoordinates(options.returnPickupCoordinates);
+        else await geocodePickupAddress(order);
+      }
+      return;
+    }
     const shipment = await createXExpressShipmentForOrder(order.id, {
       returnPickupCoordinates: options.returnPickupCoordinates,
       packageCount: options.packageCount ?? derivedPackageCount,
