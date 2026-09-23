@@ -163,7 +163,13 @@ type OperationalSectionProps = {
 
 async function OperationalCards({ data, input, warehouseLabel }: OperationalSectionProps) {
   const { warehouseId, ordersPeriod, fiscalPeriod, reclamationsPeriod } = input;
-  const { orderSummary, fiscalRows, reclamationCount, warehouseStockRows, incomingRows } = await data;
+  const { orderSummary, fiscalRows, reclamationCount, reclamationQuantity, reclamationDeliveredQuantity, warehouseStockRows, incomingRows } = await data;
+  const reclamationRate = reclamationDeliveredQuantity > 0
+    ? `${((reclamationQuantity / reclamationDeliveredQuantity) * 100).toLocaleString("sr-Latn-RS", { maximumFractionDigits: 2 })}%`
+    : "—";
+  const reclamationRatioHint = reclamationDeliveredQuantity > 0
+    ? `${reclamationQuantity.toLocaleString("sr-Latn-RS")} reklamiranih / ${reclamationDeliveredQuantity.toLocaleString("sr-Latn-RS")} isporučenih komada`
+    : `${reclamationQuantity.toLocaleString("sr-Latn-RS")} reklamiranih komada · Nema isporučenih komada u periodu`;
   const fiscal = fiscalRows[0] ?? { today_net: 0, period_net: 0 };
   const ordersToday = orderSummary.today_count;
   const ordersTodayAmount = orderSummary.today_total;
@@ -204,7 +210,13 @@ async function OperationalCards({ data, input, warehouseLabel }: OperationalSect
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <StatCard label="Reklamacije u periodu" value={String(reclamationCount)} hint={`${reclamationsPeriod.label} · ${warehouseLabel}`} tone={reclamationCount > 0 ? "warning" : "default"} />
+            <StatCard
+              label="Reklamacije u periodu"
+              value={String(reclamationCount)}
+              amount={`${reclamationRate} reklamiranih komada`}
+              hint={`${reclamationRatioHint} · ${reclamationsPeriod.label} · ${warehouseLabel}`}
+              tone={reclamationCount > 0 ? "warning" : "default"}
+            />
             <StatCard label="Ukupne zalihe po COGS-u" value={formatRsd(totalStock.stock_value)} hint={`${totalStock.total_qty} kom · ${formatVolume(totalStock.total_volume)} · svi aktivni magacini`} />
             <StatCard
               label="Zauzeta paletna mesta"

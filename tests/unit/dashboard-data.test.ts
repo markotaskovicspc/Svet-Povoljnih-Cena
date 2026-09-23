@@ -57,3 +57,26 @@ it("keeps analytics scans out of the operational query and operational tables ou
   expect(analytics.text).not.toContain('FROM "Order"');
   expect(analytics.text).not.toContain('FROM "Warehouse"');
 });
+
+it("uses reclamation dates for both quantities and delivery dates instead of order creation", () => {
+  const reclamationsPeriod = resolveReportPeriod({ range: "custom", from: "2026-08-01", to: "2026-08-31" }, now);
+  const query = buildDashboardDataQuery({ ...input, reclamationsPeriod, warehouseId: "dc" }, "operations");
+  const quantitySql = query.text.split('AS "reclamationCount",')[1].split('AS "reclamationDeliveredQuantity"')[0];
+  const dates = [...quantitySql.matchAll(/\$(\d+)/g)].map((match) => query.values[Number(match[1]) - 1]);
+  expect(dates).toEqual([
+    reclamationsPeriod.start, reclamationsPeriod.endExclusive, "dc",
+    reclamationsPeriod.start, reclamationsPeriod.endExclusive, "dc",
+  ]);
+  expect(quantitySql).toContain('SUM(r.quantity)');
+  expect(quantitySql).toContain('SUM(oi.qty)');
+  expect(quantitySql).toContain('AND r."warehouseId" =');
+  expect(quantitySql).toContain('AND oi."warehouseId" =');
+  expect(quantitySql).toContain('delivery."deliveredAt" >=');
+  expect(quantitySql).toContain('delivery."deliveredAt" <');
+  expect(quantitySql).not.toContain('o."createdAt"');
+  expect(quantitySql).not.toContain('o."updatedAt"');
+  expect(quantitySql).toContain("o.status = 'ISPORUCENO'");
+  expect(quantitySql).toContain("s.purpose = 'ORDER_DELIVERY'");
+  expect(quantitySql).toContain('MAX(s."deliveredAt")');
+  expect(quantitySql).toContain('MIN(e."createdAt")');
+});

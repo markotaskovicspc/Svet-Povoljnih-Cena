@@ -79,6 +79,8 @@ type OrderSummary = {
 export type DashboardData = {
   orderSummary: OrderSummary;
   reclamationCount: number;
+  reclamationQuantity: number;
+  reclamationDeliveredQuantity: number;
   fiscalRows: FiscalTurnoverSummary[];
   topProducts: DashboardTopProduct[];
   warehouseStockRows: WarehouseStockRow[];
@@ -128,6 +130,25 @@ export function buildDashboardDataQuery(input: DashboardDataInput, section: "all
     (SELECT COUNT(*)::int FROM "Reclamation" r
       WHERE r."createdAt" >= ${reclamationsPeriod.start} AND r."createdAt" < ${reclamationsPeriod.endExclusive}
       ${reclamationWarehouseSql}) AS "reclamationCount",
+    (SELECT COALESCE(SUM(r.quantity), 0)::int FROM "Reclamation" r
+      WHERE r."createdAt" >= ${reclamationsPeriod.start} AND r."createdAt" < ${reclamationsPeriod.endExclusive}
+      ${reclamationWarehouseSql}) AS "reclamationQuantity",
+    (SELECT COALESCE(SUM(oi.qty), 0)::int
+      FROM "OrderItem" oi
+      JOIN "Order" o ON o.id = oi."orderId"
+      JOIN LATERAL (
+        SELECT COALESCE(
+          (SELECT MAX(s."deliveredAt") FROM "Shipment" s
+            WHERE s."orderId" = o.id AND s.purpose = 'ORDER_DELIVERY'
+              AND s.status = 'DELIVERED'),
+          (SELECT MIN(e."createdAt") FROM "OrderStatusEvent" e
+            WHERE e."orderId" = o.id AND e.status = 'ISPORUCENO')
+        ) AS "deliveredAt"
+      ) delivery ON true
+      WHERE o.status = 'ISPORUCENO'
+        AND delivery."deliveredAt" >= ${reclamationsPeriod.start}
+        AND delivery."deliveredAt" < ${reclamationsPeriod.endExclusive}
+        ${orderItemWarehouseSql}) AS "reclamationDeliveredQuantity",
     (SELECT COALESCE(json_agg(result), '[]'::json) FROM (
       SELECT
         COALESCE(SUM(

@@ -8,7 +8,7 @@ vi.mock("@/lib/admin/dashboard-analytics", () => ({ getDashboardAnalytics: mocks
 vi.mock("@/components/admin/dashboard-filters", () => ({ DashboardFilters: () => <div>FILTERS_READY</div> }));
 vi.mock("@/components/admin/page-header", () => ({ PageHeader: ({title}: {title: string}) => <h1>{title}</h1> }));
 import AdminDashboard from "@/app/admin/page";
-const data = { orderSummary: { today_count: 1234, today_total: 50, today_shipping: 5, period_count: 1234, period_total: 50, period_shipping: 5 }, fiscalRows: [], reclamationCount: 0, topProducts: [], warehouseStockRows: [], incomingRows: [], lowStock: [] };
+const data = { orderSummary: { today_count: 1234, today_total: 50, today_shipping: 5, period_count: 1234, period_total: 50, period_shipping: 5 }, fiscalRows: [], reclamationCount: 0, reclamationQuantity: 0, reclamationDeliveredQuantity: 0, topProducts: [], warehouseStockRows: [], incomingRows: [], lowStock: [] };
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((r) => { resolve = r; });
@@ -57,4 +57,22 @@ it("does not start any dashboard reads when authorization fails", async () => {
   expect(mocks.warehouses).not.toHaveBeenCalled();
   expect(mocks.operations).not.toHaveBeenCalled();
   expect(mocks.analytics).not.toHaveBeenCalled();
+});
+
+it.each([
+  { count: 2, quantity: 5, delivered: 200, rate: "2,5%", ratio: "5 reklamiranih / 200 isporučenih komada" },
+  { count: 0, quantity: 0, delivered: 200, rate: "0%", ratio: "0 reklamiranih / 200 isporučenih komada" },
+  { count: 2, quantity: 5, delivered: 0, rate: "—", ratio: "Nema isporučenih komada u periodu" },
+  { count: 2, quantity: 5, delivered: 2, rate: "250%", ratio: "5 reklamiranih / 2 isporučenih komada" },
+])("shows a quantity-based reclamation rate ($quantity / $delivered), preserving the case count", async ({ count, quantity, delivered, rate, ratio }) => {
+  mocks.operations.mockResolvedValue({ ...data, reclamationCount: count, reclamationQuantity: quantity, reclamationDeliveredQuantity: delivered });
+  mocks.analytics.mockResolvedValue({ visitRows: [], conversionRows: [], checkedAt: "2026-09-20T00:00:00Z" });
+  const stream = await renderToReadableStream(await AdminDashboard({ searchParams: Promise.resolve({}) }));
+  await stream.allReady;
+  const html = await new Response(stream).text();
+  const card = html.split("Reklamacije u periodu")[1].split("</div>")[0];
+  expect(card).toContain(`>${count}</p>`);
+  expect(card).toContain(`${rate} reklamiranih komada`);
+  expect(card).toContain(ratio);
+  expect(card).toContain("Svi magacini");
 });
