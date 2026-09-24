@@ -40,3 +40,8 @@ describe("receipt lines while COGS is blocked", () => {
     expect(purchaseOrderGoodsTotal([])).toBe(0);
   });
 });
+
+it("links known article IDs without inventing links for unmatched lines", () => {
+  const html = renderToStaticMarkup(createElement(InboundInvoicePendingItems, { items: [{ ...items[0], productId: "product-1" }, items[1]], currency: "USD", purchaseOrderId: "po" }));
+  expect(html).toContain('href="/admin/erp/artikli/product-1"'); expect(html).not.toContain('/admin/erp/artikli/undefined');
+});

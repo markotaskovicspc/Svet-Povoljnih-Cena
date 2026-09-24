@@ -5,6 +5,7 @@ import { purchaseOrderGoodsTotal } from "@/lib/admin/purchase-order";
 type Item = {
   id: string;
   sku: string;
+  productId?: string | null;
   name: string;
   qty: number;
   purchasePrice: number;
@@ -43,7 +44,7 @@ export function InboundInvoicePendingItems({ items, currency, purchaseOrderId }:
           <tbody className="divide-y divide-border/60">
             {items.map((item) => (
               <tr key={item.id}>
-                <td className="px-3 py-3 font-medium">{item.sku}</td>
+                <td className="px-3 py-3 font-medium">{item.productId ? <Link href={`/admin/erp/artikli/${item.productId}`} className="text-walnut underline underline-offset-2">{item.sku}</Link> : item.sku}</td>
                 <td className="px-3 py-3">{item.name}</td>
                 <td className="px-3 py-3 text-right tabular-nums">{money(item.purchasePrice)}</td>
                 <td className="px-3 py-3 text-right tabular-nums">{item.qty}</td>

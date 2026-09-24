@@ -1,5 +1,7 @@
+import Link from "next/link";
 export type InboundCogsRow = {
   sku: string;
+  productId?: string | null;
   name: string;
   qty: number;
   purchasePrices: number[];
@@ -49,7 +51,7 @@ export function InboundInvoiceCogsTable({ rows, purchaseCurrency }: {
         </thead>
         <tbody className="divide-y divide-border/60">
           {rows.map(row => <tr key={row.sku}>
-            <td className="px-3 py-3 font-medium">{row.sku}</td>
+            <td className="px-3 py-3 font-medium">{row.productId ? <Link href={`/admin/erp/artikli/${row.productId}`} className="text-walnut underline underline-offset-2">{row.sku}</Link> : row.sku}</td>
             <td className="px-3 py-3">{row.name}</td>
             <td className="px-3 py-3 text-right tabular-nums">{Array.from(new Set(row.purchasePrices)).map(price => <span className="block" key={price}>{fmt(price)}</span>)}</td>
             <td className="px-3 py-3 text-right tabular-nums">{row.qty}</td>
