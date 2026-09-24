@@ -2,7 +2,7 @@ import { Store } from './store.mjs';
 import { Worker } from './worker.mjs';
 import { createSpcClient } from './spc.mjs';
 import { createHttpServer } from './server.mjs';
-const required=['DATABASE_URL','CHAT_DATA_KEY','CHAT_ADMIN_TOKEN','META_APP_SECRET','META_VERIFY_TOKEN','SPC_BASE_URL','SOCIAL_INTEGRATION_SECRET','OPENAI_API_KEY','META_GRAPH_VERSION'];
+const required=['DATABASE_URL','CHAT_DATA_KEY','CHAT_ADMIN_TOKEN','META_VERIFY_TOKEN','SPC_BASE_URL','SOCIAL_INTEGRATION_SECRET','OPENAI_API_KEY','META_GRAPH_VERSION'];
 for(const key of required)if(!process.env[key])throw new Error(`Missing ${key}`);
 if(!/^[a-f0-9]{64}$/i.test(process.env.CHAT_DATA_KEY))throw new Error('CHAT_DATA_KEY must contain 64 hex characters');
 for(const key of ['CHAT_ADMIN_TOKEN','SOCIAL_INTEGRATION_SECRET'])if(process.env[key].length<32)throw new Error(`${key} must have at least 32 characters`);
@@ -10,6 +10,8 @@ if(!/^v\d+\.\d+$/.test(process.env.META_GRAPH_VERSION))throw new Error('Invalid 
 let accounts;
 try {accounts=JSON.parse(process.env.META_ACCOUNTS_JSON??'[]');}catch{throw new Error('Invalid META_ACCOUNTS_JSON');}
 if(!Array.isArray(accounts)||accounts.some(a=>!['facebook','instagram'].includes(a.channel)||!/^\d+$/.test(a.id)||typeof a.token!=='string'||!['facebook','instagram'].includes(a.login)))throw new Error('Invalid Meta account configuration');
+if((accounts.length||process.env.BOT_ENABLED==='true')&&!process.env.META_APP_SECRET)throw new Error('META_APP_SECRET required before connecting accounts');
+if(process.env.BOT_ENABLED==='true'&&!accounts.length)throw new Error('Meta accounts required before enabling bot');
 const store=new Store(process.env.DATABASE_URL,process.env.CHAT_DATA_KEY);
 await store.init();
 const worker=new Worker({store,spc:createSpcClient(process.env.SPC_BASE_URL,process.env.SOCIAL_INTEGRATION_SECRET),accounts,model:process.env.OPENAI_MODEL??'gpt-5.4-mini',graphVersion:process.env.META_GRAPH_VERSION,enabled:process.env.BOT_ENABLED==='true',testSenders:(process.env.TEST_SENDER_IDS??'').split(',').filter(Boolean)});

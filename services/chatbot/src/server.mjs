@@ -9,6 +9,7 @@ const server=http.createServer(async(req,res)=>{
   const reply=(status,data)=>{res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(data));};
   try {
     const url=new URL(req.url,'http://localhost');
+    if(url.pathname==='/webhooks/meta'&&!appSecret)return reply(503,{error:'Meta connection is not configured'});
     if(url.pathname==='/health'){await store.pool.query('SELECT 1');return reply(200,{ok:true,botEnabled:worker.enabled,accounts:accounts.length});}
     if(req.method==='GET'&&url.pathname==='/webhooks/meta'){
       if(url.searchParams.get('hub.mode')==='subscribe'&&equal(url.searchParams.get('hub.verify_token'),verifyToken)) {res.writeHead(200,{'Content-Type':'text/plain'});return res.end(url.searchParams.get('hub.challenge')??'');}
