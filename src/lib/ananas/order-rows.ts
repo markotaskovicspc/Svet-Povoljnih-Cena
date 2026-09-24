@@ -37,8 +37,14 @@ export async function ananasOrderRows(take: number, filters?: SalesOrderExportFi
     const shipping = items.reduce((sum, item) => sum + item.shipping, 0);
     if (shipping) rows.push({ id: `${detailId}:shipping`, detailId, cellHrefs: { number: ananasOrderHref(order.id) }, values: {
       ...common, sku: "DOSTAVA", shortName: "Ananas dostava", qty: 1, unitPrice: shipping, totalGross: shipping,
-      totalNet: items.reduce((sum, item) => sum + item.shippingNet, 0),
+      totalNet: items.some(item => item.shippingNet == null) ? null : items.reduce((sum, item) => sum + (item.shippingNet ?? 0), 0),
     } });
+    if (address.source === "SHIPMENTS") {
+      const difference = Math.round((Number(order.total) - items.reduce((sum, item) => sum + item.gross, 0)) * 100) / 100;
+      if (difference) rows.push({ id: `${detailId}:other`, detailId, cellHrefs: { number: ananasOrderHref(order.id) }, values: {
+        ...common, sku: "ANANAS-OSTALO", shortName: "Ostali iznosi pošiljke prema Ananasu", qty: 1, unitPrice: difference, totalGross: difference, totalNet: null,
+      } });
+    }
     return rows;
   });
 }

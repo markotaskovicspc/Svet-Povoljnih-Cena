@@ -31,13 +31,34 @@ export function normalizeAnanasOrder(value: unknown) {
     billingAddress: JSON.parse(JSON.stringify(address)) as Record<string, string | null>,
     items: row.items.map(item => ({ id: item.id, sku: item.productSku ?? "", ean: item.productEan ?? "", name: item.productName ?? item.productSku ?? "Artikal",
       quantity: item.quantity, confirmed: item.confirmedQuantity ?? null, packed: item.packedQuantity ?? null,
-      unitPrice: item.basePrice, gross: item.grandTotal, net: item.grandTotalWithoutVat, vat: item.vat,
-      shipping: item.shippingCost ?? 0, shippingNet: item.shippingCostWithoutVat ?? 0, commission: item.takeRateTotal ?? null,
+      unitPrice: item.basePrice, gross: item.grandTotal, net: item.grandTotalWithoutVat as number | null, vat: item.vat as number | null,
+      shipping: item.shippingCost ?? 0, shippingNet: (item.shippingCostWithoutVat ?? 0) as number | null, commission: item.takeRateTotal ?? null,
       warehouseId: item.suborderWarehouseAddressId ?? null,
     })),
   };
 }
 export type AnanasOrderItem = ReturnType<typeof normalizeAnanasOrder>["items"][number];
+const shipmentOrder = z.object({ orderId: id, suborderId: id, createdDate: z.string().datetime({ offset: true }),
+  totalPrice: money, warehouseId: id.nullish(),
+  items: z.array(z.object({ merchantInventoryId: id, orderedQuantity: quantity, unitPrice: money, totalPrice: money,
+    confirmedQuantity: quantity.nullish(), packedQuantity: quantity.nullish(), productSku: optionalText, productEan: optionalText, productName: optionalText,
+  })).min(1),
+});
+export function ordersFromAnanasShipments(values: unknown[]): ReturnType<typeof normalizeAnanasOrder>[] {
+  const unique = [...new Map(values.map(value => { const s = shipmentOrder.parse(value); return [s.suborderId, s] as const; })).values()];
+  const grouped = Map.groupBy(unique, s => s.orderId);
+  return [...grouped].map(([orderId, shipments]) => ({ id: orderId,
+    createdAt: new Date(Math.min(...shipments.map(s => Date.parse(s.createdDate)))),
+    total: shipments.reduce((n, s) => n + s.totalPrice, 0), currency: "RSD", paymentMethods: "", customerName: null,
+    billingAddress: { source: "SHIPMENTS" },
+    items: shipments.flatMap(s => s.items.map((item, index) => ({
+      id: `${s.suborderId}:${item.merchantInventoryId}:${index}`, sku: item.productSku ?? "", ean: item.productEan ?? "", name: item.productName ?? item.productSku ?? "Artikal",
+      quantity: item.orderedQuantity, confirmed: item.confirmedQuantity ?? null, packed: item.packedQuantity ?? null,
+      unitPrice: item.unitPrice, gross: item.totalPrice, net: null, vat: null, shipping: 0, shippingNet: null, commission: null,
+      warehouseId: s.warehouseId ?? null,
+    }))),
+  }));
+}
 const shipment = z.object({ orderId: id, suborderId: id, status: z.string().min(1),
   warehouseId: id.nullish(), warehouseName: optionalText, carrierName: optionalText,
   items: z.array(z.object({ orderedQuantity: quantity, productSku: optionalText, productEan: optionalText })),

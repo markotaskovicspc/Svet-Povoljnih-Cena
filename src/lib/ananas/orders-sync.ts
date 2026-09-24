@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { AnanasClient } from "./client";
 import { ananasDateRange } from "./documents";
 import { ananasError } from "./sync";
-import { ananasOrderStatus, normalizeAnanasOrder, normalizeAnanasShipments } from "./orders";
+import { ananasOrderStatus, normalizeAnanasOrder, normalizeAnanasShipments, ordersFromAnanasShipments } from "./orders";
 
 export async function syncAnanasOrders(from: Date, to: Date, source: "ORDERS_MANUAL" | "ORDERS_AUTO" = "ORDERS_MANUAL") {
   ananasDateRange(from.toISOString(), to.toISOString());
@@ -18,13 +18,14 @@ export async function syncAnanasOrders(from: Date, to: Date, source: "ORDERS_MAN
   const api = new AnanasClient(fetch, AbortSignal.timeout(180000));
   try {
     const incoming = (await api.orders(new URLSearchParams({ dateFrom: from.toISOString(), dateTo: new Date(to.getTime() - 1).toISOString() }))).map(normalizeAnanasOrder);
-    const orders = [...new Map(incoming.map(row => [row.id, row])).values()];
-    const batchShipments = [];
+    const standardIds = new Set(incoming.map(row => row.id));
+    const batchRaw: unknown[] = [];
     for (const statusGroup of ["SG_FOR_PACKAGING", "SG_SHIPMENT_ON_DELIVERY", "SG_COMPLETED"]) {
-      batchShipments.push(...normalizeAnanasShipments(await api.shipments(new URLSearchParams({ statusGroup,
-        confirmedFrom: from.toISOString(), confirmedTo: new Date(to.getTime() - 1).toISOString(),
-      }))));
+      batchRaw.push(...await api.shipmentsInPeriod(statusGroup, from, to));
     }
+    const batchShipments = normalizeAnanasShipments(batchRaw);
+    const fallback = ordersFromAnanasShipments(batchRaw.filter((_, index) => !standardIds.has(batchShipments[index].orderId)));
+    const orders = [...new Map([...fallback, ...incoming].map(row => [row.id, row])).values()];
     const uniqueShipments = [...new Map(batchShipments.map(s => [s.suborderId, s])).values()];
     // Save the immutable identity of each remote order; never call local Order/stock/fiscal services.
     for (let offset = 0; offset < orders.length; offset += 100) {
@@ -46,9 +47,10 @@ export async function syncAnanasOrders(from: Date, to: Date, source: "ORDERS_MAN
       const raw = await api.shipments(new URLSearchParams({ search: order.id }));
       const shipments = normalizeAnanasShipments(raw);
       if (shipments.some(s => s.orderId !== order.id)) throw new Error("Ananas pošiljka ne odgovara traženoj porudžbini.");
-      const items = refreshed[0]?.items ?? order.items as { quantity: number }[];
+      const replacement = refreshed[0] ?? ((order.billingAddress as { source?: string })?.source === "SHIPMENTS" && raw.length ? ordersFromAnanasShipments(raw)[0] : undefined);
+      const items = replacement?.items ?? order.items as { quantity: number }[];
       const status = ananasOrderStatus(shipments, items.reduce((sum, item) => sum + item.quantity, 0));
-      await db.ananasOrder.update({ where: { id: order.id }, data: { ...refreshed[0], shipments, ...status, lastCheckedAt: new Date() } });
+      await db.ananasOrder.update({ where: { id: order.id }, data: { ...replacement, shipments, ...status, lastCheckedAt: new Date() } });
       await new Promise(resolve => setTimeout(resolve, 250));
     }
     await db.ananasSyncRun.update({ where: { id: run.id }, data: { status: "SUCCESS", count: orders.length, finishedAt: new Date() } });

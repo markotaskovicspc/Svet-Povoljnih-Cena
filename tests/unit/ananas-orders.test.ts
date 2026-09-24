@@ -1,11 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { normalizeAnanasOrder, normalizeAnanasShipments, ananasOrderStatus } from "@/lib/ananas/orders";
+import { normalizeAnanasOrder, normalizeAnanasShipments, ananasOrderStatus, ordersFromAnanasShipments } from "@/lib/ananas/orders";
 import { AnanasClient } from "@/lib/ananas/client";
 const order = () => ({ id: "A-B", createdDate: "2026-09-24T10:00:00", currency: "RSD", totalPrice: "2400", paymentMethods: ["PBC", "VOUCHER"], billingAddress: { firstName: "Test", lastName: "Buyer", secret: "not-persisted" },
   items: [{ id: 1, productSku: "SKU", productName: "Test", quantity: 2, confirmedQuantity: 2, packedQuantity: 1, basePrice: "1200", grandTotal: "2400", grandTotalWithoutVat: "2000", vat: 20, takeRateTotal: 240 }],
 });
 afterEach(() => vi.unstubAllEnvs());
 describe("Ananas order mirror", () => {
+  it("groups split FBA shipments without duplicates or inventing tax and buyer data", () => {
+    const s = { orderId: "FBA", suborderId: "FBA-1", createdDate: "2026-09-24T10:00:00Z", totalPrice: 3048, items: [{ merchantInventoryId: 7, orderedQuantity: 1, unitPrice: 2699, totalPrice: 2699 }] };
+    const rows = ordersFromAnanasShipments([s, s, { ...s, suborderId: "FBA-2" }]);
+    expect(rows).toHaveLength(1); expect(rows[0].total).toBe(6096); expect(rows[0].items).toHaveLength(2);
+    expect(rows[0].items[0].net).toBeNull(); expect(rows[0].customerName).toBeNull();
+  });
   it("preserves quantities, remote totals and payment methods without retaining unknown data", () => {
     const result = normalizeAnanasOrder(order());
     expect(result.createdAt.toISOString()).toBe("2026-09-24T10:00:00.000Z");
@@ -28,6 +34,15 @@ describe("Ananas order mirror", () => {
   });
 });
 describe("Ananas orders API", () => {
+  it("reads FBA by purchase date and stops before older history without confirmed-date filters", async () => {
+    vi.stubEnv("ANANAS_CLIENT_ID", "test"); vi.stubEnv("ANANAS_CLIENT_SECRET", "secret");
+    const request = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json({ access_token: "test-access-token" }))
+      .mockResolvedValueOnce(Response.json({ content: [{ createdDate: "2026-09-24T10:00:00Z" }], last: false }))
+      .mockResolvedValueOnce(Response.json({ content: [{ createdDate: "2026-08-01T10:00:00Z" }], last: false }));
+    const rows = await new AnanasClient(request).shipmentsInPeriod("SG_COMPLETED", new Date("2026-09-01Z"), new Date("2026-09-25Z"));
+    expect(rows).toHaveLength(1); expect(request).toHaveBeenCalledTimes(3);
+    expect(String(request.mock.calls[1][0])).not.toContain("confirmedFrom");
+  });
   it("fetches all pages with fixed date filters and only GETs after authentication", async () => {
     vi.stubEnv("ANANAS_CLIENT_ID", "test"); vi.stubEnv("ANANAS_CLIENT_SECRET", "secret");
     const request = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json({ access_token: "test-access-token" }))
