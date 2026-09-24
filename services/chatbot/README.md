@@ -52,17 +52,22 @@ cannot create a real order. Tests use embedded PostgreSQL and stub external APIs
 Cross-process advisory locking, real Meta delivery, production DB transactions and
 container deployment must also be checked in staging before public activation.
 
-## Deploy later to the user's OTHER Railway account
+## Deployment
 
-The current Railway account was explicitly excluded. No deployment was requested
-for this stage. No live customer automation has been activated.
+Deployment targets the user's approved Railway workspace and project `SPC Chat Prodaja`
+(`a713af38-0d74-48f4-aa20-c8ae4dc9dd08`). No live customer automation has been activated.
+The service can boot with no Meta secret only while no accounts are configured and
+the bot is disabled; the Meta webhook returns 503 until the secret is configured.
 
 1. Merge/apply the SPC integration change and deploy the normal SPC app. Set
    `SOCIAL_INTEGRATION_SECRET` there to the same random 32+ character secret as the bot.
    The route `/api/integrations/social` returns 503 until this is configured.
 2. In the intended Railway account, create an isolated PostgreSQL database and one
-   service. Set the repo root directory to `services/chatbot`. The Dockerfile and
-   railway.json build/start the continuously running service. Disable Serverless/sleep.
+   service. Set the repo root directory to `services/chatbot` for a GitHub source,
+   or upload only that directory through the CLI. Use the Dockerfile, start command
+   `node src/main.mjs`, and healthcheck `/health`. Disable Serverless/sleep.
+   New Railway services no longer accept legacy Config as Code; set these values
+   in service settings instead of relying on the included legacy railway.json.
 3. Set variables listed in `ENVIRONMENT.example`. `CHAT_DATA_KEY` must be 32 random
    bytes encoded as 64 hex characters. Keep it stable and back it up with DB backups;
    losing it loses the ability to decrypt conversations. `CHAT_ADMIN_TOKEN` is the
