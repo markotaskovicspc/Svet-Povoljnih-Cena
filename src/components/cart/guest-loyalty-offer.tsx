@@ -57,7 +57,7 @@ export function GuestLoyaltyOffer() {
   if (loggedIn || status === "loading" || (status === "authenticated" && session?.user?.userType === "customer") || !lines.length) return null;
 
   return <section className="rounded-xl border border-action/20 bg-action/[0.03] p-4" aria-label="Loyalty pogodnosti" aria-busy={busy}>
-    <p className="flex items-center gap-2 text-sm font-semibold text-action"><Gift className="size-5 shrink-0" aria-hidden />{member.active ? "Loyalty popust je primenjen" : "Ostvarite loyalty popust"}</p>
+    <p className="flex items-center gap-2 text-sm font-semibold text-action"><Gift className="size-5 shrink-0" aria-hidden />{member.active ? (appliedSavings > 0 ? "Loyalty popust je primenjen" : "Loyalty pogodnosti su aktivne") : "Ostvarite loyalty popust"}</p>
     <p className="mt-1.5 text-sm text-ink-700" aria-live="polite">{member.active ? (appliedSavings > 0 ? <>Uštedeli ste <strong className="text-action">{formatRsd(appliedSavings)}</strong> na ovoj korpi.</> : "Pogodnosti su aktivne za vašu kupovinu.") : (savings > 0 ? <>Uštedite odmah <strong className="text-action">{formatRsd(savings)}</strong> na ovoj korpi.</> : "30% popusta na artikle van akcije.")}</p>
     <label htmlFor={id} className="mt-3 flex cursor-pointer items-start gap-3 text-sm font-medium leading-5 text-ink-900">
       <input id={id} type="checkbox" checked={member.active} disabled={busy || !member.ready} onChange={(event) => { if (event.target.checked) void request(); else void removeBenefits(); }} aria-describedby={`${id}-consent`} className="mt-0.5 size-5 shrink-0 accent-ink-900 disabled:cursor-wait" />
