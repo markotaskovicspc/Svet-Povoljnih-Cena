@@ -15,6 +15,9 @@ export async function importAnanas(_: AdminActionState, form: FormData): Promise
       revalidatePath("/admin/erp/ananas");
       revalidatePath("/admin");
       return { ok: true, entityId: result.runId, message: `Uvoz završen: ${result.count} dokumenata. Postojeći računi nisu duplirani.` };
-    } catch (error) { return { ok: false, message: ananasError(error) }; }
+    } catch (error) {
+      revalidatePath("/admin/erp/ananas");
+      return { ok: false, message: ananasError(error) };
+    }
   })();
 }
