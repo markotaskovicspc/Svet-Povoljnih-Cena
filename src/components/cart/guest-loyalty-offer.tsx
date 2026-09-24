@@ -1,5 +1,5 @@
 "use client";
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, Mail, Gift, ArrowRight, ChevronDown } from "lucide-react";
 import { useCart } from "@/lib/hooks/use-cart";
@@ -19,6 +19,7 @@ export function GuestLoyaltyOffer() {
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
   const id = useId();
+  const panelHeader = useRef<HTMLDivElement>(null);
   const savings = loyaltySavings(lines);
 
   async function request(event: React.FormEvent) {
@@ -65,8 +66,8 @@ export function GuestLoyaltyOffer() {
     </>}
     {error && !open ? <p role="alert" className="mt-2 text-sm text-action">{error}</p> : null}
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetContent className="w-full! max-w-full! gap-0! overflow-hidden bg-white! sm:max-w-[560px]!">
-        <SheetHeader className="shrink-0 border-b border-border/60 px-6 py-6 pr-12 sm:px-8 sm:pr-14">
+      <SheetContent initialFocus={panelHeader} className="w-full! max-w-full! gap-0! overflow-hidden bg-white! sm:max-w-[560px]!">
+        <SheetHeader ref={panelHeader} tabIndex={-1} className="shrink-0 border-b border-border/60 px-6 py-6 pr-12 outline-none sm:px-8 sm:pr-14">
           <SheetTitle className="text-xl font-semibold text-ink-900!">Pridružite se loyalty programu</SheetTitle>
           <SheetDescription>Vaš mejl. Vaše pogodnosti.</SheetDescription>
         </SheetHeader>
