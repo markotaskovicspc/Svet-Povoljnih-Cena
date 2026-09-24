@@ -1,6 +1,7 @@
 "use client";
 import { useId, useRef, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { CheckCircle2, Mail, Gift, ArrowRight, ChevronDown } from "lucide-react";
 import { useCart } from "@/lib/hooks/use-cart";
 import { formatRsd } from "@/lib/format";
@@ -74,11 +75,13 @@ export function GuestLoyaltyOffer() {
         <div className="flex min-h-0 flex-1 flex-col">
           {member.email ? <div role="status" className="flex flex-1 flex-col items-center justify-center px-8 text-center"><CheckCircle2 className="mb-5 size-14 text-success" aria-hidden /><h3 className="text-2xl font-semibold">Dobro došli u SPC loyalty</h3><p className="mt-3 text-ink-500">Mejl je potvrđen. Pogodnosti su aktivne u vašoj korpi.</p><button type="button" onClick={() => setOpen(false)} className="mt-8 rounded-lg bg-ink-900 px-6 py-3 font-semibold text-white">Nastavi kupovinu</button></div> : <form onSubmit={request} className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-6 sm:px-8">
-              <div className="relative overflow-hidden rounded-2xl bg-ink-900 px-6 py-7 text-white">
-                <Gift className="absolute -right-5 -bottom-6 size-40 -rotate-12 text-white/5" aria-hidden />
+              <div className="overflow-hidden rounded-2xl bg-ink-900 text-white">
+                <Image src="/images/loyalty/spc-loyalty-email.png" alt="Loyalty pogodnosti uz potvrdu mejla na telefonu" width={1536} height={1024} sizes="(max-width: 560px) 100vw, 496px" className="aspect-[2/1] w-full object-cover" />
+                <div className="px-5 py-5 sm:px-6">
                 <p className="relative text-xs font-semibold tracking-[0.2em] text-white/70">SVET POVOLJNIH CENA</p>
-                <h3 className="relative mt-4 text-3xl font-semibold leading-tight">Više razloga<br />za dobru kupovinu.</h3>
+                <h3 className="relative mt-3 text-2xl font-semibold leading-tight">Više razloga za dobru kupovinu.</h3>
                 <div className="relative mt-6 flex gap-6 border-t border-white/20 pt-5"><div><p className="text-3xl font-bold">−30%</p><p className="mt-1 text-xs text-white/75">na artikle van akcije</p></div><div className="border-l border-white/20 pl-6"><p className="text-3xl font-bold">−15%</p><p className="mt-1 text-xs text-white/75">dodatno za prvu kupovinu</p></div></div>
+                </div>
               </div>
               <p className="mt-5 text-sm leading-6 text-ink-700">Dovoljan je vaš mejl. Pročitajte izjavu, prihvatite uslove pristupanja i potvrdite link koji vam pošaljemo.</p>
             <div className="mt-6 border-t border-border/60 pt-6 text-sm leading-6 text-ink-700">

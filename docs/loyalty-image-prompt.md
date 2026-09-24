@@ -1,0 +1,7 @@
+# SPC loyalty panel image
+
+Generated with the built-in image_gen tool. Asset: `public/images/loyalty/spc-loyalty-email.png`.
+
+## Final prompt
+
+Use case: ads-marketing. Generate a premium photorealistic landscape website banner, 1536x1024 composition with all important elements in central wide 2:1 crop, for Serbian home goods retailer Svet Povoljnih Cena's EMAIL-ONLY loyalty program. A natural close-up of a person's hands holding a modern smartphone in a warmly lit stylish but attainable home, oak table, softly blurred comfortable sofa and small household decor in the background. On the phone a beautifully minimal navy blue screen with a simple large white envelope and checkmark symbol, no readable interface text. Beside the hand a small cream gift box with a deep red fabric ribbon, suggesting member benefits. Natural believable hands and phone perspective, editorial commercial photography, soft daylight, tasteful navy blue and burgundy red accents matching SPC brand, warm ivory neutrals, realistic materials, uncluttered composition, crisp focal point and gentle depth of field. No physical loyalty cards, no plastic cards, no printed text, no letters, no numbers, no percentages, no logos, no watermark. This image is a compact hero photo inside a 560px wide membership side panel, so the visual story must read at small size. The site will render headings and discount amounts separately in HTML.
