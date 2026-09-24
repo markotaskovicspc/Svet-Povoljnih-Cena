@@ -128,14 +128,14 @@ async function loadImageDataUri(value: string | null | undefined) {
   }
 }
 
-function purchaseOrderPageSvg(
+export function purchaseOrderPageSvg(
   order: PurchaseOrderPdfInput,
   items: RenderedItem[],
   pageIndex: number,
   pageCount: number,
 ) {
   const x = 60;
-  const tableY = 455;
+  const tableY = pageIndex === 0 ? 455 : 130;
   const headerHeight = 88;
   const totalHeight = 38;
   const rowHeight = 84;
@@ -275,6 +275,7 @@ function purchaseOrderPageSvg(
     <text x="65" y="82" class="title">PORUDŽBENICA / ORDER REQUEST</text>
     <text x="1685" y="82" text-anchor="end" class="number">${xmlEscape(order.number)}</text>
 
+    ${pageIndex === 0 ? `
     ${metaRow(66, 145, "Datum porudžbine / Order date", formatDate(order.orderDate ?? new Date()))}
     ${metaRow(66, 180, "Kupac / Buyer", MERCHANT_LEGAL_INFO.name.toUpperCase())}
     ${metaRow(66, 215, "Adresa kupca / Buyer address", MERCHANT_LEGAL_INFO.shortAddress)}
@@ -286,6 +287,8 @@ function purchaseOrderPageSvg(
     ${termRow(66, 370, "1. Uslovi plaćanja / Terms of payment:", order.supplier?.paymentTerms ?? "—")}
     ${termRow(66, 398, "2. Datum utovara / Loading date", order.loadingDate ? formatDate(order.loadingDate) : "—")}
     ${termRow(66, 426, "3. Luka utovara / Port of loading", loadingPort || "—")}
+
+    ` : ""}
 
     ${headerCells}${totalCells}${itemRows}
     ${order.notes ? `<text x="65" y="1200" class="footer">Napomena / Note: ${xmlEscape(order.notes)}</text>` : ""}

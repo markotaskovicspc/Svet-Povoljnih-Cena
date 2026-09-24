@@ -1027,7 +1027,7 @@ export default async function InboundInvoicePage({
                   purchaseOrderId={invoice.purchaseOrder.id}
                   currency={invoice.purchaseOrder.currency}
                   items={invoice.purchaseOrder.items.map((item) => ({
-                    id: item.id, sku: item.sku, name: item.name,
+                    id: item.id, sku: item.sku, name: item.name, productId: item.product?.id,
                     qty: item.qty, purchasePrice: Number(item.purchasePrice),
                     customsRatePct: effectiveCustomsRate(item, invoice.purchaseOrder?.lockedAt ?? null),
                   }))}
@@ -1046,7 +1046,7 @@ export default async function InboundInvoicePage({
                     : weightedAverageCogs({ existingQty, existingUnitCogs: existingCogs, incomingQty: row.qty, incomingUnitCogs: row.incomingUnitCogsRsd });
                   const sourceItems = invoice.purchaseOrder!.items.filter(item => item.sku === row.sku);
                   return {
-                    ...row, name: product?.name ?? sourceItems[0]?.name ?? "—",
+                    ...row, productId: product?.id, name: product?.name ?? sourceItems[0]?.name ?? "—",
                     purchasePrices: sourceItems.map(item => Number(item.purchasePrice)),
                     customsRates: sourceItems.map(item => effectiveCustomsRate(item, invoice.purchaseOrder?.lockedAt ?? null)),
                     existingQty, existingCogs, finalCogs,

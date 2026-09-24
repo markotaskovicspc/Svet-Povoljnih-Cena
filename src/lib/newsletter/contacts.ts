@@ -93,6 +93,9 @@ export async function confirmNewsletterOptIn(token: string) {
       where: { tokenHash: digest(token) },
       include: { contact: true },
     });
+    // A repeated click must be harmless, and must never resubscribe someone
+    // who subsequently unsubscribed or was suppressed.
+    if (row?.usedAt && row.contact.status === "ACTIVE") return { ok: true as const, email: row.contact.email, alreadyConfirmed: true };
     if (!row || row.usedAt || row.expiresAt < new Date()) {
       return { ok: false as const, reason: row?.expiresAt && row.expiresAt < new Date() ? "expired" as const : "invalid" as const };
     }
@@ -131,7 +134,7 @@ export async function confirmNewsletterOptIn(token: string) {
     });
     return { ok: true as const, email: row.contact.email };
   }).then(async (result) => {
-    if (result.ok) await syncMarketingContact(result.email, "grant");
+    if (result.ok && !("alreadyConfirmed" in result)) await syncMarketingContact(result.email, "grant");
     return result;
   });
 }

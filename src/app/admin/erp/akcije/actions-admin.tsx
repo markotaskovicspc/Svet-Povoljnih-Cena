@@ -9,6 +9,7 @@ import {
   useTransition,
 } from "react";
 import { FolderOpen, Plus, Tag, Users } from "lucide-react";
+import { ActionPriceImport } from "@/components/admin/action-price-import";
 import { Card, CardTitle } from "@/components/admin/card";
 import { Field } from "@/components/admin/field";
 import { SubmitButton } from "@/components/admin/submit-button";
@@ -735,6 +736,7 @@ function ActionProductsDialog({
           </div>
         </DialogHeader>
         <div className="min-h-0 overflow-auto">
+          {!action.isPermanent && <ActionPriceImport key={action.id} actionId={action.id} />}
           <table
             className={cn(
               "border-separate border-spacing-0 text-left text-xs",

@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { buildPurchaseOrderPdf } from "@/lib/admin/po-pdf";
+import { buildPurchaseOrderPdf, purchaseOrderPageSvg } from "@/lib/admin/po-pdf";
 
 describe("purchase-order PDF", () => {
   it("builds the bilingual landscape order-request PDF", async () => {
@@ -97,4 +97,14 @@ describe("purchase-order PDF", () => {
       writeFileSync(process.env.PO_PDF_SAMPLE_PATH, pdf);
     }
   });
+});
+
+it("shows supplier, buyer and terms only on the first page, with repeated column headings", () => {
+  const item = { sku: "TEST-1", name: "Stolica", qty: 1, purchasePrice: 100, totalVolume: 0.5, imageDataUri: null };
+  const order = { number: "QA-33", orderDate: new Date("2026-09-24"), currency: "RSD", totalPrice: 100, totalVolume: 0.5, supplier: { name: "TEST SUPPLIER", address: "ADRESA", city: "GRAD", country: "RS", paymentTerms: "AVANS" }, items: [item] };
+  const first = purchaseOrderPageSvg(order, [item], 0, 2);
+  const continuation = purchaseOrderPageSvg(order, [item], 1, 2);
+  expect(first).toContain("TEST SUPPLIER"); expect(first).toContain("AVANS");
+  expect(continuation).not.toContain("TEST SUPPLIER"); expect(continuation).not.toContain("AVANS"); expect(continuation).not.toContain("PIB kupca");
+  expect(continuation).toContain("TEST-1"); expect(continuation).toContain("SPC item"); expect(continuation).toContain("Strana / Page 2/2");
 });

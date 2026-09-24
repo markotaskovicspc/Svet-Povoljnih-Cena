@@ -42,6 +42,7 @@ export default async function ErpModulePage({
   if (slug === "mobilni-tabovi") redirect("/admin/tabovi#mobile-tabs");
   const definition = getErpModuleDefinition(slug);
   if (definition?.redirectHref) redirect(definition.redirectHref);
+  const isArticleArchive = slug === "artikli" && search.view === "archived-articles";
   const isStocktakeArchive = slug === "popisi" && search.view === "archive";
   const isRabaluxStockView =
     slug === "artikli" && search.view === "rabalux-stock";
@@ -50,7 +51,7 @@ export default async function ErpModulePage({
       stocktakeArchived: isStocktakeArchive,
       deferRows: slug === "artikli" && Boolean(search.view),
     }),
-    slug === "artikli" && search.view && !isRabaluxStockView
+    slug === "artikli" && search.view && !isRabaluxStockView && !isArticleArchive
       ? db.adminSavedView.findFirst({
           where: {
             id: search.view,
@@ -149,6 +150,7 @@ export default async function ErpModulePage({
         ]}
         actions={
           <div className="flex flex-wrap gap-2">
+            {slug === "artikli" && <Link href={isArticleArchive ? "/admin/erp/artikli" : "/admin/erp/artikli?view=archived-articles"} className="inline-flex h-8 items-center rounded-lg border border-border px-2.5 text-sm">{isArticleArchive ? "Svi artikli" : "Arhivirani artikli (ARH)"}</Link>}
             {slug === "preuzimanja" ? (
               <Link
                 href="/admin/erp/preuzimanja/povrati"
@@ -184,6 +186,7 @@ export default async function ErpModulePage({
             </Link>
           </nav>
         ) : null}
+        {isArticleArchive && <p className="mb-4 text-sm text-ink-600">Za vraćanje artikla iz arhive izaberite „Uredi” i promenite Status u željeni status (SP, IT, DTZ, DOB ili UZ). Promena se čuva i artikal izlazi iz ovog pregleda.</p>}
         <ErpGrid
           key={`${erpModule.slug}:${search.view ?? (isStocktakeArchive ? "archive" : "default")}`}
           module={erpModule}
@@ -196,6 +199,7 @@ export default async function ErpModulePage({
           }
           initialContext={isStocktakeArchive ? { archive: "1" } : undefined}
           initialView={initialSavedView}
+          fixedFilters={isArticleArchive ? [{ id: "article-archive", columnKey: "status", operator: "equals", value: "ARH" }] : undefined}
         />
       </div>
     </>

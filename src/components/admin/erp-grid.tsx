@@ -47,6 +47,7 @@ import type {
   ErpRow,
   ErpValue,
 } from "@/lib/admin/erp";
+import { readGridNavigation } from "@/lib/admin/grid-navigation";
 import { nextGridSorting } from "@/lib/admin/grid-query";
 import { createInitialGridRowsReuse } from "@/lib/admin/grid-initial-rows";
 import {
@@ -389,6 +390,9 @@ export function ErpGrid({
   initialView?: ErpGridInitialView;
 }) {
   const router = useRouter();
+  const [navigationReady, setNavigationReady] = useState(false);
+  const restoredSnapshot = useRef(false);
+  const navigationKey = useRef("");
   const clientReady = useClientReady();
   const defaultColumns = useMemo(
     () => {
@@ -519,7 +523,31 @@ export function ErpGrid({
   };
 
   useEffect(() => {
-    if (initialView?.columnOrder?.length) return;
+    navigationKey.current = `spc:grid-navigation:${module.slug}:${window.location.pathname}${window.location.search}`;
+    try {
+      const raw = sessionStorage.getItem(navigationKey.current);
+      const saved = readGridNavigation(raw, module.columns.map(c => c.key));
+      if (saved) {
+        restoredSnapshot.current = true;
+        setQuery(saved.query); setSearchColumn(saved.searchColumn);
+        setFilters(saved.filters); setSorting(saved.sorting);
+        setVisibleColumns(saved.visibleColumns); setColumnOrder(saved.columnOrder);
+        setColumnWidths(saved.columnWidths); setContext(saved.context); setPage(saved.page);
+      }
+    } catch { /* Storage can be unavailable in private browsing. */ }
+    setNavigationReady(true);
+  }, [module.slug, module.columns]);
+
+  useEffect(() => {
+    if (!navigationReady || !navigationKey.current) return;
+    try {
+      const snapshot = JSON.stringify({ version: 1, query, searchColumn, filters, sorting, visibleColumns, columnOrder, columnWidths, context, page });
+      sessionStorage.setItem(navigationKey.current, snapshot);
+    } catch { /* Navigation still works without storage. */ }
+  }, [navigationReady, query, searchColumn, filters, sorting, visibleColumns, columnOrder, columnWidths, context, page]);
+
+  useEffect(() => {
+    if (restoredSnapshot.current || initialView?.columnOrder?.length) return;
     const timeout = window.setTimeout(() => {
       setColumnOrder(readColumnOrder(module.slug, module.columns));
     }, 0);
@@ -583,6 +611,7 @@ export function ErpGrid({
   }, [module.slug]);
 
   useEffect(() => {
+    if (!navigationReady) return;
     // Invalidate permanently on any changed request or server refresh. Returning
     // to the first page after a filter/edit must not resurrect the old snapshot.
     if (reuseInitialRows.current(module, {
@@ -643,6 +672,7 @@ export function ErpGrid({
       controller.abort();
     };
   }, [
+    navigationReady,
     filters,
     fixedFilters,
     module,
@@ -1777,7 +1807,7 @@ export function ErpGrid({
                       }}
                       onDragEnd={() => setDraggedColumn(null)}
                       className={cn(
-                        "group relative whitespace-nowrap px-3 py-3 text-left font-medium transition",
+                        "group relative whitespace-normal px-3 py-3 text-left font-medium transition",
                         draggedColumn === column.key && "opacity-40",
                         column.align === "right" && "text-right",
                         column.align === "center" && "text-center",
@@ -1787,17 +1817,17 @@ export function ErpGrid({
                         type="button"
                         onClick={() => toggleSort(column.key)}
                         className={cn(
-                          "inline-flex items-center gap-2",
+                          "inline-flex w-full items-center gap-2",
                           column.align === "right" && "justify-end",
                           column.align === "center" && "justify-center",
                         )}
-                        title="Sortiraj po ovoj koloni"
+                        title={`${column.label} — sortiraj po ovoj koloni`}
                       >
                         <GripVertical
                           className="size-3.5 cursor-grab text-ink-300 opacity-0 transition group-hover:opacity-100"
                           aria-hidden
                         />
-                        {column.label}
+                        <span className="line-clamp-3 min-w-0 max-w-48 break-words leading-4">{column.label}</span>
                         {sorting[0]?.columnKey === column.key
                           ? sorting[0].direction === "asc"
                             ? " ↑"

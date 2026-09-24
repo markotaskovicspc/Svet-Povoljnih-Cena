@@ -33,12 +33,12 @@ export function DataTable({
                 <th
                   key={c.key}
                   className={cn(
-                    "whitespace-nowrap px-4 py-3 text-left font-medium",
+                    "whitespace-normal px-4 py-3 text-left font-medium",
                     c.align === "right" && "text-right",
                     c.align === "center" && "text-center",
                   )}
                 >
-                  {c.label}
+                  <span title={c.label} className="line-clamp-3 max-w-48 break-words leading-4">{c.label}</span>
                 </th>
               ))}
             </tr>
