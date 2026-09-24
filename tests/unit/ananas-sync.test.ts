@@ -27,5 +27,20 @@ it("writes no receipts when any incoming document fails validation", async () =>
 it("resumes an outage in bounded chunks with overlap instead of skipping the missing period", async () => {
   m.latest.mockResolvedValue({ to: new Date("2026-07-01Z") });
   await syncAnanasAutomatically(new Date("2026-09-24Z"));
-  expect(m.documents).toHaveBeenCalledWith("SALE", new Date("2026-06-24Z"), new Date("2026-07-25Z"));
+  expect(m.create).toHaveBeenCalledWith({ data: expect.objectContaining({ from: new Date("2026-06-24Z"), to: new Date("2026-07-25Z") }) });
+  const ranges = m.documents.mock.calls.filter(call => call[0] === "SALE");
+  expect(ranges).toHaveLength(11);
+  expect(ranges[0].slice(1)).toEqual([new Date("2026-06-24Z"), new Date("2026-06-27Z")]);
+  expect(ranges.at(-1)?.[2]).toEqual(new Date("2026-07-25Z"));
+  for (let i = 1; i < ranges.length; i++) expect(ranges[i][1]).toEqual(ranges[i - 1][2]);
+  // Duplicate provider documents across windows are persisted only once.
+  expect(m.upsert).toHaveBeenCalledTimes(2);
+});
+it("keeps previous imported data intact if a later window times out", async () => {
+  m.documents.mockImplementation(async (_kind, from: Date) => {
+    if (from >= new Date("2026-09-04Z")) throw new DOMException("timeout", "TimeoutError");
+    return [{ id: "one" }];
+  });
+  await expect(syncAnanasDocuments(new Date("2026-09-01Z"), new Date("2026-09-10Z"))).rejects.toThrow(/predviđenom roku/);
+  expect(m.upsert).not.toHaveBeenCalled();
 });

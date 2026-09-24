@@ -7,14 +7,18 @@ const BASE = "https://api.ananas.rs";
 export function ananasConfigured() { return Boolean(envValue("ANANAS_CLIENT_ID") && envValue("ANANAS_CLIENT_SECRET")); }
 export class AnanasClient {
   private token: string | null = null;
-  constructor(private readonly request: typeof fetch = fetch) {}
+  constructor(private readonly request: typeof fetch = fetch, private readonly deadline?: AbortSignal) {}
+  private signal(milliseconds: number) {
+    const timeout = AbortSignal.timeout(milliseconds);
+    return this.deadline ? AbortSignal.any([timeout, this.deadline]) : timeout;
+  }
   private async authenticate() {
     const clientId = envValue("ANANAS_CLIENT_ID"), clientSecret = envValue("ANANAS_CLIENT_SECRET");
     if (!clientId || !clientSecret) throw new Error("Ananas produkcioni pristup nije podešen.");
     const response = await this.request(`${BASE}/iam/api/v1/auth/token`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ grantType: "CLIENT_CREDENTIALS", clientId, clientSecret, scope: "public_api/full_access" }),
-      cache: "no-store", redirect: "error", signal: AbortSignal.timeout(25000),
+      cache: "no-store", redirect: "error", signal: this.signal(25000),
     });
     if (!response.ok) throw new Error(`Ananas prijava je odbijena (HTTP ${response.status}). Proverite API pristup sa Ananas podrškom.`);
     const payload = z.object({ access_token: z.string().min(10) }).parse(await response.json());
@@ -24,7 +28,7 @@ export class AnanasClient {
     if (!this.token) await this.authenticate();
     const send = () => this.request(`${BASE}/order/api/v1/merchant-integration/${path}?${params}`, {
       headers: { Authorization: `Bearer ${this.token}`, Accept: "application/json" },
-      cache: "no-store", redirect: "error", signal: AbortSignal.timeout(45000),
+      cache: "no-store", redirect: "error", signal: this.signal(45000),
     });
     let response = await send();
     if (response.status === 401) { await this.authenticate(); response = await send(); }

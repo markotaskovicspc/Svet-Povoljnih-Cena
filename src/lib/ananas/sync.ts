@@ -16,18 +16,31 @@ export function ananasError(error: unknown) {
 export async function syncAnanasDocuments(from: Date, to: Date, source: "MANUAL" | "AUTO" = "MANUAL") {
   ananasDateRange(from.toISOString(), to.toISOString());
   const run = await db.ananasSyncRun.create({ data: { from, to, source, status: "RUNNING" } });
-  let stage = "preuzimanje računa";
+  let stage = "preuzimanje računa i refundacija";
   try {
-    const api = new AnanasClient();
-    const sales = await api.documents("SALE", from, to);
-    stage = "preuzimanje refundacija";
-    const refunds = await api.documents("REFUND", from, to);
+    // Production month-wide requests time out. Bound each provider request to
+    // three days, two windows at a time, and leave 90 seconds for atomic storage.
+    const api = new AnanasClient(fetch, AbortSignal.timeout(180000));
+    const windows: Array<{ from: Date; to: Date }> = [];
+    for (let start = from.getTime(); start < to.getTime(); start += 3 * 86400000) {
+      windows.push({ from: new Date(start), to: new Date(Math.min(to.getTime(), start + 3 * 86400000)) });
+    }
+    const sales: unknown[] = [], refunds: unknown[] = [];
+    for (let offset = 0; offset < windows.length; offset += 2) {
+      const batch = await Promise.all(windows.slice(offset, offset + 2).map(async window => ({
+        sales: await api.documents("SALE", window.from, window.to),
+        refunds: await api.documents("REFUND", window.from, window.to),
+      })));
+      for (const result of batch) { sales.push(...result.sales); refunds.push(...result.refunds); }
+      if (sales.length + refunds.length > 20000) throw new Error("Ananas period sadrži previše dokumenata. Izaberite kraći period.");
+    }
     stage = "provera dokumenata";
     // Validate every receipt before writing any. Do not persist buyer PII.
-    const documents = [
+    const normalized = [
       ...sales.map(row => normalizeAnanasDocument(row, "SALE", MERCHANT_LEGAL_INFO.pib)),
       ...refunds.map(row => normalizeAnanasDocument(row, "REFUND", MERCHANT_LEGAL_INFO.pib)),
     ];
+    const documents = [...new Map(normalized.map(document => [`${document.kind}:${document.externalId}`, document])).values()];
     // Atomic per period, deduplicated by provider document identity.
     stage = "upis dokumenata";
     await db.$transaction(async tx => {
