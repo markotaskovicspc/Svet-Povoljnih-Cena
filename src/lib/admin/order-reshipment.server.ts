@@ -1,4 +1,5 @@
 import "server-only";
+import { canReshipCourierDelivery } from "./order-reshipment-eligibility";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { adjustInventory } from "@/lib/inventory";
@@ -25,7 +26,7 @@ export async function queueOrderReshipment(input: { orderId: string; shipmentId:
     if (!source || source.orderId !== input.orderId || source.purpose !== "ORDER_DELIVERY") throw new Error("Pošiljka porudžbine nije pronađena.");
     if (source.reshipment) return source.reshipment.batch;
     const order = source.order;
-    if (!["PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY", "RETURNED"].includes(source.status)) throw new Error("Ponovno slanje je dostupno za pošiljku koju je kurir već preuzeo, a nije isporučena kupcu.");
+    if (!canReshipCourierDelivery(source)) throw new Error("Ponovno slanje je dostupno za pošiljku koju je kurir već preuzeo, a nije isporučena kupcu.");
     if (order.cancelledAt || order.stockRestoredAt || ["OTKAZANO", "ISPORUCENO"].includes(order.status) || order.paymentRefunds.length) throw new Error("Otkazana, isporučena ili refundirana porudžbina ne može ponovo da se šalje.");
     if (source.provider !== "X_EXPRESS" && source.provider !== "MYGLS") throw new Error("Ponovno slanje podržava X Express i MyGLS.");
     assertFulfillmentPaymentReady({ purpose: "ORDER_DELIVERY", orderNumber: order.number, paymentMethod: order.paymentMethod, paymentStatuses: order.payments.map(p => p.status) });
