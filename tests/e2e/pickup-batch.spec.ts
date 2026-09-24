@@ -430,6 +430,46 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       ).toBe(1);
     });
 
+    await test.step("učitavanje ostaje dostupno van uređivanja i ne duplira postojeće pakete", async () => {
+      await page.goto(`/admin/erp/preuzimanja/${firstBatchId}`);
+      const load = page.getByRole("button", { name: "Učitaj porudžbine", exact: true });
+      await expect(load).toBeVisible();
+      await load.click();
+      await expect(page.getByRole("status").filter({
+        hasText: "Nema novih porudžbina koje odgovaraju ovom kuriru",
+      })).toBeVisible();
+      expect(await db.pickupBatchLine.count({ where: { batchId: firstBatchId } })).toBe(5);
+      await expect(load).toBeVisible();
+      await page.getByRole("link", { name: "Uredi", exact: true }).click();
+    });
+
+    await test.step("isti nalog prima naknadnu porudžbinu i zaključava učitavanje pri izradi adresnica", async () => {
+      const before = await db.pickupBatchLine.findMany({ where: { batchId: firstBatchId } });
+      const addedOrder = await db.order.update({
+        where: { number: fixture.wrongStatusOrder },
+        data: { status: "KREIRANO" },
+      });
+      await page.goto(`/admin/erp/preuzimanja/${firstBatchId}`);
+      await page.getByRole("button", { name: "Učitaj porudžbine", exact: true }).click();
+      await expect(page.getByRole("status").filter({ hasText: "Učitano paketa: 1 iz 1 porudžbina" })).toBeVisible();
+      const after = await db.pickupBatchLine.findMany({ where: { batchId: firstBatchId } });
+      expect(after).toHaveLength(6);
+      for (const line of before) expect(after).toContainEqual(line);
+      expect(after.filter(line => line.orderId === addedOrder.id)).toHaveLength(1);
+      await expect(page.getByRole("button", { name: "Učitaj porudžbine", exact: true })).toBeVisible();
+
+      for (const marker of ["labelsCreationStartedAt", "labelsCreatedAt"] as const) {
+        await db.pickupBatch.update({ where: { id: firstBatchId }, data: { [marker]: new Date() } });
+        await page.reload();
+        await expect(page.getByRole("button", { name: "Učitaj porudžbine", exact: true })).toHaveCount(0);
+        await db.pickupBatch.update({ where: { id: firstBatchId }, data: { [marker]: null } });
+      }
+      // Restore this fixture before the existing removal/printing scenarios.
+      await db.pickupBatchLine.deleteMany({ where: { batchId: firstBatchId, orderId: addedOrder.id } });
+      await db.order.update({ where: { id: addedOrder.id }, data: { status: "POTVRDJENO" } });
+      await page.goto(`/admin/erp/preuzimanja/${firstBatchId}?mode=edit`);
+    });
+
     await test.step("kompaktna picking grupa čuva sve operativne podatke bez ponavljanja količine po paketu", async () => {
       for (const header of [
         "Izvor",
@@ -585,11 +625,9 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       await expect(page.getByLabel("Kraj preuzimanja")).toHaveCount(0);
       await expect(
         page.getByRole("button", { name: "Učitaj porudžbine", exact: true }),
-      ).toHaveCount(0);
+      ).toBeVisible();
       await expect(
-        page.getByText("Kliknite „Uredi“, pa „Učitaj porudžbine“.", {
-          exact: true,
-        }),
+        page.getByText("Kliknite „Učitaj porudžbine“.", { exact: false }),
       ).toBeVisible();
       await page.getByRole("link", { name: "Uredi", exact: true }).click();
       await expect(page).toHaveURL(/\?mode=edit$/);
@@ -663,8 +701,8 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       );
       await expect(page.getByRole("heading", { name: "Zbirna picking lista" })).toBeVisible();
       await expect(page.locator("html")).toHaveAttribute("data-qa-print-called", "yes");
-      await expect(page.getByRole("cell", { name: `Kratki Z ${runId}`, exact: true })).toBeVisible();
-      await expect(page.getByRole("cell", { name: `Kratki A ${runId}`, exact: true })).toBeVisible();
+      await expect(page.getByRole("cell", { name: `Kratki Z ${runId}`, exact: false })).toBeVisible();
+      await expect(page.getByRole("cell", { name: `Kratki A ${runId}`, exact: false })).toBeVisible();
       await expect(page.getByRole("columnheader", { name: "Bar kod", exact: true })).toBeVisible();
       await expect(page.getByRole("columnheader", { name: "Dobavljač", exact: true })).toHaveCount(0);
       for (const [name, prefix, quantity] of [
@@ -677,6 +715,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         await expect(row.getByRole("cell").nth(2).locator("strong")).toHaveCSS("font-weight", "700");
         await expect(row.getByRole("cell", { name: fixture.supplierName, exact: true })).toHaveCount(0);
         await expect(row.getByRole("cell").nth(4)).toHaveText(quantity);
+        await expect(row).toContainText(`Po kupcima (porudžbinama): 1 × ${quantity} kom`);
       }
       await expect(page.getByText("Interne magacinske etikete", { exact: true })).toHaveCount(0);
       await expect(page.locator("article")).toHaveCount(0);
@@ -1059,6 +1098,53 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
           where: { batchId: myGlsBatchId, orderId: pendingBankOrderId },
         }),
       ).toBe(1);
+    });
+
+    await test.step("težina nula ulazi u X Express picking i ne duplira se pri ponovnom učitavanju", async () => {
+      const product = await createProduct({
+        sku: `QA-PICKUP-ZERO-${runId}`.slice(0, 90),
+        slug: `qa-pickup-zero-${runId}`,
+        barcode: `869${runId.replace(/\D/g, "").slice(-10).padStart(10, "0")}`,
+        shortName: `Nulta težina ${runId}`,
+        shortDescription: "Test artikla sa težinom 0",
+        attribute1: "", attribute2: "", attribute3: "", attribute4: "",
+        colorPrimary: "Bela", colorSecondary: "",
+        packWidthCm: 17, unitPackWidthCm: 17, unitPackDepthCm: 17, unitPackHeightCm: 25,
+      });
+      productIds.push(product.id);
+      await db.product.update({ where: { id: product.id }, data: {
+        weightKg: 0, grossWeightKg: 0, packGrossWeightKg: 0,
+      } });
+      const order = await createOrder({
+        number: `QA-PICKUP-ZERO-${runId}`, status: "KREIRANO", shippingMethod: "KURIR",
+        lines: [{ product, warehouseId: dcWarehouseId, qty: 2 }],
+      });
+      orderIds.push(order.id);
+      await page.goto("/admin/erp/preuzimanja");
+      await page.getByRole("button", { name: "Novi", exact: true }).click();
+      const dialog = page.getByRole("dialog");
+      await dialog.getByLabel("Kurirska služba").selectOption("X_EXPRESS");
+      await dialog.getByRole("button", { name: "Novi", exact: true }).click();
+      await expect(page).toHaveURL(/\/admin\/erp\/preuzimanja\/[^/?]+\?mode=edit$/);
+      const batchId = pickupBatchIdFromUrl(page.url());
+      batchIds.push(batchId);
+      await page.goto(`/admin/erp/preuzimanja/${batchId}`);
+      const load = page.getByRole("button", { name: "Učitaj porudžbine", exact: true });
+      await load.click();
+      await expect(page.getByRole("status").filter({ hasText: "Učitano paketa: 2 iz 1 porudžbina" })).toBeVisible();
+      const batch = await db.pickupBatch.findUniqueOrThrow({ where: { id: batchId }, include: { lines: true } });
+      expect(batch.provider).toBe("X_EXPRESS");
+      expect(batch.lines).toHaveLength(2);
+      expect(batch.lines.every(line => line.orderId === order.id && line.weightKg === null && line.warehouseReadyAt === null)).toBe(true);
+      const row = page.getByRole("row").filter({ hasText: product.sku });
+      await expect(row).toBeVisible();
+      await row.locator("summary").click();
+      await expect(row.getByText("nedostaje težina paketa", { exact: false })).toHaveCount(2);
+      await expect(page.getByRole("button", { name: "Kreiraj adresnice i pošalji", exact: true })).toBeDisabled();
+      await page.screenshot({ path: test.info().outputPath("zero-weight-x-express.png"), fullPage: true });
+      await load.click();
+      await expect(page.getByRole("status").filter({ hasText: "Nema novih porudžbina koje odgovaraju ovom kuriru" })).toBeVisible();
+      expect(await db.pickupBatchLine.count({ where: { batchId } })).toBe(2);
     });
 
     expect(pageErrors).toEqual([]);

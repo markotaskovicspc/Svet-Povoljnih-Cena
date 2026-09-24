@@ -44,6 +44,7 @@ describe("pickup picking print", () => {
         barcode: "0012345678905",
         quantity: 5,
         packageCount: 3,
+        quantityDistribution: [{ quantity: 3, orderCount: 1 }, { quantity: 2, orderCount: 1 }],
       },
       {
         key: "sku:200",
@@ -52,6 +53,7 @@ describe("pickup picking print", () => {
         barcode: null,
         quantity: 1,
         packageCount: 1,
+        quantityDistribution: [{ quantity: 1, orderCount: 1 }],
       },
     ]);
   });
@@ -106,7 +108,45 @@ describe("pickup picking print", () => {
         barcode: null,
         quantity: 1,
         packageCount: 1,
+        quantityDistribution: [{ quantity: 1, orderCount: 1 }],
       },
     ]);
+  });
+
+  it("shows the customer quantity breakdown without counting physical packages as customers", () => {
+    const quantities = [4, 4, 4, 6, 1, 1];
+    const rows = buildPickupPrintRows(quantities.flatMap((quantity, order) =>
+      Array.from({ length: quantity }, (_, pkg) => ({
+        id: `${order}-${pkg}`,
+        lineGroupKey: `order:${order}:MYGLS`,
+        quantity,
+        orderItem: { id: `item-${order}`, sku: "CHAIR", name: "Trpezarijska stolica", qty: quantity },
+      })),
+    ));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      quantity: 20,
+      packageCount: 20,
+      quantityDistribution: [
+        { quantity: 6, orderCount: 1 },
+        { quantity: 4, orderCount: 3 },
+        { quantity: 1, orderCount: 2 },
+      ],
+    });
+  });
+
+  it("combines separate lines of the same article within a customer's order", () => {
+    const rows = buildPickupPrintRows([
+      { id: "a", lineGroupKey: "order:1", quantity: 2,
+        orderItem: { id: "item-a", sku: "CHAIR", name: "Stolica", qty: 8 } },
+      { id: "b", lineGroupKey: "order:1", quantity: 4,
+        orderItem: { id: "item-b", sku: "CHAIR", name: "Stolica", qty: 4 } },
+      { id: "c", lineGroupKey: "order:2", quantity: null,
+        orderItem: { id: "item-c", sku: "CHAIR", name: "Stolica", qty: 6 } },
+    ]);
+    expect(rows[0]).toMatchObject({
+      quantity: 12,
+      quantityDistribution: [{ quantity: 6, orderCount: 2 }],
+    });
   });
 });

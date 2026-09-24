@@ -492,7 +492,9 @@ export default async function PickupBatchPage({
   }
   const myGls = posting.provider === "MYGLS";
   const editable =
-    isPickupBatchEditable(batch.status) && !batch.labelsCreationStartedAt;
+    isPickupBatchEditable(batch.status) &&
+    !batch.labelsCreationStartedAt &&
+    !batch.labelsCreatedAt;
   const canPost =
     isPickupBatchEditable(batch.status);
   const editing = query.mode === "edit" && editable;
@@ -708,7 +710,7 @@ export default async function PickupBatchPage({
               editing
                 ? "Režim uređivanja je uključen. Svaka izmena se čuva svojim dugmetom; „Završi uređivanje“ samo vraća pregled naloga."
                 : editable
-                  ? "Ovo je pregled naloga. Kliknite „Uredi“ da učitate porudžbine ili unesete mere paketa."
+                  ? "Porudžbine možete učitati direktno u ovaj nalog. Kliknite „Uredi“ za izmenu mera paketa."
                   : batch.status === "DRAFT" && batch.labelsCreationStartedAt
                     ? "Mere i sastav naloga su zaključani jer je izrada adresnica započeta. Adresu ili telefon kupca i dalje možete ispraviti u povezanom prodajnom nalogu."
                     : "Nalog je zaključan za izmene jer više nije u statusu Novi."
@@ -840,7 +842,7 @@ export default async function PickupBatchPage({
             <CardTitle description={`Učitavaju se sve neučitane, nefiskalizovane DC porudžbine koje po stvarnoj težini i dimenzijama pripadaju kuriru ${myGls ? "MyGLS (preko 30 kg ili bar jedna stranica preko 60 cm)" : "X Express (paketi do 60 cm po svakoj strani, sa težinom do 30 kg ili bez upisane težine)"}. Težina 0 ili prazno polje ne blokira ulazak u picking; stvarnu težinu unesite pre potvrde spremnosti i kreiranja adresnice. Poznato prekoračenje granice šalje celu porudžbinu u MyGLS. Cela porudžbina ostaje u jednom nalogu. Zamene ulaze u isti picking tok. MyGLS volumetrijska dimenzija preko 300 cm može imati doplatu, ali ne blokira adresnicu.`}>
               Zajednička picking lista
             </CardTitle>
-            {editing ? (
+            {editable ? (
               <AdminActionForm
                 action={loadOrdersAction}
                 className="flex items-end"
@@ -1134,11 +1136,9 @@ export default async function PickupBatchPage({
             <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-ink-500">
               <p>Nalog još nema učitanih porudžbina.</p>
               <p className="mt-1 text-xs">
-                {editing
+                {editable
                   ? "Kliknite „Učitaj porudžbine“. Biće dodate sve neučitane, nefiskalizovane DC porudžbine koje pripadaju ovom kuriru; porudžbina sa različitim veličinama paketa ide cela MyGLS-u."
-                  : editable
-                    ? "Kliknite „Uredi“, pa „Učitaj porudžbine“."
-                    : "Ovaj nalog više nije moguće dopunjavati."}
+                  : "Ovaj nalog više nije moguće dopunjavati."}
               </p>
             </div>
           )}

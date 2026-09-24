@@ -124,7 +124,17 @@ export default async function PickupBatchPrintPage({
                 <td className="py-3"><span className="inline-block size-5 border border-black" /></td>
                 <td className="py-3 font-mono font-bold">{row.sku}</td>
                 <td className="px-2 py-3"><PickingBarcode value={row.barcode} /></td>
-                <td className="px-2 py-3">{row.name}</td>
+                <td className="px-2 py-3">
+                  <div>{row.name}</div>
+                  {row.quantityDistribution.length ? (
+                    <p className="mt-1 text-xs">
+                      <span className="font-semibold">Po kupcima (porudžbinama): </span>
+                      {row.quantityDistribution.map(({ quantity, orderCount }) =>
+                        `${orderCount} × ${quantity} kom`,
+                      ).join(" · ")}
+                    </p>
+                  ) : null}
+                </td>
                 <td className="py-3 pl-2 text-right text-lg font-bold">{row.quantity}</td>
                 <td className="py-3 pl-2 text-right">{row.packageCount}</td>
               </tr>
