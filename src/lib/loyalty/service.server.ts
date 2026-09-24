@@ -8,6 +8,17 @@ export const LOYALTY_SESSION_SECONDS = 30 * 24 * 60 * 60;
 const digest = (token: string) => createHash("sha256").update(token).digest("hex");
 const validToken = (token: string) => /^[a-f0-9]{64}$/.test(token);
 
+export async function acceptLoyaltyConsent() {
+  const token = randomBytes(32).toString("hex");
+  const consentAt = new Date();
+  await db.verificationToken.create({ data: {
+    identifier: `loyalty-consent:${LOYALTY_CONSENT_VERSION}`,
+    token: digest(token),
+    expires: new Date(consentAt.getTime() + LOYALTY_SESSION_SECONDS * 1000),
+  } });
+  return token;
+}
+
 export async function requestLoyaltyConfirmation(rawEmail: string) {
   const email = normalizeLoyaltyEmail(rawEmail);
   const token = randomBytes(32).toString("hex");
@@ -60,7 +71,16 @@ export async function confirmLoyalty(token: string) {
 export async function loyaltyMemberForSession(token?: string) {
   if (!token || !validToken(token)) return null;
   const record = await db.verificationToken.findUnique({ where: { token: digest(token) } });
-  if (!record?.identifier.startsWith("loyalty-session:") || record.expires <= new Date()) return null;
+  if (!record || record.expires <= new Date()) return null;
+  if (record.identifier === `loyalty-consent:${LOYALTY_CONSENT_VERSION}`) {
+    return {
+      email: null,
+      consentVersion: LOYALTY_CONSENT_VERSION,
+      consentAt: new Date(record.expires.getTime() - LOYALTY_SESSION_SECONDS * 1000),
+      verifiedAt: null,
+    };
+  }
+  if (!record.identifier.startsWith("loyalty-session:")) return null;
   const member = await db.guestLoyaltyMembership.findUnique({
     where: { email: record.identifier.slice("loyalty-session:".length) },
   });
@@ -72,6 +92,7 @@ export async function revokeLoyaltySession(token?: string) {
     where: { token: digest(token), OR: [
       { identifier: { startsWith: "loyalty-session:" } },
       { identifier: { startsWith: "loyalty-pending:" } },
+      { identifier: { startsWith: "loyalty-consent:" } },
     ] },
   });
 }

@@ -21,6 +21,7 @@ import { cartDrawerLoginReturnPath } from "@/lib/cart/cart-drawer-auth-return";
 import { GuestLoyaltyOffer } from "./guest-loyalty-offer";
 import { LoyaltyReturnNotice } from "./loyalty-return-notice";
 import { useGuestLoyalty } from "@/lib/loyalty/use-guest-loyalty";
+import { appliedLoyaltySavings } from "@/lib/loyalty/shared";
 import { computeTotals } from "@/components/checkout/order-summary";
 
 /**
@@ -148,6 +149,9 @@ function CartSummary({
   quote: CheckoutDeliveryQuote | null;
   deliveryLoading: boolean;
 }) {
+  const lines = useCart((s) => s.lines);
+  const loyaltyDiscount = appliedLoyaltySavings(lines);
+  const saleSavings = Math.max(0, savings - loyaltyDiscount);
   const voucher = useCheckout((s) => s.voucher);
   const applyVoucher = useCheckout((s) => s.applyVoucher);
   const [code, setCode] = useState("");
@@ -162,7 +166,7 @@ function CartSummary({
     shippingMethod: shippingMethod ?? "kurir",
     shippingPrices: quote?.prices ?? { kurir: null, kamion: null },
     voucherDiscountRsd: voucherDiscountForSubtotal(voucher, subtotal),
-    firstPurchaseEligible: !loggedIn && Boolean(guestLoyalty.email) && guestLoyalty.firstPurchase,
+    firstPurchaseEligible: !loggedIn && guestLoyalty.active && guestLoyalty.firstPurchase,
   });
 
   async function applyCartVoucher(e: React.FormEvent) {
@@ -212,15 +216,16 @@ function CartSummary({
             <dt className="text-ink-700">Vrednost artikala</dt>
             <dd className="font-medium text-ink-900">{formatRsd(fullTotal)}</dd>
           </div>
-          {savings > 0 ? (
+          {saleSavings > 0 ? (
             <div className="text-action flex items-baseline justify-between">
               <dt className="inline-flex items-center gap-1.5">
                 <Tag className="size-3.5" aria-hidden />
-                Ukupna ušteda
+                Akcijska ušteda
               </dt>
-              <dd className="font-semibold">−{formatRsd(savings)}</dd>
+              <dd className="font-semibold">−{formatRsd(saleSavings)}</dd>
             </div>
           ) : null}
+          {loyaltyDiscount > 0 && <div className="flex items-baseline justify-between font-semibold text-action" aria-live="polite"><dt>Loyalty popust</dt><dd>−{formatRsd(loyaltyDiscount)}</dd></div>}
           <div className="flex items-baseline justify-between">
             <dt className="text-ink-700 inline-flex items-center gap-1.5">
               <Truck className="size-3.5" aria-hidden />

@@ -26,22 +26,22 @@ describe("guest loyalty checkout trust boundary", () => {
     mocks.member.mockResolvedValue(null);
     mocks.createOrder.mockResolvedValue({ ok: false, error: { code: "EMPTY_CART" } });
   });
-  it("rejects a client loyalty flag without a verified server session", async () => {
+  it("rejects a client loyalty flag without a server consent session", async () => {
     const response = await POST(request({ guestEmail: "a@b.com", guestLoyalty: true }));
     expect(response.status).toBe(422);
-    expect(await response.json()).toMatchObject({ error: { code: "LOYALTY_VERIFICATION_REQUIRED" } });
+    expect(await response.json()).toMatchObject({ error: { code: "LOYALTY_CONSENT_REQUIRED" } });
     expect(mocks.createOrder).not.toHaveBeenCalled();
   });
-  it("rejects using one confirmed email for another buyer", async () => {
-    mocks.member.mockResolvedValue({ email: "a@b.com", consentVersion: "v1" });
-    await POST(request({ guestEmail: "other@b.com", guestLoyalty: true }));
+  it("requires an email at checkout even after accepting consent", async () => {
+    mocks.member.mockResolvedValue({ email: null, consentVersion: "v3", consentAt: new Date() });
+    await POST(request({ guestLoyalty: true }));
     expect(mocks.createOrder).not.toHaveBeenCalled();
   });
-  it("passes verified membership to pricing without a user account", async () => {
-    const member = { email: "a@b.com", consentVersion: "v1" };
+  it("binds anonymous server consent to the email entered at checkout", async () => {
+    const member = { email: null, consentVersion: "v3", consentAt: new Date() };
     mocks.member.mockResolvedValue(member);
     await POST(request({ guestEmail: "A@B.COM", guestLoyalty: true }));
-    expect(mocks.createOrder).toHaveBeenCalledWith(expect.objectContaining({ guestLoyalty: true }), null, member);
+    expect(mocks.createOrder).toHaveBeenCalledWith(expect.objectContaining({ guestLoyalty: true }), null, { ...member, email: "a@b.com" });
   });
   it("keeps ordinary guests eligible for checkout without membership", async () => {
     await POST(request({ guestEmail: "a@b.com" }));

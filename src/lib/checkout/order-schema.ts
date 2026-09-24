@@ -99,6 +99,9 @@ export const createOrderSchema = z
       .optional(),
   })
   .superRefine((input, context) => {
+    if (input.guestLoyalty && !input.guestEmail) {
+      context.addIssue({ code: "custom", path: ["guestEmail"], message: "Mejl je obavezan za loyalty pogodnosti." });
+    }
     const seen = new Set<string>();
     input.lines.forEach((line, index) => {
       if (seen.has(line.sku)) {

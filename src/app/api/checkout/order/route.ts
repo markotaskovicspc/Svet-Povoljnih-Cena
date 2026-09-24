@@ -45,8 +45,8 @@ export async function POST(req: Request) {
   const userId = user?.userType === "customer" ? user.id : null;
   try {
     const member = !userId && parsed.data.guestLoyalty ? await getGuestLoyaltyMember() : null;
-    if (!userId && parsed.data.guestLoyalty && (!member || member.email !== normalizeLoyaltyEmail(parsed.data.guestEmail ?? ""))) {
-      return NextResponse.json({ ok: false, error: { code: "LOYALTY_VERIFICATION_REQUIRED" } }, { status: 422 });
+    if (!userId && parsed.data.guestLoyalty && (!member || !parsed.data.guestEmail)) {
+      return NextResponse.json({ ok: false, error: { code: "LOYALTY_CONSENT_REQUIRED" } }, { status: 422 });
     }
     const result = await createOrder(
       {
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
         analytics: hasAnalyticsConsent(req) ? parsed.data.analytics : undefined,
       },
       userId,
-      member,
+      member ? { email: normalizeLoyaltyEmail(parsed.data.guestEmail!), consentVersion: member.consentVersion, consentAt: member.consentAt } : null,
     );
     if (result.ok) {
       // The durable job is already committed. Even an import failure or a

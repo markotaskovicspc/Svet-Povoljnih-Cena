@@ -76,7 +76,7 @@ export type CreateOrderError =
   | { code: "INACTIVE"; sku: string }
   | { code: "VOUCHER_INVALID"; reason: string }
   | { code: "GUEST_REQUIRES_EMAIL" }
-  | { code: "LOYALTY_VERIFICATION_REQUIRED" }
+  | { code: "LOYALTY_CONSENT_REQUIRED" }
   | { code: "DELIVERY_POINT_INVALID" }
   | { code: "DELIVERY_ADDRESS_INVALID" }
   | { code: "PAYMENT_UNAVAILABLE" }
@@ -313,14 +313,14 @@ function paymentExpiresAt(method: PaymentMethod) {
 export async function createOrder(
   input: CreateOrderInput,
   userId: string | null,
-  guestLoyalty: { email: string; consentVersion: string } | null = null,
+  guestLoyalty: { email: string; consentVersion: string; consentAt: Date } | null = null,
 ): Promise<
   { ok: true; data: CreateOrderResult } | { ok: false; error: CreateOrderError }
 > {
   // The route supplies this identity only after validating the HttpOnly session.
   if ((!userId && input.guestLoyalty && !guestLoyalty) ||
       (guestLoyalty && (userId || guestLoyalty.email !== input.guestEmail?.trim().toLowerCase()))) {
-    return { ok: false, error: { code: "LOYALTY_VERIFICATION_REQUIRED" } };
+    return { ok: false, error: { code: "LOYALTY_CONSENT_REQUIRED" } };
   }
   if (!userId && !input.guestEmail) {
     return { ok: false, error: { code: "GUEST_REQUIRES_EMAIL" } };
@@ -792,6 +792,13 @@ export async function createOrder(
         }
       }
 
+      if (guestLoyalty) {
+        await tx.guestLoyaltyMembership.upsert({
+          where: { email: guestLoyalty.email },
+          create: { email: guestLoyalty.email, consentVersion: guestLoyalty.consentVersion, consentAt: guestLoyalty.consentAt },
+          update: { consentVersion: guestLoyalty.consentVersion, consentAt: guestLoyalty.consentAt },
+        });
+      }
       const number = await nextOrderNumber(tx);
 
       const order = await tx.order.create({

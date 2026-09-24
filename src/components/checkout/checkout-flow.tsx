@@ -258,11 +258,28 @@ export function CheckoutFlow({
   });
   const isAuthenticatedCustomer = initialCustomer?.authenticated === true;
   const guestLoyalty = useGuestLoyalty();
-  const useGuestBenefits = !isAuthenticatedCustomer && Boolean(guestLoyalty.email);
+  const useGuestBenefits = !isAuthenticatedCustomer && guestLoyalty.active;
+  const loyaltyEmail = normalizeLoyaltyEmail(shippingEmail);
+  const [loyaltyCheck, setLoyaltyCheck] = useState<{ email: string; eligible: boolean } | null>(null);
   const effectiveFirstPurchaseEligible = firstPurchaseEligible ||
-    (useGuestBenefits && guestLoyalty.firstPurchase && normalizeLoyaltyEmail(shippingEmail) === guestLoyalty.email);
+    (useGuestBenefits && loyaltyCheck?.email === loyaltyEmail && loyaltyCheck.eligible);
   useEffect(() => {
-    if (useGuestBenefits && !getValues("shipping.email")) {
+    if (!useGuestBenefits || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loyaltyEmail)) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      void fetch("/api/loyalty/eligibility", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: loyaltyEmail }), signal: controller.signal,
+      }).then(async (response) => {
+        if (!response.ok) throw new Error("Eligibility unavailable");
+        const data = await response.json();
+        if (!controller.signal.aborted) setLoyaltyCheck({ email: loyaltyEmail, eligible: data.firstPurchase === true });
+      }).catch(() => { /* Final order pricing remains authoritative. */ });
+    }, 350);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [useGuestBenefits, loyaltyEmail]);
+  useEffect(() => {
+    if (useGuestBenefits && guestLoyalty.email && !getValues("shipping.email")) {
       setValue("shipping.email", guestLoyalty.email!);
     }
   }, [useGuestBenefits, guestLoyalty.email, getValues, setValue]);
@@ -357,7 +374,7 @@ export function CheckoutFlow({
     [lines],
   );
 
-  const deliveryQuoteKey = `${shippingCity.trim().toLocaleLowerCase("sr-Latn-RS")}|${quoteLineKey}|${guestLoyalty.email ?? ""}`;
+  const deliveryQuoteKey = `${shippingCity.trim().toLocaleLowerCase("sr-Latn-RS")}|${quoteLineKey}|${guestLoyalty.active}`;
   const deliveryQuote = resolvedDeliveryQuote.quote;
   const deliveryQuoteIsCurrent =
     hydrated &&
@@ -617,10 +634,6 @@ export function CheckoutFlow({
 
   const onSubmit: SubmitHandler<CheckoutFormData> = async (data) => {
     setSubmitError(null);
-    if (useGuestBenefits && normalizeLoyaltyEmail(data.shipping.email) !== guestLoyalty.email) {
-      setSubmitError(`Za loyalty popuste koristite potvrđeni mejl ${guestLoyalty.email}, ili u korpi potvrdite novu adresu.`);
-      return;
-    }
     if (!deliveryQuoteIsPayable) {
       setSubmitError(
         deliveryQuoteIsCurrent
@@ -869,6 +882,7 @@ export function CheckoutFlow({
                   ) : null}
                   {step === "shipping" ? (
                     <div className="flex flex-col gap-4 sm:gap-5">
+                      {useGuestBenefits && <p role="status" className="rounded-lg bg-muted-bg p-3 text-sm text-ink-700">Loyalty popust je aktivan. Mejl je obavezan za evidenciju članstva.{loyaltyCheck?.email === loyaltyEmail ? (loyaltyCheck.eligible ? " Primenjeno je i dodatnih 15% za prvu kupovinu." : " Pogodnost za prvu kupovinu je već iskorišćena.") : " Po unosu mejla proveravamo i dodatnih 15% za prvu kupovinu."}</p>}
                       <ShippingForm
                         xExpressAddressEnabled={xExpressAddressEnabled}
                       />
@@ -1413,8 +1427,8 @@ function readCreateOrderError(
       return "Proverite obavezna polja i saglasnost pre potvrde porudžbine.";
     case "GUEST_REQUIRES_EMAIL":
       return "Unesite e-mail adresu za porudžbinu kao gost.";
-    case "LOYALTY_VERIFICATION_REQUIRED":
-      return "Potvrdite mejl za loyalty pogodnosti u korpi, pa ponovo proverite porudžbinu.";
+    case "LOYALTY_CONSENT_REQUIRED":
+      return "Prihvatite saglasnost za loyalty pogodnosti u korpi, pa ponovo proverite porudžbinu.";
     case "DELIVERY_POINT_INVALID":
       return "Izabrana MyGLS paket tačka više nije dostupna. Izaberite drugu lokaciju ili dostavu na adresu.";
     case "DELIVERY_ADDRESS_INVALID":

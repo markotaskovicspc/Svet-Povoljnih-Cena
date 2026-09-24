@@ -11,7 +11,7 @@ export interface CartLine {
   qty: number;
   unitPriceFull: number;
   unitPriceSale: number;
-  /** Loyalty offer visible to guests; payable only after customer login. */
+  /** Loyalty offer visible to guests; payable after customer login or guest loyalty consent. */
   unitPriceLoyalty?: number;
   loyaltyDiscountPct?: number;
   thumbnailUrl?: string;

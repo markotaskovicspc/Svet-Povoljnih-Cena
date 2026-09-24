@@ -11,7 +11,7 @@ export function useCartDeliveryQuote(
 ) {
   const member = useGuestLoyalty();
   const requestKey = JSON.stringify({
-    loyaltyEmail: member.email,
+    loyaltyActive: member.active,
     city: null,
     lines: lines
       .map((line) => ({ sku: line.sku, qty: line.qty }))

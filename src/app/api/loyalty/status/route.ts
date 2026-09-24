@@ -9,9 +9,10 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const member = await getGuestLoyaltyMember();
   return NextResponse.json({
+    active: Boolean(member),
     email: member?.email ?? null,
     pending: !member && await isLoyaltyConfirmationPending((await cookies()).get(LOYALTY_COOKIE)?.value),
-    firstPurchase: member ? await isFirstPurchaseDiscountEligible(null, member.email) : false,
+    firstPurchase: member?.email ? await isFirstPurchaseDiscountEligible(null, member.email) : false,
   }, { headers: { "Cache-Control": "private, no-store" } });
 }
 

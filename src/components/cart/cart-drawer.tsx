@@ -33,7 +33,7 @@ export function CartDrawer() {
   const subtotal = lines.reduce((n, l) => n + l.unitPriceSale * l.qty, 0);
   const guestLoyalty = useGuestLoyalty();
   const loggedIn = useLoyaltyEligibility();
-  const firstPurchaseDiscount = !loggedIn && guestLoyalty.email && guestLoyalty.firstPurchase
+  const firstPurchaseDiscount = !loggedIn && guestLoyalty.active && guestLoyalty.firstPurchase
     ? Math.round(subtotal * FIRST_PURCHASE_PCT / 100) : 0;
   const savings = lines.reduce(
     (n, l) => n + (l.unitPriceFull - l.unitPriceSale) * l.qty,

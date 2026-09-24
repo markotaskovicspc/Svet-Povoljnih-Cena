@@ -16,7 +16,7 @@ export function CartPricingSync() {
   const pathname = usePathname();
   const loggedIn = useLoyaltyEligibility();
   const guestLoyalty = useGuestLoyalty();
-  const loyaltyEligible = loggedIn || Boolean(guestLoyalty.email);
+  const loyaltyEligible = loggedIn || guestLoyalty.active;
   const checkoutStep = useCheckout((state) => state.step);
   const hydrated = useCart((state) => state.hydrated);
   const skuKey = useCart((state) =>
@@ -53,6 +53,7 @@ export function CartPricingSync() {
           }),
         );
         const products = payloads.flatMap((payload) => payload.products ?? []);
+        if (controller.signal.aborted) return;
         reprice(
           products.map((product) => {
             const quote = resolveProductPriceQuote(product, {

@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
-import { loyaltySavings } from "@/lib/loyalty/shared";
+import { loyaltySavings, appliedLoyaltySavings, LOYALTY_CONSENT_VERSION } from "@/lib/loyalty/shared";
 
 const { tx } = vi.hoisted(() => ({ tx: {
   verificationToken: { findUnique: vi.fn(), deleteMany: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
   guestLoyaltyMembership: { upsert: vi.fn(), update: vi.fn(), findUnique: vi.fn() },
 } }));
 vi.mock("@/lib/db", () => ({ db: { ...tx, $transaction: (fn: (client: typeof tx) => unknown) => fn(tx) } }));
-import { confirmLoyalty, loyaltyMemberForSession, requestLoyaltyConfirmation } from "@/lib/loyalty/service.server";
+import { acceptLoyaltyConsent, LOYALTY_SESSION_SECONDS, confirmLoyalty, loyaltyMemberForSession, requestLoyaltyConfirmation } from "@/lib/loyalty/service.server";
 
 const token = "a".repeat(64);
 describe("email-only loyalty", () => {
@@ -97,5 +97,37 @@ describe("email-only loyalty", () => {
     expect(await loyaltyMemberForSession(emailBrowserSession!)).toEqual(expect.objectContaining({ email: "buyer@example.com" }));
     expect(await loyaltyMemberForSession(first.browserSession)).toBeNull();
     expect(await confirmLoyalty(replacement.token)).toBeNull();
+  });
+});
+
+
+describe("immediate guest loyalty consent", () => {
+  beforeEach(() => vi.resetAllMocks());
+  it("activates an anonymous session without email, account, or verified membership", async () => {
+    const before = Date.now();
+    const raw = await acceptLoyaltyConsent();
+    const record = tx.verificationToken.create.mock.calls[0][0].data;
+    expect(record.token).toBe(createHash("sha256").update(raw).digest("hex"));
+    expect(record.identifier).toBe(`loyalty-consent:${LOYALTY_CONSENT_VERSION}`);
+    expect(tx.guestLoyaltyMembership.upsert).not.toHaveBeenCalled();
+    tx.verificationToken.findUnique.mockResolvedValue(record);
+    const member = await loyaltyMemberForSession(raw);
+    expect(member).toMatchObject({ email: null, verifiedAt: null, consentVersion: LOYALTY_CONSENT_VERSION });
+    expect(member!.consentAt.getTime()).toBeGreaterThanOrEqual(before);
+    expect(record.expires.getTime() - member!.consentAt.getTime()).toBe(LOYALTY_SESSION_SECONDS * 1000);
+    expect(tx.guestLoyaltyMembership.findUnique).not.toHaveBeenCalled();
+  });
+  it("does not accept expired consent or an unknown consent version", async () => {
+    tx.verificationToken.findUnique.mockResolvedValue({ identifier: `loyalty-consent:${LOYALTY_CONSENT_VERSION}`, expires: new Date(0) });
+    expect(await loyaltyMemberForSession(token)).toBeNull();
+    tx.verificationToken.findUnique.mockResolvedValue({ identifier: "loyalty-consent:unknown", expires: new Date(Date.now() + 60_000) });
+    expect(await loyaltyMemberForSession(token)).toBeNull();
+  });
+  it("separates applied loyalty savings from promotions and counts quantities", () => {
+    expect(appliedLoyaltySavings([
+      { qty: 2, unitPriceFull: 1000, unitPriceSale: 700, unitPriceLoyalty: 700 },
+      { qty: 1, unitPriceFull: 1000, unitPriceSale: 600 },
+      { qty: 1, unitPriceFull: 1000, unitPriceSale: 1000, unitPriceLoyalty: 700 },
+    ])).toBe(600);
   });
 });
