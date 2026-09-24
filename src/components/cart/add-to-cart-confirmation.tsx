@@ -7,12 +7,15 @@ import { ArrowRight, Check, ShoppingBag } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useCart } from "@/lib/hooks/use-cart";
 import { useCartUi } from "@/lib/hooks/use-cart-ui";
+import { GuestLoyaltyOffer } from "./guest-loyalty-offer";
+import { appliedLoyaltySavings } from "@/lib/loyalty/shared";
 import { formatRsd } from "@/lib/format";
 
 export function AddToCartConfirmation() {
   const added = useCartUi((state) => state.addedItem);
   const close = useCartUi((state) => state.closeAddedItem);
   const lines = useCart((state) => state.lines);
+  const loyaltyDiscount = appliedLoyaltySavings(lines);
   const heading = useRef<HTMLDivElement>(null);
   const line = lines.find((item) => item.sku === added?.line.sku) ?? added?.line;
   const count = lines.reduce((sum, item) => sum + item.qty, 0);
@@ -38,11 +41,13 @@ export function AddToCartConfirmation() {
             <p className="mt-1 text-lg font-semibold text-ink-900">{formatRsd(line.unitPriceSale)} <span className="text-xs font-normal text-ink-500">/ kom.</span></p>
           </div>
         </div>
-        <div className="mt-6 flex items-center justify-between gap-4 rounded-xl bg-muted-bg px-4 py-3 text-sm">
+        <div className="mt-5"><GuestLoyaltyOffer /></div>
+        {loyaltyDiscount > 0 && <p aria-live="polite" className="mt-3 flex justify-between text-sm font-semibold text-action"><span>Loyalty popust</span><span>−{formatRsd(loyaltyDiscount)}</span></p>}
+        <div className="mt-4 flex items-center justify-between gap-4 rounded-xl bg-muted-bg px-4 py-3 text-sm">
           <span className="text-ink-700">Artikli u korpi <span className="ml-1 text-ink-500">({count})</span></span>
           <span className="font-semibold text-ink-900">{formatRsd(subtotal)}</span>
         </div>
-        <p className="mt-2 text-xs text-ink-500">Dostavu i dostupne popuste proverite u korpi.</p>
+        <p className="mt-2 text-xs text-ink-500">Dostava se obračunava u korpi.</p>
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
           <Link href="/korpa" onClick={close} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-ink-900 px-5 py-3 text-sm font-semibold text-canvas transition hover:bg-walnut focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 sm:order-2">Idi u korpu<ArrowRight className="size-4" aria-hidden /></Link>
           <button type="button" onClick={close} className="inline-flex min-h-12 items-center justify-center rounded-full border border-border px-5 py-3 text-sm font-semibold text-ink-900 transition hover:bg-muted-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900 sm:order-1">Nastavi kupovinu</button>

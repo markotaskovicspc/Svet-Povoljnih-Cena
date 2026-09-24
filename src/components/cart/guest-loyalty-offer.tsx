@@ -2,7 +2,9 @@
 import { useId, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { CheckCircle2, Gift, ArrowRight, ChevronDown } from "lucide-react";
+import { Gift } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { useLoyaltyEligibility } from "@/components/pricing/pricing-eligibility";
 import { useCart } from "@/lib/hooks/use-cart";
 import { formatRsd } from "@/lib/format";
 import { LOYALTY_CONSENT_SECTIONS, LOYALTY_CONSENT_VERSION, loyaltySavings, appliedLoyaltySavings } from "@/lib/loyalty/shared";
@@ -13,8 +15,8 @@ export function GuestLoyaltyOffer() {
   const lines = useCart((state) => state.lines);
   const member = useGuestLoyalty();
   const [open, setOpen] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const [consent, setConsent] = useState(false);
+  const loggedIn = useLoyaltyEligibility();
+  const { status, data: session } = useSession();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const id = useId();
@@ -22,13 +24,12 @@ export function GuestLoyaltyOffer() {
   const savings = loyaltySavings(lines);
   const appliedSavings = appliedLoyaltySavings(lines);
 
-  async function request(event: React.FormEvent) {
-    event.preventDefault();
+  async function request() {
     setBusy(true); setError("");
     try {
       const response = await fetch("/api/loyalty/request", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ consent, consentVersion: LOYALTY_CONSENT_VERSION }),
+        body: JSON.stringify({ consent: true, consentVersion: LOYALTY_CONSENT_VERSION }),
       });
       const result = await response.json();
       if (!response.ok || !result.ok) throw new Error(result.message || "Aktivacija nije uspela. Pokušajte ponovo.");
@@ -53,23 +54,17 @@ export function GuestLoyaltyOffer() {
     finally { setBusy(false); }
   }
 
-  return <section className="overflow-hidden rounded-xl border border-border bg-white p-5" aria-label="Loyalty pogodnosti">
-    {member.active ? <>
-      <p className="flex items-center gap-2 font-semibold text-ink-900"><CheckCircle2 className="size-5 text-action" aria-hidden />Loyalty pogodnosti su aktivne</p>
-      {appliedSavings > 0 && <p className="mt-3 text-lg font-semibold text-action">Loyalty ušteda: {formatRsd(appliedSavings)}</p>}
-      <p role="status" className="mt-2 text-sm text-ink-700">Popust je primenjen na artikle van akcije. Nastavite na unos podataka za porudžbinu.</p>
-      <p className="mt-1 text-sm text-ink-700">Mejl unosite pri poručivanju. Tada proveravamo i dodatnih 15% za prvu kupovinu.</p>
-      <button type="button" disabled={busy} onClick={removeBenefits} className="mt-2 text-sm underline">Ukloni loyalty pogodnosti iz ove korpe</button>
-    </> : <>
-      <button type="button" aria-expanded={expanded} aria-controls={`${id}-offer`} onClick={() => setExpanded(!expanded)} className="flex w-full items-center gap-3 text-left font-semibold text-action focus-visible:outline-2 focus-visible:outline-action"><Gift className="size-5 shrink-0" aria-hidden /><span className="flex-1">Ostvarite loyalty popust</span><ChevronDown className={`size-4 transition-transform ${expanded ? "rotate-180" : ""}`} aria-hidden /></button>
-      {savings > 0 && <p className="mt-3 text-sm text-ink-700">Uštedite još <strong className="text-action">{formatRsd(savings)}</strong> na ovoj korpi.</p>}
-      <div id={`${id}-offer`} hidden={!expanded} className="mt-4 border-t border-border/60 pt-4">
-        <p className="text-sm leading-relaxed text-ink-700">Prihvatite saglasnost i odmah ostvarite <strong>30% na artikle van akcije</strong>, uz dodatnih <strong>15% za prvu kupovinu</strong>.</p>
-        <p className="mt-2 text-xs text-ink-500">Bez kreiranja naloga. Bez fizičke kartice.</p>
-        <button type="button" onClick={() => setOpen(true)} className="mt-4 flex w-full items-center justify-between gap-3 rounded-lg bg-muted-bg px-4 py-4 text-sm font-semibold text-ink-900 transition hover:bg-action/10"><span className="flex items-center gap-3"><Gift className="size-5 text-action" aria-hidden />Želim loyalty pogodnosti</span><ArrowRight className="size-4" aria-hidden /></button>
-      </div>
-    </>}
-    {error && !open ? <p role="alert" className="mt-2 text-sm text-action">{error}</p> : null}
+  if (loggedIn || status === "loading" || (status === "authenticated" && session?.user?.userType === "customer") || !lines.length) return null;
+
+  return <section className="rounded-xl border border-action/20 bg-action/[0.03] p-4" aria-label="Loyalty pogodnosti" aria-busy={busy}>
+    <p className="flex items-center gap-2 text-sm font-semibold text-action"><Gift className="size-5 shrink-0" aria-hidden />{member.active ? "Loyalty popust je primenjen" : "Ostvarite loyalty popust"}</p>
+    <p className="mt-1.5 text-sm text-ink-700" aria-live="polite">{member.active ? (appliedSavings > 0 ? <>Uštedeli ste <strong className="text-action">{formatRsd(appliedSavings)}</strong> na ovoj korpi.</> : "Pogodnosti su aktivne za vašu kupovinu.") : (savings > 0 ? <>Uštedite odmah <strong className="text-action">{formatRsd(savings)}</strong> na ovoj korpi.</> : "30% popusta na artikle van akcije.")}</p>
+    <label htmlFor={id} className="mt-3 flex cursor-pointer items-start gap-3 text-sm font-medium leading-5 text-ink-900">
+      <input id={id} type="checkbox" checked={member.active} disabled={busy || !member.ready} onChange={(event) => { if (event.target.checked) void request(); else void removeBenefits(); }} aria-describedby={`${id}-consent`} className="mt-0.5 size-5 shrink-0 accent-ink-900 disabled:cursor-wait" />
+      <span>{busy ? "Obračunavam pogodnosti…" : "Želim da pristupim loyalty programu"}</span>
+    </label>
+    <p id={`${id}-consent`} className="mt-2 text-xs leading-5 text-ink-500">Označavanjem prihvatate <button type="button" onClick={() => setOpen(true)} className="font-medium text-ink-700 underline underline-offset-2">izjavu o saglasnosti</button>. Bez naloga i kartice. Dodatnih 15% za prvu kupovinu proveravamo po unosu mejla pri poručivanju.</p>
+    {error && <p role="alert" className="mt-2 text-sm text-action">{error}</p>}
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetContent initialFocus={panelHeader} className="w-full! max-w-full! gap-0! overflow-hidden bg-white! sm:max-w-[560px]!">
         <SheetHeader ref={panelHeader} tabIndex={-1} className="shrink-0 border-b border-border/60 px-6 py-6 pr-12 outline-none sm:px-8 sm:pr-14">
@@ -77,7 +72,6 @@ export function GuestLoyaltyOffer() {
           <SheetDescription>Jedna saglasnost. Popust odmah u korpi.</SheetDescription>
         </SheetHeader>
         <div className="flex min-h-0 flex-1 flex-col">
-          {member.active ? <div role="status" className="flex flex-1 flex-col items-center justify-center px-8 text-center"><CheckCircle2 className="mb-5 size-14 text-success" aria-hidden /><h3 className="text-2xl font-semibold">Dobro došli u SPC loyalty</h3><p className="mt-3 text-ink-500">Pogodnosti su aktivne u vašoj korpi.</p><button type="button" onClick={() => setOpen(false)} className="mt-8 rounded-lg bg-ink-900 px-6 py-3 font-semibold text-white">Nastavi kupovinu</button></div> : <form onSubmit={request} className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-6 sm:px-8">
               <div className="overflow-hidden rounded-2xl bg-ink-900 text-white">
                 <Image src="/images/loyalty/spc-loyalty-email.png" alt="SPC loyalty pogodnosti za povoljniju kupovinu" width={1536} height={1024} sizes="(max-width: 560px) 100vw, 496px" className="aspect-[2/1] w-full object-cover" />
@@ -94,12 +88,9 @@ export function GuestLoyaltyOffer() {
               <Link href="/politika-privatnosti" target="_blank" className="mt-2 inline-block underline">Politika privatnosti</Link>
             </div>
             </div>
-            <div className="shrink-0 space-y-3 border-t border-border bg-white px-6 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(0,0,0,0.04)] sm:px-8">
-            <label className="flex cursor-pointer items-start gap-3 text-xs leading-5 text-ink-700"><input type="checkbox" required checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5 size-4 shrink-0 accent-ink-900" /><span>Želim da pristupim loyalty programu i saglasan/a sam sa navedenom obradom podataka.</span></label>
-            {error ? <p role="alert" className="text-sm text-action">{error}</p> : null}
-            <button type="submit" disabled={busy || !consent} className="w-full rounded-lg bg-ink-900 px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-walnut disabled:bg-muted-bg disabled:text-ink-500">{busy ? "Aktiviram pogodnosti…" : "Prihvati i primeni popust"}</button>
+            <div className="shrink-0 border-t border-border bg-white px-6 py-4 sm:px-8">
+              <button type="button" onClick={() => setOpen(false)} className="w-full rounded-full bg-ink-900 px-5 py-3 text-sm font-semibold text-white">Nazad na kupovinu</button>
             </div>
-          </form>}
         </div>
       </SheetContent>
     </Sheet>

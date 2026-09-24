@@ -210,6 +210,7 @@ function CartSummary({
     >
       <div className="bg-surface ring-border/60 flex flex-col gap-3 rounded-2xl p-4 shadow-soft-2 ring-1 md:gap-4 md:p-5">
         <h2 className="font-display text-lg text-ink-900">Sažetak</h2>
+        <GuestLoyaltyOffer />
 
         <dl className="flex flex-col gap-2 text-sm">
           <div className="flex items-baseline justify-between">
@@ -314,7 +315,7 @@ function CartSummary({
           </span>
         </div>
 
-        <CartLoginOffer />
+        <CartLoginOffer hideLoyalty />
 
         <Link
           href="/checkout/podaci"
@@ -352,9 +353,11 @@ export function CartLoginOfferCopy() {
 export function CartLoginOffer({
   onNavigate,
   reopenDrawerAfterLogin = false,
+  hideLoyalty = false,
 }: {
   onNavigate?: () => void;
   reopenDrawerAfterLogin?: boolean;
+  hideLoyalty?: boolean;
 } = {}) {
   const loyaltyEligible = useLoyaltyEligibility();
   const { data: session, status } = useSession();
@@ -371,7 +374,7 @@ export function CartLoginOffer({
       ) : (
         <CartLoginOfferLink onNavigate={onNavigate} />
       )}
-      <GuestLoyaltyOffer />
+      {!hideLoyalty && <GuestLoyaltyOffer />}
     </div>
   );
 }
