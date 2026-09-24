@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getGuestLoyaltyMember } from "@/lib/loyalty/session.server";
-import { LOYALTY_COOKIE, revokeLoyaltySession } from "@/lib/loyalty/service.server";
+import { LOYALTY_COOKIE, revokeLoyaltySession, isLoyaltyConfirmationPending } from "@/lib/loyalty/service.server";
 import { isFirstPurchaseDiscountEligible } from "@/lib/checkout/first-purchase.server";
 
 export const runtime = "nodejs";
@@ -10,6 +10,7 @@ export async function GET() {
   const member = await getGuestLoyaltyMember();
   return NextResponse.json({
     email: member?.email ?? null,
+    pending: !member && await isLoyaltyConfirmationPending((await cookies()).get(LOYALTY_COOKIE)?.value),
     firstPurchase: member ? await isFirstPurchaseDiscountEligible(null, member.email) : false,
   }, { headers: { "Cache-Control": "private, no-store" } });
 }

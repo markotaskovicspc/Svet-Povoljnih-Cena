@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  const destination = new URL("/korpa", getEmailConfig().baseUrl);
+  const destination = new URL("/loyalty/potvrda", getEmailConfig().baseUrl);
   try {
     const session = await confirmLoyalty(new URL(req.url).searchParams.get("token") ?? "");
     destination.searchParams.set("loyalty", session ? "confirmed" : "invalid");

@@ -11,6 +11,7 @@ const validToken = (token: string) => /^[a-f0-9]{64}$/.test(token);
 export async function requestLoyaltyConfirmation(rawEmail: string) {
   const email = normalizeLoyaltyEmail(rawEmail);
   const token = randomBytes(32).toString("hex");
+  const browserSession = randomBytes(32).toString("hex");
   const identifier = `loyalty-confirm:${email}`;
   await db.$transaction(async (tx) => {
     await tx.guestLoyaltyMembership.upsert({
@@ -22,8 +23,12 @@ export async function requestLoyaltyConfirmation(rawEmail: string) {
     await tx.verificationToken.create({ data: {
       identifier, token: digest(token), expires: new Date(Date.now() + 30 * 60_000),
     } });
+    await tx.verificationToken.create({ data: {
+      identifier: `loyalty-pending:${digest(token)}`, token: digest(browserSession),
+      expires: new Date(Date.now() + 30 * 60_000),
+    } });
   });
-  return token;
+  return { token, browserSession };
 }
 
 export async function confirmLoyalty(token: string) {
@@ -37,6 +42,12 @@ export async function confirmLoyalty(token: string) {
     if (claimed.count !== 1) return null;
     const email = record.identifier.slice("loyalty-confirm:".length);
     await tx.guestLoyaltyMembership.update({ where: { email }, data: { verifiedAt: new Date() } });
+    // Only the browser that requested this exact email link is activated.
+    // Existing membership alone must never authorize a new browser.
+    await tx.verificationToken.updateMany({
+      where: { identifier: `loyalty-pending:${record.token}`, expires: { gt: new Date() } },
+      data: { identifier: `loyalty-session:${email}`, expires: new Date(Date.now() + LOYALTY_SESSION_SECONDS * 1000) },
+    });
     const session = randomBytes(32).toString("hex");
     await tx.verificationToken.create({ data: {
       identifier: `loyalty-session:${email}`, token: digest(session),
@@ -58,6 +69,15 @@ export async function loyaltyMemberForSession(token?: string) {
 
 export async function revokeLoyaltySession(token?: string) {
   if (token && validToken(token)) await db.verificationToken.deleteMany({
-    where: { token: digest(token), identifier: { startsWith: "loyalty-session:" } },
+    where: { token: digest(token), OR: [
+      { identifier: { startsWith: "loyalty-session:" } },
+      { identifier: { startsWith: "loyalty-pending:" } },
+    ] },
   });
+}
+
+export async function isLoyaltyConfirmationPending(token?: string) {
+  if (!token || !validToken(token)) return false;
+  const record = await db.verificationToken.findUnique({ where: { token: digest(token) } });
+  return Boolean(record?.identifier.startsWith("loyalty-pending:") && record.expires > new Date());
 }

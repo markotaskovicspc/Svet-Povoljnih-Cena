@@ -3,7 +3,12 @@
 Cart page and mini-cart offer membership and display additional loyalty savings
 from the current product quotes. Consent plus an email request sends a 30-minute,
 single-use confirmation link. Confirmation creates an HttpOnly, 30-day loyalty
-session and redirects to the cart. It does not create or authenticate a User,
+session and opens a dedicated confirmation page. The requesting browser receives
+a separate, initially inactive HttpOnly token. Only confirmation of that exact
+request promotes it to a session; the cart refreshes status while pending and on
+focus. Opening email in another browser activates both sessions, without copying
+or replacing carts. The confirmation page directs the customer back to the
+original browser when the current browser has no cart. It does not create or authenticate a User,
 issue a card number, or subscribe the customer to marketing.
 
 The server validates membership and requires the checkout email to match the
