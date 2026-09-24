@@ -1,3 +1,4 @@
+import { AnanasSummary } from "@/components/admin/ananas-summary";
 import { db } from "@/lib/db";
 import { Suspense } from "react";
 import { getDashboardOperations, type DashboardDataInput, type DashboardOperations } from "@/lib/admin/dashboard-data";
@@ -44,7 +45,7 @@ export default async function AdminDashboard({
         description="Dnevni pregled, sačuvani poslovni periodi i jedinstven magacinski kontekst."
       />
       <Suspense fallback={<DashboardPending label="Učitavanje filtera…" />}>
-        <DashboardBody adminId={admin.id} sp={sp} />
+        <DashboardBody adminId={admin.id} sp={sp} canViewAnanas={admin.role === "OPS" || admin.role === "SUPER"} />
       </Suspense>
     </>
   );
@@ -54,7 +55,7 @@ function DashboardPending({ label }: { label: string }) {
   return <div role="status" className="rounded-xl border border-border/60 bg-surface p-6 text-sm text-ink-500">{label}</div>;
 }
 
-async function DashboardBody({ adminId, sp }: { adminId: string; sp: DashboardParams }) {
+async function DashboardBody({ adminId, sp, canViewAnanas }: { adminId: string; sp: DashboardParams; canViewAnanas: boolean }) {
   const explicitContext = cleanDashboardContext(sp);
   const hasExplicitContext = hasDashboardContext(sp);
 
@@ -140,6 +141,7 @@ async function DashboardBody({ adminId, sp }: { adminId: string; sp: DashboardPa
           </p>
         </div>
 
+        {canViewAnanas && <Suspense fallback={<DashboardPending label="Učitavanje Ananas pregleda…" />}><AnanasSummary period={fiscalPeriod} /></Suspense>}
         <section aria-label="Ključni pokazatelji" className="space-y-8">
           <Suspense key={`operations-${sectionKey}`} fallback={<DashboardPending label="Učitavanje porudžbina i zaliha…" />}>
             <OperationalCards data={operations} input={input} warehouseLabel={warehouseLabel} />

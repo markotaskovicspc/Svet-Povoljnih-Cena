@@ -24,12 +24,12 @@ describe("hourly all-channel fiscal reconciliation", () => {
     mocks.enqueueBackgroundJob.mockResolvedValue({ id: "job-1", status: "QUEUED" });
   });
 
-  it("scans eligible orders from every sales channel without a SALE document", async () => {
+  it("scans eligible orders excluding externally fiscalized Ananas without a SALE document", async () => {
     await enqueueEligibleOrdersForFiscalization(25);
 
     expect(mocks.orderFindMany).toHaveBeenCalledWith({
       where: {
-        channel: { in: ["WEB", "ANANAS", "MP", "VP", "INO"] },
+        channel: { in: ["WEB", "MP", "VP", "INO"] },
         status: { notIn: ["OTKAZANO", "VRACENO"] },
         total: { gt: 0 },
         items: { some: {} },

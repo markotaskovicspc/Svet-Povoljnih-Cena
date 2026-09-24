@@ -3875,3 +3875,43 @@ model ProductArDailyCount {
 
   @@id([day, slug, event])
 }
+
+/// External receipts only. Never creates an Order, local fiscal job or stock movement.
+model AnanasDocument {
+  id             String   @id @default(cuid())
+  kind           String
+  externalId     String
+  fiscalNumber   String
+  reference      String?
+  orderNumber    String
+  suborderNumber String
+  issuedAt       DateTime
+  invoicedAt     DateTime
+  gross          Decimal  @db.Decimal(16, 2)
+  net            Decimal  @db.Decimal(16, 2)
+  vat            Decimal  @db.Decimal(16, 2)
+  paymentMethods String
+  items          Json
+  importedAt     DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([kind, externalId])
+  @@unique([kind, fiscalNumber])
+  @@index([issuedAt, kind])
+  @@index([suborderNumber])
+}
+
+model AnanasSyncRun {
+  id          String   @id @default(cuid())
+  source      String
+  status      String
+  from        DateTime
+  to          DateTime
+  count       Int      @default(0)
+  error       String?
+  startedAt   DateTime @default(now())
+  finishedAt  DateTime?
+
+  @@index([startedAt])
+  @@index([source, status, to])
+}

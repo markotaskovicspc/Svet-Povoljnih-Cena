@@ -89,6 +89,10 @@ export async function issueFiscalSale(input: {
     return { ok: false, reason: "not_found", error: `Porudžbina ${input.orderId} ne postoji.` };
   }
 
+  if (order.channel === "ANANAS") {
+    return { ok: false, reason: "gateway_failure", error: "Račun za Ananas porudžbinu izdaje Ananas. Preuzmite ga u Ananas pregledu." };
+  }
+
   const selectedIds = input.orderItemIds?.length ? new Set(input.orderItemIds) : null;
   const candidates = order.items.filter((item) => !selectedIds || selectedIds.has(item.id));
   if (!candidates.length) {
