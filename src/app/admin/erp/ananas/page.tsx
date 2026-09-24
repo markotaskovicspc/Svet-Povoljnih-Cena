@@ -8,6 +8,7 @@ import { formatRsd } from "@/lib/format";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle } from "@/components/admin/card";
 import { AnanasSummary } from "@/components/admin/ananas-summary";
+import { AnanasOrdersPanel } from "@/components/admin/ananas-orders-panel";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { importAnanas } from "./actions";
@@ -18,7 +19,7 @@ export const metadata = { title: "Ananas — računi i promet", robots: { index:
 function staleRun(startedAt: Date) { return Date.now() - startedAt.getTime() > 300000; }
 const date = (value: Date) => value.toLocaleString("sr-Latn-RS", { timeZone: "Europe/Belgrade" });
 
-export default async function AnanasPage({ searchParams }: { searchParams: Promise<{ from?: string; to?: string; page?: string; q?: string; kind?: string }> }) {
+export default async function AnanasPage({ searchParams }: { searchParams: Promise<{ from?: string; to?: string; page?: string; q?: string; kind?: string; view?: string }> }) {
   await requireAdminAction(["OPS"]);
   const sp = await searchParams;
   const period = resolveReportPeriod({ range: "custom", from: sp.from, to: sp.to });
@@ -32,7 +33,7 @@ export default async function AnanasPage({ searchParams }: { searchParams: Promi
   const page = Math.min(pages, Math.max(1, Math.floor(Number(sp.page) || 1)));
   const [rows, runs] = await Promise.all([
     db.ananasDocument.findMany({ where, orderBy: [{ issuedAt: "desc" }, { id: "desc" }], take: 50, skip: (page - 1) * 50 }),
-    db.ananasSyncRun.findMany({ orderBy: { startedAt: "desc" }, take: 5 }),
+    db.ananasSyncRun.findMany({ where: { source: { in: ["AUTO", "MANUAL"] } }, orderBy: { startedAt: "desc" }, take: 5 }),
   ]);
   const configured = ananasConfigured();
   const canImport = configured && period.endExclusive.getTime() - period.start.getTime() <= 31 * 86400000 + 3600000;
@@ -40,15 +41,18 @@ export default async function AnanasPage({ searchParams }: { searchParams: Promi
   return <>
     <PageHeader title="Ananas" description="Fiskalne račune izdaje Ananas. Ovde ih preuzimate i pratite promet i refundacije." />
     <div className="space-y-6 px-4 py-6 md:px-8">
+      <nav className="flex gap-3 text-sm"><Link className={`rounded-lg border px-4 py-2 ${sp.view !== "orders" ? "bg-muted font-semibold" : ""}`} href={`?from=${period.fromInput}&to=${period.toInput}`}>Računi i refundacije</Link><Link className={`rounded-lg border px-4 py-2 ${sp.view === "orders" ? "bg-muted font-semibold" : ""}`} href={`?view=orders&from=${period.fromInput}&to=${period.toInput}`}>Porudžbine</Link></nav>
       <Card>
         <form className="flex flex-wrap items-end gap-3">
+          {sp.view === "orders" && <input type="hidden" name="view" value="orders" />}
           <label className="text-sm">Od<input className="mt-1 block rounded-lg border p-2" type="date" name="from" defaultValue={period.fromInput} required /></label>
           <label className="text-sm">Do<input className="mt-1 block rounded-lg border p-2" type="date" name="to" defaultValue={period.toInput} required /></label>
-          <label className="text-sm">Dokumenti<select className="mt-1 block rounded-lg border p-2" name="kind" defaultValue={kind ?? ""}><option value="">Svi</option><option value="SALE">Računi</option><option value="REFUND">Refundacije</option></select></label>
+          {sp.view !== "orders" && <label className="text-sm">Dokumenti<select className="mt-1 block rounded-lg border p-2" name="kind" defaultValue={kind ?? ""}><option value="">Svi</option><option value="SALE">Računi</option><option value="REFUND">Refundacije</option></select></label>}
           <label className="text-sm">Pretraga<input className="mt-1 block rounded-lg border p-2" name="q" defaultValue={q} placeholder="Broj računa ili porudžbine" maxLength={200} /></label>
           <button className="rounded-lg border px-4 py-2 text-sm">Prikaži</button>
         </form>
       </Card>
+      {sp.view === "orders" ? <AnanasOrdersPanel period={period} query={q} page={sp.page} /> : <>
       <AnanasSummary period={period} />
       <Card>
         <CardTitle>Povezivanje i preuzimanje</CardTitle>
@@ -73,6 +77,7 @@ export default async function AnanasPage({ searchParams }: { searchParams: Promi
         {!rows.length && <p className="py-6 text-sm text-ink-500">Nema preuzetih dokumenata za izabrane filtere. Proverite period i status uvoza.</p>}
         <div className="mt-4 flex gap-4 text-sm">{page > 1 && <Link href={pageUrl(page - 1)}>← Prethodna</Link>}<span>Strana {page} / {pages}</span>{page < pages && <Link href={pageUrl(page + 1)}>Sledeća →</Link>}</div>
       </Card>
+      </>}
     </div>
   </>;
 }

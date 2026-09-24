@@ -3899,6 +3899,7 @@ model AnanasDocument {
   @@unique([kind, fiscalNumber])
   @@index([issuedAt, kind])
   @@index([suborderNumber])
+  @@index([orderNumber])
 }
 
 model AnanasSyncRun {
@@ -3914,4 +3915,25 @@ model AnanasSyncRun {
 
   @@index([startedAt])
   @@index([source, status, to])
+}
+
+/// Read-only API mirror. Isolated from local fulfillment, payment and stock jobs.
+model AnanasOrder {
+  id              String   @id
+  createdAt       DateTime
+  total           Decimal  @db.Decimal(16, 2)
+  currency        String
+  paymentMethods  String
+  customerName    String?
+  billingAddress  Json
+  items           Json
+  shipments       Json
+  status          String   @default("Čeka proveru")
+  needsRefresh    Boolean  @default(true)
+  lastCheckedAt   DateTime @default(dbgenerated("'1970-01-01 00:00:00'::timestamp"))
+  importedAt      DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([createdAt])
+  @@index([needsRefresh, lastCheckedAt])
 }

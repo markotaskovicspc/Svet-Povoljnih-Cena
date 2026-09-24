@@ -8,7 +8,7 @@ import { Card, CardTitle, StatCard } from "./card";
 export async function AnanasSummary({ period }: { period: ReportPeriod }) {
   const [summary, last] = await Promise.all([
     getAnanasSummary(period.start, period.endExclusive),
-    db.ananasSyncRun.findFirst({ where: { status: "SUCCESS" }, orderBy: { finishedAt: "desc" } }),
+    db.ananasSyncRun.findFirst({ where: { status: "SUCCESS", source: { in: ["AUTO", "MANUAL"] } }, orderBy: { finishedAt: "desc" } }),
   ]);
   return <Card>
     <CardTitle description={`Datum fiskalnog računa · ${period.label} · Svi Ananas magacini`}>Ananas</CardTitle>

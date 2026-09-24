@@ -45,4 +45,22 @@ export class AnanasClient {
     if (!document) throw new Error("Ananas nije vratio PDF za ovaj dokument.");
     return safeAnanasPdfUrl(document.link);
   }
+  async orders(params: URLSearchParams) { return this.pages("orders", params); }
+  async shipments(params: URLSearchParams) {
+    if (!params.has("search") && !params.has("statusGroup")) throw new Error("Ananas filter pošiljki je obavezan.");
+    return this.pages("outbound-orders/shipments", params);
+  }
+  private async pages(path: string, filters: URLSearchParams) {
+    const rows: unknown[] = [];
+    for (let page = 0; page < 50; page++) {
+      const params = new URLSearchParams(filters);
+      params.set("page", String(page)); params.set("size", "100");
+      await new Promise(resolve => setTimeout(resolve, 250));
+      const data = z.object({ content: z.array(z.unknown()).max(100), last: z.boolean() }).parse(await this.get(path, params));
+      rows.push(...data.content);
+      if (data.last) return rows;
+      if (!data.content.length) throw new Error("Ananas paginacija nije potpuna. Uvoz nije završen.");
+    }
+    throw new Error("Ananas period sadrži previše porudžbina. Izaberite kraći period.");
+  }
 }

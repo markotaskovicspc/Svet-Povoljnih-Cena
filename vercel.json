@@ -20,6 +20,7 @@
     "RABALUX_X_EXPRESS_LONGITUDE": "19.7837926"
   },
   "crons": [
+    { "path": "/api/cron/ananas-orders", "schedule": "7,22,37,52 * * * *" },
     { "path": "/api/cron/ananas", "schedule": "25 * * * *" },
     {
       "path": "/api/cron/background-jobs",
