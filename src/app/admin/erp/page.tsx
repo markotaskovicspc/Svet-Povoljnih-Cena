@@ -44,6 +44,7 @@ export default async function ErpDashboardPage() {
         }
       />
       <div className="space-y-8 px-8 py-6">
+        {isAuthorized(admin.role, ["OPS"]) && <Card><CardTitle>Ananas</CardTitle><p className="mb-3 text-sm text-ink-500">Preuzimanje fiskalnih računa i refundacija, pregled prometa i status povezivanja.</p><Link className="text-sm underline" href="/admin/erp/ananas">Otvori Ananas →</Link></Card>}
         <div className="grid grid-cols-3 gap-4">
           <StatCard
             label="Moduli"

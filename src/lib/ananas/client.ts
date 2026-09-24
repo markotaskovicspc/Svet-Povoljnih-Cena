@@ -1,0 +1,48 @@
+import "server-only";
+import { z } from "zod";
+import { envValue } from "@/lib/env";
+import { safeAnanasPdfUrl } from "./documents";
+
+const BASE = "https://api.ananas.rs";
+export function ananasConfigured() { return Boolean(envValue("ANANAS_CLIENT_ID") && envValue("ANANAS_CLIENT_SECRET")); }
+export class AnanasClient {
+  private token: string | null = null;
+  constructor(private readonly request: typeof fetch = fetch, private readonly deadline?: AbortSignal) {}
+  private signal(milliseconds: number) {
+    const timeout = AbortSignal.timeout(milliseconds);
+    return this.deadline ? AbortSignal.any([timeout, this.deadline]) : timeout;
+  }
+  private async authenticate() {
+    const clientId = envValue("ANANAS_CLIENT_ID"), clientSecret = envValue("ANANAS_CLIENT_SECRET");
+    if (!clientId || !clientSecret) throw new Error("Ananas produkcioni pristup nije podešen.");
+    const response = await this.request(`${BASE}/iam/api/v1/auth/token`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ grantType: "CLIENT_CREDENTIALS", clientId, clientSecret, scope: "public_api/full_access" }),
+      cache: "no-store", redirect: "error", signal: this.signal(25000),
+    });
+    if (!response.ok) throw new Error(`Ananas prijava je odbijena (HTTP ${response.status}). Proverite API pristup sa Ananas podrškom.`);
+    const payload = z.object({ access_token: z.string().min(10) }).parse(await response.json());
+    this.token = payload.access_token;
+  }
+  private async get(path: string, params: URLSearchParams) {
+    if (!this.token) await this.authenticate();
+    const send = () => this.request(`${BASE}/order/api/v1/merchant-integration/${path}?${params}`, {
+      headers: { Authorization: `Bearer ${this.token}`, Accept: "application/json" },
+      cache: "no-store", redirect: "error", signal: this.signal(45000),
+    });
+    let response = await send();
+    if (response.status === 401) { await this.authenticate(); response = await send(); }
+    if (!response.ok) throw new Error(`Ananas čitanje nije uspelo (HTTP ${response.status}). Pokušajte kasnije ili proverite API pristup.`);
+    return response.json() as Promise<unknown>;
+  }
+  async documents(kind: "SALE" | "REFUND", start: Date, endExclusive: Date) {
+    const payload = await this.get(kind === "SALE" ? "invoices" : "invoice-corrections", new URLSearchParams({ type: "FISCAL", dateFrom: start.toISOString(), dateTo: new Date(endExclusive.getTime() - 1).toISOString() }));
+    return z.array(z.unknown()).max(10000).parse(payload);
+  }
+  async pdf(kind: string, suborder: string, externalId: string) {
+    const payload = z.record(z.string(), z.array(z.object({ documentCorrelationId: z.union([z.string(), z.number()]), link: z.string() }))).parse(await this.get(kind === "SALE" ? "invoices/urls" : "invoice-corrections/urls", new URLSearchParams({ suborderIds: suborder, type: "FISCAL" })));
+    const document = payload[suborder]?.find(item => String(item.documentCorrelationId) === externalId);
+    if (!document) throw new Error("Ananas nije vratio PDF za ovaj dokument.");
+    return safeAnanasPdfUrl(document.link);
+  }
+}

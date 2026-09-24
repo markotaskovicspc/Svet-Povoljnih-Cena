@@ -32,6 +32,18 @@ beforeEach(() => {
   tx.warehouse.findUnique.mockResolvedValue({ active: true, isDefault: true });
 });
 describe("new goods for an unresolved courier delivery", () => {
+  it("queues new goods and the old shipment return after X Express incomplete delivery", async () => {
+    tx.shipment.findUnique.mockResolvedValue({ ...source(), status: "FAILED", providerStatusCode: "DLV_FAIL_INCOMPLETE" });
+    expect(await queueOrderReshipment(input)).toMatchObject({ id: "b" });
+    expect(adjust.mock.calls[0][1]).toMatchObject({ qtyDelta: -2 });
+    expect(tx.orderReshipment.create.mock.calls[0][0].data.sourceShipmentId).toBe("s");
+  });
+  it.each(["PCK_FAIL_INCOMPLETE", "LOCAL_ANNOUNCEMENT_FAILED", "DELETED", "UNKNOWN"])("does not treat %s as a failed delivery", async providerStatusCode => {
+    tx.shipment.findUnique.mockResolvedValue({ ...source(), status: "FAILED", providerStatusCode });
+    await expect(queueOrderReshipment(input)).rejects.toThrow("Ponovno slanje");
+    expect(tx.pickupBatch.create).not.toHaveBeenCalled();
+    expect(adjust).not.toHaveBeenCalled();
+  });
   it("creates distinct picking packages, debits new goods once per item and keeps the original fiscal ledger untouched", async () => {
     expect(await queueOrderReshipment(input)).toMatchObject({ id: "b" });
     expect(adjust).toHaveBeenCalledTimes(1);

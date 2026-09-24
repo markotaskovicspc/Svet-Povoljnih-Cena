@@ -802,7 +802,7 @@ export const operationalErpModules: ErpModule[] = [
       },
       {
         label: "Ananas sinhronizacija",
-        disabledReason: "Nedostaju ANANAS_BASE_URL i ANANAS_API_KEY.",
+        disabledReason: "Računi i promet su dostupni u Ananas pregledu. Slanje kataloga još nije omogućeno.",
       },
     ],
     columns: [
@@ -2265,7 +2265,7 @@ function eotpremnicaProviderRow(): ErpRow {
 async function integrationRows(): Promise<ErpRow[]> {
   return [
     eotpremnicaProviderRow(),
-    providerRow("ANANAS", ["ANANAS_BASE_URL", "ANANAS_API_KEY"]),
+    providerRow("ANANAS", ["ANANAS_CLIENT_ID", "ANANAS_CLIENT_SECRET"]),
     providerRow("MYGLS_PICKUP", [
       "MYGLS_USERNAME",
       "MYGLS_PASSWORD",

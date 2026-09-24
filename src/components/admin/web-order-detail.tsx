@@ -13,6 +13,7 @@ import { enqueueBackgroundJob, processBackgroundJob } from "@/lib/background-job
 import { withAdminState, requireAdminAction } from "@/lib/admin";
 import type { AdminActionState } from "@/lib/admin/action-state";
 import { queueOrderReshipment } from "@/lib/admin/order-reshipment.server";
+import { canReshipCourierDelivery } from "@/lib/admin/order-reshipment-eligibility";
 import {
   createShipmentForOrder,
   syncCourierShipmentById,
@@ -2496,7 +2497,7 @@ export async function WebOrderDetail({ id }: { id: string }) {
                             Stara pošiljka je u <Link className="underline" href="/admin/erp/povrati">očekivanim povratima</Link>.
                             {" "}Nova roba: <Link className="underline" href={`/admin/erp/preuzimanja/${shipment.reshipment.batchId}`}>{shipment.reshipment.batch.number}</Link>.
                           </p>
-                        ) : shipment.purpose === "ORDER_DELIVERY" && ["PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY", "RETURNED"].includes(shipment.status) && !["OTKAZANO", "ISPORUCENO"].includes(order.status) ? (
+                        ) : shipment.purpose === "ORDER_DELIVERY" && canReshipCourierDelivery(shipment) && !["OTKAZANO", "ISPORUCENO"].includes(order.status) ? (
                           <AdminActionForm action={reshipOrderAction} refreshOnSuccess className="mb-4 space-y-3 rounded-lg border border-border p-3">
                             <input type="hidden" name="orderId" value={order.id} />
                             <input type="hidden" name="shipmentId" value={shipment.id} />

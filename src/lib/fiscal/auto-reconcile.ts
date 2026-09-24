@@ -5,7 +5,7 @@ import { enqueueBackgroundJob } from "@/lib/background-jobs";
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
-const ALL_SALES_CHANNELS = ["WEB", "ANANAS", "MP", "VP", "INO"] as const;
+const ALL_SALES_CHANNELS = ["WEB", "MP", "VP", "INO"] as const;
 const PICKED_UP_OR_LATER = [
   "PICKED_UP",
   "IN_TRANSIT",
@@ -24,7 +24,7 @@ export interface FiscalAutoSummary {
 }
 
 /**
- * Queues eligible orders from every sales channel that have never started SALE
+ * Queues eligible orders from locally fiscalized sales channels that have never started SALE
  * fiscalization. Every payment method follows the same trigger: the delivery
  * shipment must have been picked up by the courier.
  *

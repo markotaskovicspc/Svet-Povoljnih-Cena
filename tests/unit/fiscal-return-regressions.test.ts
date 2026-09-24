@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({
-  tx: vi.fn(), lock: vi.fn(), lines: vi.fn(), lineUpdate: vi.fn(), aggregate: vi.fn(), warehouse: vi.fn(),
+  order: vi.fn(), tx: vi.fn(), lock: vi.fn(), lines: vi.fn(), lineUpdate: vi.fn(), aggregate: vi.fn(), warehouse: vi.fn(),
   documents: vi.fn(), document: vi.fn(), createDocument: vi.fn(), updateDocument: vi.fn(),
   movements: vi.fn(), adjust: vi.fn(), fiscalize: vi.fn(), payment: vi.fn(),
   refund: vi.fn(), createRefund: vi.fn(), ips: vi.fn(), job: vi.fn(), createJob: vi.fn(), updateJob: vi.fn(),
 }));
 vi.mock("@/lib/db", () => ({ db: {
   $transaction: m.tx,
+  order: { findUnique: m.order },
   warehouse: { findFirst: m.warehouse },
   fiscalDocumentLine: { findMany: m.lines, updateMany: m.lineUpdate, aggregate: m.aggregate },
   fiscalDocument: { findMany: m.documents, findUnique: m.document, create: m.createDocument, update: m.updateDocument },
@@ -21,7 +22,7 @@ vi.mock("@/lib/fiscal/transport", () => ({ fiscalize: m.fiscalize }));
 vi.mock("@/lib/fiscal/pdf-storage", () => ({ uploadFiscalPdf: vi.fn() }));
 vi.mock("@/lib/payments", () => ({ ipsPaymentProvider: { refundPayment: m.ips } }));
 import { db } from "@/lib/db";
-import { issueFiscalRefund, recordFiscalPaymentRefund } from "@/lib/fiscal/issue";
+import { issueFiscalSale, issueFiscalRefund, recordFiscalPaymentRefund } from "@/lib/fiscal/issue";
 
 const input = { fiscalLineIds: ["line"], quantities: { line: 1 }, paymentReturnMethod: "POUZECE_GOTOVINA" as const, warehouseId: "warehouse", buyerId: "20:TEST" };
 const paymentInput = { orderId: "order", orderNumber: "SPC", fiscalDocumentId: "refund", amount: 100, actorId: null };
@@ -117,4 +118,11 @@ describe("actual money return versus fiscal refund", () => {
     expect(await recordFiscalPaymentRefund({ ...paymentInput, method: "IPS" })).toContain("uplata nije potvrđena");
     expect(m.ips).not.toHaveBeenCalled();
   });
+});
+
+it("does not issue a second fiscal receipt for Ananas orders", async () => {
+  m.order.mockResolvedValue({ id: "ananas-order", channel: "ANANAS", items: [] });
+  expect(await issueFiscalSale({ orderId: "ananas-order" })).toMatchObject({ ok: false, error: expect.stringContaining("Ananas") });
+  expect(m.fiscalize).not.toHaveBeenCalled();
+  expect(m.createDocument).not.toHaveBeenCalled();
 });
