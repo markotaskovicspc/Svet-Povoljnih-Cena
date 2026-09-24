@@ -115,6 +115,27 @@ export function readMyGlsPageText(document: PDFDocument, page: ReturnType<PDFDoc
   );
 }
 
+/** Remove selected text operators before replacing a provider content field. */
+export function removeMyGlsPageText(
+  document: PDFDocument,
+  page: ReturnType<PDFDocument["getPage"]>,
+  matches: (block: TextBlock) => boolean,
+) {
+  const contents = page.node.Contents();
+  if (!contents) return;
+  const fontMaps = readFontMaps(page.node.Resources());
+  const refs = contentStreams(document, contents).map((stream) => {
+    let text = Buffer.from(decodePDFRawStream(stream).decode()).toString("latin1");
+    const targets = readTextBlocks(text, fontMaps).filter(matches);
+    if (!targets.length) return document.context.register(stream);
+    for (const target of targets.sort((a, b) => b.start - a.start)) {
+      text = `${text.slice(0, target.start)}()${text.slice(target.end)}`;
+    }
+    return document.context.register(document.context.flateStream(Buffer.from(text, "latin1")));
+  });
+  page.node.set(PDFName.of("Contents"), document.context.obj(refs));
+}
+
 function readFontMaps(
   resources: PDFDict | undefined,
 ) {

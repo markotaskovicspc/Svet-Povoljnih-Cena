@@ -8,7 +8,7 @@ import {
   MYGLS_PROVIDER,
 } from "@/lib/mygls";
 import { usableMyGlsLabelWhere } from "@/lib/mygls/labels";
-import { mergePdfDocuments } from "@/lib/pdf/merge";
+import { packMyGlsLabels, MyGlsPrintLayoutError } from "@/lib/mygls/print-layout";
 import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
 import { xExpressLabelItemSelect } from "@/lib/x-express/article-labels";
 import { renderXExpressBatchLabelsHtml } from "@/lib/x-express/labels";
@@ -194,17 +194,24 @@ export async function GET(
         downloadMyGlsLabelPdf(shipment.labelObjectKey!),
       ),
     );
-    const pdf = await mergePdfDocuments(sourcePdfs, {
-      title: `${batch.number} — kurirske etikete`,
-      author: "Svet povoljnih cena",
-    });
-    return new NextResponse(pdf, {
+    let pdf: Buffer;
+    try {
+      pdf = await packMyGlsLabels(sourcePdfs.map((bytes, index) => ({
+        bytes,
+        packageCount: Math.max(1, shipments[index]!.packageCount),
+        groupKey: `${shipments[index]!.orderId}:${shipments[index]!.purpose}:${shipments[index]!.reclamationId ?? ""}`,
+      })), `${batch.number} - kurirske etikete`);
+    } catch (error) {
+      if (!(error instanceof MyGlsPrintLayoutError)) throw error;
+      return labelConflict(error.message, batch.id);
+    }
+    return new NextResponse(new Uint8Array(pdf), {
       headers: {
         "content-type": "application/pdf",
         "content-disposition": `inline; filename="${batch.number}-kurirske-etikete.pdf"`,
         "cache-control": "private, no-store",
         "x-content-type-options": "nosniff",
-        "x-courier-label-source": "mygls-provider-pdfs-merged",
+        "x-courier-label-source": "mygls-provider-pdfs-packed",
         "x-courier-label-count": String(labelCount),
       },
     });
