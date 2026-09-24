@@ -78,6 +78,13 @@ const packages = [
 ];
 
 describe("MyGLS reclamation payload", () => {
+  it("keeps the full reshipment identity and parcel number for long order numbers", () => {
+    const parcels = buildMyGlsParcelsForOrder({ cfg: config, order: { ...order, number: "SPC-" + "1".repeat(40) }, packages, clientReferenceSuffix: "S123456789012" });
+    expect(parcels).toHaveLength(2);
+    expect(parcels[0].ClientReference).toMatch(/-S123456789012-P1$/);
+    expect(parcels[1].ClientReference).toMatch(/-S123456789012-P2$/);
+    expect(parcels.every(p => p.ClientReference.length <= 40)).toBe(true);
+  });
   it("prints each article's SKU and EAN on its own label even when package names are stale", () => {
     const items = [
       { id: "item-1", name: "Komjuter sto LOFT", sku: "210027", qty: 1, product: { barcode: "0012345678905" } },

@@ -71,6 +71,7 @@ export type PickupCourierSnapshot = {
  * whose provider events predated automatic picking reconciliation.
  */
 export function pickupCourierSnapshot(args: {
+  lineGroupKey?: string;
   provider: string | null;
   purpose: ShipmentPurpose;
   reclamationId: string | null;
@@ -94,6 +95,7 @@ export function pickupCourierSnapshot(args: {
             );
           }
           const assignment = readShipmentAssignment(candidate.rawCreateResponse);
+          if ((args.lineGroupKey?.startsWith("reshipment:") || assignment?.assignmentKey?.startsWith("reshipment:")) && assignment?.assignmentKey !== args.lineGroupKey) return false;
           return (
             !assignment ||
             !args.orderItemId ||

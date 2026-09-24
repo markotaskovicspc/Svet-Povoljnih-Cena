@@ -21,6 +21,8 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, ArrowRight, Loader2, ShoppingBag } from "lucide-react";
 import { useCart } from "@/lib/hooks/use-cart";
+import { useGuestLoyalty } from "@/lib/loyalty/use-guest-loyalty";
+import { normalizeLoyaltyEmail } from "@/lib/loyalty/shared";
 import {
   useCheckout,
   type CheckoutStep,
@@ -255,6 +257,15 @@ export function CheckoutFlow({
     name: "perItemAssembly",
   });
   const isAuthenticatedCustomer = initialCustomer?.authenticated === true;
+  const guestLoyalty = useGuestLoyalty();
+  const useGuestBenefits = !isAuthenticatedCustomer && Boolean(guestLoyalty.email);
+  const effectiveFirstPurchaseEligible = firstPurchaseEligible ||
+    (useGuestBenefits && guestLoyalty.firstPurchase && normalizeLoyaltyEmail(shippingEmail) === guestLoyalty.email);
+  useEffect(() => {
+    if (useGuestBenefits && !getValues("shipping.email")) {
+      setValue("shipping.email", guestLoyalty.email!);
+    }
+  }, [useGuestBenefits, guestLoyalty.email, getValues, setValue]);
   const stepOrder = useMemo<CheckoutStep[]>(
     () =>
       isAuthenticatedCustomer
@@ -346,7 +357,7 @@ export function CheckoutFlow({
     [lines],
   );
 
-  const deliveryQuoteKey = `${shippingCity.trim().toLocaleLowerCase("sr-Latn-RS")}|${quoteLineKey}`;
+  const deliveryQuoteKey = `${shippingCity.trim().toLocaleLowerCase("sr-Latn-RS")}|${quoteLineKey}|${guestLoyalty.email ?? ""}`;
   const deliveryQuote = resolvedDeliveryQuote.quote;
   const deliveryQuoteIsCurrent =
     hydrated &&
@@ -606,6 +617,10 @@ export function CheckoutFlow({
 
   const onSubmit: SubmitHandler<CheckoutFormData> = async (data) => {
     setSubmitError(null);
+    if (useGuestBenefits && normalizeLoyaltyEmail(data.shipping.email) !== guestLoyalty.email) {
+      setSubmitError(`Za loyalty popuste koristite potvrđeni mejl ${guestLoyalty.email}, ili u korpi potvrdite novu adresu.`);
+      return;
+    }
     if (!deliveryQuoteIsPayable) {
       setSubmitError(
         deliveryQuoteIsCurrent
@@ -619,12 +634,12 @@ export function CheckoutFlow({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(
-        buildCreateOrderPayload(
+        { ...buildCreateOrderPayload(
           { ...data, voucherCode: voucher?.code ?? "" },
           lines,
           checkoutSessionId ?? getCheckoutSessionId(),
           getConsentedAnalyticsContext(),
-        ),
+        ), guestLoyalty: useGuestBenefits },
       ),
     });
     const result = (await response
@@ -882,7 +897,7 @@ export function CheckoutFlow({
                       deliveryQuote={deliveryQuote}
                       deliveryQuoteStatus={deliveryQuoteDisplayStatus}
                       paymentMethods={checkoutConfig.paymentMethods}
-                      firstPurchaseEligible={firstPurchaseEligible}
+                      firstPurchaseEligible={effectiveFirstPurchaseEligible}
                     />
                   ) : null}
                 </motion.div>
@@ -933,7 +948,7 @@ export function CheckoutFlow({
           shippingMethod={shippingMethod}
           paymentMethod={paymentMethod}
           perItemAssembly={perItemAssembly}
-          firstPurchaseEligible={firstPurchaseEligible}
+          firstPurchaseEligible={effectiveFirstPurchaseEligible}
           className="hidden lg:block"
           beforeCta={
             step === "review" ? (
@@ -1398,6 +1413,8 @@ function readCreateOrderError(
       return "Proverite obavezna polja i saglasnost pre potvrde porudžbine.";
     case "GUEST_REQUIRES_EMAIL":
       return "Unesite e-mail adresu za porudžbinu kao gost.";
+    case "LOYALTY_VERIFICATION_REQUIRED":
+      return "Potvrdite mejl za loyalty pogodnosti u korpi, pa ponovo proverite porudžbinu.";
     case "DELIVERY_POINT_INVALID":
       return "Izabrana MyGLS paket tačka više nije dostupna. Izaberite drugu lokaciju ili dostavu na adresu.";
     case "DELIVERY_ADDRESS_INVALID":

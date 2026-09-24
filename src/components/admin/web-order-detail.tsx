@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { randomUUID } from "node:crypto";
 import {
@@ -11,6 +12,7 @@ import { db } from "@/lib/db";
 import { enqueueBackgroundJob, processBackgroundJob } from "@/lib/background-jobs";
 import { withAdminState, requireAdminAction } from "@/lib/admin";
 import type { AdminActionState } from "@/lib/admin/action-state";
+import { queueOrderReshipment } from "@/lib/admin/order-reshipment.server";
 import {
   createShipmentForOrder,
   syncCourierShipmentById,
@@ -388,6 +390,24 @@ function shippingContactActionResult(
   };
 }
 
+async function reshipOrderAction(_state: AdminActionState, formData: FormData) {
+  "use server";
+  return withAdminState(
+    { allowed: ["OPS"], action: "order.reshipment.create", entity: "Order" },
+    async (actorId, data: FormData) => {
+      const orderId = String(data.get("orderId") ?? "");
+      const shipmentId = String(data.get("shipmentId") ?? "");
+      const reason = String(data.get("reason") ?? "");
+      const batch = await queueOrderReshipment({ orderId, shipmentId, reason, actorId });
+      revalidatePath(`/admin/erp/prodajni-nalozi/${orderId}`);
+      revalidatePath("/admin/erp/preuzimanja");
+      revalidatePath("/admin/erp/povrati");
+      revalidatePath("/admin/erp/preuzimanja/povrati");
+      return { ok: true as const, entityId: orderId, diff: { shipmentId, batchId: batch.id, reason }, message: `Nova roba je u picking nalogu ${batch.number}. Stara pošiljka je u očekivanim povratima. Povrat dogovorite sa kurirom; stara adresnica nije automatski otkazana.` };
+    },
+  )(formData);
+}
+
 async function updateStatus(_state: AdminActionState, formData: FormData) {
   "use server";
 
@@ -421,6 +441,9 @@ async function updateStatus(_state: AdminActionState, formData: FormData) {
             },
           });
           if (!existing) throw new Error("Porudžbina ne postoji.");
+          if (status === "OTKAZANO" && await tx.orderReshipment.findFirst({ where: { orderId: id } })) {
+            throw new Error("Porudžbina ima dodatno izdvojenu robu i očekivane povrate. Najpre usaglasite novu pošiljku i fizički prijem robe; obično otkazivanje nije dostupno.");
+          }
           const shouldRestore = status === "OTKAZANO" && !existing.stockRestoredAt;
           const now = new Date();
           const updated = await tx.order.updateMany({
@@ -1365,7 +1388,7 @@ export async function WebOrderDetail({ id }: { id: string }) {
         where: { status: { not: "CANCELLED" } },
         select: { id: true },
       },
-      shipments: { include: { events: { orderBy: { occurredAt: "desc" } } } },
+      shipments: { include: { reshipment: { include: { batch: true } }, events: { orderBy: { occurredAt: "desc" } } } },
       pickupBatchLines: {
         where: {
           purpose: "ORDER_DELIVERY",
@@ -2468,6 +2491,20 @@ export async function WebOrderDetail({ id }: { id: string }) {
                       const partialHandover = incompletePackageHandover(shipment.rawCreateResponse);
                       return (
                       <li key={shipment.id} className="rounded-lg border border-border p-3">
+                        {shipment.reshipment ? (
+                          <p className="mb-3 rounded-lg bg-muted p-3">
+                            Stara pošiljka je u <Link className="underline" href="/admin/erp/povrati">očekivanim povratima</Link>.
+                            {" "}Nova roba: <Link className="underline" href={`/admin/erp/preuzimanja/${shipment.reshipment.batchId}`}>{shipment.reshipment.batch.number}</Link>.
+                          </p>
+                        ) : shipment.purpose === "ORDER_DELIVERY" && ["PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY", "RETURNED"].includes(shipment.status) && !["OTKAZANO", "ISPORUCENO"].includes(order.status) ? (
+                          <AdminActionForm action={reshipOrderAction} refreshOnSuccess className="mb-4 space-y-3 rounded-lg border border-border p-3">
+                            <input type="hidden" name="orderId" value={order.id} />
+                            <input type="hidden" name="shipmentId" value={shipment.id} />
+                            <p>Pripremi novu robu za kupca, a ovu pošiljku evidentiraj u očekivanim povratima. Prijem stare robe ne pokreće refundaciju. Povrat stare pošiljke dogovorite sa kurirom.</p>
+                            <Field label="Razlog ponovnog slanja"><Textarea name="reason" required minLength={5} maxLength={500} rows={2} /></Field>
+                            <SubmitButton size="sm" confirm="Izdvojiti novu robu sa lagera i napraviti novi picking nalog? Stara roba će biti na čekanju za prijem povrata, bez refundacije kupcu.">Pošalji novu robu / vrati u picking</SubmitButton>
+                          </AdminActionForm>
+                        ) : null}
                         <dl className="space-y-1 text-ink-700">
                           <Row k="Provider" v={shipment.provider ?? "—"} />
                           <Row

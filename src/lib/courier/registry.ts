@@ -544,7 +544,7 @@ export async function applyShipmentEvent(
     await tx.$queryRaw`SELECT "id" FROM "Shipment" WHERE "id" = ${shipment.id} FOR UPDATE`;
     const current = await tx.shipment.findUniqueOrThrow({
       where: { id: shipment.id },
-      select: { rawCreateResponse: true, status: true, lastStatusEventAt: true },
+      select: { rawCreateResponse: true, status: true, lastStatusEventAt: true, reshipment: { select: { id: true } } },
     });
     if (appliedProvider === MYGLS_PROVIDER && isMyGlsNotification(event.providerStatusCode)) {
       const duplicate = event.providerEventId
@@ -633,7 +633,7 @@ export async function applyShipmentEvent(
       // Audit events are immutable, but their derived pickup-batch markers may
       // be missing after a legacy bug or interrupted transaction. Replaying a
       // verified proof event is therefore an idempotent self-healing pass.
-      if (!handoverReport && appliedProvider && PICKUP_PROOF_STATUSES.includes(event.status)) {
+      if (!current.reshipment && !handoverReport && appliedProvider && PICKUP_PROOF_STATUSES.includes(event.status)) {
         await reconcilePickupBatchesFromShipment(tx, {
           orderId: shipment.orderId,
           reclamationId: shipment.reclamationId,
@@ -690,6 +690,9 @@ export async function applyShipmentEvent(
       },
     });
     if (stateClaim.count === 0) return;
+    // Preserve tracking of the expected return, but it no longer controls
+    // the customer's active delivery, notifications or warehouse handover.
+    if (current.reshipment) return;
     stateApplied = true;
 
     if (
@@ -701,6 +704,7 @@ export async function applyShipmentEvent(
           orderId: shipment.orderId,
           purpose: "ORDER_DELIVERY",
           id: { not: shipment.id },
+          reshipment: null,
           status: { notIn: ["DELIVERED", "RETURNED", "FAILED"] },
         },
       });

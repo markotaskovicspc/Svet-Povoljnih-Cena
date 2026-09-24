@@ -76,6 +76,7 @@ export type CreateOrderError =
   | { code: "INACTIVE"; sku: string }
   | { code: "VOUCHER_INVALID"; reason: string }
   | { code: "GUEST_REQUIRES_EMAIL" }
+  | { code: "LOYALTY_VERIFICATION_REQUIRED" }
   | { code: "DELIVERY_POINT_INVALID" }
   | { code: "DELIVERY_ADDRESS_INVALID" }
   | { code: "PAYMENT_UNAVAILABLE" }
@@ -312,9 +313,15 @@ function paymentExpiresAt(method: PaymentMethod) {
 export async function createOrder(
   input: CreateOrderInput,
   userId: string | null,
+  guestLoyalty: { email: string; consentVersion: string } | null = null,
 ): Promise<
   { ok: true; data: CreateOrderResult } | { ok: false; error: CreateOrderError }
 > {
+  // The route supplies this identity only after validating the HttpOnly session.
+  if ((!userId && input.guestLoyalty && !guestLoyalty) ||
+      (guestLoyalty && (userId || guestLoyalty.email !== input.guestEmail?.trim().toLowerCase()))) {
+    return { ok: false, error: { code: "LOYALTY_VERIFICATION_REQUIRED" } };
+  }
   if (!userId && !input.guestEmail) {
     return { ok: false, error: { code: "GUEST_REQUIRES_EMAIL" } };
   }
@@ -505,7 +512,7 @@ export async function createOrder(
         discountPct: p.discountPct,
         loyaltyPrice: null,
         loyaltyDiscountPct: ruleInputs.loyaltyDiscountPct,
-        loyaltyEligible: Boolean(userId),
+        loyaltyEligible: Boolean(userId || guestLoyalty),
         action: p.action ?? null,
         actionPrices: p.actionPrices.map((entry) => ({
           price: num(entry.salePrice),
@@ -524,7 +531,7 @@ export async function createOrder(
   const deliveryQuote = await resolveDeliveryQuote({
     city: input.shipping.city,
     lines: input.lines.map((line) => ({ sku: line.sku, qty: line.qty })),
-    loggedIn: Boolean(userId),
+    loggedIn: Boolean(userId || guestLoyalty),
   });
   if (input.shippingMethod === "KAMION" && !deliveryQuote.truckAvailable) {
     return { ok: false, error: { code: "DELIVERY_UNAVAILABLE" } };
@@ -573,7 +580,7 @@ export async function createOrder(
   }
 
   // Resolve eligibility from the auth context (server-only).
-  const firstPurchase = await isFirstPurchaseDiscountEligible(userId);
+  const firstPurchase = await isFirstPurchaseDiscountEligible(userId, guestLoyalty?.email);
   // A boolean supplied by the browser cannot prove which token will be
   // charged. Keep the discount disabled until the selected payment instrument
   // is server-verified and bound to the actual card authorization.
@@ -792,6 +799,8 @@ export async function createOrder(
           number,
           publicAccessTokenHash: hashOrderAccessToken(accessToken),
           publicAccessTokenCreatedAt: new Date(),
+          guestLoyaltyEmail: guestLoyalty?.email ?? null,
+          guestLoyaltyConsentVersion: guestLoyalty?.consentVersion ?? null,
           userId,
           guestEmail: userId ? null : (input.guestEmail ?? null),
           customerId: customer.id,

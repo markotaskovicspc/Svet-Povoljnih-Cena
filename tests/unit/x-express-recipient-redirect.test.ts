@@ -110,3 +110,23 @@ describe("GLS informational notification", () => {
     expect(mocks.updatePickup).not.toHaveBeenCalled();
   });
 });
+
+describe("tracking after replacement goods are queued", () => {
+  it.each(["IN_TRANSIT", "DELIVERED", "RETURNED"] as const)("records the old shipment's %s without changing the new delivery", async status => {
+    shipmentAt("IN_TRANSIT");
+    mocks.loadLockedShipment.mockResolvedValue({ status: "IN_TRANSIT", lastStatusEventAt: physicalEventAt, rawCreateResponse: null, reshipment: { id: "retry" } });
+    const result = await applyShipmentEvent("COURIER_SMALL", { trackingNo: "OLD", status, providerEventId: `old-${status}`, occurredAt: new Date("2026-09-24T12:00:00Z") });
+    expect(result).toMatchObject({ eventCreated: true, stateApplied: false, orderStatus: null });
+    expect(mocks.updateShipment).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status }) }));
+    expect(mocks.updateOrder).not.toHaveBeenCalled();
+    expect(mocks.updatePickup).not.toHaveBeenCalled();
+  });
+  it("does not reconcile old pickup markers on duplicate scans", async () => {
+    shipmentAt("IN_TRANSIT");
+    mocks.loadLockedShipment.mockResolvedValue({ status: "IN_TRANSIT", rawCreateResponse: null, reshipment: { id: "retry" } });
+    mocks.findEvent.mockResolvedValue({ id: "seen" });
+    expect(await applyShipmentEvent("COURIER_SMALL", { trackingNo: "OLD", status: "DELIVERED", providerEventId: "seen" })).toMatchObject({ eventCreated: false, stateApplied: false });
+    expect(mocks.updateOrder).not.toHaveBeenCalled();
+    expect(mocks.updatePickup).not.toHaveBeenCalled();
+  });
+});

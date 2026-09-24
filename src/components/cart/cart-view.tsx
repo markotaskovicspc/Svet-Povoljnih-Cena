@@ -18,6 +18,10 @@ import type { CheckoutDeliveryQuote } from "@/lib/checkout/config-shared";
 import { DeliveryCategoryBreakdown } from "./delivery-category-breakdown";
 import { customerLoginHref } from "@/lib/auth/customer-callback";
 import { cartDrawerLoginReturnPath } from "@/lib/cart/cart-drawer-auth-return";
+import { GuestLoyaltyOffer } from "./guest-loyalty-offer";
+import { LoyaltyReturnNotice } from "./loyalty-return-notice";
+import { useGuestLoyalty } from "@/lib/loyalty/use-guest-loyalty";
+import { computeTotals } from "@/components/checkout/order-summary";
 
 /**
  * Full /korpa page view. Hydration-aware so server renders the empty state
@@ -55,11 +59,12 @@ export function CartView() {
   }
 
   if (lines.length === 0) {
-    return <CartEmptyState />;
+    return <><LoyaltyReturnNotice /><CartEmptyState /></>;
   }
 
   return (
     <>
+      <LoyaltyReturnNotice />
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
         <section
           aria-label="Stavke u korpi"
@@ -151,11 +156,15 @@ function CartSummary({
   const [checkingVoucher, setCheckingVoucher] = useState(false);
   const shippingMethod = quote?.recommendedMethod ?? null;
   const shipping = shippingMethod ? quote?.prices[shippingMethod] ?? null : null;
-  const voucherDiscount = voucherDiscountForSubtotal(voucher, subtotal);
-  const total =
-    shipping == null
-      ? null
-      : Math.max(0, subtotal + shipping - voucherDiscount);
+  const guestLoyalty = useGuestLoyalty();
+  const loggedIn = useLoyaltyEligibility();
+  const { voucherDiscount, firstPurchaseDiscount, total } = computeTotals({
+    itemsFull: fullTotal, itemsSale: subtotal, assemblyTotal: 0,
+    shippingMethod: shippingMethod ?? "kurir",
+    shippingPrices: quote?.prices ?? { kurir: null, kamion: null },
+    voucherDiscountRsd: voucherDiscountForSubtotal(voucher, subtotal),
+    firstPurchaseEligible: !loggedIn && Boolean(guestLoyalty.email) && guestLoyalty.firstPurchase,
+  });
 
   async function applyCartVoucher(e: React.FormEvent) {
     e.preventDefault();
@@ -293,6 +302,7 @@ function CartSummary({
           </div>
         ) : null}
 
+        {firstPurchaseDiscount > 0 ? <div className="text-action flex justify-between text-sm"><span>Prva kupovina −15%</span><strong>−{formatRsd(firstPurchaseDiscount)}</strong></div> : null}
         <div className="border-border/60 flex items-baseline justify-between border-t pt-3">
           <span className="text-sm font-medium text-ink-900">Ukupno za plaćanje</span>
           <span className="font-display text-2xl text-ink-900">
@@ -350,7 +360,7 @@ export function CartLoginOffer({
 
   return (
     <div className="border-action/30 bg-action/5 flex flex-col gap-3 border-y px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-      <CartLoginOfferCopy />
+      <div className="min-w-0 flex-1"><GuestLoyaltyOffer /></div>
       {reopenDrawerAfterLogin ? (
         <CartDrawerLoginOfferLink onNavigate={onNavigate} />
       ) : (

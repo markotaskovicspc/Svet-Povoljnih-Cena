@@ -1230,6 +1230,7 @@ function pickupLineRow(line: {
     line.purpose === "RECLAMATION_REPLACEMENT" &&
     line.reclamation?.resolution === "ZAMENA_DELA";
   const courier = pickupCourierSnapshot({
+    lineGroupKey: line.lineGroupKey,
     provider,
     purpose: line.purpose,
     reclamationId: line.reclamationId,

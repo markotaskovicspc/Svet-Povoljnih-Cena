@@ -10,6 +10,7 @@ import {
   receiveReturnedOrderUnit,
 } from "@/lib/admin/returned-orders.server";
 import { db } from "@/lib/db";
+import { receiveReshipmentReturn } from "@/lib/admin/order-reshipment.server";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle, StatCard } from "@/components/admin/card";
 import { AdminActionForm } from "@/components/admin/action-form";
@@ -110,6 +111,7 @@ async function receiveOrderUnitAction(
 
 export default async function ReturnsPage() {
   await requireAdminAction(["OPS"]);
+  const reshipments = await db.orderReshipment.findMany({ orderBy: { createdAt: "desc" }, take: 500, include: { items: true, order: { select: { number: true } }, sourceShipment: true, batch: true } });
   const [returnedOrders, reclamations, warehouseCandidates, movements] = await Promise.all([
     listReturnedOrders(),
     db.reclamation.findMany({
@@ -199,6 +201,25 @@ export default async function ReturnsPage() {
         }
       />
       <main className="space-y-6 px-4 py-6 md:px-8">
+        <Card>
+          <CardTitle description="Kupcu se šalje nova roba. Stara pošiljka ostaje ovde do fizičkog prijema i pregleda. Prijem vraća samo robu na lager, bez refundacije kupcu.">Povrati prethodnih pošiljki nakon ponovnog slanja</CardTitle>
+          <div className="space-y-4">
+            {reshipments.length === 0 ? <p className="text-sm text-ink-500">Nema očekivanih povrata po ponovnom slanju.</p> : null}
+            {reshipments.map(retry => <div key={retry.id} className="space-y-3 rounded-lg border border-border p-4">
+              <p><Link className="font-medium underline" href={`/admin/erp/prodajni-nalozi/${retry.orderId}`}>{retry.order.number}</Link> · Stara pošiljka: {retry.sourceShipment.provider} / {retry.sourceShipment.trackingNo ?? retry.sourceShipmentId} · {retry.sourceShipment.status}</p>
+              <p className="text-sm">Razlog: {retry.reason} · Nova roba: <Link className="underline" href={`/admin/erp/preuzimanja/${retry.batchId}`}>{retry.batch.number}</Link></p>
+              {retry.items.map(item => <div key={item.id} className="rounded-lg bg-muted p-3 text-sm">
+                <p>{item.sku} · {item.name} · Primljeno {item.receivedQty}/{item.quantity} kom</p>
+                {item.receivedQty < item.quantity ? <AdminActionForm action={receiveReshipmentReturnAction} refreshOnSuccess className="mt-2 flex flex-wrap items-end gap-3">
+                  <input type="hidden" name="itemId" value={item.id} />
+                  <input type="hidden" name="unitNo" value={item.receivedQty + 1} />
+                  <Field label="Magacin prijema"><select name="warehouseId" required className="h-9 rounded-lg border border-input px-2"><option value="">Izaberite magacin</option>{warehouses.map(w => <option key={w.id} value={w.id}>{w.code} · {w.name}</option>)}</select></Field>
+                  <SubmitButton size="sm" confirm="Potvrđujete da je 1 komad stare robe fizički primljen, pregledan i spreman za lager? Novac kupcu neće biti refundiran.">Primi 1 kom na lager</SubmitButton>
+                </AdminActionForm> : <p className="text-success">Povrat primljen.</p>}
+              </div>)}
+            </div>)}
+          </div>
+        </Card>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Vraćene porudžbine" value={String(returnedOrders.total)} />
           <StatCard label="Reklamacioni povrati" value={String(reclamations.length)} />
@@ -385,6 +406,20 @@ export default async function ReturnsPage() {
       </main>
     </>
   );
+}
+
+async function receiveReshipmentReturnAction(_state: AdminActionState, formData: FormData) {
+  "use server";
+  return withAdminState({ allowed: ["OPS"], action: "order.reshipment.return.receive", entity: "OrderReshipmentItem" }, async (actorId, data: FormData) => {
+    const itemId = String(data.get("itemId") ?? "");
+    const warehouseId = String(data.get("warehouseId") ?? "");
+    const unitNo = Number(data.get("unitNo"));
+    await receiveReshipmentReturn({ itemId, warehouseId, unitNo, actorId });
+    revalidatePath("/admin/erp/povrati");
+    revalidatePath("/admin/erp/preuzimanja/povrati");
+    revalidatePath("/admin/erp/stanje-po-magacinima");
+    return { ok: true as const, entityId: itemId, diff: { warehouseId, unitNo }, message: "Stara roba je primljena na lager. Refundacija nije pokrenuta." };
+  })(formData);
 }
 
 function formatDate(value: Date) {

@@ -133,8 +133,9 @@ export function buildMyGlsParcelForOrder(
     purpose === "ORDER_DELIVERY"
       ? order.number
       : `${order.number}-${purpose === "RECLAMATION_RETURN" ? "POVRAT" : "ZAMENA"}`;
+  const packageSuffixLength = packages.length > 1 ? 2 + String(packages.length).length : 0;
   const reference = args.clientReferenceSuffix
-    ? `${referenceBase}-${args.clientReferenceSuffix}`
+    ? `${referenceBase.slice(0, Math.max(0, 39 - packageSuffixLength - args.clientReferenceSuffix.length))}-${args.clientReferenceSuffix}`
     : referenceBase;
 
   const parcel: MyGlsParcel = {

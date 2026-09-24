@@ -7,6 +7,7 @@ const { findFirst } = vi.hoisted(() => ({
 vi.mock("@/lib/db", () => ({
   db: {
     order: { findFirst },
+    user: { findUnique: vi.fn().mockResolvedValue({ email: "buyer@example.com" }) },
   },
 }));
 
@@ -30,7 +31,11 @@ describe("isFirstPurchaseDiscountEligible", () => {
     ).resolves.toBe(true);
     expect(findFirst).toHaveBeenCalledWith({
       where: {
-        userId: "customer-1",
+        OR: [
+          { userId: "customer-1" },
+          { guestEmail: { equals: "buyer@example.com", mode: "insensitive" } },
+          { user: { email: { equals: "buyer@example.com", mode: "insensitive" } } },
+        ],
         fiscalDocuments: {
           some: { kind: "SALE", status: "ISSUED" },
         },
@@ -45,5 +50,16 @@ describe("isFirstPurchaseDiscountEligible", () => {
     await expect(
       isFirstPurchaseDiscountEligible("customer-1"),
     ).resolves.toBe(false);
+  });
+
+  it("grants a verified guest the first-purchase benefit and searches both account and guest history", async () => {
+    findFirst.mockResolvedValue(null);
+    await expect(isFirstPurchaseDiscountEligible(null, " Buyer@Example.com ")).resolves.toBe(true);
+    expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ OR: [
+      { guestEmail: { equals: "buyer@example.com", mode: "insensitive" } },
+      { user: { email: { equals: "buyer@example.com", mode: "insensitive" } } },
+    ] }) }));
+    findFirst.mockResolvedValue({ id: "previous-account-sale" });
+    await expect(isFirstPurchaseDiscountEligible(null, "buyer@example.com")).resolves.toBe(false);
   });
 });

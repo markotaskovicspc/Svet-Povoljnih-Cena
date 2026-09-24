@@ -22,6 +22,7 @@ export async function cancelWebOrderByCustomer(input: {
     const order = await tx.order.findUnique({
       where: { id: input.orderId },
       include: {
+        reshipments: { select: { id: true } },
         fiscal: { select: { id: true } },
         fiscalDocuments: {
           where: { kind: "SALE" },
@@ -87,6 +88,9 @@ export async function cancelWebOrderByCustomer(input: {
         "Porudžbina je fiskalizovana i više se ne može otkazati ovim putem.",
         "FISCALIZED",
       );
+    }
+    if (order.reshipments?.length) {
+      throw new OrderCancellationError("Za ovu porudžbinu već je pokrenuto ponovno slanje nove robe. Kontaktirajte podršku radi usaglašavanja pošiljki i povrata.", "NOT_ALLOWED");
     }
 
     const fiscalJobKeys = [

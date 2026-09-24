@@ -12,7 +12,7 @@ import { lockOrderReturn } from "@/lib/fiscal/return-lock";
 const returnedOrdersWhere = {
   OR: [
     { status: "VRACENO" },
-    { shipments: { some: { purpose: "ORDER_DELIVERY", status: "RETURNED" } } },
+    { shipments: { some: { purpose: "ORDER_DELIVERY", status: "RETURNED", reshipment: null } } },
   ],
 } satisfies Prisma.OrderWhereInput;
 
@@ -37,7 +37,7 @@ export async function listReturnedOrders() {
           },
         },
         shipments: {
-          where: { purpose: "ORDER_DELIVERY", status: "RETURNED" },
+          where: { purpose: "ORDER_DELIVERY", status: "RETURNED", reshipment: null },
           orderBy: { createdAt: "desc" },
           select: { id: true, provider: true, trackingNo: true, lastStatusEventAt: true },
         },

@@ -262,6 +262,7 @@ function shipmentMatchesLine(
     rawCreateResponse: Prisma.JsonValue | null;
   },
   line: {
+    lineGroupKey?: string;
     orderId: string;
     orderItemId: string | null;
     reclamationId: string | null;
@@ -275,6 +276,7 @@ function shipmentMatchesLine(
     );
   }
   const assignment = readShipmentAssignment(shipment.rawCreateResponse);
+  if ((line.lineGroupKey?.startsWith("reshipment:") || assignment?.assignmentKey?.startsWith("reshipment:")) && assignment?.assignmentKey !== line.lineGroupKey) return false;
   return (
     shipment.purpose === "ORDER_DELIVERY" &&
     shipment.orderId === line.orderId &&

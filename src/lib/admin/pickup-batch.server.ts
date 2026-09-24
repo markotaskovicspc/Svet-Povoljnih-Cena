@@ -256,6 +256,7 @@ export async function deferPickupPackageBeforeBooking(
       throw new Error("Za ovaj paket već postoji kurirska adresnica.");
     }
     if (line.deferredAt) return line;
+    if (line.lineGroupKey.startsWith("reshipment:")) throw new Error("Ponovno slanje ne može da se deli odlaganjem pojedinačnih paketa.");
     const packageValue = line.orderItem
       ? Number(line.orderItem.unitPriceSale) +
         (line.orderItem.withAssembly
@@ -923,6 +924,9 @@ export async function removeOrderFromPickupBatch(
       },
     });
     assertEditableBatch(batch);
+    if (await tx.orderReshipment.findFirst({ where: { batchId, orderId } })) {
+      throw new Error("Nova roba je već izdvojena za ponovno slanje. Ovaj nalog ne može da se ukloni običnim brisanjem.");
+    }
     const removed = await tx.pickupBatchLine.deleteMany({
       where: { batchId, orderId, purpose: "ORDER_DELIVERY" },
     });
@@ -1041,6 +1045,9 @@ export async function deletePickupBatches(
       throw new Error("Jedan od izabranih naloga više ne postoji.");
     }
     for (const batch of batches) assertEditableBatch(batch);
+    if (await tx.orderReshipment.findFirst({ where: { batchId: { in: uniqueIds } } })) {
+      throw new Error("Nalog sadrži izdvojenu novu robu za ponovno slanje i ne može da se obriše.");
+    }
     const orderIds = Array.from(
       new Set(
         batches.flatMap((batch) =>
@@ -2344,6 +2351,11 @@ async function pickupAssignmentCodAmountAfterDeferrals(
   provider: SmallParcelProvider,
   assignedOrderItemIds: readonly string[],
 ) {
+  if (lineGroupKey.startsWith("reshipment:")) {
+    const retry = await db.orderReshipment.findFirst({ where: { id: lineGroupKey.slice("reshipment:".length), batchId, orderId } });
+    if (!retry) throw new Error("Evidencija ponovnog slanja nije pronađena.");
+    return Number(retry.codAmount);
+  }
   const fullAssignmentCod = await pickupAssignmentCodAmount(
     orderId,
     provider,
@@ -2445,6 +2457,7 @@ function samePickupAssignment(raw: unknown, group: PickupWorkGroup) {
   const itemIds = orderItemIdsForGroup(group);
   if (!itemIds.length) return false;
   const assignment = readShipmentAssignment(raw);
+  if (group.lineGroupKey.startsWith("reshipment:")) return sameShipmentAssignment(raw, itemIds, group.lineGroupKey);
   return assignment == null ||
     sameShipmentAssignment(raw, itemIds, assignment.assignmentKey ? group.lineGroupKey : undefined);
 }

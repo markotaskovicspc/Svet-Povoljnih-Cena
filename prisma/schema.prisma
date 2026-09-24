@@ -144,6 +144,15 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
+/// Email-only loyalty membership; never creates or authenticates a User.
+model GuestLoyaltyMembership {
+  email          String   @id
+  consentVersion String
+  consentAt      DateTime
+  verifiedAt     DateTime?
+  createdAt      DateTime @default(now())
+}
+
 model Address {
   id               String   @id @default(cuid())
   userId           String
@@ -1283,6 +1292,8 @@ model Order {
   publicAccessTokenCreatedAt DateTime?
   userId                     String?
   guestEmail                 String?
+  guestLoyaltyEmail           String?
+  guestLoyaltyConsentVersion  String?
   status                     OrderStatus  @default(KREIRANO)
   channel                    SalesChannel @default(WEB)
   customerId                 String?
@@ -1365,6 +1376,7 @@ model Order {
   pickupBatchLines     PickupBatchLine[]
   analyticsEvents      AnalyticsEvent[]
   supplierFulfillments SupplierFulfillment[]
+  reshipments          OrderReshipment[]
 
   @@index([userId, createdAt])
   @@index([status])
@@ -1562,6 +1574,8 @@ model Shipment {
   warehouse        Warehouse?        @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
   events           ShipmentEvent[]
   pickupBatchLines PickupBatchLine[]
+
+  reshipment OrderReshipment?
 
   @@unique([reclamationId, purpose])
   @@index([orderId])
@@ -2821,8 +2835,42 @@ model PickupBatch {
   updatedAt                DateTime          @updatedAt
 
   lines PickupBatchLine[]
+  reshipments OrderReshipment[]
 
   @@index([status, pickupDate])
+}
+
+/// A replacement delivery keeps the sale intact. Receipt of the original goods
+/// is a stock-only return, never a customer refund.
+model OrderReshipment {
+  id String @id @default(cuid())
+  orderId String
+  sourceShipmentId String @unique
+  batchId String
+  reason String
+  actorId String
+  codAmount Decimal @db.Decimal(12, 2)
+  createdAt DateTime @default(now())
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  sourceShipment Shipment @relation(fields: [sourceShipmentId], references: [id], onDelete: Restrict)
+  batch PickupBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  items OrderReshipmentItem[]
+  @@index([orderId])
+  @@index([batchId])
+}
+
+model OrderReshipmentItem {
+  id String @id @default(cuid())
+  reshipmentId String
+  orderItemId String
+  productId String
+  warehouseId String
+  sku String
+  name String
+  quantity Int
+  receivedQty Int @default(0)
+  reshipment OrderReshipment @relation(fields: [reshipmentId], references: [id], onDelete: Restrict)
+  @@unique([reshipmentId, orderItemId])
 }
 
 model PickupBatchLine {

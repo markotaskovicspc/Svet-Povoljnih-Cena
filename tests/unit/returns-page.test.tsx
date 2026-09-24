@@ -2,11 +2,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  orders: vi.fn(), count: vi.fn(), reclamations: vi.fn(),
+  orders: vi.fn(), count: vi.fn(), reclamations: vi.fn(), reshipments: vi.fn(),
   jobs: vi.fn(), warehouses: vi.fn(), movements: vi.fn(), authorize: vi.fn(),
 }));
 vi.mock("@/lib/db", () => ({ db: {
   order: { findMany: mocks.orders, count: mocks.count },
+  orderReshipment: { findMany: mocks.reshipments },
   reclamation: { findMany: mocks.reclamations },
   warehouse: { findMany: mocks.warehouses },
   stockMovement: { findMany: mocks.movements },
@@ -31,6 +32,7 @@ const returnedOrder = (id: string, shipments = [{
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.jobs.mockResolvedValue([]);
+  mocks.reshipments.mockResolvedValue([]);
   mocks.orders.mockResolvedValue([]);
   mocks.count.mockResolvedValue(0);
   mocks.reclamations.mockResolvedValue([]);
@@ -39,6 +41,16 @@ beforeEach(() => {
 });
 
 describe("ERP returns page", () => {
+  it("shows the unresolved old shipment for stock-only receipt while the new picking stays linked", async () => {
+    mocks.reshipments.mockResolvedValue([{ id: "r", orderId: "o", batchId: "b", reason: "Kurir ne nalazi robu", order: { number: "SPC-RETRY" }, batch: { number: "PRE-NEW" }, sourceShipmentId: "s", sourceShipment: { provider: "X_EXPRESS", trackingNo: "OLD-TRACK", status: "IN_TRANSIT" }, items: [{ id: "ri", sku: "SKU", name: "Sto", quantity: 2, receivedQty: 1 }] }]);
+    const html = renderToStaticMarkup(await ReturnsPage());
+    expect(html).toContain("OLD-TRACK");
+    expect(html).toContain("Primljeno 1/2 kom");
+    expect(html).toContain("Primi 1 kom na lager");
+    expect(html).toContain("bez refundacije kupcu");
+    expect(html).toContain("/admin/erp/preuzimanja/b");
+    expect(html).not.toContain('name="buyerId"');
+  });
   it("shows the missing refund data and a retry for an already received package", async () => {
     mocks.orders.mockResolvedValue([returnedOrder("1")]);
     mocks.movements.mockResolvedValue([{ id: "receipt", idempotencyKey: "order-return:SPC-1:item-1:1", warehouseId: "warehouse", createdAt: new Date(), warehouse: { code: "MAG-004", name: "Povrati" } }]);
@@ -79,7 +91,7 @@ describe("ERP returns page", () => {
     // eligible, without counting failed deliveries or replacement shipments.
     const where = { OR: [
       { status: "VRACENO" },
-      { shipments: { some: { purpose: "ORDER_DELIVERY", status: "RETURNED" } } },
+      { shipments: { some: { purpose: "ORDER_DELIVERY", status: "RETURNED", reshipment: null } } },
     ] };
     expect(mocks.orders).toHaveBeenCalledWith(expect.objectContaining({ where }));
     expect(mocks.count).toHaveBeenCalledWith({ where });

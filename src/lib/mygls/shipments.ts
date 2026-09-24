@@ -326,6 +326,9 @@ async function prepareMyGlsShipmentForOrder(
 }
 
 function deferredReferenceSuffix(assignmentKey?: string) {
+  if (assignmentKey?.startsWith("reshipment:")) {
+    return `S${assignmentKey.slice("reshipment:".length).replace(/[^a-z0-9]/gi, "").slice(-12)}`;
+  }
   const deferredId = assignmentKey?.split(":deferred:")[1]?.trim();
   if (!deferredId) return undefined;
   return `R${deferredId.replace(/[^a-z0-9]/gi, "").slice(-8)}`;

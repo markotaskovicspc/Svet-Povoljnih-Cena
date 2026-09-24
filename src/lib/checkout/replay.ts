@@ -5,7 +5,7 @@ import { formatStreetAddress } from "@/lib/address/house-number";
 // Both the optimistic replay and the replay found under the session lock must
 // validate the same persisted buyer, basket and delivery details.
 export const checkoutReplaySelect = {
-  userId: true, guestEmail: true, paymentMethod: true, shippingMethod: true,
+  userId: true, guestEmail: true, guestLoyaltyEmail: true, paymentMethod: true, shippingMethod: true,
   voucherCode: true, notes: true, billingSameAsShipping: true,
   shipFirstName: true, shipLastName: true, shipPhone: true,
   shipStreet: true, shipHouseNumber: true, shipCity: true,
@@ -37,6 +37,7 @@ export function checkoutRequestMatchesOrder(
   if (order.userId !== userId || (!userId && email(input.guestEmail) !== email(order.guestEmail))) {
     return false;
   }
+  if (!userId && Boolean(input.guestLoyalty) !== Boolean(order.guestLoyaltyEmail)) return false;
   const ship = input.shipping;
   const courier = input.shippingMethod === "KURIR";
   const townId = courier ? (ship.xExpressTownId ?? null) : null;

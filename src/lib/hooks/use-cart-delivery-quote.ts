@@ -3,12 +3,15 @@
 import { useEffect, useState } from "react";
 import type { CartLine } from "@/lib/hooks/use-cart";
 import type { CheckoutDeliveryQuote } from "@/lib/checkout/config-shared";
+import { useGuestLoyalty } from "@/lib/loyalty/use-guest-loyalty";
 
 export function useCartDeliveryQuote(
   lines: CartLine[],
   enabled = true,
 ) {
+  const member = useGuestLoyalty();
   const requestKey = JSON.stringify({
+    loyaltyEmail: member.email,
     city: null,
     lines: lines
       .map((line) => ({ sku: line.sku, qty: line.qty }))

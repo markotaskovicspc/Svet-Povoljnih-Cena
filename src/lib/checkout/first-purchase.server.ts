@@ -8,12 +8,25 @@ import { db } from "@/lib/db";
  */
 export async function isFirstPurchaseDiscountEligible(
   userId: string | null | undefined,
+  verifiedEmail?: string | null,
 ) {
-  if (!userId) return false;
+  if (!userId && !verifiedEmail) return false;
+
+  // Use one identity across guest and account purchases. This does not sign
+  // a guest in, even when the confirmed email belongs to an existing account.
+  const email = verifiedEmail?.trim().toLowerCase() || (userId
+    ? (await db.user.findUnique({ where: { id: userId }, select: { email: true } }))?.email
+    : null);
 
   const issuedSale = await db.order.findFirst({
     where: {
-      userId,
+      OR: [
+        ...(userId ? [{ userId }] : []),
+        ...(email ? [
+          { guestEmail: { equals: email, mode: "insensitive" as const } },
+          { user: { email: { equals: email, mode: "insensitive" as const } } },
+        ] : []),
+      ],
       fiscalDocuments: {
         some: { kind: "SALE", status: "ISSUED" },
       },

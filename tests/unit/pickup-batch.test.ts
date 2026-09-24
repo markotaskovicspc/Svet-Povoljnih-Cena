@@ -13,6 +13,10 @@ import {
 } from "@/lib/admin/pickup-batch";
 
 describe("ERP module 13 pickup batches", () => {
+  it("does not show the old shipment's newer tracking scan on the new picking", () => {
+    const snapshot = pickupCourierSnapshot({ provider: "X_EXPRESS", purpose: "ORDER_DELIVERY", reclamationId: null, orderItemId: "i", courierPickedUpAt: null, lineGroupKey: "reshipment:r", shipments: [{ id: "old", provider: "X_EXPRESS", purpose: "ORDER_DELIVERY", reclamationId: null, status: "RETURNED", shippedAt: new Date(), lastStatusEventAt: new Date(), rawCreateResponse: { assignment: { orderItemIds: ["i"], codAmount: 0 } }, createdAt: new Date(), updatedAt: new Date() }] });
+    expect(snapshot).toBeNull();
+  });
   it("exposes the required commands and overview columns", () => {
     const definition = getErpModuleDefinition("preuzimanja");
 

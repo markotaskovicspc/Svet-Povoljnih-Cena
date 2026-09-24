@@ -67,6 +67,25 @@ beforeEach(() => {
 });
 
 describe("pickup label downloads", () => {
+  it("does not reuse the old address label for replacement goods", async () => {
+    lines = [{ ...line("order"), lineGroupKey: "reshipment:r" }];
+    mocks.shipments.mockResolvedValue([shipment("order")]);
+    expect((await request()).status).toBe(409);
+    expect(mocks.download).not.toHaveBeenCalled();
+    mocks.shipments.mockResolvedValue([{ ...shipment("order"), labelObjectKey: "new.pdf", rawCreateResponse: { assignment: { orderItemIds: ["order-item"], assignmentKey: "reshipment:r", codAmount: 0 } } }]);
+    expect((await request()).status).toBe(200);
+    expect(mocks.download).toHaveBeenCalledWith("new.pdf");
+  });
+
+  it("preserves the historical batch's label when a replacement shipment exists", async () => {
+    lines = [line("order")];
+    mocks.shipments.mockResolvedValue([
+      { ...shipment("order"), id: "new", labelObjectKey: "new.pdf", rawCreateResponse: { assignment: { orderItemIds: ["order-item"], assignmentKey: "reshipment:r", codAmount: 0 } } },
+      shipment("order"),
+    ]);
+    expect((await request()).status).toBe(200);
+    expect(mocks.download.mock.calls).toEqual([["order.pdf"]]);
+  });
   it.each(["MYGLS", "X_EXPRESS"])("prints eight active packages without the deferred group (%s)", async (courier) => {
     provider = courier;
     const response = await request();

@@ -332,6 +332,7 @@ export async function updateWebOrderItemQuantity(input: {
       id: true,
       updatedAt: true,
       userId: true,
+      guestLoyaltyEmail: true,
       shipCity: true,
       shippingMethod: true,
       shipping: true,
@@ -359,7 +360,7 @@ export async function updateWebOrderItemQuantity(input: {
   const deliveryQuote = await resolveDeliveryQuote({
     city: preview.shipCity,
     lines: previewLines,
-    loggedIn: Boolean(preview.userId),
+    loggedIn: Boolean(preview.userId || preview.guestLoyaltyEmail),
   });
   const quotedShipping =
     (preview.shippingMethod === "KURIR"
@@ -800,6 +801,7 @@ export async function addWebOrderItem(input: {
       id: true,
       updatedAt: true,
       userId: true,
+      guestLoyaltyEmail: true,
       shipCity: true,
       shippingMethod: true,
       items: {
@@ -828,7 +830,7 @@ export async function addWebOrderItem(input: {
   const deliveryQuote = await resolveDeliveryQuote({
     city: preview.shipCity,
     lines: previewLines,
-    loggedIn: Boolean(preview.userId),
+    loggedIn: Boolean(preview.userId || preview.guestLoyaltyEmail),
   });
   const quotedShipping =
     preview.shippingMethod === "KURIR"
@@ -1116,7 +1118,7 @@ export async function addWebOrderItem(input: {
           discountPct: product.discountPct,
           loyaltyPrice: null,
           loyaltyDiscountPct: ruleInputs.loyaltyDiscountPct,
-          loyaltyEligible: Boolean(order.userId),
+          loyaltyEligible: Boolean(order.userId || order.guestLoyaltyEmail),
           action: product.action,
           actionPrices: product.actionPrices.map((entry) => ({
             price: num(entry.salePrice),

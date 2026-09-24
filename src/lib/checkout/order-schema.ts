@@ -58,6 +58,7 @@ export const createOrderSchema = z
       .regex(/^[A-Za-z0-9_-]+$/)
       .optional(),
     guestEmail: z.email().optional(),
+    guestLoyalty: z.boolean().optional(),
     lines: z.array(lineSchema).min(1).max(50),
     shipping: addressSchema,
     billingSameAsShipping: z.boolean().default(true),

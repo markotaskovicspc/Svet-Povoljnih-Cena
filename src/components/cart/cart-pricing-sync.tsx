@@ -9,20 +9,28 @@ import { getMediaVariantUrl } from "@/lib/media";
 import type { Product } from "@/types";
 import { useCheckout } from "@/lib/checkout/store";
 import { deliveryCategory } from "@/lib/delivery-tariff";
+import { useGuestLoyalty } from "@/lib/loyalty/use-guest-loyalty";
 
 /** Keeps persisted cart snapshots aligned with current rules and auth state. */
 export function CartPricingSync() {
   const pathname = usePathname();
-  const loyaltyEligible = useLoyaltyEligibility();
+  const loggedIn = useLoyaltyEligibility();
+  const guestLoyalty = useGuestLoyalty();
+  const loyaltyEligible = loggedIn || Boolean(guestLoyalty.email);
   const checkoutStep = useCheckout((state) => state.step);
   const hydrated = useCart((state) => state.hydrated);
   const skuKey = useCart((state) =>
     state.lines.map((line) => line.sku).sort().join("|"),
   );
+  // Adding an existing SKU from a public product card can replace its saved
+  // price without changing the SKU set. Revalidate that snapshot as well.
+  const priceKey = useCart((state) => state.lines.map((line) =>
+    `${line.sku}:${line.unitPriceFull}:${line.unitPriceSale}:${line.unitPriceLoyalty ?? ""}`,
+  ).sort().join("|"));
   const reprice = useCart((state) => state.reprice);
 
   useEffect(() => {
-    if (!hydrated || !skuKey) return;
+    if (!hydrated || !skuKey || !guestLoyalty.ready) return;
     const controller = new AbortController();
     const skus = skuKey.split("|");
 
@@ -79,7 +87,7 @@ export function CartPricingSync() {
 
     void sync();
     return () => controller.abort();
-  }, [checkoutStep, hydrated, loyaltyEligible, pathname, reprice, skuKey]);
+  }, [checkoutStep, hydrated, loyaltyEligible, guestLoyalty.ready, pathname, reprice, skuKey, priceKey]);
 
   return null;
 }

@@ -1,5 +1,7 @@
 import { after, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
+import { getGuestLoyaltyMember } from "@/lib/loyalty/session.server";
+import { normalizeLoyaltyEmail } from "@/lib/loyalty/shared";
 import { createOrder, createOrderSchema } from "@/lib/api/checkout";
 import { logOperationalError } from "@/lib/monitoring";
 import { checkoutFollowUpKey } from "@/lib/checkout/outbox";
@@ -42,12 +44,17 @@ export async function POST(req: Request) {
   const user = await getCurrentUser();
   const userId = user?.userType === "customer" ? user.id : null;
   try {
+    const member = !userId && parsed.data.guestLoyalty ? await getGuestLoyaltyMember() : null;
+    if (!userId && parsed.data.guestLoyalty && (!member || member.email !== normalizeLoyaltyEmail(parsed.data.guestEmail ?? ""))) {
+      return NextResponse.json({ ok: false, error: { code: "LOYALTY_VERIFICATION_REQUIRED" } }, { status: 422 });
+    }
     const result = await createOrder(
       {
         ...parsed.data,
         analytics: hasAnalyticsConsent(req) ? parsed.data.analytics : undefined,
       },
       userId,
+      member,
     );
     if (result.ok) {
       // The durable job is already committed. Even an import failure or a
