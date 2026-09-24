@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Bell, BellOff, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { WishlistEntry } from "@/lib/hooks/use-wishlist";
+import { useCartUi } from "@/lib/hooks/use-cart-ui";
 import { useCart } from "@/lib/hooks/use-cart";
 import { CartQuantityControl } from "@/components/cart/cart-quantity-control";
 import { cn } from "@/lib/utils";
@@ -60,7 +61,8 @@ export function WishlistProductCard({
           : undefined,
       thumbnailUrl: product.thumbnailUrl ?? undefined,
     });
-    toast.success("Dodato u korpu");
+    const addedLine = useCart.getState().lines.find((line) => line.sku === entry.sku);
+    if (addedLine) useCartUi.getState().showAddedItem(addedLine, 1);
   }
 
   const media = (

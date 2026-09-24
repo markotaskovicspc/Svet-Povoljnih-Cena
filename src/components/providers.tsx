@@ -5,6 +5,7 @@ import { MotionConfig } from "framer-motion";
 import { SessionProvider } from "next-auth/react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AddToCartConfirmation } from "@/components/cart/add-to-cart-confirmation";
 import { CartDrawer } from "@/components/cart/cart-drawer";
 import { CrossSellModal } from "@/components/cart/cross-sell-modal";
 import { WishlistDrawer } from "@/components/cart/wishlist-drawer";
@@ -35,6 +36,7 @@ export function Providers({
           <TooltipProvider delay={150}>
             {children}
             <CartDrawer />
+            <AddToCartConfirmation />
             <WishlistDrawer />
             <CrossSellModal />
             <CartOverlayHistoryBridge />
@@ -52,6 +54,8 @@ export function Providers({
 }
 
 function CartOverlayHistoryBridge() {
+  const addedItem = useCartUi((s) => s.addedItem);
+  const closeAddedItem = useCartUi((s) => s.closeAddedItem);
   const drawerOpen = useCartUi((s) => s.drawerOpen);
   const wishlistOpen = useCartUi((s) => s.wishlistOpen);
   const crossSellSku = useCartUi((s) => s.crossSellSku);
@@ -60,7 +64,7 @@ function CartOverlayHistoryBridge() {
   const closeWishlist = useCartUi((s) => s.closeWishlist);
   const closeCrossSell = useCartUi((s) => s.closeCrossSell);
   const pushedOverlay = useRef(false);
-  const overlayOpen = drawerOpen || wishlistOpen || Boolean(crossSellSku || suggestionDestination);
+  const overlayOpen = Boolean(addedItem) || drawerOpen || wishlistOpen || Boolean(crossSellSku || suggestionDestination);
 
   useEffect(() => {
     if (!overlayOpen || pushedOverlay.current) return;
@@ -75,7 +79,8 @@ function CartOverlayHistoryBridge() {
     }
 
     const onPopState = () => {
-      if (suggestionDestination || crossSellSku) closeCrossSell();
+      if (addedItem) closeAddedItem();
+      else if (suggestionDestination || crossSellSku) closeCrossSell();
       else if (drawerOpen) closeDrawer();
       else if (wishlistOpen) closeWishlist();
       pushedOverlay.current = false;
@@ -84,6 +89,8 @@ function CartOverlayHistoryBridge() {
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, [
+    addedItem,
+    closeAddedItem,
     closeCrossSell,
     closeDrawer,
     closeWishlist,

@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import type { CartLine } from "./use-cart";
 import type { SKU } from "@/types";
 
 /**
@@ -9,6 +10,9 @@ import type { SKU } from "@/types";
  * flags never end up in localStorage.
  */
 interface CartUiState {
+  addedItem: { line: CartLine; addedQty: number } | null;
+  showAddedItem: (line: CartLine, addedQty: number) => void;
+  closeAddedItem: () => void;
   drawerOpen: boolean;
   crossSellSku: SKU | null;
   suggestionDestination: string | null;
@@ -25,15 +29,18 @@ interface CartUiState {
 }
 
 export const useCartUi = create<CartUiState>()((set) => ({
+  addedItem: null,
+  showAddedItem: (line, addedQty) => set({ addedItem: { line, addedQty }, drawerOpen: false, wishlistOpen: false, crossSellSku: null, suggestionDestination: null }),
+  closeAddedItem: () => set({ addedItem: null }),
   drawerOpen: false,
   crossSellSku: null,
   suggestionDestination: null,
   wishlistOpen: false,
-  openDrawer: () => set({ drawerOpen: true }),
+  openDrawer: () => set({ drawerOpen: true, addedItem: null }),
   closeDrawer: () => set({ drawerOpen: false }),
   setDrawer: (open) => set({ drawerOpen: open }),
-  openCrossSell: (sku) => set({ crossSellSku: sku }),
-  openSuggestion: (destination) => set({ suggestionDestination: destination }),
+  openCrossSell: (sku) => set({ crossSellSku: sku, addedItem: null }),
+  openSuggestion: (destination) => set({ suggestionDestination: destination, addedItem: null }),
   closeCrossSell: () => set({ crossSellSku: null, suggestionDestination: null }),
   openWishlist: () => set({ wishlistOpen: true }),
   closeWishlist: () => set({ wishlistOpen: false }),
