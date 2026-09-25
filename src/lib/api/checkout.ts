@@ -72,6 +72,7 @@ export type { CreateOrderInput } from "@/lib/checkout/order-schema";
 
 export type CreateOrderError =
   | { code: "EMPTY_CART" }
+  | { code: "PRICE_CHANGED" }
   | { code: "OUT_OF_STOCK"; sku: string }
   | { code: "INACTIVE"; sku: string }
   | { code: "VOUCHER_INVALID"; reason: string }
@@ -314,6 +315,7 @@ export async function createOrder(
   input: CreateOrderInput,
   userId: string | null,
   guestLoyalty: { email: string; consentVersion: string; consentAt: Date } | null = null,
+  options: { previewOnly?: boolean; expectedTotal?: number } = {},
 ): Promise<
   { ok: true; data: CreateOrderResult } | { ok: false; error: CreateOrderError }
 > {
@@ -637,6 +639,21 @@ export async function createOrder(
     0,
     subtotal + shippingPrice + assemblyTotal - pricing.totalOrderDiscount,
   );
+
+  // Social checkout uses this same calculation for its customer confirmation.
+  // A preview never allocates an order number, reserves stock or queues mail.
+  if (options.expectedTotal !== undefined && Math.round(total * 100) !== Math.round(options.expectedTotal * 100)) {
+    return { ok: false, error: { code: "PRICE_CHANGED" } };
+  }
+  if (options.previewOnly) {
+    return { ok: true, data: {
+      id: "", number: "", accessToken: "", total, subtotal, savings,
+      shipping: shippingPrice, assemblyTotal, paymentMethod: input.paymentMethod,
+      shippingMethod: input.shippingMethod, voucherDiscount,
+      firstPurchaseDiscount: pricing.firstPurchaseDiscount,
+      savedCardDiscount: pricing.savedCardDiscount,
+    } };
+  }
 
   const ship = input.shipping;
   const bill = input.billingSameAsShipping ? null : (input.billing ?? null);

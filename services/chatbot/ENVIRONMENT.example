@@ -1,0 +1,16 @@
+# Copy names into Railway Variables. Do not commit filled values.
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-5.4-mini
+DATABASE_URL=
+CHAT_DATA_KEY=
+CHAT_ADMIN_TOKEN=
+META_APP_SECRET=
+META_VERIFY_TOKEN=
+# Set supported Graph API version from the Meta app dashboard.
+META_GRAPH_VERSION=v25.0
+META_ACCOUNTS_JSON=[]
+SPC_BASE_URL=https://www.svetpovoljnihcena.rs
+SOCIAL_INTEGRATION_SECRET=
+BOT_ENABLED=false
+TEST_SENDER_IDS=
+PORT=8080
