@@ -1,3 +1,4 @@
+import { orderErrorMessage } from './delivery.mjs';
 import { classifyOrderIntent } from './order-intent.mjs';
 import { randomUUID } from 'node:crypto';
 import { answer, quoteMessage } from './agent.mjs';
@@ -62,7 +63,9 @@ export class Worker {
               message=`Porudžbina ${result.data.number} je uspešno kreirana. Ukupno: ${result.data.total} RSD, sa dostavom. Potvrda stiže i na mejl.`;
               delete state.pending;delete state.confirming;
             } else {
-              message='Porudžbina nije kreirana. Ponuda je istekla ili su se cena/dostupnost promenile. Proveriću ponovo podatke pre nove potvrde.';
+              const code=result.error?.code;
+              console.error('chat.order_rejected',{code:typeof code==='string'&&/^[A-Z_]+$/.test(code)?code:'UNKNOWN'});
+              message=orderErrorMessage(code);
               delete state.pending;
             }
           } else if (state.reclamation && isConfirmation(event.text,state.reclamation.code)) {
