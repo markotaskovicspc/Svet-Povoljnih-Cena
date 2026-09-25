@@ -57,7 +57,7 @@ export async function deferMyGlsPickupPackage(
       Number(line.shipment.codAmount ?? assignment?.codAmount ?? 0),
     );
     const packageValue = money(
-      Number(line.packageValue ?? unitPackageValue(line.orderItem)),
+      Number(line.packageValue ?? unitPackageValue(line.orderItem) * (line.packedQuantity ?? 1)),
     );
     const nextCod = money(Math.max(0, currentCod - packageValue));
     const currentCarrier = activeLines.find(
@@ -290,7 +290,8 @@ export async function rescheduleDeferredMyGlsPackage(
         orderItemId: source.orderItemId,
         purpose: "ORDER_DELIVERY",
         lineGroupKey: `order:${source.orderId}:MYGLS:deferred:${source.id}`,
-        quantity: 1,
+        quantity: source.packedQuantity ?? 1,
+        packedQuantity: source.packedQuantity ?? 1,
         packageNo: 1,
         weightKg: source.weightKg,
         widthCm: source.widthCm,

@@ -93,6 +93,7 @@ export async function createXExpressShipmentForOrder(
           product: {
             select: {
               barcode: true,
+              courierUnitsPerBox: true,
               packQty: true,
               packGrossWeightKg: true,
               grossWeightKg: true,

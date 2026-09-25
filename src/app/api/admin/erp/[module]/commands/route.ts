@@ -43,6 +43,7 @@ import {
 } from "@/lib/admin/warehouse-master.server";
 import {
   createPickupBatch,
+  loadEligibleOrders,
   deletePickupBatches,
   postPickupBatches,
 } from "@/lib/admin/pickup-batch.server";
@@ -277,7 +278,7 @@ async function runCommand(
       if (module !== "preuzimanja") {
         throw new Error("Komanda nije dostupna u ovom ERP modulu.");
       }
-      return createPickupBatchCommand(input);
+      return createPickupBatchCommand(input, actorId);
     case "pickup.delete":
       if (module !== "preuzimanja") {
         throw new Error("Komanda nije dostupna u ovom ERP modulu.");
@@ -575,14 +576,16 @@ async function createWarehouse(
 
 async function createPickupBatchCommand(
   input: Record<string, unknown>,
+  actorId: string,
 ): Promise<CommandResult> {
   const provider = input.provider === "MYGLS" || input.provider === "X_EXPRESS"
     ? input.provider
     : null;
   if (!provider) throw new Error("Izaberite X Express ili MyGLS.");
   const batch = await createPickupBatch(provider);
+  await loadEligibleOrders(batch.id, actorId);
   return {
-    message: `Nalog ${batch.number} je kreiran.`,
+    message: `Otvoren je zajednički picking nalog ${batch.number}; učitane su dostupne porudžbine, uz zakazane zamene i ponovne isporuke.`,
     createdId: batch.id,
     redirect: `/admin/erp/preuzimanja/${batch.id}?mode=edit`,
   };

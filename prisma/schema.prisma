@@ -374,6 +374,9 @@ model Product {
   weightKg      Decimal? @db.Decimal(10, 3)
   grossWeightKg Decimal? @db.Decimal(10, 3)
 
+  /// Sellable units in a courier carton; independent of inbound packQty.
+  courierUnitsPerBox Int @default(1)
+
   // Individual article package dimensions ŠxDxV (cm)
   unitPackWidthCm  Decimal? @db.Decimal(8, 2)
   unitPackDepthCm  Decimal? @db.Decimal(8, 2)
@@ -2886,6 +2889,8 @@ model PickupBatchLine {
   /// Quantity represented by this logical picking line. Null keeps legacy
   /// order rows compatible and falls back to OrderItem.qty.
   quantity                 Int?
+  /// Actual units in this physical parcel, retained for deferrals and COD.
+  packedQuantity           Int             @default(1)
   packageNo                Int             @default(1)
   weightKg                 Decimal?        @db.Decimal(10, 3)
   widthCm                  Decimal?        @db.Decimal(8, 2)

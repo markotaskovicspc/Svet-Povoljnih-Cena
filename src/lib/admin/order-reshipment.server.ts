@@ -52,7 +52,16 @@ export async function queueOrderReshipment(input: { orderId: string; shipmentId:
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('pickup-batch-number'))::text`;
     const year = new Date().getFullYear();
     const existing = await tx.pickupBatch.findMany({ where: { number: { startsWith: `PRE-${year}-` } }, select: { number: true } });
-    const batch = await tx.pickupBatch.create({ data: { number: nextPickupBatchNumber(existing.map(b => b.number), year), provider: source.provider, courier: "COURIER_SMALL" } });
+    const pending = await tx.pickupBatch.findFirst({
+      where: { provider: source.provider, status: "DRAFT", labelsCreationStartedAt: null, labelsCreatedAt: null },
+      orderBy: { createdAt: "desc" },
+    });
+    if (pending) {
+      await tx.$queryRaw`SELECT "id" FROM "PickupBatch" WHERE "id" = ${pending.id} FOR UPDATE`;
+      const fresh = await tx.pickupBatch.findUniqueOrThrow({ where: { id: pending.id } });
+      if (fresh.status !== "DRAFT" || fresh.labelsCreationStartedAt || fresh.labelsCreatedAt) throw new Error("Picking nalog se upravo šalje kuriru. Ponovite zakazivanje.");
+    }
+    const batch = pending ?? await tx.pickupBatch.create({ data: { number: nextPickupBatchNumber(existing.map(b => b.number), year), provider: source.provider, courier: "COURIER_SMALL" } });
     const retry = await tx.orderReshipment.create({ data: {
       orderId: order.id, sourceShipmentId: source.id, batchId: batch.id, reason, actorId: input.actorId,
       codAmount: isCashOnDeliveryPaymentMethod(order.paymentMethod) && !order.payments.some(payment => payment.status === "PAID") ? source.codAmount ?? assignment?.codAmount ?? order.total : 0,
@@ -67,7 +76,7 @@ export async function queueOrderReshipment(input: { orderId: string; shipmentId:
     }
     await tx.pickupBatchLine.createMany({ data: lines.map((line, index) => ({
       batchId: batch.id, orderId: order.id, orderItemId: line.orderItemId, purpose: "ORDER_DELIVERY", lineGroupKey: `reshipment:${retry.id}`,
-      quantity: quantities.get(line.orderItemId!), packageNo: index + 1,
+      quantity: quantities.get(line.orderItemId!), packedQuantity: line.packedQuantity, packageNo: index + 1,
       weightKg: line.weightKg, widthCm: line.widthCm, depthCm: line.depthCm, heightCm: line.heightCm,
     })) });
     await tx.orderStatusEvent.create({ data: { orderId: order.id, status: "U_PRIPREMI", actorId: input.actorId, note: `Nova roba ide u picking ${batch.number}. Stara pošiljka ${source.trackingNo ?? source.id} evidentirana je kao očekivani povrat, bez refundacije. Razlog: ${reason}` } });

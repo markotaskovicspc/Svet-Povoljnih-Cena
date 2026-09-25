@@ -43,9 +43,15 @@ export default async function PickupBatchPrintPage({
               sku: true,
               name: true,
               qty: true,
+              categoryName: true,
+              color1: true,
+              color2: true,
               product: {
                 select: {
                   barcode: true,
+                  colorPrimary: true,
+                  colorSecondary: true,
+                  categories: { orderBy: { categoryId: "asc" }, include: { category: { include: { parent: true } } } },
                 },
               },
             },
@@ -56,7 +62,11 @@ export default async function PickupBatchPrintPage({
   });
   if (!batch) notFound();
 
-  const picking = buildPickupPrintRows(batch.lines);
+  const activeLines = batch.lines.filter((line) => !line.deferredAt);
+  const picking = buildPickupPrintRows(activeLines);
+  const printedAt = new Intl.DateTimeFormat("sr-Latn-RS", {
+    timeZone: "Europe/Belgrade", dateStyle: "short", timeStyle: "short",
+  }).format(new Date());
 
   return (
     <main className="mx-auto max-w-[1200px] space-y-8 bg-white p-6 text-black print:max-w-none print:p-0">
@@ -103,8 +113,10 @@ export default async function PickupBatchPrintPage({
               <dt>Kurir</dt><dd className="font-bold">{providerLabel(batch.provider)}</dd>
             </div>
             <div>
-              <dt>Paketa</dt><dd className="font-bold">{batch.lines.length}</dd>
+              <dt>Paketa</dt><dd className="font-bold">{activeLines.length}</dd>
             </div>
+            {batch.pickupDate ? <div><dt>Termin preuzimanja</dt><dd className="font-bold">{new Intl.DateTimeFormat("sr-Latn-RS", { timeZone: "Europe/Belgrade", dateStyle: "short", timeStyle: "short" }).format(batch.pickupDate)}</dd></div> : null}
+            <div><dt>Datum štampe</dt><dd className="font-bold">{printedAt}</dd></div>
           </dl>
         </header>
         <table className="mt-5 w-full border-collapse text-sm print:text-xs">
@@ -125,7 +137,9 @@ export default async function PickupBatchPrintPage({
                 <td className="py-3 font-mono font-bold">{row.sku}</td>
                 <td className="px-2 py-3"><PickingBarcode value={row.barcode} /></td>
                 <td className="px-2 py-3">
+                  <p className="text-xs font-semibold">{row.category}</p>
                   <div>{row.name}</div>
+                  {row.color ? <p className="mt-1 text-xs">Boja: {row.color}</p> : null}
                   {row.quantityDistribution.length ? (
                     <p className="mt-1 text-xs">
                       <span className="font-semibold">Po kupcima (porudžbinama): </span>

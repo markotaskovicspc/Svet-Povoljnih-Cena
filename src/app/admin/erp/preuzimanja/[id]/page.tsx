@@ -953,7 +953,7 @@ export default async function PickupBatchPage({
                                   <AdminActionForm action={savePackageAction} className="flex flex-wrap items-end gap-2 rounded-lg border border-border p-2">
                                     <input type="hidden" name="batchId" value={batch.id} />
                                     <input type="hidden" name="lineId" value={row.lineId} />
-                                    <span className="pb-1 text-xs font-semibold">#{row.packageNo}</span>
+                                    <span className="pb-1 text-xs font-semibold">#{row.packageNo} · {row.packedQuantity} kom</span>
                                     <PackageMeasureInput name="weightKg" label="kg" max={myGls ? 40 : 30} step="0.001" value={row.weightKg} />
                                     <PackageMeasureInput name="widthCm" label="Š" max={myGls ? 200 : 60} value={row.widthCm} />
                                     <PackageMeasureInput name="depthCm" label="D" max={myGls ? 200 : 60} value={row.depthCm} />
@@ -963,7 +963,7 @@ export default async function PickupBatchPage({
                                 ) : (
                                   <div className="rounded-lg border border-border p-2">
                                     <p className={row.measurementsComplete ? "text-ink-700" : "text-warning"}>
-                                      #{row.packageNo} · {formatPackageMeasurements(row)}
+                                      #{row.packageNo} · {row.packedQuantity} kom · {formatPackageMeasurements(row)}
                                     </p>
                                     {row.providerParcelNumber ? (
                                       <p className="mt-1 font-mono text-xs text-ink-500">
@@ -1163,6 +1163,7 @@ function pickupLineRow(line: {
   purpose: "ORDER_DELIVERY" | "RECLAMATION_RETURN" | "RECLAMATION_REPLACEMENT";
   lineGroupKey: string;
   quantity: number | null;
+  packedQuantity: number;
   packageNo: number;
   weightKg: unknown;
   widthCm: unknown;
@@ -1276,6 +1277,7 @@ function pickupLineRow(line: {
     color1: product?.colorPrimary ?? item?.color1 ?? "",
     color2: product?.colorSecondary ?? item?.color2 ?? "",
     qty: isPartReplacement ? 1 : line.quantity ?? item?.qty ?? 0,
+    packedQuantity: line.packedQuantity,
     packageNo: line.packageNo,
     courierPickedUpAt: courier ? courier.pickedUpAt : line.courierPickedUpAt,
     handoverReport: courier?.handoverReport,

@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/db", () => ({ db: {
   $transaction: (run: (tx: unknown) => unknown) => run({
     $queryRaw: mocks.query,
-    pickupBatch: { findUnique: mocks.batch },
+    pickupBatch: { findUnique: mocks.batch, findMany: async () => [] },
     warehouse: { findFirst: mocks.warehouse },
     payment: { findMany: mocks.payments },
     orderItem: { findMany: mocks.items },
@@ -47,7 +47,7 @@ it("loads both zero-weight units into X Express without inventing weight or mark
 
 it("still leaves unpaid bank-transfer orders out of picking", async () => {
   mocks.query.mockReset().mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: "order", number: "SPC-test", paymentMethod: "UPLATA_NA_RACUN" }]);
-  const result = await loadEligibleOrders("batch", "actor");
+  const result = await loadEligibleOrders("batch", "actor", ["order"]);
   expect(result).toMatchObject({ orderCount: 0, skippedPaymentCount: 1 });
   expect(mocks.insert).not.toHaveBeenCalled();
 });

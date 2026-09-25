@@ -164,6 +164,7 @@ async function processShipmentForOrder(
           supplierReservedQty: true,
           product: {
             select: {
+              courierUnitsPerBox: true,
               packQty: true,
               packWidthCm: true,
               packDepthCm: true,
@@ -426,7 +427,7 @@ async function processShipmentForOrder(
     },
     notes: order.notes,
     packageCount: shipmentItems.reduce(
-      (sum, item) => sum + courierPackageCount(item.qty),
+      (sum, item) => sum + courierPackageCount(item.qty, item.product?.courierUnitsPerBox),
       0,
     ),
   });

@@ -42,6 +42,7 @@ describe("pickup picking print", () => {
         sku: "100",
         name: "Ergo Lux",
         barcode: "0012345678905",
+        category: "Bez kategorije", color: "",
         quantity: 5,
         packageCount: 3,
         quantityDistribution: [{ quantity: 3, orderCount: 1 }, { quantity: 2, orderCount: 1 }],
@@ -51,6 +52,7 @@ describe("pickup picking print", () => {
         sku: "200",
         name: "Urban Seat",
         barcode: null,
+        category: "Bez kategorije", color: "",
         quantity: 1,
         packageCount: 1,
         quantityDistribution: [{ quantity: 1, orderCount: 1 }],
@@ -73,6 +75,7 @@ describe("pickup picking print", () => {
         sku: "—",
         name: "Artikal više nije povezan sa porudžbinom",
         barcode: null,
+        category: "Bez kategorije", color: "",
         quantity: 0,
         packageCount: 1,
       }),
@@ -106,6 +109,7 @@ describe("pickup picking print", () => {
         sku: "DEO ZA 110081",
         name: "ukrasna maska — NE SLATI CEO ARTIKAL (Kancelarijska stolica ERGO LUX)",
         barcode: null,
+        category: "Bez kategorije", color: "",
         quantity: 1,
         packageCount: 1,
         quantityDistribution: [{ quantity: 1, orderCount: 1 }],
@@ -149,4 +153,29 @@ describe("pickup picking print", () => {
       quantityDistribution: [{ quantity: 6, orderCount: 2 }],
     });
   });
+});
+
+it("sorts categories first and names second, keeps colors, and excludes deferred carton contents", () => {
+  const make = (id: string, name: string, category: string, packedQuantity = 1) => ({
+    id, lineGroupKey: "order:1", quantity: 3, packedQuantity,
+    orderItem: { id, sku: id, name, qty: 3, categoryName: category, color1: "Siva", color2: "Crna" },
+  });
+  const a = make("999", "Alfa", "Stolice", 2);
+  const rows = buildPickupPrintRows([
+    make("001", "Zebra", "Stolice"), a,
+    { ...a, id: "remainder", packedQuantity: 1, deferredAt: new Date() },
+    make("500", "Zulu", "Lampe"),
+  ]);
+  expect(rows.map(row => row.name)).toEqual(["Zulu", "Alfa", "Zebra"]);
+  expect(rows[1]).toMatchObject({ color: "Siva / Crna", quantity: 2, packageCount: 1,
+    quantityDistribution: [{ quantity: 2, orderCount: 1 }] });
+});
+
+it("counts a full box and an odd remainder as three units for one customer", () => {
+  const orderItem = { id: "item", sku: "100", name: "Stolica", qty: 3 };
+  const rows = buildPickupPrintRows([2, 1].map((packedQuantity, i) => ({
+    id: String(i), lineGroupKey: "order:1", quantity: 3, packedQuantity, orderItem,
+  })));
+  expect(rows[0]).toMatchObject({ quantity: 3, packageCount: 2,
+    quantityDistribution: [{ quantity: 3, orderCount: 1 }] });
 });

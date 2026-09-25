@@ -154,6 +154,7 @@ const overrideSchema = z.object({
   unitPackWidthCm: optionalNonnegativeNumber(),
   unitPackDepthCm: optionalNonnegativeNumber(),
   unitPackHeightCm: optionalNonnegativeNumber(),
+  courierUnitsPerBox: optionalPositiveInteger(),
   packQty: optionalPositiveInteger(),
   palletQty: optionalPositiveInteger(),
   packWidthCm: optionalPositiveNumber(),
@@ -540,6 +541,7 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
           unitPackWidthCm: d.unitPackWidthCm ?? null,
           unitPackDepthCm: d.unitPackDepthCm ?? null,
           unitPackHeightCm: d.unitPackHeightCm ?? null,
+          courierUnitsPerBox: d.courierUnitsPerBox ?? 1,
           packQty: d.packQty ?? null,
           palletQty: d.palletQty ?? null,
           packWidthCm: d.packWidthCm ?? null,
@@ -2112,6 +2114,10 @@ export default async function ProductDetail({
                 <Input name="grossWeightKg" type="number" min={0} step="0.001" defaultValue={product.grossWeightKg ? num(product.grossWeightKg) : ""} />
               </Field>
             </div>
+            <Field label="Komada u kurirskoj kutiji">
+              <Input name="courierUnitsPerBox" type="number" min={1} step={1} required defaultValue={product.courierUnitsPerBox} />
+              <p className="mt-1 text-xs text-ink-500">Podrazumevano 1. Za 2 komada u kutiji, 3 kupljena komada daju 2 adresnice. Za punu kutiju koristimo mere i bruto težinu transportnog pakovanja; kom/pak mora odgovarati ovoj količini. Pojedinačni ostatak koristi mere pojedinačnog artikla. Kupovina neparnog broja je dozvoljena.</p>
+            </Field>
             <ProductUnitPackagingFields
               key={product.id}
               widthCm={

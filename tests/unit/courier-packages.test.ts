@@ -256,3 +256,27 @@ describe("physical courier packages", () => {
     expect(() => requireCompleteXExpressPackages([{ packageNo: 1, weightKg, widthCm: 17, depthCm: 17, heightCm: 25 }])).toThrow("težina");
   });
 });
+
+describe("explicit courier cartons", () => {
+  const product = { courierUnitsPerBox: 2, packQty: 2, packGrossWeightKg: 12,
+    packWidthCm: 50, packDepthCm: 45, packHeightCm: 55,
+    grossWeightKg: 5, unitPackWidthCm: 30, unitPackDepthCm: 25, unitPackHeightCm: 35 };
+  it.each([[1, 1], [2, 1], [3, 2], [4, 2], [5, 3]])("packs %s units into %s parcels", (qty, count) => {
+    const packages = derivePhysicalPackages([{ id: "i", name: "Stolica", qty, product }]);
+    expect(packages).toHaveLength(count);
+    expect(packages.reduce((sum, pkg) => sum + pkg.packedQuantity!, 0)).toBe(qty);
+    expect(packages.map(pkg => pkg.packageNo)).toEqual(Array.from({length: count}, (_, i) => i + 1));
+  });
+  it("uses the full carton measurements and individual measurements for the odd unit", () => {
+    expect(derivePhysicalPackages([{ id: "i", name: "Stolica", qty: 3, product }])).toMatchObject([
+      { packedQuantity: 2, weightKg: 12, widthCm: 50, depthCm: 45, heightCm: 55 },
+      { packedQuantity: 1, weightKg: 5, widthCm: 30, depthCm: 25, heightCm: 35 },
+    ]);
+  });
+  it("does not invent a weight for a partially filled carton", () => {
+    const packages = derivePhysicalPackages([{ id: "i", name: "Stolica", qty: 2,
+      product: { ...product, courierUnitsPerBox: 4, packQty: 4 } }]);
+    expect(packages[0]).toMatchObject({ packedQuantity: 2, weightKg: null });
+    expect(() => requireCompleteXExpressPackages(packages)).toThrow("težina");
+  });
+});

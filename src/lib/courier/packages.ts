@@ -8,6 +8,7 @@ export const MAX_MYGLS_PACKAGE_SIDE_CM = 200;
 export const MAX_MYGLS_PACKAGE_GIRTH_CM = 300;
 
 export type PhysicalPackage = {
+  packedQuantity?: number;
   packageNo: number;
   orderItemId?: string | null;
   content?: string | null;
@@ -18,6 +19,7 @@ export type PhysicalPackage = {
 };
 
 export type CompletePhysicalPackage = {
+  packedQuantity?: number;
   packageNo: number;
   orderItemId?: string | null;
   content?: string | null;
@@ -32,6 +34,7 @@ export type PackageSourceItem = {
   name: string;
   qty: number;
   product?: {
+    courierUnitsPerBox?: number | null;
     packQty?: number | null;
     packWidthCm?: unknown;
     packDepthCm?: unknown;
@@ -48,13 +51,9 @@ export type PackageSourceItem = {
   } | null;
 };
 
-/**
- * Courier labels follow the merchant's operational rule: every sold unit is
- * handed to the courier as its own package. Catalogue `packQty` describes
- * inbound/warehouse transport packaging and must never merge customer units.
- */
-export function courierPackageCount(quantity: unknown) {
-  return positiveInteger(quantity) ?? 1;
+/** An explicit courier carton groups units; inbound packQty alone never does. */
+export function courierPackageCount(quantity: unknown, unitsPerBox: unknown = 1) {
+  return Math.ceil((positiveInteger(quantity) ?? 1) / (positiveInteger(unitsPerBox) ?? 1));
 }
 
 /**
@@ -120,8 +119,8 @@ export function hasKnownMyGlsOversizeSurcharge(pkg: PhysicalPackage) {
 }
 
 /**
- * Expands order lines into one physical package per sold unit. Individual
- * article packaging is the only catalogue source for courier dimensions.
+ * Expands order lines into full courier cartons and a separate remainder.
+ * Full cartons use transport measurements; a single remainder uses unit measurements.
  * Missing values intentionally remain null so an operator must enter real
  * measurements before a provider request can be sent.
  */
@@ -131,16 +130,22 @@ export function derivePhysicalPackages(
   const packages: PhysicalPackage[] = [];
 
   for (const item of items) {
-    const count = courierPackageCount(item.qty);
+    const unitsPerBox = positiveInteger(item.product?.courierUnitsPerBox) ?? 1;
+    const quantity = positiveInteger(item.qty) ?? 1;
+    const count = courierPackageCount(quantity, unitsPerBox);
     for (let index = 0; index < count; index += 1) {
+      const packedQuantity = Math.min(unitsPerBox, quantity - index * unitsPerBox);
+      const multiple = packedQuantity > 1;
+      const matchingCarton = item.product?.packQty === packedQuantity;
       packages.push({
+        packedQuantity,
         packageNo: packages.length + 1,
         orderItemId: item.id,
         content: item.name,
-        weightKg: courierUnitWeightKg(item.product),
-        widthCm: positiveNumber(item.product?.unitPackWidthCm),
-        depthCm: positiveNumber(item.product?.unitPackDepthCm),
-        heightCm: positiveNumber(item.product?.unitPackHeightCm),
+        weightKg: multiple ? (matchingCarton ? positiveNumber(item.product?.packGrossWeightKg) : null) : courierUnitWeightKg(item.product),
+        widthCm: positiveNumber(multiple ? item.product?.packWidthCm : item.product?.unitPackWidthCm),
+        depthCm: positiveNumber(multiple ? item.product?.packDepthCm : item.product?.unitPackDepthCm),
+        heightCm: positiveNumber(multiple ? item.product?.packHeightCm : item.product?.unitPackHeightCm),
       });
     }
   }
@@ -201,6 +206,7 @@ export function requireCompleteMyGlsPackages(
     }
     return {
       packageNo,
+      packedQuantity: pkg.packedQuantity,
       orderItemId: pkg.orderItemId,
       content: pkg.content,
       weightKg: completeWeightKg,
@@ -244,6 +250,7 @@ export function requireCompletePhysicalPackages(
     }
     return {
       packageNo,
+      packedQuantity: pkg.packedQuantity,
       orderItemId: pkg.orderItemId,
       content: pkg.content,
       weightKg: values.weightKg!,

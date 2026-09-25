@@ -2,6 +2,8 @@ export type PickupPrintLine = {
   id: string;
   lineGroupKey: string;
   quantity: number | null;
+  packedQuantity?: number;
+  deferredAt?: Date | null;
   purpose?: "ORDER_DELIVERY" | "RECLAMATION_RETURN" | "RECLAMATION_REPLACEMENT";
   reclamation?: {
     resolution: string | null;
@@ -12,8 +14,14 @@ export type PickupPrintLine = {
     sku: string;
     name: string;
     qty: number;
+    categoryName?: string | null;
+    color1?: string | null;
+    color2?: string | null;
     product?: {
       barcode: string | null;
+      colorPrimary?: string | null;
+      colorSecondary?: string | null;
+      categories?: { category: { name: string; parent?: { name: string } | null } }[];
     } | null;
   } | null;
 };
@@ -23,6 +31,8 @@ export type PickupPrintRow = {
   sku: string;
   name: string;
   barcode: string | null;
+  category: string;
+  color: string;
   quantity: number;
   packageCount: number;
   quantityDistribution: { quantity: number; orderCount: number }[];
@@ -30,8 +40,8 @@ export type PickupPrintRow = {
 
 /**
  * Produces one picking row per article across the entire batch. A logical order
- * item can have several physical package lines, so its quantity is added only
- * once while every physical package is still included in packageCount.
+ * item can have several physical package lines. Their snapshotted contents
+ * are summed; legacy fixtures without a snapshot count the logical item once.
  * Distribution counts picking groups (customer orders), not physical packages;
  * separate item lines for the same SKU in one group are combined first.
  */
@@ -43,6 +53,7 @@ export function buildPickupPrintRows(
   const quantitiesByGroup = new Map<string, Map<string, number>>();
 
   for (const line of lines) {
+    if (line.deferredAt) continue;
     const isPartReplacement =
       line.purpose === "RECLAMATION_REPLACEMENT" &&
       line.reclamation?.resolution === "ZAMENA_DELA";
@@ -63,6 +74,11 @@ export function buildPickupPrintRows(
       barcode: isPartReplacement
         ? null
         : line.orderItem?.product?.barcode?.trim() || null,
+      category: line.orderItem?.product?.categories?.[0]?.category.parent?.name
+        ?? line.orderItem?.product?.categories?.[0]?.category.name
+        ?? line.orderItem?.categoryName ?? "Bez kategorije",
+      color: [line.orderItem?.product?.colorPrimary ?? line.orderItem?.color1,
+        line.orderItem?.product?.colorSecondary ?? line.orderItem?.color2].filter(Boolean).join(" / "),
       quantity: 0,
       packageCount: 0,
       quantityDistribution: [],
@@ -73,11 +89,11 @@ export function buildPickupPrintRows(
     const itemKey = line.orderItem
       ? `${line.lineGroupKey}:${line.orderItem.id}`
       : `missing:${line.id}`;
-    if (countedItems.has(itemKey)) continue;
+    if (line.packedQuantity == null && countedItems.has(itemKey)) continue;
 
     const quantity = isPartReplacement
       ? 1
-      : line.quantity ?? line.orderItem?.qty ?? 0;
+      : line.packedQuantity ?? line.quantity ?? line.orderItem?.qty ?? 0;
     current.quantity += quantity;
     const groups = quantitiesByGroup.get(key) ?? new Map<string, number>();
     groups.set(line.lineGroupKey, (groups.get(line.lineGroupKey) ?? 0) + quantity);
@@ -98,6 +114,8 @@ export function buildPickupPrintRows(
 
   return [...rows.values()].sort(
     (left, right) =>
+      left.category.localeCompare(right.category, "sr-Latn", { sensitivity: "base" }) ||
+      left.name.localeCompare(right.name, "sr-Latn", { numeric: true, sensitivity: "base" }) ||
       left.sku.localeCompare(right.sku, "sr-Latn", {
         numeric: true,
         sensitivity: "base",
