@@ -44,12 +44,14 @@ export function StatCard({
   value,
   amount,
   hint,
+  breakdown,
   tone = "default",
 }: {
   label: string;
   value: string;
   amount?: string;
   hint?: string;
+  breakdown?: { label: string; value: string }[];
   tone?: "default" | "success" | "warning" | "danger";
 }) {
   const toneCls =
@@ -78,6 +80,12 @@ export function StatCard({
           {amount}
         </p>
       ) : null}
+      {breakdown?.length ? <dl className="mt-4 space-y-2 border-t border-border/60 pt-3 text-sm">
+        {breakdown.map(row => <div key={row.label} className="flex flex-wrap justify-between gap-x-3 gap-y-1">
+          <dt className="text-ink-500">{row.label}</dt>
+          <dd className="font-medium tabular-nums text-ink-900">{row.value}</dd>
+        </div>)}
+      </dl> : null}
       {hint ? <p className="mt-1 text-xs text-ink-500">{hint}</p> : null}
     </Card>
   );
