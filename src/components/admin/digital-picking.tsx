@@ -46,6 +46,7 @@ export function DigitalPicking({ initial }: { initial: Session }) {
   const [quantity, setQuantity] = useState(1);
   const [note, setNote] = useState("");
   const [noteKey, setNoteKey] = useState("");
+  useEffect(() => { if (!busy && !retry) input.current?.focus(); }, [busy, retry]);
   const total = session.rows.reduce((sum, r) => sum + r.quantity, 0);
   const done = session.rows.reduce((sum, r) => sum + (session.progress[r.key] ?? 0), 0);
   const editable = session.editable && !busy && !retry;
@@ -56,7 +57,7 @@ export function DigitalPicking({ initial }: { initial: Session }) {
       const response = await recordPicking(request);
       if (response.ok && response.result) {
         setSession(response.result); setRetry(null); setCode(""); setNote(""); setQuantity(1);
-        setMessage(response.message); input.current?.focus();
+        setMessage(response.message);
       } else { setMessage(response.message); setRetry(request); }
     } catch { setRetry(request); setMessage("Potvrda nije stigla. Proverite vezu pa ponovite isti zahtev — neće biti duplog evidentiranja."); }
     finally { lock.current = false; setBusy(false); }
