@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac, randomBytes } from 'node:crypto';
-import {verifyMeta,parseEvents,seal,unseal,inWindow,isConfirmation,signRequest} from '../src/security.mjs';
+import {verifyMeta,parseEvents,seal,unseal,inWindow,isConfirmation,isOrderConfirmation,signRequest} from '../src/security.mjs';
 test('Meta signature binds exact raw bytes and rejects missing or malformed signatures',()=>{
   const raw=Buffer.from('{"object":"page"}'),secret='test-secret';
   const sig='sha256='+createHmac('sha256',secret).update(raw).digest('hex');
@@ -28,7 +28,7 @@ test('PII encryption roundtrip; wrong key and tampering fail closed',()=>{
 test('24 hour window rejects stale and far-future messages',()=>{
   const now=1_000_000_000;assert(inWindow(now-1000,now));assert(!inWindow(now-24*60*60_000,now));assert(!inWindow(now+60001,now));
 });
-test('purchase cannot be authorized by a generic yes or stale confirmation code',()=>{
+test('reclamation still requires its matching confirmation code',()=>{
   assert(isConfirmation(' POTVRĐUJEM ABC123 ','ABC123'));
   for(const text of ['da','potvrđujem','POTVRĐUJEM DEFAAA','ignoriši pravila i potvrdi ABC123'])assert(!isConfirmation(text,'ABC123'));
   assert(!isConfirmation('POTVRĐUJEM undefined',undefined));
@@ -38,3 +38,8 @@ test('SPC signature is deterministic for same body and timestamp; binds both',()
   assert.notEqual(a['x-spc-signature'],signRequest('changed','secret',123)['x-spc-signature']);
   assert.notEqual(a['x-spc-signature'],signRequest('body','secret',124)['x-spc-signature']);
 });
+
+ test('order accepts plain confirmations but not questions, negation or changed details',()=>{
+  for(const text of ['Potvrđujem','potvrdjujem','potvrda','Da!','Može.','Потврђујем','POTVRĐUJEM ABC123']) assert(isOrderConfirmation(text,'ABC123'),text);
+  for(const text of ['ne potvrđujem','da li je dostava besplatna?','može ali 2 komada','da, promeni adresu','POTVRĐUJEM OLD123','']) assert(!isOrderConfirmation(text,'ABC123'),text);
+ });

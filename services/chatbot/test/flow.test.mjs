@@ -63,3 +63,19 @@ test('changed shipping details invalidate the previous customer confirmation',as
     await store.accept({...event,id:'facebook:stale-confirmation'});await worker.tick();assert.equal(calls.length,0);
   }finally{await store.close();}
 });
+
+test('plain confirmation creates pending order once, repeated confirmation does not restart purchase',async()=>{
+  const {store,worker,calls,event}=await setup();
+  try {
+    await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
+    worker.answerFn=async()=>{throw Error('Confirmation must not call the model');};
+    await store.accept({...event,id:'facebook:plain-confirm',text:'potvrđujem'});
+    await worker.tick();
+    assert.equal(calls.length,1);assert.equal(calls[0].action,'create_order');
+    await store.accept({...event,id:'facebook:repeat-confirm',text:'da'});
+    await worker.tick();
+    assert.equal(calls.length,1);
+    const replies=(await store.pool.query('SELECT payload FROM spc_chat_outbox')).rows.map(r=>store.decode(r.payload).text);
+    assert(replies.some(t=>t.includes('već kreirana')));
+  }finally{await store.close();}
+});

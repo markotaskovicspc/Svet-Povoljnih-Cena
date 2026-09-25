@@ -24,6 +24,13 @@ export function inWindow(timestamp, now = Date.now()) { return timestamp <= now 
 export function isConfirmation(text, code) {
   return typeof code === 'string' && text.trim().toUpperCase() === `POTVRĐUJEM ${code}`;
 }
+// Only a whole, affirmative message confirms the currently pending order.
+// Reclamation confirmations keep their separate code-based contract.
+export function isOrderConfirmation(text, code) {
+  if (isConfirmation(text, code)) return true;
+  const normalized=String(text).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'dj').replace(/[.!]+$/,'').trim();
+  return ['da','potvrdjujem','potvrda','potvrdjujem porudzbinu','da potvrdjujem','da, potvrdjujem','moze','vazi','potvrdi','потврђујем','потврда','да','може','важи','потврди'].includes(normalized);
+}
 export function parseEvents(body, accounts) {
   if (!['page', 'instagram'].includes(body?.object)) return [];
   const channel = body.object === 'page' ? 'facebook' : 'instagram';

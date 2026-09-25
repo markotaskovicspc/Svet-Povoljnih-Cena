@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { answer, quoteMessage } from './agent.mjs';
-import { inWindow, isConfirmation } from './security.mjs';
+import { inWindow, isConfirmation, isOrderConfirmation } from './security.mjs';
 
 export class Worker {
   constructor({store,spc,accounts,model,graphVersion,enabled=false,testSenders=[],answerFn=answer}) {
@@ -38,7 +38,7 @@ export class Worker {
           } else if (event.attachments.length) {
             await this.store.pause(row.id,'Prilog/slika zahteva pregled zaposlenog');
             message='Primili smo prilog. Prosledio sam razgovor kolegama da provere artikal ili reklamaciju.';
-          } else if (state.pending && isConfirmation(event.text,state.pending.code)) {
+          } else if (state.pending && isOrderConfirmation(event.text,state.pending.code)) {
             const result=await this.spc({action:'create_order',channel:event.channel,conversationId:row.id,quoteToken:state.pending.quoteToken});
             if(result.ok) {
               state.orders.push({number:result.data.number,accessToken:result.data.accessToken});
@@ -59,6 +59,8 @@ export class Worker {
               state.reclamationInFlight=false; delete state.reclamation;
               if(!result.ok) await this.store.pause(row.id,'Reklamacija zahteva proveru');
             }
+          } else if (!state.pending && !state.reclamation && state.orders.length && isOrderConfirmation(event.text)) {
+            message=`Porudžbina ${state.orders.at(-1).number} je već kreirana. Nije napravljena nova porudžbina. Ako želite izmenu, napišite šta menjate.`;
           } else {
             if(state.reclamationInFlight) throw new Error('RECLAMATION_UNCERTAIN');
             const result=await this.answerFn({event,state,spc:this.spc,model:this.model,pause:reason=>this.store.pause(row.id,reason)});
