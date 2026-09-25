@@ -69,6 +69,8 @@ export type DashboardDataInput = {
 
 type OrderSummary = {
   today_ananas?: number;
+  today_ananas_total?: number;
+  period_ananas_total?: number;
   period_ananas?: number;
   today_count: number;
   today_total: number;
@@ -120,12 +122,14 @@ export function buildDashboardDataQuery(input: DashboardDataInput, section: "all
       SELECT
         COUNT(*) FILTER (WHERE o."createdAt" >= ${todayPeriod.start} AND o."createdAt" < ${todayPeriod.endExclusive})::int AS today_count,
         COALESCE(SUM(o.total) FILTER (WHERE o."createdAt" >= ${todayPeriod.start} AND o."createdAt" < ${todayPeriod.endExclusive}), 0)::double precision AS today_total,
-        COALESCE(SUM(o.shipping) FILTER (WHERE o."createdAt" >= ${todayPeriod.start} AND o."createdAt" < ${todayPeriod.endExclusive}), 0)::double precision AS today_shipping,
+        COALESCE(SUM(o.shipping) FILTER (WHERE o.channel <> 'ANANAS' AND o."createdAt" >= ${todayPeriod.start} AND o."createdAt" < ${todayPeriod.endExclusive}), 0)::double precision AS today_shipping,
         COUNT(*) FILTER (WHERE o."createdAt" >= ${ordersPeriod.start} AND o."createdAt" < ${ordersPeriod.endExclusive})::int AS period_count,
         COALESCE(SUM(o.total) FILTER (WHERE o."createdAt" >= ${ordersPeriod.start} AND o."createdAt" < ${ordersPeriod.endExclusive}), 0)::double precision AS period_total,
-        COALESCE(SUM(o.shipping) FILTER (WHERE o."createdAt" >= ${ordersPeriod.start} AND o."createdAt" < ${ordersPeriod.endExclusive}), 0)::double precision AS period_shipping
+        COALESCE(SUM(o.shipping) FILTER (WHERE o.channel <> 'ANANAS' AND o."createdAt" >= ${ordersPeriod.start} AND o."createdAt" < ${ordersPeriod.endExclusive}), 0)::double precision AS period_shipping
       , COUNT(*) FILTER (WHERE o.channel = 'ANANAS' AND o."createdAt" >= ${todayPeriod.start} AND o."createdAt" < ${todayPeriod.endExclusive})::int AS today_ananas
       , COUNT(*) FILTER (WHERE o.channel = 'ANANAS' AND o."createdAt" >= ${ordersPeriod.start} AND o."createdAt" < ${ordersPeriod.endExclusive})::int AS period_ananas
+      , COALESCE(SUM(o.total) FILTER (WHERE o.channel = 'ANANAS' AND o."createdAt" >= ${todayPeriod.start} AND o."createdAt" < ${todayPeriod.endExclusive}), 0)::double precision AS today_ananas_total
+      , COALESCE(SUM(o.total) FILTER (WHERE o.channel = 'ANANAS' AND o."createdAt" >= ${ordersPeriod.start} AND o."createdAt" < ${ordersPeriod.endExclusive}), 0)::double precision AS period_ananas_total
       FROM (
         SELECT o."createdAt", o.total, o.shipping, o.channel::text AS channel
         FROM "Order" o

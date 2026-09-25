@@ -38,6 +38,9 @@ describe("dashboard data snapshot", () => {
     expect(orderSummary).toContain('FROM "AnanasOrder"');
     expect(orderSummary).toContain('COALESCE(o."externalOrderNo", o.number)');
     expect(orderSummary).toContain('UNION ALL');
+    expect(orderSummary).toContain('AS today_ananas_total');
+    expect(orderSummary).toContain('AS period_ananas_total');
+    expect(orderSummary.match(/SUM\(o.shipping\) FILTER \(WHERE o.channel <> 'ANANAS'/g)).toHaveLength(2);
     expect(text).toContain('THEN f."totalGross" ELSE -f."totalGross" END');
     expect(text).toContain("/ 30.0");
     expect(text).toContain("AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Belgrade'");
