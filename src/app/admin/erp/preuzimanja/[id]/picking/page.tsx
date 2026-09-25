@@ -8,5 +8,5 @@ export default async function DigitalPickingPage({ params }: { params: Promise<{
   await requireAdminAction(["OPS"]);
   const { id } = await params;
   const session = await getPickingSession(id);
-  return <><PageHeader title={`Picking · ${session.number}`} description="Jedan obilazak, zbirno po artiklu i poziciji. Raspodela po porudžbinama ostaje vidljiva." actions={<Link href={`/admin/erp/preuzimanja/${id}`} className="rounded border px-4 py-2">Nalog i pakovanje</Link>} /><DigitalPicking key={`${session.planHash}:${session.events[0]?.id ?? "empty"}`} initial={session} /></>;
+  return <><PageHeader title={`Picking · ${session.number}`} description="Jedan obilazak, zbirno po artiklu i poziciji. Raspodela po porudžbinama ostaje vidljiva." actions={<Link href={`/admin/erp/preuzimanja/${id}`} className="rounded border px-4 py-2">Nalog i pakovanje</Link>} /><DigitalPicking key={session.planHash} initial={session} /></>;
 }

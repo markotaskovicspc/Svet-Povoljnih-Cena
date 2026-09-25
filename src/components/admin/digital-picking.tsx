@@ -1,7 +1,6 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import type { getPickingSession } from "@/lib/admin/picking.server";
 import { recordPicking } from "@/app/admin/erp/preuzimanja/[id]/picking/actions";
 type Session = Awaited<ReturnType<typeof getPickingSession>>;
@@ -35,7 +34,6 @@ function Camera({ onCode, onClose }: { onCode: (code: string) => void; onClose: 
 }
 
 export function DigitalPicking({ initial }: { initial: Session }) {
-  const router = useRouter();
   const [session, setSession] = useState(initial);
   const [code, setCode] = useState("");
   const [camera, setCamera] = useState(false);
@@ -79,7 +77,7 @@ export function DigitalPicking({ initial }: { initial: Session }) {
   return <div className="space-y-5 p-4 md:p-8">
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4">
       <div><strong className="text-2xl">{done} / {total} kom.</strong><p>{total > 0 && done === total ? "Roba je odvojena. Nastavite sa proverom pakovanja i dimenzija na nalogu." : "Odvojeno / potrebno"}</p></div>
-      <div className="flex gap-2 print:hidden"><Link href="/admin/erp/picking-pozicije" className="rounded border px-3 py-2">Pozicije</Link><button onClick={() => window.print()} className="rounded border px-3 py-2">Štampaj putanju</button><button disabled={busy || !!retry} onClick={() => { router.refresh(); }} className="rounded border px-3 py-2">Osveži</button></div>
+      <div className="flex gap-2 print:hidden"><Link href="/admin/erp/picking-pozicije" className="rounded border px-3 py-2">Pozicije</Link><button onClick={() => window.print()} className="rounded border px-3 py-2">Štampaj putanju</button><button disabled={busy || !!retry} onClick={() => { window.location.reload(); }} className="rounded border px-3 py-2">Osveži</button></div>
     </div>
     <p className="text-sm text-muted-foreground">Redosled je po magacinu i podešenom redosledu pozicija. Kod više pozicija proverite raspoloživu robu. Stavke bez pozicije su na kraju svakog magacina. Odvajanje ne zamenjuje potvrdu spakovanih paketa.</p>
     {session.previousPlan && <p className="rounded border border-amber-400 bg-amber-50 p-3 text-amber-950">Sadržaj naloga je menjan posle ranijih skeniranja. Za sadašnji sadržaj roba mora ponovo da se proveri; prethodni zapisi ostaju u istoriji.</p>}

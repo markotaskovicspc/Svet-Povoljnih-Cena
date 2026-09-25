@@ -40,7 +40,7 @@ export default async function PickingPositionsPage({ searchParams }: { searchPar
       </div>
       {warehouse && <section id="position-editor" className="max-w-3xl rounded-xl border p-5">
         <h2 className="mb-4 text-xl font-semibold">Pozicija {selected} · {warehouse.name}</h2>
-        <AdminActionForm key={`${warehouse.id}:${selected}:${position?.updatedAt.toISOString()}`} action={savePosition} className="space-y-4">
+        <AdminActionForm key={`${warehouse.id}:${selected}`} action={savePosition} className="space-y-4">
           <input type="hidden" name="warehouseId" value={warehouse.id} /><input type="hidden" name="number" value={selected} /><input type="hidden" name="version" value={position?.updatedAt.toISOString() ?? ""} />
           <label className="block">Šifre artikala <span className="text-sm text-muted-foreground">(svaka u novom redu ili odvojena zarezom)</span><textarea name="skus" rows={4} defaultValue={position?.skus.join("\n")} className="mt-1 w-full rounded border p-3" /></label>
           <label className="block">Dobavljači<select name="supplierIds" multiple size={6} defaultValue={position?.supplierIds ?? []} className="mt-1 w-full rounded border p-2">{suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select><span className="text-sm text-muted-foreground">Ctrl / Cmd za izbor više dobavljača ili uklanjanje izbora.</span></label>
