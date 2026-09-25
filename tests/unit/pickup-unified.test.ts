@@ -70,3 +70,13 @@ it("deferring a two-unit carton removes the value of both units from COD", async
   expect(Number(saved.packageValue)).toBe(2500);
   expect(saved.warehouseReadyAt).toBeNull();
 });
+
+it("defers the full value of every differently priced article in a Pompea parcel", async () => {
+  const packedItems = [2, 3].map((quantity, i) => ({ orderItemId: `i-${i}`, quantity, sku: `SKU-${i}`, name: "POMPEA", barcode: null, categoryName: null, color1: null, color2: null, unitValue: 100 + i * 50 }));
+  tx.pickupBatchLine.findFirst.mockResolvedValue({ id: "parcel", batch, purpose: "ORDER_DELIVERY", packedQuantity: 5, packedItems,
+    lineGroupKey: "order:1", orderId: "o", packageNo: 1, order: { status: "U_PRIPREMI" },
+    orderItem: { unitPriceSale: 100, withAssembly: false, assemblyPrice: null },
+  });
+  await deferPickupPackageBeforeBooking("shared", "parcel", "admin");
+  expect(Number(tx.pickupBatchLine.update.mock.calls[0][0].data.packageValue)).toBe(650);
+});

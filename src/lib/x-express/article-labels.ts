@@ -1,3 +1,4 @@
+import { packedItemsLabel } from "@/lib/courier/parcel-contents";
 import type { ShipmentPurpose } from "@prisma/client";
 import type { PhysicalPackage } from "@/lib/courier/packages";
 import { readShipmentAssignment } from "@/lib/courier/shipment-assignment";
@@ -31,6 +32,9 @@ export function buildXExpressArticleLabels(args: {
 }) {
   return args.codes.flatMap((Code, index) => {
     const pkg = args.packages?.[index];
+    if (pkg?.packedItems?.length) {
+      return [{ Code, name: packedItemsLabel(pkg.packedItems)!, sku: null, barcode: null }];
+    }
     const item = pkg?.orderItemId
       ? args.items.find((item) => item.id === pkg.orderItemId)
       : args.items.length === 1 ? args.items[0] : undefined;

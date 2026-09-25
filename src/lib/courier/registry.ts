@@ -1,3 +1,4 @@
+import { parcelOrderItemIds } from "@/lib/courier/parcel-contents";
 import "server-only";
 import { requireReturnPickupCoordinates, type XExpressPickupCoordinates } from "@/lib/x-express/return";
 import { geocodePickupAddress } from "@/lib/address/google-geocoding";
@@ -39,11 +40,10 @@ import {
 } from "./types";
 import { SHIPMENT_STATUS_LABEL } from "./status";
 import { incompletePackageHandover } from "./package-handover";
-import { resolveCourierProvider, routeService } from "./routing";
+import { physicalPackageRouteItem, resolveCourierProvider, routeService } from "./routing";
 import { getSelectedSmallParcelProvider } from "./provider-selection";
 import type { SmallParcelProvider } from "@/lib/mygls/config";
 import {
-  courierPackageCount,
   derivePhysicalPackages,
   type PhysicalPackage,
 } from "./packages";
@@ -158,12 +158,20 @@ async function processShipmentForOrder(
         select: {
           id: true,
           name: true,
+          sku: true, supplierName: true, collectionName: true, categoryName: true,
+          color1: true, color2: true, unitPriceSale: true, assemblyPrice: true,
           withAssembly: true,
           qty: true,
           warehouseReservedQty: true,
           supplierReservedQty: true,
           product: {
             select: {
+              name: true,
+              supplier: { select: { name: true } },
+              collection: { select: { name: true } },
+              barcode: true,
+              colorPrimary: true,
+              colorSecondary: true,
               courierUnitsPerBox: true,
               packQty: true,
               packWidthCm: true,
@@ -279,23 +287,12 @@ async function processShipmentForOrder(
 
   const derivedPackages = derivePhysicalPackages(
     shipmentItems.map((item) => ({
-      id: item.id,
-      name: item.name,
-      qty: item.qty,
-      product: item.product,
+      ...item,
     })),
   );
   const routeInput = {
     shippingMethod: order.shippingMethod,
-    items: derivedPackages.map((pkg) => ({
-      withAssembly: false,
-      qty: 1,
-      packQty: 1,
-      packWidthCm: pkg.widthCm,
-      packDepthCm: pkg.depthCm,
-      packHeightCm: pkg.heightCm,
-      packGrossWeightKg: pkg.weightKg,
-    })),
+    items: (options.packages ?? derivedPackages).map(physicalPackageRouteItem),
   } as const;
   const dimensionRouting = resolveCourierProvider(routeInput);
   const routing = supplierFulfillment && dimensionRouting.kind !== "invalid_dimensions"
@@ -323,11 +320,11 @@ async function processShipmentForOrder(
             (pkg) =>
               !requestedOrderItemIds.length ||
               !pkg.orderItemId ||
-              requestedOrderItemIds.includes(pkg.orderItemId),
+              parcelOrderItemIds(pkg).every(id => requestedOrderItemIds.includes(id)),
           )
         : null) ??
       derivedPackages;
-    const derivedPackageCount = derivedPackages.length;
+    const derivedPackageCount = packages.length;
     if (selectedProvider === "MYGLS") {
       const myGlsOptions = {
         purpose,
@@ -426,10 +423,7 @@ async function processShipmentForOrder(
       companyName: order.shipCompanyName,
     },
     notes: order.notes,
-    packageCount: shipmentItems.reduce(
-      (sum, item) => sum + courierPackageCount(item.qty, item.product?.courierUnitsPerBox),
-      0,
-    ),
+    packageCount: (options.packages ?? derivedPackages).length,
   });
 
   return db.shipment.create({
@@ -870,6 +864,7 @@ async function reconcilePickupBatchesFromShipment(
           select: {
             lineGroupKey: true,
             orderId: true,
+            packedItems: true,
             orderItemId: true,
             reclamationId: true,
             purpose: true,
@@ -904,9 +899,7 @@ async function reconcilePickupBatchesFromShipment(
 
     if (shipment.purpose === "ORDER_DELIVERY") {
       const groupItemIds = normalizeOrderItemIds(
-        matchingLines.flatMap((line) =>
-          line.orderItemId ? [line.orderItemId] : [],
-        ),
+        matchingLines.flatMap(parcelOrderItemIds),
       );
       if (
         shipmentAssignment &&

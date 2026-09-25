@@ -1,3 +1,4 @@
+import { packedItemsContent, type PackedItem } from "@/lib/courier/parcel-contents";
 import { packageVolumetricDimension } from "@/lib/delivery-tariff";
 
 export const MAX_COURIER_PACKAGES = 99;
@@ -8,6 +9,8 @@ export const MAX_MYGLS_PACKAGE_SIDE_CM = 200;
 export const MAX_MYGLS_PACKAGE_GIRTH_CM = 300;
 
 export type PhysicalPackage = {
+  packedItems?: PackedItem[];
+  routingMeasurements?: { weightKg: number | null; widthCm: number | null; depthCm: number | null; heightCm: number | null };
   packedQuantity?: number;
   packageNo: number;
   orderItemId?: string | null;
@@ -19,6 +22,7 @@ export type PhysicalPackage = {
 };
 
 export type CompletePhysicalPackage = {
+  packedItems?: PackedItem[];
   packedQuantity?: number;
   packageNo: number;
   orderItemId?: string | null;
@@ -33,7 +37,22 @@ export type PackageSourceItem = {
   id: string;
   name: string;
   qty: number;
+  sku?: string;
+  supplierName?: string | null;
+  collectionName?: string | null;
+  categoryName?: string | null;
+  color1?: string | null;
+  color2?: string | null;
+  unitPriceSale?: unknown;
+  assemblyPrice?: unknown;
+  withAssembly?: boolean;
   product?: {
+    supplier?: { name: string } | null;
+    collection?: { name: string } | null;
+    name?: string;
+    barcode?: string | null;
+    colorPrimary?: string | null;
+    colorSecondary?: string | null;
     courierUnitsPerBox?: number | null;
     packQty?: number | null;
     packWidthCm?: unknown;
@@ -126,10 +145,17 @@ export function hasKnownMyGlsOversizeSurcharge(pkg: PhysicalPackage) {
  */
 export function derivePhysicalPackages(
   items: readonly PackageSourceItem[],
+  options: { consolidatePompea?: boolean } = {},
 ): PhysicalPackage[] {
   const packages: PhysicalPackage[] = [];
-
+  const pompea = options.consolidatePompea === false ? [] : items.filter(isPompeaItem);
+  let consolidated = false;
   for (const item of items) {
+    if (pompea.includes(item)) {
+      if (!consolidated) packages.push(buildPompeaParcel(pompea, packages.length + 1));
+      consolidated = true;
+      continue;
+    }
     const unitsPerBox = positiveInteger(item.product?.courierUnitsPerBox) ?? 1;
     const quantity = positiveInteger(item.qty) ?? 1;
     const count = courierPackageCount(quantity, unitsPerBox);
@@ -206,6 +232,7 @@ export function requireCompleteMyGlsPackages(
     }
     return {
       packageNo,
+      ...(pkg.packedItems ? { packedItems: pkg.packedItems } : {}),
       packedQuantity: pkg.packedQuantity,
       orderItemId: pkg.orderItemId,
       content: pkg.content,
@@ -250,6 +277,7 @@ export function requireCompletePhysicalPackages(
     }
     return {
       packageNo,
+      ...(pkg.packedItems ? { packedItems: pkg.packedItems } : {}),
       packedQuantity: pkg.packedQuantity,
       orderItemId: pkg.orderItemId,
       content: pkg.content,
@@ -290,4 +318,42 @@ function positiveNumber(value: unknown) {
 function positiveInteger(value: unknown) {
   const number = positiveNumber(value);
   return number != null && Number.isInteger(number) ? number : null;
+}
+
+/** Brand matching also covers the current Modital catalogue without grouping other brands. */
+export function isPompeaItem(item: PackageSourceItem): boolean {
+  return [item.product?.supplier?.name, item.supplierName, item.product?.collection?.name,
+    item.collectionName, item.product?.name, item.name].some(value => /^pompea(?:\b|_)/iu.test(value?.trim() ?? ""));
+}
+
+function buildPompeaParcel(items: readonly PackageSourceItem[], packageNo: number): PhysicalPackage {
+  const packedItems: PackedItem[] = items.map(item => {
+    const price = item.unitPriceSale == null ? null : Number(item.unitPriceSale);
+    const assembly = item.withAssembly ? Number(item.assemblyPrice ?? 0) : 0;
+    return {
+      orderItemId: item.id, quantity: positiveInteger(item.qty) ?? 1,
+      sku: item.sku ?? "", name: item.name,
+      barcode: item.product?.barcode ?? null, categoryName: item.categoryName ?? null,
+      color1: item.product?.colorPrimary ?? item.color1 ?? null,
+      color2: item.product?.colorSecondary ?? item.color2 ?? null,
+      unitValue: price != null && Number.isFinite(price + assembly) ? price + assembly : null,
+    };
+  });
+  const packedQuantity = packedItems.reduce((sum, item) => sum + item.quantity, 0);
+  const maximum = (key: "unitPackWidthCm" | "unitPackDepthCm" | "unitPackHeightCm") => {
+    const values = items.map(item => positiveNumber(item.product?.[key]));
+    return values.some(value => value != null) ? Math.max(...values.map(value => value ?? 0)) : null;
+  };
+  const weights = items.map(item => courierUnitWeightKg(item.product));
+  const routingMeasurements = {
+    weightKg: weights.every(value => value != null) ? items.reduce((sum, item, i) => sum + weights[i]! * (positiveInteger(item.qty) ?? 1), 0) : null,
+    widthCm: maximum("unitPackWidthCm"), depthCm: maximum("unitPackDepthCm"), heightCm: maximum("unitPackHeightCm"),
+  };
+  return {
+    packageNo, orderItemId: items[0].id, packedItems, packedQuantity,
+    content: packedItemsContent(packedItems),
+    // Multiple soft goods need one measured shipping parcel, not multiplied unit dimensions.
+    ...(packedQuantity === 1 ? routingMeasurements : { weightKg: null, widthCm: null, depthCm: null, heightCm: null }),
+    routingMeasurements,
+  };
 }

@@ -1,8 +1,10 @@
+import { readPackedItems } from "@/lib/courier/parcel-contents";
 export type PickupPrintLine = {
   id: string;
   lineGroupKey: string;
   quantity: number | null;
   packedQuantity?: number;
+  packedItems?: unknown;
   deferredAt?: Date | null;
   purpose?: "ORDER_DELIVERY" | "RECLAMATION_RETURN" | "RECLAMATION_REPLACEMENT";
   reclamation?: {
@@ -50,9 +52,19 @@ export function buildPickupPrintRows(
 ): PickupPrintRow[] {
   const rows = new Map<string, PickupPrintRow>();
   const countedItems = new Set<string>();
+  const countedPackages = new Set<string>();
   const quantitiesByGroup = new Map<string, Map<string, number>>();
 
-  for (const line of lines) {
+  const articleLines = lines.flatMap<PickupPrintLine>(line => {
+    const contents = readPackedItems(line.packedItems);
+    return contents.length ? contents.map(item => ({
+      ...line, packedQuantity: item.quantity,
+      orderItem: { id: item.orderItemId, sku: item.sku, name: item.name, qty: item.quantity,
+        categoryName: item.categoryName, color1: item.color1, color2: item.color2,
+        product: { barcode: item.barcode } },
+    })) : [line];
+  });
+  for (const line of articleLines) {
     if (line.deferredAt) continue;
     const isPartReplacement =
       line.purpose === "RECLAMATION_REPLACEMENT" &&
@@ -83,7 +95,9 @@ export function buildPickupPrintRows(
       packageCount: 0,
       quantityDistribution: [],
     };
-    current.packageCount += 1;
+    const packageKey = `${key}:${line.id}`;
+    if (!countedPackages.has(packageKey)) current.packageCount += 1;
+    countedPackages.add(packageKey);
     rows.set(key, current);
 
     const itemKey = line.orderItem

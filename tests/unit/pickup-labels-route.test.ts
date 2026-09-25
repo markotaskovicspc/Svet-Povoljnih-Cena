@@ -177,3 +177,14 @@ describe("pickup label downloads", () => {
     expect(mocks.batch).not.toHaveBeenCalled();
   });
 });
+
+it("requires a shipment assignment to include every SKU in the combined parcel", async () => {
+  const packedItems = ["order-item", "second-item"].map(orderItemId => ({ orderItemId, quantity: 2, sku: orderItemId, name: "POMPEA", barcode: null, categoryName: null, color1: null, color2: null, unitValue: 100 }));
+  mocks.batch.mockResolvedValue({ id: "batch", number: "PRE", provider: "X_EXPRESS", labelsCreatedAt: new Date(), lines: [{ ...line("order"), packedItems }] });
+  mocks.shipments.mockResolvedValue([{ ...shipment("order"), rawCreateResponse: { assignment: { orderItemIds: ["order-item"], codAmount: 400 } } }]);
+  expect((await request()).status).toBe(409);
+  expect(mocks.render).not.toHaveBeenCalled();
+  mocks.shipments.mockResolvedValue([{ ...shipment("order"), rawCreateResponse: { assignment: { orderItemIds: ["order-item", "second-item"], codAmount: 400 } } }]);
+  expect((await request()).status).toBe(200);
+  expect(mocks.render.mock.calls[0][1]).toMatchObject({ packageContentsByShipmentId: { "shipment-order": ["POMPEA · 2 stavki · 4 kom"] }, packageOrderItemIdsByShipmentId: { "shipment-order": [null] } });
+});

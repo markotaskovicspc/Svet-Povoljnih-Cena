@@ -382,3 +382,10 @@ describe("MyGLS reclamation payload", () => {
     expect(parcel.CODReference).toBeUndefined();
   });
 });
+
+it("sends one consolidated Pompea parcel with the whole COD and all article contents", () => {
+  const packedItems = ["i", "j"].map((orderItemId, i) => ({ orderItemId, quantity: 2 + i, sku: `SKU${i}`, name: `POMPEA ${i}`, barcode: null, categoryName: null, color1: null, color2: null, unitValue: 100 }));
+  const parcels = buildMyGlsParcelsForOrder({ cfg: config, order: { ...order, items: packedItems.map(item => ({ id: item.orderItemId, name: item.name, qty: item.quantity })) }, packages: [{ ...packages[0], orderItemId: "i", packedItems, packedQuantity: 5, content: "2 × POMPEA 0; 3 × POMPEA 1" }] });
+  expect(parcels).toHaveLength(1);
+  expect(parcels[0]).toMatchObject({ Count: 1, CODAmount: 12000, Content: "2 × POMPEA 0; 3 × POMPEA 1" });
+});

@@ -1,3 +1,4 @@
+import { readPackedItems } from "@/lib/courier/parcel-contents";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -1164,6 +1165,7 @@ function pickupLineRow(line: {
   lineGroupKey: string;
   quantity: number | null;
   packedQuantity: number;
+  packedItems?: unknown;
   packageNo: number;
   weightKg: unknown;
   widthCm: unknown;
@@ -1278,6 +1280,7 @@ function pickupLineRow(line: {
     color2: product?.colorSecondary ?? item?.color2 ?? "",
     qty: isPartReplacement ? 1 : line.quantity ?? item?.qty ?? 0,
     packedQuantity: line.packedQuantity,
+    packedContents: readPackedItems(line.packedItems),
     packageNo: line.packageNo,
     courierPickedUpAt: courier ? courier.pickedUpAt : line.courierPickedUpAt,
     handoverReport: courier?.handoverReport,
@@ -1355,6 +1358,19 @@ function aggregatePickupGroups(rows: ReturnType<typeof pickupLineRow>[]) {
       }
     >();
     for (const row of group.rows) {
+      if (row.packedContents.length) {
+        for (const content of row.packedContents) {
+          const previous = items.get(content.orderItemId);
+          if (previous) { previous.quantity += content.quantity; continue; }
+          items.set(content.orderItemId, {
+            key: content.orderItemId, sku: content.sku, name: content.name, quantity: content.quantity,
+            barcode: content.barcode ?? "", collection: "POMPEA", description: "Zajednički paket",
+            attributes: [content.color1, content.color2].filter(Boolean).join(" / "),
+            isPartReplacement: false, originalName: content.name,
+          });
+        }
+        continue;
+      }
       const key = row.orderItemId ?? `package:${row.lineId}`;
       if (items.has(key)) continue;
       items.set(key, {

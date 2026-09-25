@@ -1,9 +1,10 @@
 import type { ShipmentService } from "@prisma/client";
-import { courierPackageCount } from "@/lib/courier/packages";
+import { courierPackageCount, type PhysicalPackage } from "@/lib/courier/packages";
 
 export interface PackageRouteInput {
   shippingMethod: "KURIR" | "KAMION";
   items: {
+    allowUnmeasuredParcel?: boolean;
     withAssembly: boolean;
     qty?: number;
     packQty?: number | null;
@@ -66,7 +67,7 @@ export function resolveCourierProvider(
     ].map(Number);
     const weightKg = Number(item.packGrossWeightKg ?? 0);
     if (
-      dimensions.some((value) => !Number.isFinite(value) || value <= 0) ||
+      (!item.allowUnmeasuredParcel && dimensions.some((value) => !Number.isFinite(value) || value <= 0)) ||
       !Number.isFinite(weightKg) ||
       weightKg < 0
     ) {
@@ -121,4 +122,16 @@ export function routeService(order: PackageRouteInput): ShipmentService {
   return routePackages(order).some((item) => item.courier === "GLS")
     ? "COURIER_BULKY"
     : "COURIER_SMALL";
+}
+
+/** Consolidated soft goods can enter picking before the outer parcel is measured.
+ * Known lower bounds still route bulky/heavy contents to MyGLS. Labels always
+ * require the final physical measurements, independently of these routing hints.
+ */
+export function physicalPackageRouteItem(pkg: PhysicalPackage): PackageRouteInput["items"][number] {
+  const dimensions = pkg.routingMeasurements ?? pkg;
+  return { withAssembly: false, qty: 1, packQty: 1,
+    allowUnmeasuredParcel: Boolean(pkg.packedItems?.length),
+    packWidthCm: dimensions.widthCm, packDepthCm: dimensions.depthCm,
+    packHeightCm: dimensions.heightCm, packGrossWeightKg: dimensions.weightKg };
 }

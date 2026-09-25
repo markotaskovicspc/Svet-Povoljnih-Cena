@@ -128,3 +128,18 @@ describe("physical return of the old goods", () => {
     expect(adjust).not.toHaveBeenCalled();
   });
 });
+
+it("resends a consolidated parcel as one package and reserves every contained SKU", async () => {
+  const s = source();
+  s.order.items.push({ ...s.order.items[0], id: "j", productId: "p2", sku: "SKU2", qty: 3 });
+  s.rawCreateResponse.assignment.orderItemIds.push("j");
+  tx.shipment.findUnique.mockResolvedValue(s);
+  const packedItems = ["i", "j"].map((orderItemId, i) => ({ orderItemId, quantity: 2 + i, sku: `SKU${i}`, name: "POMPEA", barcode: null, categoryName: null, color1: null, color2: null, unitValue: 100 }));
+  tx.pickupBatchLine.findMany.mockResolvedValue([{ orderItemId: "i", quantity: 5, packedQuantity: 5, packedItems, packageNo: 1 }]);
+  await queueOrderReshipment(input);
+  expect(adjust.mock.calls.map(call => call[1])).toEqual([
+    expect.objectContaining({ productId: "p", qtyDelta: -2 }),
+    expect.objectContaining({ productId: "p2", qtyDelta: -3 }),
+  ]);
+  expect(tx.pickupBatchLine.createMany.mock.calls[0][0].data).toEqual([expect.objectContaining({ packedItems, packedQuantity: 5, quantity: 5, packageNo: 1 })]);
+});

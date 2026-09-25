@@ -1,3 +1,4 @@
+import { readPackedItems } from "@/lib/courier/parcel-contents";
 import "server-only";
 import { canReshipCourierDelivery } from "./order-reshipment-eligibility";
 import { Prisma } from "@prisma/client";
@@ -38,7 +39,14 @@ export async function queueOrderReshipment(input: { orderId: string; shipmentId:
     }, orderBy: { packageNo: "asc" } });
     if (!lines.length || lines.some(line => !line.orderItemId || line.deferredAt || line.providerLabelCancelledAt)) throw new Error("Pošiljka nema kompletnu picking evidenciju. Prvo usaglasite odložene ili otkazane pakete.");
     const quantities = new Map<string, number>();
-    for (const line of lines) quantities.set(line.orderItemId!, Math.max(quantities.get(line.orderItemId!) ?? 0, line.quantity ?? order.items.find(item => item.id === line.orderItemId)?.qty ?? 0));
+    for (const line of lines) {
+      const contents = readPackedItems(line.packedItems);
+      if (contents.length) {
+        for (const item of contents) quantities.set(item.orderItemId, (quantities.get(item.orderItemId) ?? 0) + item.quantity);
+      } else {
+        quantities.set(line.orderItemId!, Math.max(quantities.get(line.orderItemId!) ?? 0, line.quantity ?? order.items.find(item => item.id === line.orderItemId)?.qty ?? 0));
+      }
+    }
     const items = [...quantities].map(([id, quantity]) => {
       const item = order.items.find(item => item.id === id);
       if (!item?.productId || !item.warehouseId || quantity < 1 || quantity > item.qty || item.supplierReservedQty > 0) throw new Error("Za ponovno slanje potrebna je jasna količina i magacin svakog artikla.");
@@ -76,7 +84,7 @@ export async function queueOrderReshipment(input: { orderId: string; shipmentId:
     }
     await tx.pickupBatchLine.createMany({ data: lines.map((line, index) => ({
       batchId: batch.id, orderId: order.id, orderItemId: line.orderItemId, purpose: "ORDER_DELIVERY", lineGroupKey: `reshipment:${retry.id}`,
-      quantity: quantities.get(line.orderItemId!), packedQuantity: line.packedQuantity, packageNo: index + 1,
+      quantity: line.packedItems ? line.packedQuantity : quantities.get(line.orderItemId!), packedQuantity: line.packedQuantity, packedItems: line.packedItems ?? Prisma.DbNull, packageNo: index + 1,
       weightKg: line.weightKg, widthCm: line.widthCm, depthCm: line.depthCm, heightCm: line.heightCm,
     })) });
     await tx.orderStatusEvent.create({ data: { orderId: order.id, status: "U_PRIPREMI", actorId: input.actorId, note: `Nova roba ide u picking ${batch.number}. Stara pošiljka ${source.trackingNo ?? source.id} evidentirana je kao očekivani povrat, bez refundacije. Razlog: ${reason}` } });

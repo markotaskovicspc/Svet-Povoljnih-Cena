@@ -1,3 +1,4 @@
+import { parcelOrderItemIds } from "@/lib/courier/parcel-contents";
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -48,8 +49,8 @@ export async function recordPackageHandover(args: {
       const lines = await tx.pickupBatchLine.findMany({ where: {
         batchId: batch.id, orderId: shipment.orderId, purpose: "ORDER_DELIVERY",
         lineGroupKey: `order:${shipment.orderId}:${shipment.provider}`,
-      }, select: { id: true, orderItemId: true, courierPickedUpById: true } });
-      const itemIds = normalizeOrderItemIds(lines.flatMap(line => line.orderItemId ? [line.orderItemId] : []));
+      }, select: { id: true, packedItems: true, orderItemId: true, courierPickedUpById: true } });
+      const itemIds = normalizeOrderItemIds(lines.flatMap(parcelOrderItemIds));
       if (assignment && (itemIds.length !== assignment.orderItemIds.length || !itemIds.every(id => assignment.orderItemIds.includes(id)))) continue;
       if (lines.length !== report.expectedPackages) continue;
       const complete = report.pickedUpPackages === report.expectedPackages;

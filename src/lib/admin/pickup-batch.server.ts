@@ -23,7 +23,8 @@ import {
   type PhysicalPackage,
   type PackageSourceItem,
 } from "@/lib/courier/packages";
-import { resolveCourierProvider } from "@/lib/courier/routing";
+import { readPackedItems, packedItemsContent, packedItemsValue, parcelOrderItemIds } from "@/lib/courier/parcel-contents";
+import { resolveCourierProvider, physicalPackageRouteItem } from "@/lib/courier/routing";
 import {
   readShipmentAssignment,
   sameShipmentAssignment,
@@ -116,7 +117,7 @@ export async function createPickupBatch(provider: SmallParcelProvider) {
 export async function savePickupPackage(
   batchId: string,
   lineId: string,
-  input: Omit<PhysicalPackage, "packageNo" | "orderItemId" | "content" | "packedQuantity">,
+  input: Omit<PhysicalPackage, "packageNo" | "orderItemId" | "content" | "packedQuantity" | "packedItems" | "routingMeasurements">,
 ) {
   const line = await db.pickupBatchLine.findFirst({
     where: { id: lineId, batchId },
@@ -278,7 +279,7 @@ export async function deferPickupPackageBeforeBooking(
       data: {
         deferredAt: new Date(),
         deferredById: actorId,
-        packageValue: new Prisma.Decimal(packageValue * (line.packedQuantity ?? 1)),
+        packageValue: new Prisma.Decimal(packedItemsValue(line.packedItems) ?? packageValue * (line.packedQuantity ?? 1)),
         warehouseReadyAt: null,
         warehouseReadyById: null,
       },
@@ -357,6 +358,7 @@ export async function rescheduleDeferredPickupPackage(
         lineGroupKey: `order:${source.orderId}:${provider}:deferred:${source.id}`,
         quantity: source.packedQuantity ?? 1,
         packedQuantity: source.packedQuantity ?? 1,
+        packedItems: source.packedItems ?? Prisma.DbNull,
         packageNo: 1,
         weightKg: source.weightKg,
         widthCm: source.widthCm,
@@ -573,9 +575,17 @@ export async function loadEligibleOrders(
         name: true,
         qty: true,
         warehouseReservedQty: true,
+        supplierName: true, collectionName: true, categoryName: true,
+        color1: true, color2: true, unitPriceSale: true, assemblyPrice: true,
         withAssembly: true,
         product: {
           select: {
+            name: true,
+            supplier: { select: { name: true } },
+            collection: { select: { name: true } },
+            barcode: true,
+            colorPrimary: true,
+            colorSecondary: true,
             courierUnitsPerBox: true,
             packQty: true,
             packWidthCm: true,
@@ -616,15 +626,7 @@ export async function loadEligibleOrders(
       const orderPackages = derivePhysicalPackages(dcOrderItems);
       const routing = resolveCourierProvider({
         shippingMethod: "KURIR",
-        items: orderPackages.map((pkg) => ({
-          withAssembly: false,
-          qty: 1,
-          packQty: 1,
-          packWidthCm: pkg.widthCm,
-          packDepthCm: pkg.depthCm,
-          packHeightCm: pkg.heightCm,
-          packGrossWeightKg: pkg.weightKg,
-        })),
+        items: orderPackages.map(physicalPackageRouteItem),
       });
       if (routing.kind === "invalid_dimensions") {
         skippedInvalidDimensionsCount += 1;
@@ -655,7 +657,7 @@ export async function loadEligibleOrders(
           ...pkg,
           orderId,
           lineGroupKey: `order:${orderId}:${provider}`,
-          quantity: quantityByItem.get(pkg.orderItemId ?? "") ?? 1,
+          quantity: pkg.packedItems ? pkg.packedQuantity! : quantityByItem.get(pkg.orderItemId ?? "") ?? 1,
         })),
       );
     }
@@ -681,6 +683,7 @@ export async function loadEligibleOrders(
         lineGroupKey: pkg.lineGroupKey,
         quantity: pkg.quantity,
         packedQuantity: pkg.packedQuantity ?? 1,
+        packedItems: pkg.packedItems,
         packageNo: pkg.packageNo,
         weightKg: pkg.weightKg,
         widthCm: pkg.widthCm,
@@ -762,11 +765,18 @@ export async function queueReclamationReplacement(
       orderItem: {
         select: {
           id: true,
+          sku: true,
           name: true,
           qty: true,
           withAssembly: true,
           product: {
             select: {
+              name: true,
+              supplier: { select: { name: true } },
+              collection: { select: { name: true } },
+              barcode: true,
+              colorPrimary: true,
+              colorSecondary: true,
               courierUnitsPerBox: true,
               packQty: true,
               packWidthCm: true,
@@ -842,6 +852,8 @@ export async function queueReclamationReplacement(
 
   const sourceItem = {
     id: reclamation.orderItem.id,
+    sku: reclamation.orderItem.sku,
+    unitPriceSale: 0,
     name: isPartReplacement
       ? reclamation.resolutionNote!.trim()
       : reclamation.orderItem.name,
@@ -851,10 +863,7 @@ export async function queueReclamationReplacement(
   };
   const routing = resolveCourierProvider({
     shippingMethod: "KURIR",
-    items: derivePhysicalPackages([sourceItem]).map((pkg) => ({
-      withAssembly: false, qty: 1, packWidthCm: pkg.widthCm, packDepthCm: pkg.depthCm,
-      packHeightCm: pkg.heightCm, packGrossWeightKg: pkg.weightKg,
-    })),
+    items: derivePhysicalPackages([sourceItem], { consolidatePompea: !isPartReplacement }).map(physicalPackageRouteItem),
   });
   if (routing.kind !== "single") {
     return {
@@ -863,7 +872,7 @@ export async function queueReclamationReplacement(
     };
   }
   const provider = routing.provider;
-  const packages = derivePhysicalPackages([sourceItem]).map((pkg) =>
+  const packages = derivePhysicalPackages([sourceItem], { consolidatePompea: !isPartReplacement }).map((pkg) =>
     isPartReplacement
       ? {
           ...pkg,
@@ -917,6 +926,7 @@ export async function queueReclamationReplacement(
         lineGroupKey,
         quantity: replacementQty,
         packedQuantity: pkg.packedQuantity ?? 1,
+        packedItems: pkg.packedItems,
         packageNo: pkg.packageNo,
         weightKg: pkg.weightKg,
         widthCm: pkg.widthCm,
@@ -1229,6 +1239,7 @@ export async function recreateMyGlsLabelsForPickupBatch(
           select: {
             lineGroupKey: true,
             orderId: true,
+            packedItems: true,
             orderItemId: true,
             reclamationId: true,
             purpose: true,
@@ -1437,6 +1448,7 @@ async function postPickupBatch(batchId: string, actorId: string) {
         packageLines.map((line) => ({
           packageNo: line.packageNo,
           orderItemId: line.orderItemId,
+          packedItems: line.packedItems ? readPackedItems(line.packedItems) : undefined,
           content: pickupPackageContent(line),
           weightKg: Number(line.weightKg ?? 0),
           widthCm: Number(line.widthCm ?? 0),
@@ -1617,6 +1629,7 @@ async function createXExpressLabelsForPickupBatch(
         group.lines.map((line) => ({
           packageNo: line.packageNo,
           orderItemId: line.orderItemId,
+          packedItems: line.packedItems ? readPackedItems(line.packedItems) : undefined,
           content: pickupPackageContent(line),
           weightKg: Number(line.weightKg ?? 0),
           widthCm: Number(line.widthCm ?? 0),
@@ -1657,6 +1670,7 @@ async function createXExpressLabelsForPickupBatch(
         group.lines.map((line) => ({
           packageNo: line.packageNo,
           orderItemId: line.orderItemId,
+          packedItems: line.packedItems ? readPackedItems(line.packedItems) : undefined,
           content: pickupPackageContent(line),
           weightKg: Number(line.weightKg ?? 0),
           widthCm: Number(line.widthCm ?? 0),
@@ -1851,6 +1865,7 @@ async function createMyGlsLabelsForPickupBatch(
         group.lines.map((line) => ({
           packageNo: line.packageNo,
           orderItemId: line.orderItemId,
+          packedItems: line.packedItems ? readPackedItems(line.packedItems) : undefined,
           content: pickupPackageContent(line),
           weightKg: Number(line.weightKg ?? 0),
           widthCm: Number(line.widthCm ?? 0),
@@ -2043,6 +2058,7 @@ export async function confirmMyGlsPickupAnnouncement(
             lineGroupKey: true,
             purpose: true,
             reclamationId: true,
+            packedItems: true,
             orderItemId: true,
             deferredAt: true,
           },
@@ -2305,7 +2321,7 @@ async function bindMyGlsPackageAssignments(
           providerParcelNumber: String(assignment.parcelNumber),
           providerClientReference: assignment.clientReference,
           providerCodAmount: new Prisma.Decimal(assignment.codAmount),
-          packageValue: new Prisma.Decimal(packageValue * (line.packedQuantity ?? 1)),
+          packageValue: new Prisma.Decimal(packedItemsValue(line.packedItems) ?? packageValue * (line.packedQuantity ?? 1)),
           cancellationError: null,
         },
       });
@@ -2314,6 +2330,7 @@ async function bindMyGlsPackageAssignments(
 }
 
 type PickupWorkLine = {
+  packedItems?: unknown;
   lineGroupKey: string;
   orderId: string;
   orderItemId: string | null;
@@ -2446,15 +2463,14 @@ function pickupPackageContent(
   ) {
     return line.reclamation.resolutionNote?.trim() || "Deo prema reklamaciji";
   }
-  return line.orderItem?.name;
+  return packedItemsContent(line.packedItems) ?? line.orderItem?.name;
 }
 
 function orderItemIdsForGroup(group: PickupWorkGroup) {
   return Array.from(
     new Set(
       group.lines
-        .map((line) => line.orderItemId)
-        .filter((id): id is string => Boolean(id)),
+        .flatMap(parcelOrderItemIds),
     ),
   );
 }
@@ -2520,10 +2536,7 @@ function courierProviderForItem(
 ): SmallParcelProvider | null {
   const routing = resolveCourierProvider({
     shippingMethod: "KURIR",
-    items: derivePhysicalPackages([{ id: "routing", name: "", ...item }]).map((pkg) => ({
-      withAssembly: false, qty: 1, packWidthCm: pkg.widthCm, packDepthCm: pkg.depthCm,
-      packHeightCm: pkg.heightCm, packGrossWeightKg: pkg.weightKg,
-    })),
+    items: derivePhysicalPackages([{ id: "routing", name: "", ...item }]).map(physicalPackageRouteItem),
   });
   return routing.kind === "single" ? routing.provider : null;
 }
@@ -2552,6 +2565,12 @@ export async function pickupAssignmentCodAmount(
           withAssembly: true,
           product: {
             select: {
+              name: true,
+              supplier: { select: { name: true } },
+              collection: { select: { name: true } },
+              barcode: true,
+              colorPrimary: true,
+              colorSecondary: true,
               courierUnitsPerBox: true,
               packQty: true,
               packWidthCm: true,

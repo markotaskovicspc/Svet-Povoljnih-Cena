@@ -2891,6 +2891,8 @@ model PickupBatchLine {
   quantity                 Int?
   /// Actual units in this physical parcel, retained for deferrals and COD.
   packedQuantity           Int             @default(1)
+  /// Immutable article/quantity/value snapshots for consolidated parcels.
+  packedItems              Json?
   packageNo                Int             @default(1)
   weightKg                 Decimal?        @db.Decimal(10, 3)
   widthCm                  Decimal?        @db.Decimal(8, 2)
