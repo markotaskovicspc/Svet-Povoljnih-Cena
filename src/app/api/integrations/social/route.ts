@@ -9,12 +9,16 @@ import { verifyOrderAccessToken } from "@/lib/api/order-access";
 import { createGuestReclamation, createReclamationSchema } from "@/lib/api/reclamations";
 import { verifySocialRequest, signSocialQuote, readSocialQuote } from "@/lib/social/security";
 import { checkoutFollowUpKey } from "@/lib/checkout/outbox";
+import { trackedDispatch } from "@/lib/email/tracking";
+import { getEmailConfig } from "@/lib/email/config";
+import { createHash } from "node:crypto";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 const identity = z.object({ channel: z.enum(["facebook", "instagram"]), conversationId: z.string().min(3).max(200) });
 const quotePayload = identity.extend({ input: createOrderSchema, total: z.number().nonnegative(), expiresAt: z.number() });
 const requestSchema = z.discriminatedUnion("action", [
+  identity.extend({ action: z.literal("support_handoff"), id: z.string().min(1).max(300), reason: z.string().max(200), transcript: z.string().max(10000) }),
   z.object({ action: z.literal("search"), query: z.string().trim().min(1).max(100) }),
   identity.extend({ action: z.literal("quote"), input: createOrderSchema }),
   identity.extend({ action: z.literal("create_order"), quoteToken: z.string().max(20000) }),
@@ -36,6 +40,13 @@ export async function POST(req: Request) {
   if (!parsed.success) return NextResponse.json({ error: "INVALID", issues: parsed.error.flatten() }, { status: 400 });
   const body = parsed.data;
   try {
+    if (body.action === "support_handoff") {
+      if (getEmailConfig().provider === "none") return NextResponse.json({ ok: false, error: "EMAIL_NOT_CONFIGURED" }, { status: 503 });
+      const text = `Potreban je odgovor SPC podrške.\nKanal: ${body.channel}\nRazgovor: ${body.conversationId}\nRazlog: ${body.reason}\n\nPoslednje poruke:\n${body.transcript}\n\nOtvorite Meta Business Suite inbox i pronađite razgovor. Bot nastavlja da pomaže oko novih pitanja dok zaposleni ne preuzme razgovor.`;
+      const escaped = text.replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[c]!);
+      const result = await trackedDispatch({ kind: "social_support_handoff", to: "podrska@svetpovoljnihcena.rs", subject: `SPC ${body.channel} — upit za podršku`, text, html: `<pre style="white-space:pre-wrap">${escaped}</pre>`, idempotencyKey: `social-support:${createHash('sha256').update(body.conversationId+':'+body.id).digest('hex')}` });
+      return NextResponse.json({ ok: result.ok && result.provider !== "none" });
+    }
     if (body.action === "search") {
       const exact = await getProductBySku(body.query);
       const products = exact ? [exact] : (await listProducts({ nameKeyword: body.query, limit: 6 }, { throwOnError: true })).items;

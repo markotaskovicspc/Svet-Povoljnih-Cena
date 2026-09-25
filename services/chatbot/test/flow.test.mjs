@@ -151,3 +151,44 @@ test('semantic decision is persisted and not reinterpreted after uncertain ERP w
   assert.equal(state.orders.length,1);assert.equal(state.confirming,undefined);
  }finally{await store.close();}
 });
+
+test('support handoff emails once and next product question still receives a reply',async()=>{
+ const {store,worker,event}=await setup();
+ try {
+  await store.withConversation(event.conversation,async(row,state,c)=>{delete state.pending;await store.save(c,row.id,state);});
+  let turns=0;const notifications=[];
+  worker.answerFn=async({state})=>{turns++;if(turns===1)state.supportRequest={reason:'Provera kupovine'};return {text:turns===1?'Upit šaljem podršci.':'Imamo pegle. Koji model želiš?'};};
+  worker.spc=async p=>{notifications.push(p);return {ok:true};};
+  await worker.tick();await store.accept({...event,id:'facebook:next-product',text:'A peglu?'});await worker.tick();await worker.tick();
+  assert.equal(turns,2);assert.equal(notifications.length,1);assert.equal(notifications[0].action,'support_handoff');
+  assert.equal((await store.pool.query('SELECT paused FROM spc_chat_conversations')).rows[0].paused,false);
+  assert.equal((await store.pool.query('SELECT status FROM spc_chat_support')).rows[0].status,'sent');
+ }finally{await store.close();}
+});
+
+test('failed support email stays queued without stopping shopping or duplicating the notice',async()=>{
+ const {store,worker,event}=await setup();
+ try {
+  await store.withConversation(event.conversation,async(row,state,c)=>{delete state.pending;await store.save(c,row.id,state);});
+  worker.answerFn=async({state})=>{state.supportRequest={reason:'Provera uplate'};return {text:'Upit šaljem podršci.'};};
+  worker.spc=async()=>{throw Error('Email down');};
+  await worker.tick();await store.accept(event);await worker.tick();
+  const notices=(await store.pool.query('SELECT * FROM spc_chat_support')).rows;
+  assert.equal(notices.length,1);assert.equal(notices[0].status,'pending');assert.equal(notices[0].attempts,1);
+  assert.equal((await store.pool.query('SELECT paused FROM spc_chat_conversations')).rows[0].paused,false);
+ }finally{await store.close();}
+});
+
+test('legacy automatic handoff resumes on a new question, while manual pauses remain',async()=>{
+ for(const manual of [false,true]){
+  const {store,worker,event}=await setup();
+  try{
+   await store.withConversation(event.conversation,async(row,state,c)=>{state.handedOff=true;await store.save(c,row.id,state);});
+   await store.pause(event.conversation,manual?'Ručna pauza':'Zahtev van kataloga');
+   let answers=0;worker.answerFn=async()=>{answers++;return {text:'Koja pegla te zanima?'};};
+   await worker.tick();
+   assert.equal(answers,manual?0:1);
+   assert.equal((await store.pool.query('SELECT paused FROM spc_chat_conversations')).rows[0].paused,manual);
+  }finally{await store.close();}
+ }
+});

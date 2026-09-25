@@ -17,7 +17,7 @@ async function turn(text){
 }
 await turn('Cao, imate li Urban stolicu?');
 assert.match(state.history.at(-1).content,/Stefan/);
-assert.match(state.history.at(-1).content,/automatizovan/i);
+assert.doesNotMatch(state.history.at(-1).content,/automatizovan/i);
 const photo=await turn('Daj sliku te stolice');
 assert(photo.text.includes('https://www.svetpovoljnihcena.rs/p/test-stolica'));
 assert.equal(photo.images?.[0]?.url,item.image.url);

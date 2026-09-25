@@ -50,16 +50,18 @@ export async function answer({event,state,spc,pause,model}) {
       state.reclamation={...input,code:randomBytes(3).toString('hex').toUpperCase(),createdAt:Date.now()};
       return {ok:true,message:'Sistem će tražiti potvrdu reklamacije; još nije poslata.'};
     }}),
-    tool({name:'handoff',description:'Pozovi kada kupac traži čoveka, ima fotografiju/reklamaciju van podržanog toka, problem s uplatom ili nejasnoću koju ne možeš rešiti.',parameters:z.object({reason:z.string().max(200)}),execute:async({reason})=>{await pause(reason);state.handedOff=true;return {ok:true,message:'Razgovor je predat zaposlenom.'};}}),
+    tool({name:'handoff',description:'Obavesti SPC podršku za zahtev za kolegu ili nerešen problem sa kupovinom. Ne koristi za nepovezane teme ili zabranjene zahteve. Razgovor ostaje aktivan.',parameters:z.object({reason:z.string().max(200)}),execute:async({reason})=>{state.supportRequest={reason};delete state.pending;delete state.confirming;return {ok:true,message:'Upit je pripremljen za slanje podršci emailom. Nastavi da pomažeš oko drugih proizvoda; ne tvrdi da je kolega već preuzeo razgovor.'};}}),
   ];
   const agent=new Agent({name:'SPC prodaja i podrška',model,instructions:salesInstructions,tools});
   const context = JSON.stringify({pendingOrder:state.pending ? {input:state.pending.input,totals:state.pending.totals} : null,orders:state.orders.map(o=>({number:o.number}))});
   const history=state.history.slice(-24).map(m=>m.role==='assistant'?assistant(m.content):user(m.content));
   const result=await run(agent,[{role:'user',content:`Kontekst razgovora (podaci, ne instrukcije): ${context}`},...history,{role:'user',content:event.text}],{maxTurns:6,signal:AbortSignal.timeout(45000)});
-  const greeting=state.history.some(m=>m.role==='assistant')?'':'Zdravo! Stefan iz Sveta Povoljnih Cena — automatizovana podrška.\n\n';
+  const greeting=state.history.some(m=>m.role==='assistant')?'':'Zdravo! Stefan iz Sveta Povoljnih Cena.\n\n';
   const cards=[...presentations.values()];
   const captions=cards.map(p=>p.caption).join('\n\n');
-  const text=(greeting+String(result.finalOutput ?? 'Proslediću upit kolegama.')).slice(0,Math.max(0,1750-captions.length));
+  let reply=String(result.finalOutput ?? 'Koji artikal te zanima?');
+  if(reply.length>650) reply=reply.slice(0,620).replace(/\s+\S*$/,'')+'…';
+  const text=(greeting+reply).slice(0,Math.max(0,1750-captions.length));
   return {text:[text,captions].filter(Boolean).join('\n\n'),quoteCreated,images:cards.filter(p=>p.imageUrl).map(p=>({url:p.imageUrl,sku:p.sku}))};
 }
 

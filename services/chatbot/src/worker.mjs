@@ -26,6 +26,13 @@ export class Worker {
         const events=await c.query(`SELECT * FROM spc_chat_events WHERE conversation=$1 AND status='pending' ORDER BY created_at,id LIMIT 1`,[row.id]);
         const job=events.rows[0]; if(!job || new Date(job.next_at)>new Date()) return;
         const event=this.store.decode(job.payload);
+        // Recover only legacy bot handoffs. Operator and safety pauses stay intact.
+        if(!event.echo && row.paused && state.handedOff && !state.reclamationInFlight &&
+          !/Ručna pauza|Razgovor preuzeo zaposleni|Odgovor zaposlenog|Previše poruka|Greška|Nepotvrđen|Proveriti|Reklamacija zahteva proveru/i.test(row.reason??'')) {
+          delete state.handedOff;delete state.pending;delete state.confirming;
+          await this.store.save(c,row.id,state);
+          await c.query('UPDATE spc_chat_conversations SET paused=false,reason=NULL WHERE id=$1',[row.id]);row.paused=false;
+        }
         if(event.echo || row.paused || !this.allowed(row.sender) || !inWindow(event.timestamp)) {
           await c.query(`UPDATE spc_chat_events SET status='skipped' WHERE id=$1`,[job.id]); return;
         }
@@ -49,8 +56,8 @@ export class Worker {
             await c.query(`UPDATE spc_chat_events SET status='failed' WHERE id=$1`,[job.id]);
             return;
           } else if (event.attachments.length) {
-            await this.store.pause(row.id,'Prilog/slika zahteva pregled zaposlenog');
-            message='Primili smo prilog. Prosledio sam razgovor kolegama da provere artikal ili reklamaciju.';
+            state.supportRequest={reason:'Prilog/slika zahteva pregled zaposlenog'};
+            message='Primili smo prilog. Upit šaljem podršci na proveru. Za druge proizvode možeš nastaviti ovde.';
           } else if (state.pending && intent==='cancel') {
             delete state.pending;delete state.confirming;
             message='U redu, odustali smo od ove ponude. Porudžbina nije kreirana.';
@@ -77,7 +84,7 @@ export class Worker {
               const result=await this.spc({action:'reclamation',input:{orderNumberOrFiscal:r.number,sku:r.sku,quantity:r.quantity,description:r.description,photos:[]},accessToken:order.accessToken});
               message=result.ok ? `Reklamacija ${result.number} je zabeležena. Kolege će pregledati prijavu.` : 'Prijavu treba da proveri zaposleni. Prosleđujem mu razgovor.';
               state.reclamationInFlight=false; delete state.reclamation;
-              if(!result.ok) await this.store.pause(row.id,'Reklamacija zahteva proveru');
+              if(!result.ok) state.supportRequest={reason:'Reklamacija zahteva proveru'};
             }
           } else if (!state.pending && !state.reclamation && state.orders.length && isOrderConfirmation(event.text)) {
             message=`Porudžbina ${state.orders.at(-1).number} je već kreirana. Nije napravljena nova porudžbina. Ako želite izmenu, napišite šta menjate.`;
@@ -91,18 +98,24 @@ export class Worker {
               if(state.pending) result.text+='\n\n'+quoteMessage(state.pending);
             }
             if(!result.quoteCreated && !unverifiedSuccess && intent!=='question') delete state.pending;
-            if(!state.handedOff && !state.reclamation) images=(result.images??[]).slice(0,3);
+            if(!state.supportRequest && !state.reclamation) images=(result.images??[]).slice(0,3);
             message=result.quoteCreated ? quoteMessage(state.pending) : result.text;
             if(state.reclamation) message=`Prijava za ${state.reclamation.number}, artikal ${state.reclamation.sku}, količina ${state.reclamation.quantity}:\n${state.reclamation.description}\n\nZa slanje prijave napišite: POTVRĐUJEM ${state.reclamation.code}`;
             if(message.length>1850) {
               delete state.pending; delete state.reclamation;
-              await this.store.pause(row.id,'Složena ponuda zahteva zaposlenog');
+              state.supportRequest={reason:'Složena ponuda zahteva zaposlenog'};
               message='Za ovu ponudu potreban je zaposleni. Prosledio sam mu razgovor da proveri sve stavke i dostavu.';
             }
           }
           state.history.push({role:'user',content:event.text || '[Prilog kupca]'},{role:'assistant',content:message});
           state.history=state.history.slice(-30);
           await c.query('BEGIN');
+          if(state.supportRequest) {
+            const payload={action:'support_handoff',id:job.id,channel:event.channel,conversationId:row.id,
+              reason:state.supportRequest.reason,transcript:state.history.slice(-8).map(m=>`${m.role==='user'?'Kupac':'SPC'}: ${m.content}`).join('\n').slice(-6000)};
+            await c.query('INSERT INTO spc_chat_support(id,conversation,payload) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[job.id,row.id,this.store.encode(payload)]);
+            delete state.supportRequest;
+          }
           await this.store.save(c,row.id,state);
           await this.store.enqueue(c,`reply:${job.id}`,row.id,{text:message,allowPaused:state.handedOff===true || event.attachments.length>0 || message.includes('zaposleni')});
           for(const [index,image] of images.entries()) await this.store.enqueue(c,`reply:${job.id}:image:${index}`,row.id,{imageUrl:image.url});
@@ -119,7 +132,23 @@ export class Worker {
         }
       })));
       await this.flush();
+      await this.flushSupport();
     } catch { console.error('chat.worker_failed'); } finally {this.busy=false;}
+  }
+  async flushSupport() {
+    const pending=await this.store.pool.query("SELECT DISTINCT conversation FROM spc_chat_support WHERE status='pending' AND next_at<=now() LIMIT 8");
+    for(const item of pending.rows) await this.store.withConversation(item.conversation,async(_row,_state,c)=>{
+      const result=await c.query("SELECT * FROM spc_chat_support WHERE conversation=$1 AND status='pending' AND next_at<=now() ORDER BY created_at LIMIT 1",[item.conversation]);
+      const job=result.rows[0];if(!job)return;
+      try {
+        const sent=await this.spc(this.store.decode(job.payload));
+        if(!sent.ok)throw Error('SUPPORT_EMAIL_FAILED');
+        await c.query("UPDATE spc_chat_support SET status='sent' WHERE id=$1",[job.id]);
+      } catch {
+        await c.query("UPDATE spc_chat_support SET attempts=attempts+1,next_at=now()+interval '5 minutes' WHERE id=$1",[job.id]);
+        console.error('chat.support_email_pending');
+      }
+    });
   }
   async flush() {
     const result=await this.store.pool.query(`SELECT DISTINCT conversation FROM spc_chat_outbox WHERE status IN ('pending','sending') LIMIT 8`);

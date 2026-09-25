@@ -15,7 +15,11 @@ export class Store {
       CREATE TABLE IF NOT EXISTS spc_chat_outbox (
       id text PRIMARY KEY, conversation text NOT NULL REFERENCES spc_chat_conversations(id),
       payload text NOT NULL, status text NOT NULL DEFAULT 'pending', meta_id text,
-      created_at timestamptz NOT NULL DEFAULT now());`);
+      created_at timestamptz NOT NULL DEFAULT now());
+      CREATE TABLE IF NOT EXISTS spc_chat_support (
+      id text PRIMARY KEY, conversation text NOT NULL REFERENCES spc_chat_conversations(id),
+      payload text NOT NULL, status text NOT NULL DEFAULT 'pending', attempts integer NOT NULL DEFAULT 0,
+      next_at timestamptz NOT NULL DEFAULT now(), created_at timestamptz NOT NULL DEFAULT now());`);
   }
   async accept(event) {
     const c = await this.pool.connect();
@@ -47,5 +51,6 @@ export class Store {
   async pause(id, reason) { await this.pool.query('UPDATE spc_chat_conversations SET paused=true,reason=$2,updated_at=now() WHERE id=$1',[id,reason]); }
   async enqueue(c, id, conversation, message) { await c.query('INSERT INTO spc_chat_outbox(id,conversation,payload) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[id,conversation,seal(message,this.key)]); }
   decode(value) { return unseal(value,this.key); }
+  encode(value) { return seal(value,this.key); }
   async close() { await this.pool.end(); }
 }
