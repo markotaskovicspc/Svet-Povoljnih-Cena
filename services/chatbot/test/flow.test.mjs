@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
 import { Store } from '../src/store.mjs';
+import { isOrderConfirmation } from '../src/security.mjs';
 import { Worker } from '../src/worker.mjs';
 
 // Real embedded PostgreSQL for persistence and transaction tests. Advisory locks
@@ -17,8 +18,8 @@ async function setup() {
     const r=await db.query(sql,args);return {...r,rowCount:r.affectedRows??r.rows.length};
   };
   store.pool={query,connect:async()=>({query,release(){}}),end:()=>db.close()};await store.init();
-  const calls=[];const worker=new Worker({store,spc:async request=>{calls.push(request);return {ok:true,data:{number:'SPC-TEST-1',accessToken:'test-private',total:2000}};},accounts:[],enabled:true,model:'test',graphVersion:'v25.0'});
-  const event={id:'facebook:mid-1',conversation:'facebook:123:456',channel:'facebook',account:'123',sender:'456',timestamp:Date.now(),text:'POTVRĐUJEM ABC123',attachments:[],echo:false};
+  const calls=[];const worker=new Worker({store,spc:async request=>{calls.push(request);return {ok:true,data:{number:'SPC-TEST-1',accessToken:'test-private',total:2000}};},accounts:[],enabled:true,model:'test',graphVersion:'v25.0',intentFn:async({text,pending})=>isOrderConfirmation(text,pending?.code)?'confirm':text.includes('Promeni')?'change':'question'});
+  const event={id:'facebook:mid-1',conversation:'facebook:123:456',channel:'facebook',account:'123',sender:'456',timestamp:Date.now(),text:'Moze potvrdjujem',attachments:[],echo:false};
   await store.accept(event);
   await store.withConversation(event.conversation,async(row,state,c)=>{state.pending={code:'ABC123',quoteToken:'signed_quote'};await store.save(c,row.id,state);});
   return {store,worker,calls,event};
@@ -124,5 +125,29 @@ test('model cannot claim an uncreated order is confirmed; pending offer remains 
   assert(state.pending);assert.equal(state.orders.length,0);assert.equal(calls.length,0);
   assert.match(state.history.at(-1).content,/još nije kreirana/);
   assert(!state.history.at(-1).content.includes('Potvrđeno.'));
+ }finally{await store.close();}
+});
+
+for(const [intent,keepsOffer] of [['question',true],['change',false],['cancel',false],['unclear',true]]) {
+ test('semantic '+intent+' never creates an order and handles pending offer',async()=>{
+  const {store,worker,calls,event}=await setup();
+  try {
+   worker.intentFn=async()=>intent;
+   worker.answerFn=async()=>({text:'Proverimo detalje.',quoteCreated:false});
+   await worker.tick();
+   const state=store.decode((await store.pool.query('SELECT state FROM spc_chat_conversations')).rows[0].state);
+   assert.equal(calls.length,0);assert.equal(Boolean(state.pending),keepsOffer);
+  }finally{await store.close();}
+ });
+}
+test('semantic decision is persisted and not reinterpreted after uncertain ERP write',async()=>{
+ const {store,worker,event}=await setup();let classifications=0,attempts=0;
+ worker.intentFn=async()=>{classifications++;return 'confirm';};
+ worker.spc=async()=>{if(++attempts===1)throw Error('response lost');return {ok:true,data:{number:'ORDER-1',accessToken:'private',total:2000}};};
+ try {
+  await worker.tick();await store.pool.query("UPDATE spc_chat_events SET next_at=now() WHERE id=$1",[event.id]);await worker.tick();
+  assert.equal(classifications,1);assert.equal(attempts,2);
+  const state=store.decode((await store.pool.query('SELECT state FROM spc_chat_conversations')).rows[0].state);
+  assert.equal(state.orders.length,1);assert.equal(state.confirming,undefined);
  }finally{await store.close();}
 });

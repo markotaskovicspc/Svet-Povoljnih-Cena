@@ -1,10 +1,11 @@
+import { classifyOrderIntent } from './order-intent.mjs';
 import { randomUUID } from 'node:crypto';
 import { answer, quoteMessage } from './agent.mjs';
 import { inWindow, isConfirmation, isOrderConfirmation } from './security.mjs';
 
 export class Worker {
-  constructor({store,spc,accounts,model,graphVersion,enabled=false,testSenders=[],answerFn=answer}) {
-    Object.assign(this,{store,spc,accounts,model,graphVersion,enabled,testSenders,answerFn}); this.busy=false;
+  constructor({store,spc,accounts,model,graphVersion,enabled=false,testSenders=[],answerFn=answer,intentFn=classifyOrderIntent}) {
+    Object.assign(this,{store,spc,accounts,model,graphVersion,enabled,testSenders,answerFn,intentFn}); this.busy=false;
   }
   async start() {
     // LISTEN starts work immediately; timer only recovers missed notifications/retries.
@@ -30,6 +31,16 @@ export class Worker {
         const recent=await c.query(`SELECT count(*)::int AS n FROM spc_chat_events WHERE conversation=$1 AND created_at>now()-interval '1 minute'`,[row.id]);
         if(recent.rows[0].n>25) {await this.store.pause(row.id,'Previše poruka; potrebna ručna provera');return;}
         try {
+          let intent;
+          if(state.pending && !state.reclamationInFlight && !event.attachments.length) {
+            if(state.confirming?.eventId===event.id || isConfirmation(event.text,state.pending.code)) intent='confirm';
+            else intent=await this.intentFn({text:event.text,history:state.history,pending:state.pending,model:this.model});
+            if(intent==='confirm') {
+              // Persist the chosen quote before writing: a timeout retries the same order.
+              state.confirming={eventId:event.id,quoteToken:state.pending.quoteToken};
+              await this.store.save(c,row.id,state);
+            } else if(intent==='change') {delete state.pending;delete state.confirming;}
+          }
           let message;
           let images=[];
           if (state.reclamationInFlight) {
@@ -39,12 +50,17 @@ export class Worker {
           } else if (event.attachments.length) {
             await this.store.pause(row.id,'Prilog/slika zahteva pregled zaposlenog');
             message='Primili smo prilog. Prosledio sam razgovor kolegama da provere artikal ili reklamaciju.';
-          } else if (state.pending && isOrderConfirmation(event.text,state.pending.code)) {
-            const result=await this.spc({action:'create_order',channel:event.channel,conversationId:row.id,quoteToken:state.pending.quoteToken});
+          } else if (state.pending && intent==='cancel') {
+            delete state.pending;delete state.confirming;
+            message='U redu, odustali smo od ove ponude. Porudžbina nije kreirana.';
+          } else if (state.pending && intent==='unclear') {
+            message='Da li želite da naručimo sve iz poslednje ponude po prikazanom ukupnom iznosu, bez izmena?';
+          } else if (state.pending && intent==='confirm') {
+            const result=await this.spc({action:'create_order',channel:event.channel,conversationId:row.id,quoteToken:state.confirming.quoteToken});
             if(result.ok) {
               state.orders.push({number:result.data.number,accessToken:result.data.accessToken});
               message=`Porudžbina ${result.data.number} je uspešno kreirana. Ukupno: ${result.data.total} RSD, sa dostavom. Potvrda stiže i na mejl.`;
-              delete state.pending;
+              delete state.pending;delete state.confirming;
             } else {
               message='Porudžbina nije kreirana. Ponuda je istekla ili su se cena/dostupnost promenile. Proveriću ponovo podatke pre nove potvrde.';
               delete state.pending;
@@ -71,7 +87,7 @@ export class Worker {
               result.text='Porudžbina još nije kreirana u sistemu. Za naručivanje je potrebna važeća ponuda i vaša potvrda.';
               if(state.pending) result.text+='\n\n'+quoteMessage(state.pending);
             }
-            if(!result.quoteCreated && !unverifiedSuccess) delete state.pending;
+            if(!result.quoteCreated && !unverifiedSuccess && intent!=='question') delete state.pending;
             if(!state.handedOff && !state.reclamation) images=(result.images??[]).slice(0,3);
             message=result.quoteCreated ? quoteMessage(state.pending) : result.text;
             if(state.reclamation) message=`Prijava za ${state.reclamation.number}, artikal ${state.reclamation.sku}, količina ${state.reclamation.quantity}:\n${state.reclamation.description}\n\nZa slanje prijave napišite: POTVRĐUJEM ${state.reclamation.code}`;

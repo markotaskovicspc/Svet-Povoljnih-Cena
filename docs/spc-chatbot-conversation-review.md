@@ -15,3 +15,7 @@ Pravila agenta:
 - Ranije porudžbine i nedostajući artikli zahtevaju proveru zaposlenog; bez automatskog obećanja povraćaja ili zamene.
 
 Ograničenja: nisu uključeni svi kupci (Meta aplikacija je u testu); slike kupaca predaju se zaposlenom; nisu ugrađena nagađanja o prodavnici, garanciji ili rokovima. Instagram je odložen po zahtevu korisnika.
+
+## Razumevanje potvrde
+
+Potvrda poslednje ponude koristi strukturisanu klasifikaciju namere (confirm/change/cancel/question/human/unclear), a ne spisak ključnih reči. Pitanje čuva ponudu, promena je poništava pre nove pripreme, odustajanje je briše, nejasan odgovor traži razjašnjenje. Kratko da se tumači prema prethodnom pitanju. ERP i dalje proverava potpisanu ponudu/cenu/rok i sprečava duplikate. Odluka za pokušaj upisa se trajno čuva pre slanja radi oporavka posle gubitka odgovora. Greška klasifikacije ne kreira porudžbinu.
