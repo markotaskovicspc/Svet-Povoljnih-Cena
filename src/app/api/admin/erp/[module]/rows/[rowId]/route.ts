@@ -417,6 +417,9 @@ async function persistProductCell(
         "Visina pakovanja pojedinačnog artikla mora biti broj.",
       );
       break;
+    case "courierUnitsPerBox":
+      data.courierUnitsPerBox = nullablePositiveInt(value, "Komada u kurirskoj kutiji mora biti ceo broj veći od nule.") ?? 1;
+      break;
     case "packQty":
       data.packQty = nullableInt(value, "Broj komada u pakovanju mora biti ceo broj.");
       break;

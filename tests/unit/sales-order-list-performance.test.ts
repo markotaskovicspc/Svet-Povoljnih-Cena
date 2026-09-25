@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ orders: vi.fn(), shipments: vi.fn() }));
+const mocks = vi.hoisted(() => ({ orders: vi.fn(), shipments: vi.fn(), ananasOrders: vi.fn() }));
 vi.mock("@/lib/db", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/db")>(),
-  db: { order: { findMany: mocks.orders }, $queryRaw: mocks.shipments },
+  db: { order: { findMany: mocks.orders }, ananasOrder: { findMany: mocks.ananasOrders }, ananasDocument: { findMany: async () => [] }, $queryRaw: mocks.shipments },
 }));
 import { getOperationalErpRows } from "@/lib/admin/erp-operations";
 
@@ -27,11 +27,20 @@ const shipment = {
 };
 
 beforeEach(() => {
+  mocks.ananasOrders.mockResolvedValue([]);
   mocks.orders.mockResolvedValue([order]);
   mocks.shipments.mockResolvedValue([shipment]);
 });
 
 describe("sales list projected courier metadata", () => {
+  it("merges remote orders chronologically and replaces a matching manually entered Ananas row", async () => {
+    mocks.orders.mockResolvedValue([order, { ...order, id: "manual", channel: "ANANAS", externalOrderNo: "A-B", items: [{ ...order.items[0], id: "manual-item" }] }]);
+    mocks.ananasOrders.mockResolvedValue([{ id: "A-B", createdAt: new Date("2026-09-24T00:00:00Z"), paymentMethods: "PBC", billingAddress: {}, shipments: [], status: "Čeka proveru", items: [{ id: "remote-item", sku: "SKU-REMOTE", name: "Remote", quantity: 2, unitPrice: 1200, gross: 2400, net: 2000, shipping: 0 }] }]);
+    const rows = await getOperationalErpRows("prodajni-nalozi", 100);
+    expect(rows![0]).toMatchObject({ detailId: "ananas-A-B", values: { channel: "ANANAS", qty: 2, totalGross: 2400, totalNet: 2000 } });
+    expect(rows!.some(row => row.detailId === "manual")).toBe(false);
+    expect(rows!.some(row => row.detailId === "order-a")).toBe(true);
+  });
   it("preserves item totals, discount, delivery charge and courier display", async () => {
     const rows = await getOperationalErpRows("prodajni-nalozi");
     expect(rows).toHaveLength(2);

@@ -11,10 +11,14 @@ vi.mock("@/lib/db", () => ({ db: {
 } }));
 vi.mock("@/lib/admin", () => ({ requireAdminAction: mocks.admin }));
 vi.mock("@/lib/mygls", () => ({ MYGLS_PROVIDER: "MYGLS", downloadMyGlsLabelPdf: mocks.download }));
-vi.mock("@/lib/pdf/merge", () => ({ mergePdfDocuments: mocks.merge }));
+vi.mock("@/lib/mygls/print-layout", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/mygls/print-layout")>(),
+  packMyGlsLabels: mocks.merge,
+}));
 vi.mock("@/lib/x-express/labels", () => ({ renderXExpressBatchLabelsHtml: mocks.render }));
 
 import { GET } from "@/app/api/admin/erp/preuzimanja/[id]/labels/route";
+import { MyGlsPrintLayoutError } from "@/lib/mygls/print-layout";
 
 function line(orderId: string, packageNo = 1, deferredAt: Date | null = null) {
   return {
@@ -96,10 +100,21 @@ describe("pickup label downloads", () => {
       expect(response.headers.get("content-type")).toBe("application/pdf");
       expect(mocks.download).toHaveBeenCalledTimes(5);
       expect(mocks.download).not.toHaveBeenCalledWith("deferred-chairs.pdf");
+      expect(mocks.merge.mock.calls[0][0]).toEqual([
+        { bytes: Buffer.from("large-order.pdf"), packageCount: 4, groupKey: "large-order:ORDER_DELIVERY:" },
+        ...Array.from({ length: 4 }, (_, i) => ({ bytes: Buffer.from(`order-${i}.pdf`), packageCount: 1, groupKey: `order-${i}:ORDER_DELIVERY:` })),
+      ]);
     } else {
       expect(mocks.render.mock.calls[0][0]).toHaveLength(5);
       expect(mocks.render.mock.calls[0][1].packageContentsByShipmentId["shipment-large-order"]).toHaveLength(4);
     }
+  });
+
+  it("explains an unsupported GLS layout instead of returning a partial batch", async () => {
+    mocks.merge.mockRejectedValue(new MyGlsPrintLayoutError("Nepoznat GLS raspored"));
+    const response = await request();
+    expect(response.status).toBe(409);
+    expect(await response.text()).toContain("Nepoznat GLS raspored");
   });
 
   it("does not require payment for a fully deferred order", async () => {
@@ -161,4 +176,15 @@ describe("pickup label downloads", () => {
     await expect(request()).rejects.toThrow("Unauthorized");
     expect(mocks.batch).not.toHaveBeenCalled();
   });
+});
+
+it("requires a shipment assignment to include every SKU in the combined parcel", async () => {
+  const packedItems = ["order-item", "second-item"].map(orderItemId => ({ orderItemId, quantity: 2, sku: orderItemId, name: "POMPEA", barcode: null, categoryName: null, color1: null, color2: null, unitValue: 100 }));
+  mocks.batch.mockResolvedValue({ id: "batch", number: "PRE", provider: "X_EXPRESS", labelsCreatedAt: new Date(), lines: [{ ...line("order"), packedItems }] });
+  mocks.shipments.mockResolvedValue([{ ...shipment("order"), rawCreateResponse: { assignment: { orderItemIds: ["order-item"], codAmount: 400 } } }]);
+  expect((await request()).status).toBe(409);
+  expect(mocks.render).not.toHaveBeenCalled();
+  mocks.shipments.mockResolvedValue([{ ...shipment("order"), rawCreateResponse: { assignment: { orderItemIds: ["order-item", "second-item"], codAmount: 400 } } }]);
+  expect((await request()).status).toBe(200);
+  expect(mocks.render.mock.calls[0][1]).toMatchObject({ packageContentsByShipmentId: { "shipment-order": ["POMPEA · 2 stavki · 4 kom"] }, packageOrderItemIdsByShipmentId: { "shipment-order": [null] } });
 });

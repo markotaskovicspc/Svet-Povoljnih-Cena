@@ -1,3 +1,4 @@
+import { packedItemsLabel, parcelOrderItemIds } from "@/lib/courier/parcel-contents";
 import { NextResponse } from "next/server";
 import type { Prisma, ShipmentPurpose } from "@prisma/client";
 import { requireAdminAction } from "@/lib/admin";
@@ -8,7 +9,7 @@ import {
   MYGLS_PROVIDER,
 } from "@/lib/mygls";
 import { usableMyGlsLabelWhere } from "@/lib/mygls/labels";
-import { mergePdfDocuments } from "@/lib/pdf/merge";
+import { packMyGlsLabels, MyGlsPrintLayoutError } from "@/lib/mygls/print-layout";
 import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
 import { xExpressLabelItemSelect } from "@/lib/x-express/article-labels";
 import { renderXExpressBatchLabelsHtml } from "@/lib/x-express/labels";
@@ -41,6 +42,7 @@ export async function GET(
           reclamationId: true,
           purpose: true,
           lineGroupKey: true,
+          packedItems: true,
           packageNo: true,
           orderItem: { select: { name: true } },
         },
@@ -194,17 +196,24 @@ export async function GET(
         downloadMyGlsLabelPdf(shipment.labelObjectKey!),
       ),
     );
-    const pdf = await mergePdfDocuments(sourcePdfs, {
-      title: `${batch.number} — kurirske etikete`,
-      author: "Svet povoljnih cena",
-    });
-    return new NextResponse(pdf, {
+    let pdf: Buffer;
+    try {
+      pdf = await packMyGlsLabels(sourcePdfs.map((bytes, index) => ({
+        bytes,
+        packageCount: Math.max(1, shipments[index]!.packageCount),
+        groupKey: `${shipments[index]!.orderId}:${shipments[index]!.purpose}:${shipments[index]!.reclamationId ?? ""}`,
+      })), `${batch.number} - kurirske etikete`);
+    } catch (error) {
+      if (!(error instanceof MyGlsPrintLayoutError)) throw error;
+      return labelConflict(error.message, batch.id);
+    }
+    return new NextResponse(new Uint8Array(pdf), {
       headers: {
         "content-type": "application/pdf",
         "content-disposition": `inline; filename="${batch.number}-kurirske-etikete.pdf"`,
         "cache-control": "private, no-store",
         "x-content-type-options": "nosniff",
-        "x-courier-label-source": "mygls-provider-pdfs-merged",
+        "x-courier-label-source": "mygls-provider-pdfs-packed",
         "x-courier-label-count": String(labelCount),
       },
     });
@@ -215,7 +224,7 @@ export async function GET(
       const contents = batch.lines
         .filter((line) => shipmentMatchesLine(shipment, line))
         .sort((left, right) => left.packageNo - right.packageNo)
-        .map((line) => line.purpose === "RECLAMATION_REPLACEMENT" ? "" : line.orderItem?.name?.trim() || "Roba");
+        .map((line) => line.purpose === "RECLAMATION_REPLACEMENT" ? "" : packedItemsLabel(line.packedItems) || line.orderItem?.name?.trim() || "Roba");
       return [shipment.id, contents];
     }),
   );
@@ -223,7 +232,7 @@ export async function GET(
     shipments.map((shipment) => [shipment.id, batch.lines
       .filter((line) => shipmentMatchesLine(shipment, line))
       .sort((left, right) => left.packageNo - right.packageNo)
-      .map((line) => line.orderItemId)]),
+      .map((line) => line.packedItems ? null : line.orderItemId)]),
   );
   let html: string;
   try {
@@ -263,6 +272,7 @@ function shipmentMatchesLine(
   },
   line: {
     lineGroupKey?: string;
+    packedItems?: unknown;
     orderId: string;
     orderItemId: string | null;
     reclamationId: string | null;
@@ -282,8 +292,8 @@ function shipmentMatchesLine(
     shipment.orderId === line.orderId &&
     (assignment == null ||
       Boolean(
-        line.orderItemId &&
-          assignment.orderItemIds.includes(line.orderItemId),
+        parcelOrderItemIds(line).length &&
+          parcelOrderItemIds(line).every(id => assignment.orderItemIds.includes(id)),
       ))
   );
 }

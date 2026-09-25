@@ -52,7 +52,7 @@ describe("MyGLS stored label download", () => {
     expect(doc.getPages().some((page) => page.node.has(PDFName.of("SPCArticleBarcodesV1")))).toBe(false);
     expect(doc.getPages().flatMap((page) => readMyGlsPageText(doc, page)).map((b) => b.text).join(" "))
       .not.toContain("381621112222");
-    expect(warn).toHaveBeenCalledExactlyOnceWith("[mygls-label] Article barcode omitted: unsupported label layout.");
+    expect(warn).toHaveBeenCalledWith("[mygls-label] Article barcode omitted: unsupported label layout.");
   });
 
   it("does not hide private storage failures", async () => {

@@ -11,8 +11,10 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function SalesOrdersOverviewPage() {
+export default async function SalesOrdersOverviewPage({ searchParams }: { searchParams: Promise<{ channel?: string }> }) {
   await requireAdminAction(["OPS"]);
+  const requestedChannel = (await searchParams).channel;
+  const channel = ["WEB", "ANANAS", "MP", "VP", "INO"].includes(requestedChannel ?? "") ? requestedChannel : undefined;
   const erpModule = await getErpModule("prodajni-nalozi", { deferRows: true });
   if (!erpModule) notFound();
   return (
@@ -35,7 +37,16 @@ export default async function SalesOrdersOverviewPage() {
         }
       />
       <div className="px-4 py-6 md:px-8">
-        <ErpGrid module={erpModule} />
+        <nav aria-label="Kanal prodajnih naloga" className="mb-5 flex flex-wrap gap-2">
+          {[{ value: "", label: "Sve porudžbine" }, { value: "WEB", label: "Web" }, { value: "ANANAS", label: "Ananas" }, { value: "MP", label: "Maloprodaja" }, { value: "VP", label: "Veleprodaja" }, { value: "INO", label: "Inostranstvo" }].map(item => (
+            <Link key={item.value} href={`/admin/erp/prodajni-nalozi?channel=${item.value || "ALL"}`} aria-current={(channel ?? "") === item.value ? "page" : undefined}
+              className={`inline-flex h-9 items-center rounded-lg border px-4 text-sm font-medium transition ${(channel ?? "") === item.value ? "border-foreground bg-foreground text-background" : "border-border bg-background hover:bg-muted"}`}>
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+        {channel === "ANANAS" && <p className="mb-4 text-sm text-ink-500">Porudžbine preuzete sa Ananasa. Klik na broj otvara artikle, status pošiljke i povezane fiskalne račune. <Link className="underline" href="/admin/erp/ananas?view=orders">Ananas statistika i preuzimanje</Link></p>}
+        <ErpGrid key={channel ?? "ALL"} module={erpModule} fixedFilters={channel ? [{ id: "sales-channel", columnKey: "channel", operator: "equals", value: channel }] : undefined} />
       </div>
     </>
   );

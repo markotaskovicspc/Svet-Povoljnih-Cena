@@ -1,3 +1,4 @@
+import { readPackedItems } from "@/lib/courier/parcel-contents";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -953,7 +954,7 @@ export default async function PickupBatchPage({
                                   <AdminActionForm action={savePackageAction} className="flex flex-wrap items-end gap-2 rounded-lg border border-border p-2">
                                     <input type="hidden" name="batchId" value={batch.id} />
                                     <input type="hidden" name="lineId" value={row.lineId} />
-                                    <span className="pb-1 text-xs font-semibold">#{row.packageNo}</span>
+                                    <span className="pb-1 text-xs font-semibold">#{row.packageNo} · {row.packedQuantity} kom</span>
                                     <PackageMeasureInput name="weightKg" label="kg" max={myGls ? 40 : 30} step="0.001" value={row.weightKg} />
                                     <PackageMeasureInput name="widthCm" label="Š" max={myGls ? 200 : 60} value={row.widthCm} />
                                     <PackageMeasureInput name="depthCm" label="D" max={myGls ? 200 : 60} value={row.depthCm} />
@@ -963,7 +964,7 @@ export default async function PickupBatchPage({
                                 ) : (
                                   <div className="rounded-lg border border-border p-2">
                                     <p className={row.measurementsComplete ? "text-ink-700" : "text-warning"}>
-                                      #{row.packageNo} · {formatPackageMeasurements(row)}
+                                      #{row.packageNo} · {row.packedQuantity} kom · {formatPackageMeasurements(row)}
                                     </p>
                                     {row.providerParcelNumber ? (
                                       <p className="mt-1 font-mono text-xs text-ink-500">
@@ -1163,6 +1164,8 @@ function pickupLineRow(line: {
   purpose: "ORDER_DELIVERY" | "RECLAMATION_RETURN" | "RECLAMATION_REPLACEMENT";
   lineGroupKey: string;
   quantity: number | null;
+  packedQuantity: number;
+  packedItems?: unknown;
   packageNo: number;
   weightKg: unknown;
   widthCm: unknown;
@@ -1276,6 +1279,8 @@ function pickupLineRow(line: {
     color1: product?.colorPrimary ?? item?.color1 ?? "",
     color2: product?.colorSecondary ?? item?.color2 ?? "",
     qty: isPartReplacement ? 1 : line.quantity ?? item?.qty ?? 0,
+    packedQuantity: line.packedQuantity,
+    packedContents: readPackedItems(line.packedItems),
     packageNo: line.packageNo,
     courierPickedUpAt: courier ? courier.pickedUpAt : line.courierPickedUpAt,
     handoverReport: courier?.handoverReport,
@@ -1353,6 +1358,19 @@ function aggregatePickupGroups(rows: ReturnType<typeof pickupLineRow>[]) {
       }
     >();
     for (const row of group.rows) {
+      if (row.packedContents.length) {
+        for (const content of row.packedContents) {
+          const previous = items.get(content.orderItemId);
+          if (previous) { previous.quantity += content.quantity; continue; }
+          items.set(content.orderItemId, {
+            key: content.orderItemId, sku: content.sku, name: content.name, quantity: content.quantity,
+            barcode: content.barcode ?? "", collection: "POMPEA", description: "Zajednički paket",
+            attributes: [content.color1, content.color2].filter(Boolean).join(" / "),
+            isPartReplacement: false, originalName: content.name,
+          });
+        }
+        continue;
+      }
       const key = row.orderItemId ?? `package:${row.lineId}`;
       if (items.has(key)) continue;
       items.set(key, {

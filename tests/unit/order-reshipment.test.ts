@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const { tx, adjust } = vi.hoisted(() => ({ adjust: vi.fn(), tx: {
   $queryRaw: vi.fn(), shipment: { findUnique: vi.fn() }, order: { update: vi.fn() },
-  pickupBatch: { findMany: vi.fn(), create: vi.fn() },
+  pickupBatch: { findMany: vi.fn(), findFirst: vi.fn(), findUniqueOrThrow: vi.fn(), create: vi.fn() },
   pickupBatchLine: { findMany: vi.fn(), createMany: vi.fn() },
   orderReshipment: { create: vi.fn() }, orderReshipmentItem: { findUniqueOrThrow: vi.fn(), update: vi.fn() },
   stockMovement: { findFirst: vi.fn(), findUnique: vi.fn() },
@@ -54,6 +54,19 @@ describe("new goods for an unresolved courier delivery", () => {
     expect(tx.orderReshipment.create.mock.calls[0][0].data).toMatchObject({ sourceShipmentId: "s", codAmount: 4500 });
     expect(tx.order.update).toHaveBeenCalledWith({ where: { id: "o" }, data: { status: "U_PRIPREMI" } });
   });
+  it("puts a reshipment in the shared unstarted courier batch", async () => {
+    tx.pickupBatch.findFirst.mockResolvedValue({ id: "shared", number: "PRE-shared" });
+    tx.pickupBatch.findUniqueOrThrow.mockResolvedValue({ id: "shared", status: "DRAFT", labelsCreationStartedAt: null, labelsCreatedAt: null });
+    tx.pickupBatchLine.findMany.mockResolvedValue([{ orderItemId: "i", quantity: 2, packedQuantity: 2, packageNo: 1 }]);
+    expect(await queueOrderReshipment(input)).toMatchObject({ id: "shared" });
+    expect(tx.pickupBatch.create).not.toHaveBeenCalled();
+    expect(tx.orderReshipment.create.mock.calls[0][0].data).toMatchObject({ batchId: "shared", codAmount: 4500 });
+    expect(tx.pickupBatchLine.createMany.mock.calls[0][0].data).toEqual([
+      expect.objectContaining({ batchId: "shared", packedQuantity: 2, quantity: 2 }),
+    ]);
+    expect(adjust.mock.calls[0][1]).toMatchObject({ qtyDelta: -2 });
+  });
+
   it("returns the existing picking batch on a repeated request without debiting again", async () => {
     tx.shipment.findUnique.mockResolvedValue({ ...source(), reshipment: { batch: { id: "existing" } } });
     expect(await queueOrderReshipment(input)).toEqual({ id: "existing" });
@@ -114,4 +127,19 @@ describe("physical return of the old goods", () => {
     await expect(receiveReshipmentReturn({ ...receipt, unitNo })).rejects.toThrow();
     expect(adjust).not.toHaveBeenCalled();
   });
+});
+
+it("resends a consolidated parcel as one package and reserves every contained SKU", async () => {
+  const s = source();
+  s.order.items.push({ ...s.order.items[0], id: "j", productId: "p2", sku: "SKU2", qty: 3 });
+  s.rawCreateResponse.assignment.orderItemIds.push("j");
+  tx.shipment.findUnique.mockResolvedValue(s);
+  const packedItems = ["i", "j"].map((orderItemId, i) => ({ orderItemId, quantity: 2 + i, sku: `SKU${i}`, name: "POMPEA", barcode: null, categoryName: null, color1: null, color2: null, unitValue: 100 }));
+  tx.pickupBatchLine.findMany.mockResolvedValue([{ orderItemId: "i", quantity: 5, packedQuantity: 5, packedItems, packageNo: 1 }]);
+  await queueOrderReshipment(input);
+  expect(adjust.mock.calls.map(call => call[1])).toEqual([
+    expect.objectContaining({ productId: "p", qtyDelta: -2 }),
+    expect.objectContaining({ productId: "p2", qtyDelta: -3 }),
+  ]);
+  expect(tx.pickupBatchLine.createMany.mock.calls[0][0].data).toEqual([expect.objectContaining({ packedItems, packedQuantity: 5, quantity: 5, packageNo: 1 })]);
 });

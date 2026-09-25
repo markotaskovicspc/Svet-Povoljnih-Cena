@@ -13,6 +13,17 @@ describe("admin report period", () => {
     expect(period.endExclusive.toISOString()).toBe("2026-07-27T22:00:00.000Z");
   });
 
+  it.each([
+    ["2026-09-25T05:00:00Z", "2026-09-24", "2026-09-23T22:00:00.000Z", "2026-09-24T22:00:00.000Z"],
+    ["2026-01-01T00:30:00Z", "2025-12-31", "2025-12-30T23:00:00.000Z", "2025-12-31T23:00:00.000Z"],
+    ["2026-03-30T06:00:00Z", "2026-03-29", "2026-03-28T23:00:00.000Z", "2026-03-29T22:00:00.000Z"],
+  ])("resolves yesterday as one Belgrade calendar day at %s", (now, day, start, end) => {
+    const period = resolveReportPeriod({ range: "yesterday" }, new Date(now));
+    expect(period).toMatchObject({ preset: "yesterday", label: "Juče", fromInput: day, toInput: day });
+    expect(period.start.toISOString()).toBe(start);
+    expect(period.endExclusive.toISOString()).toBe(end);
+  });
+
   it("builds inclusive preset periods without an extra day", () => {
     const period = resolveReportPeriod({ range: "7d" }, julyNow);
 

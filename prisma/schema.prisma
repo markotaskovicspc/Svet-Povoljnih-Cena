@@ -374,6 +374,9 @@ model Product {
   weightKg      Decimal? @db.Decimal(10, 3)
   grossWeightKg Decimal? @db.Decimal(10, 3)
 
+  /// Sellable units in a courier carton; independent of inbound packQty.
+  courierUnitsPerBox Int @default(1)
+
   // Individual article package dimensions ŠxDxV (cm)
   unitPackWidthCm  Decimal? @db.Decimal(8, 2)
   unitPackDepthCm  Decimal? @db.Decimal(8, 2)
@@ -2886,6 +2889,10 @@ model PickupBatchLine {
   /// Quantity represented by this logical picking line. Null keeps legacy
   /// order rows compatible and falls back to OrderItem.qty.
   quantity                 Int?
+  /// Actual units in this physical parcel, retained for deferrals and COD.
+  packedQuantity           Int             @default(1)
+  /// Immutable article/quantity/value snapshots for consolidated parcels.
+  packedItems              Json?
   packageNo                Int             @default(1)
   weightKg                 Decimal?        @db.Decimal(10, 3)
   widthCm                  Decimal?        @db.Decimal(8, 2)
@@ -3899,6 +3906,7 @@ model AnanasDocument {
   @@unique([kind, fiscalNumber])
   @@index([issuedAt, kind])
   @@index([suborderNumber])
+  @@index([orderNumber])
 }
 
 model AnanasSyncRun {
@@ -3914,4 +3922,25 @@ model AnanasSyncRun {
 
   @@index([startedAt])
   @@index([source, status, to])
+}
+
+/// Read-only API mirror. Isolated from local fulfillment, payment and stock jobs.
+model AnanasOrder {
+  id              String   @id
+  createdAt       DateTime
+  total           Decimal  @db.Decimal(16, 2)
+  currency        String
+  paymentMethods  String
+  customerName    String?
+  billingAddress  Json
+  items           Json
+  shipments       Json
+  status          String   @default("Čeka proveru")
+  needsRefresh    Boolean  @default(true)
+  lastCheckedAt   DateTime @default(dbgenerated("'1970-01-01 00:00:00'::timestamp"))
+  importedAt      DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([createdAt])
+  @@index([needsRefresh, lastCheckedAt])
 }

@@ -6,6 +6,7 @@ import { getMyGlsConfig, MyGlsConfigError } from "./config";
 import { redactMyGlsSenderContactPdf } from "./label-redaction";
 import { MYGLS_RECOVERABLE_STATUS_CODES } from "./status";
 import { addMyGlsProductBarcodes, MyGlsProductBarcodeLayoutError } from "./product-barcode";
+import { enlargeMyGlsArticleText, MyGlsPrintLayoutError } from "./print-layout";
 
 /**
  * A provider PDF remains printable when a status-sync mapping failed, as long
@@ -69,15 +70,22 @@ export async function downloadMyGlsLabelPdf(objectKey: string) {
     throw new MyGlsConfigError(error?.message ?? "MyGLS etiketa nije pronađena.");
   }
   const label = await redactMyGlsSenderContactPdf(await data.arrayBuffer());
+  let printable = label.bytes;
   try {
-    return (await addMyGlsProductBarcodes(label.bytes)).bytes;
+    printable = await enlargeMyGlsArticleText(printable);
+  } catch (error) {
+    if (!(error instanceof MyGlsPrintLayoutError)) throw error;
+    console.warn("[mygls-label] Article enlargement omitted: unsupported label layout.");
+  }
+  try {
+    return (await addMyGlsProductBarcodes(printable)).bytes;
   } catch (error) {
     if (!(error instanceof MyGlsProductBarcodeLayoutError)) throw error;
     // The article barcode is optional; the provider's original tracking barcode
     // remains usable. Never block a paid/created shipment on this decoration,
-    // and never return the unredacted PDF or a partially decorated document.
+    // and never return the unredacted PDF or a partially barcoded document.
     console.warn("[mygls-label] Article barcode omitted: unsupported label layout.");
-    return label.bytes;
+    return printable;
   }
 }
 

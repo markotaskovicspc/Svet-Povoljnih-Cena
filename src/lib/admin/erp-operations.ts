@@ -6,6 +6,7 @@ import {
   type ShipmentStatus,
   type Shipment,
 } from "@prisma/client";
+import { ananasOrderRows } from "@/lib/ananas/order-rows";
 import { databaseIdentifier, db } from "@/lib/db";
 import type {
   ErpColumn,
@@ -467,6 +468,7 @@ export const operationalErpModules: ErpModule[] = [
         "Kurirski nalog otkazan",
         ...Object.values(SHIPMENT_STATUS_LABEL),
         "Nije kurirska isporuka",
+        "Čeka proveru", "U obradi", "Problem / povrat", "Završeno — mešovito",
       ], {
         Refundirano: "purple",
         Otkazano: "red",
@@ -1583,6 +1585,7 @@ async function salesOrderRows(
       id: true,
       number: true,
       channel: true,
+      externalOrderNo: true,
       createdAt: true,
       status: true,
       paymentMethod: true,
@@ -1715,7 +1718,7 @@ async function salesOrderRows(
     group.push(shipment);
     shipmentsByOrder.set(shipment.orderId, group);
   }
-  return orders.flatMap((order): ErpRow[] => {
+  const localRows = orders.flatMap((order): ErpRow[] => {
     const shipments = shipmentsByOrder.get(order.id) ?? [];
     const saleFiscalDocuments = order.fiscalDocuments.filter(
       (document) => document.kind === "SALE",
@@ -1906,6 +1909,11 @@ async function salesOrderRows(
     });
     return shippingRow ? [...itemRows, shippingRow] : itemRows;
   });
+  const remoteRows = await ananasOrderRows(take, filters);
+  const remoteNumbers = new Set(remoteRows.map(row => row.values.number));
+  const duplicateLocalIds = new Set(orders.filter(order => order.channel === "ANANAS" && remoteNumbers.has(order.externalOrderNo ?? order.number)).map(order => order.id));
+  return [...localRows.filter(row => !duplicateLocalIds.has(row.detailId ?? row.id)), ...remoteRows]
+    .sort((a, b) => String(b.values.orderDate ?? "").localeCompare(String(a.values.orderDate ?? "")));
 }
 
 export function salesOrderShippingRow(args: {

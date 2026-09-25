@@ -18,7 +18,7 @@ import {
   createShipmentForOrder,
   syncCourierShipmentById,
 } from "@/lib/courier";
-import { resolveCourierProvider } from "@/lib/courier/routing";
+import { physicalPackageRouteItem, resolveCourierProvider } from "@/lib/courier/routing";
 import { derivePhysicalPackages } from "@/lib/courier/packages";
 import {
   normalizeOrderItemIds,
@@ -1365,6 +1365,10 @@ export async function WebOrderDetail({ id }: { id: string }) {
           },
           product: {
             select: {
+              courierUnitsPerBox: true,
+              name: true,
+              supplier: { select: { name: true } },
+              collection: { select: { name: true } },
               packQty: true,
               packWidthCm: true,
               packDepthCm: true,
@@ -1436,23 +1440,13 @@ export async function WebOrderDetail({ id }: { id: string }) {
   const dcCourierItems = order.items.filter((item) => item.supplierReservedQty === 0 || item.warehouseReservedQty > 0);
   const courierPackages = derivePhysicalPackages(
     dcCourierItems.map((item) => ({
-      id: item.id,
-      name: item.name,
+      ...item,
       qty: item.warehouseReservedQty || item.qty,
-      product: item.product,
     })),
   );
   const courierRouting = resolveCourierProvider({
     shippingMethod: order.shippingMethod,
-    items: courierPackages.map((pkg) => ({
-      withAssembly: false,
-      qty: 1,
-      packQty: 1,
-      packWidthCm: pkg.widthCm,
-      packDepthCm: pkg.depthCm,
-      packHeightCm: pkg.heightCm,
-      packGrossWeightKg: pkg.weightKg,
-    })),
+    items: courierPackages.map(physicalPackageRouteItem),
   });
   const automaticProvider =
     courierRouting.kind === "single"

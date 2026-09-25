@@ -82,7 +82,7 @@ export function buildMyGlsParcelForOrder(
       pkg.content?.trim() && pkg.content.trim() !== item?.name.trim();
     return {
       ...pkg,
-      content: item && !isCustomReplacement
+      content: item && !isCustomReplacement && !pkg.packedItems?.length
         ? myGlsArticleContent(item)
         : pkg.content,
     };

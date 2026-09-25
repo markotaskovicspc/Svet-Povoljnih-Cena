@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/admin/page-header";
 import { SalesOrderForm } from "@/components/admin/sales-order-form";
 import { WebOrderDetail } from "@/components/admin/web-order-detail";
+import { AnanasOrderDetail } from "@/components/admin/ananas-order-detail";
 import { requireAdminAction } from "@/lib/admin";
 import {
   getSalesOrderDetail,
@@ -24,6 +25,7 @@ export default async function SalesOrderDetailPage({
 }) {
   await requireAdminAction(["OPS"]);
   const { id } = await params;
+  if (id.startsWith("ananas-")) return <AnanasOrderDetail id={id.slice(7)} />;
   const search = await searchParams;
   const detail = await getSalesOrderDetail(id);
   if (!detail) notFound();

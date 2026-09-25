@@ -45,4 +45,34 @@ export class AnanasClient {
     if (!document) throw new Error("Ananas nije vratio PDF za ovaj dokument.");
     return safeAnanasPdfUrl(document.link);
   }
+  async orders(params: URLSearchParams) { return this.pages("orders", params); }
+  async shipments(params: URLSearchParams) {
+    if (!params.has("search") && !params.has("statusGroup")) throw new Error("Ananas filter pošiljki je obavezan.");
+    return this.pages("outbound-orders/shipments", params);
+  }
+  async shipmentsInPeriod(statusGroup: string, from: Date, to: Date) {
+    // confirmedFrom excludes FBA cancellations without a confirmation date.
+    // The documented default sort is purchaseDate DESC; stop at the date boundary.
+    return this.pages("outbound-orders/shipments", new URLSearchParams({ statusGroup }), { from, to });
+  }
+  private async pages(path: string, filters: URLSearchParams, period?: { from: Date; to: Date }) {
+    const rows: unknown[] = [];
+    for (let page = 0; page < 50; page++) {
+      const params = new URLSearchParams(filters);
+      params.set("page", String(page)); params.set("size", "100");
+      await new Promise(resolve => setTimeout(resolve, 250));
+      const data = z.object({ content: z.array(z.unknown()).max(100), last: z.boolean() }).parse(await this.get(path, params));
+      if (period) {
+        const dated = data.content.map(row => {
+          const value = z.object({ createdDate: z.string().datetime({ offset: true }) }).parse(row);
+          return { row, date: new Date(value.createdDate) };
+        });
+        rows.push(...dated.filter(x => x.date >= period.from && x.date < period.to).map(x => x.row));
+        if (dated.length && dated.every(x => x.date < period.from)) return rows;
+      } else rows.push(...data.content);
+      if (data.last) return rows;
+      if (!data.content.length) throw new Error("Ananas paginacija nije potpuna. Uvoz nije završen.");
+    }
+    throw new Error("Ananas period sadrži previše porudžbina. Izaberite kraći period.");
+  }
 }

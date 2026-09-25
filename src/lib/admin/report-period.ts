@@ -2,6 +2,7 @@ export const REPORT_TIME_ZONE = "Europe/Belgrade";
 
 export const REPORT_PERIOD_PRESETS = [
   { key: "today", label: "Danas", days: 1 },
+  { key: "yesterday", label: "Juče", days: 1 },
   { key: "7d", label: "Poslednjih 7 dana", days: 7 },
   { key: "30d", label: "Poslednjih 30 dana", days: 30 },
   { key: "90d", label: "Poslednjih 90 dana", days: 90 },
@@ -44,6 +45,10 @@ export function resolveReportPeriod(
 
   const preset = REPORT_PERIOD_PRESETS.find((item) => item.key === params.range) ??
     REPORT_PERIOD_PRESETS.find((item) => item.key === "30d")!;
+  if (preset.key === "yesterday") {
+    const yesterday = addCalendarDays(today, -1);
+    return buildPeriod(preset.key, yesterday, yesterday, preset.label);
+  }
   const fromInput =
     preset.key === "ytd"
       ? `${today.slice(0, 4)}-01-01`

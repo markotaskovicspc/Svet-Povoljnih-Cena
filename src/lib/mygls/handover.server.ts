@@ -1,3 +1,4 @@
+import { parcelOrderItemIds } from "@/lib/courier/parcel-contents";
 import "server-only";
 import { isDeepStrictEqual } from "node:util";
 import { Prisma } from "@prisma/client";
@@ -58,7 +59,7 @@ export async function persistMyGlsHandover(shipmentId: string, snapshot: MyGlsHa
       if (lines.length !== report.expectedPackages) continue;
       if (shipment.purpose === "ORDER_DELIVERY" && !sameShipmentAssignment(
         raw,
-        lines.flatMap(line => line.orderItemId ? [line.orderItemId] : []),
+        lines.flatMap(parcelOrderItemIds),
         assignment?.assignmentKey,
       )) continue;
       const mapped = lines.every((line) => Boolean(line.providerParcelNumber));

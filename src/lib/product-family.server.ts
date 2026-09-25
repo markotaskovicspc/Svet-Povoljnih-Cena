@@ -665,6 +665,7 @@ export async function propagateProductFamilySharedData(
         unitPackWidthCm: source.unitPackWidthCm,
         unitPackDepthCm: source.unitPackDepthCm,
         unitPackHeightCm: source.unitPackHeightCm,
+        courierUnitsPerBox: source.courierUnitsPerBox,
         packQty: source.packQty,
         palletQty: source.palletQty,
         packWidthCm: source.packWidthCm,

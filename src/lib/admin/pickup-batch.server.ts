@@ -15,15 +15,16 @@ import {
 } from "@/lib/courier";
 import {
   derivePhysicalPackages,
-  courierUnitWeightKg,
   hasKnownMyGlsHardLimitViolation,
   hasKnownMyGlsOversizeSurcharge,
   requireCompletePhysicalPackages,
   requireCompleteXExpressPackages,
   requireCompleteMyGlsPackages,
   type PhysicalPackage,
+  type PackageSourceItem,
 } from "@/lib/courier/packages";
-import { resolveCourierProvider } from "@/lib/courier/routing";
+import { readPackedItems, packedItemsContent, packedItemsValue, parcelOrderItemIds } from "@/lib/courier/parcel-contents";
+import { resolveCourierProvider, physicalPackageRouteItem } from "@/lib/courier/routing";
 import {
   readShipmentAssignment,
   sameShipmentAssignment,
@@ -79,6 +80,16 @@ export async function createPickupBatch(provider: SmallParcelProvider) {
   for (let attempt = 0; attempt < 4; attempt += 1) {
     try {
       return await db.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('pickup-batch-number'))::text`;
+        const pending = await tx.pickupBatch.findFirst({
+          where: { provider: availability.provider, status: "DRAFT", labelsCreationStartedAt: null, labelsCreatedAt: null },
+          orderBy: { createdAt: "desc" },
+        });
+        if (pending) {
+          await lockBatch(tx, pending.id);
+          assertEditableBatch(await tx.pickupBatch.findUnique({ where: { id: pending.id } }));
+          return pending;
+        }
         const year = new Date().getFullYear();
         const existing = await tx.pickupBatch.findMany({
           where: { number: { startsWith: `PRE-${year}-` } },
@@ -106,7 +117,7 @@ export async function createPickupBatch(provider: SmallParcelProvider) {
 export async function savePickupPackage(
   batchId: string,
   lineId: string,
-  input: Omit<PhysicalPackage, "packageNo" | "orderItemId" | "content">,
+  input: Omit<PhysicalPackage, "packageNo" | "orderItemId" | "content" | "packedQuantity" | "packedItems" | "routingMeasurements">,
 ) {
   const line = await db.pickupBatchLine.findFirst({
     where: { id: lineId, batchId },
@@ -268,7 +279,7 @@ export async function deferPickupPackageBeforeBooking(
       data: {
         deferredAt: new Date(),
         deferredById: actorId,
-        packageValue: new Prisma.Decimal(packageValue),
+        packageValue: new Prisma.Decimal(packedItemsValue(line.packedItems) ?? packageValue * (line.packedQuantity ?? 1)),
         warehouseReadyAt: null,
         warehouseReadyById: null,
       },
@@ -336,6 +347,8 @@ export async function rescheduleDeferredPickupPackage(
     await tx.$queryRaw`SELECT "id" FROM "PickupBatchLine" WHERE "id" = ${source.id} FOR UPDATE`;
     const fresh = await tx.pickupBatchLine.findUniqueOrThrow({ where: { id: source.id } });
     if (fresh.rescheduledAt) throw new Error("Paket je već ponovo zakazan.");
+    await lockBatch(tx, batch.id);
+    assertEditableBatch(await tx.pickupBatch.findUnique({ where: { id: batch.id } }));
     const line = await tx.pickupBatchLine.create({
       data: {
         batchId: batch.id,
@@ -343,7 +356,9 @@ export async function rescheduleDeferredPickupPackage(
         orderItemId: source.orderItemId,
         purpose: source.purpose,
         lineGroupKey: `order:${source.orderId}:${provider}:deferred:${source.id}`,
-        quantity: 1,
+        quantity: source.packedQuantity ?? 1,
+        packedQuantity: source.packedQuantity ?? 1,
+        packedItems: source.packedItems ?? Prisma.DbNull,
         packageNo: 1,
         weightKg: source.weightKg,
         widthCm: source.widthCm,
@@ -381,6 +396,7 @@ export async function loadEligibleOrders(
   onlyOrderIds?: readonly string[],
 ) {
   return db.$transaction(async (tx) => {
+    if (!onlyOrderIds) await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('pickup-work-collection'))::text`;
     await lockBatch(tx, batchId);
     const batch = await tx.pickupBatch.findUnique({
       where: { id: batchId },
@@ -396,6 +412,10 @@ export async function loadEligibleOrders(
     assertEditableBatch(batch);
     const provider = normalizeProvider(batch.provider) ??
       (await getSelectedSmallParcelProvider());
+
+    // Previously queued replacements/reships may live in their own old draft.
+    // Move only unsent special work; existing ordinary picking stays untouched.
+    if (!onlyOrderIds) await collectPendingPickupWork(tx, batch.id, provider);
 
     const dc = await findDcWarehouse(tx);
     if (!dc) {
@@ -555,9 +575,18 @@ export async function loadEligibleOrders(
         name: true,
         qty: true,
         warehouseReservedQty: true,
+        supplierName: true, collectionName: true, categoryName: true,
+        color1: true, color2: true, unitPriceSale: true, assemblyPrice: true,
         withAssembly: true,
         product: {
           select: {
+            name: true,
+            supplier: { select: { name: true } },
+            collection: { select: { name: true } },
+            barcode: true,
+            colorPrimary: true,
+            colorSecondary: true,
+            courierUnitsPerBox: true,
             packQty: true,
             packWidthCm: true,
             packDepthCm: true,
@@ -597,15 +626,7 @@ export async function loadEligibleOrders(
       const orderPackages = derivePhysicalPackages(dcOrderItems);
       const routing = resolveCourierProvider({
         shippingMethod: "KURIR",
-        items: orderPackages.map((pkg) => ({
-          withAssembly: false,
-          qty: 1,
-          packQty: 1,
-          packWidthCm: pkg.widthCm,
-          packDepthCm: pkg.depthCm,
-          packHeightCm: pkg.heightCm,
-          packGrossWeightKg: pkg.weightKg,
-        })),
+        items: orderPackages.map(physicalPackageRouteItem),
       });
       if (routing.kind === "invalid_dimensions") {
         skippedInvalidDimensionsCount += 1;
@@ -636,7 +657,7 @@ export async function loadEligibleOrders(
           ...pkg,
           orderId,
           lineGroupKey: `order:${orderId}:${provider}`,
-          quantity: quantityByItem.get(pkg.orderItemId ?? "") ?? 1,
+          quantity: pkg.packedItems ? pkg.packedQuantity! : quantityByItem.get(pkg.orderItemId ?? "") ?? 1,
         })),
       );
     }
@@ -661,6 +682,8 @@ export async function loadEligibleOrders(
         purpose: "ORDER_DELIVERY",
         lineGroupKey: pkg.lineGroupKey,
         quantity: pkg.quantity,
+        packedQuantity: pkg.packedQuantity ?? 1,
+        packedItems: pkg.packedItems,
         packageNo: pkg.packageNo,
         weightKg: pkg.weightKg,
         widthCm: pkg.widthCm,
@@ -694,6 +717,33 @@ export async function loadEligibleOrders(
   }, TRANSACTION_OPTIONS);
 }
 
+/** Collect old, unsent special work into the warehouse's selected batch. */
+async function collectPendingPickupWork(tx: Transaction, batchId: string, provider: SmallParcelProvider) {
+  const specialWork = {
+    OR: [
+      { purpose: "RECLAMATION_REPLACEMENT" as const },
+      { lineGroupKey: { startsWith: "reshipment:" } },
+      { deferredFromLineId: { not: null } },
+    ],
+  };
+  const sources = await tx.pickupBatch.findMany({
+    where: { id: { not: batchId }, provider, status: "DRAFT",
+      labelsCreationStartedAt: null, labelsCreatedAt: null, externalBookedAt: null,
+      lines: { some: specialWork, none: { shipmentId: { not: null } } },
+    },
+    orderBy: { id: "asc" },
+  });
+  for (const source of sources) {
+    await lockBatch(tx, source.id);
+    const fresh = await tx.pickupBatch.findUnique({ where: { id: source.id } });
+    assertEditableBatch(fresh);
+    await tx.pickupBatchLine.updateMany({ where: { batchId: source.id, ...specialWork }, data: { batchId } });
+    await tx.orderReshipment.updateMany({ where: { batchId: source.id }, data: { batchId } });
+    // Retain drafts that still contain ordinary orders.
+    await tx.pickupBatch.deleteMany({ where: { id: source.id, lines: { none: {} }, reshipments: { none: {} } } });
+  }
+}
+
 export async function queueReclamationReplacement(
   reclamationId: string,
   actorId: string,
@@ -715,11 +765,19 @@ export async function queueReclamationReplacement(
       orderItem: {
         select: {
           id: true,
+          sku: true,
           name: true,
           qty: true,
           withAssembly: true,
           product: {
             select: {
+              name: true,
+              supplier: { select: { name: true } },
+              collection: { select: { name: true } },
+              barcode: true,
+              colorPrimary: true,
+              colorSecondary: true,
+              courierUnitsPerBox: true,
               packQty: true,
               packWidthCm: true,
               packDepthCm: true,
@@ -794,6 +852,8 @@ export async function queueReclamationReplacement(
 
   const sourceItem = {
     id: reclamation.orderItem.id,
+    sku: reclamation.orderItem.sku,
+    unitPriceSale: 0,
     name: isPartReplacement
       ? reclamation.resolutionNote!.trim()
       : reclamation.orderItem.name,
@@ -803,7 +863,7 @@ export async function queueReclamationReplacement(
   };
   const routing = resolveCourierProvider({
     shippingMethod: "KURIR",
-    items: [courierRouteItem(sourceItem)],
+    items: derivePhysicalPackages([sourceItem], { consolidatePompea: !isPartReplacement }).map(physicalPackageRouteItem),
   });
   if (routing.kind !== "single") {
     return {
@@ -812,7 +872,7 @@ export async function queueReclamationReplacement(
     };
   }
   const provider = routing.provider;
-  const packages = derivePhysicalPackages([sourceItem]).map((pkg) =>
+  const packages = derivePhysicalPackages([sourceItem], { consolidatePompea: !isPartReplacement }).map((pkg) =>
     isPartReplacement
       ? {
           ...pkg,
@@ -850,6 +910,7 @@ export async function queueReclamationReplacement(
   const result = await db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`reclamation-picking:${reclamation.id}`}))::text AS "lock"`;
     await lockBatch(tx, batch.id);
+    assertEditableBatch(await tx.pickupBatch.findUnique({ where: { id: batch.id } }));
     const existing = await tx.pickupBatchLine.findFirst({
       where: { reclamationId: reclamation.id, purpose: "RECLAMATION_REPLACEMENT" },
       select: { batchId: true },
@@ -864,6 +925,8 @@ export async function queueReclamationReplacement(
         purpose: "RECLAMATION_REPLACEMENT",
         lineGroupKey,
         quantity: replacementQty,
+        packedQuantity: pkg.packedQuantity ?? 1,
+        packedItems: pkg.packedItems,
         packageNo: pkg.packageNo,
         weightKg: pkg.weightKg,
         widthCm: pkg.widthCm,
@@ -1176,6 +1239,7 @@ export async function recreateMyGlsLabelsForPickupBatch(
           select: {
             lineGroupKey: true,
             orderId: true,
+            packedItems: true,
             orderItemId: true,
             reclamationId: true,
             purpose: true,
@@ -1384,6 +1448,7 @@ async function postPickupBatch(batchId: string, actorId: string) {
         packageLines.map((line) => ({
           packageNo: line.packageNo,
           orderItemId: line.orderItemId,
+          packedItems: line.packedItems ? readPackedItems(line.packedItems) : undefined,
           content: pickupPackageContent(line),
           weightKg: Number(line.weightKg ?? 0),
           widthCm: Number(line.widthCm ?? 0),
@@ -1564,6 +1629,7 @@ async function createXExpressLabelsForPickupBatch(
         group.lines.map((line) => ({
           packageNo: line.packageNo,
           orderItemId: line.orderItemId,
+          packedItems: line.packedItems ? readPackedItems(line.packedItems) : undefined,
           content: pickupPackageContent(line),
           weightKg: Number(line.weightKg ?? 0),
           widthCm: Number(line.widthCm ?? 0),
@@ -1604,6 +1670,7 @@ async function createXExpressLabelsForPickupBatch(
         group.lines.map((line) => ({
           packageNo: line.packageNo,
           orderItemId: line.orderItemId,
+          packedItems: line.packedItems ? readPackedItems(line.packedItems) : undefined,
           content: pickupPackageContent(line),
           weightKg: Number(line.weightKg ?? 0),
           widthCm: Number(line.widthCm ?? 0),
@@ -1798,6 +1865,7 @@ async function createMyGlsLabelsForPickupBatch(
         group.lines.map((line) => ({
           packageNo: line.packageNo,
           orderItemId: line.orderItemId,
+          packedItems: line.packedItems ? readPackedItems(line.packedItems) : undefined,
           content: pickupPackageContent(line),
           weightKg: Number(line.weightKg ?? 0),
           widthCm: Number(line.widthCm ?? 0),
@@ -1990,6 +2058,7 @@ export async function confirmMyGlsPickupAnnouncement(
             lineGroupKey: true,
             purpose: true,
             reclamationId: true,
+            packedItems: true,
             orderItemId: true,
             deferredAt: true,
           },
@@ -2252,7 +2321,7 @@ async function bindMyGlsPackageAssignments(
           providerParcelNumber: String(assignment.parcelNumber),
           providerClientReference: assignment.clientReference,
           providerCodAmount: new Prisma.Decimal(assignment.codAmount),
-          packageValue: new Prisma.Decimal(packageValue),
+          packageValue: new Prisma.Decimal(packedItemsValue(line.packedItems) ?? packageValue * (line.packedQuantity ?? 1)),
           cancellationError: null,
         },
       });
@@ -2261,6 +2330,7 @@ async function bindMyGlsPackageAssignments(
 }
 
 type PickupWorkLine = {
+  packedItems?: unknown;
   lineGroupKey: string;
   orderId: string;
   orderItemId: string | null;
@@ -2393,15 +2463,14 @@ function pickupPackageContent(
   ) {
     return line.reclamation.resolutionNote?.trim() || "Deo prema reklamaciji";
   }
-  return line.orderItem?.name;
+  return packedItemsContent(line.packedItems) ?? line.orderItem?.name;
 }
 
 function orderItemIdsForGroup(group: PickupWorkGroup) {
   return Array.from(
     new Set(
       group.lines
-        .map((line) => line.orderItemId)
-        .filter((id): id is string => Boolean(id)),
+        .flatMap(parcelOrderItemIds),
     ),
   );
 }
@@ -2462,42 +2531,12 @@ function samePickupAssignment(raw: unknown, group: PickupWorkGroup) {
     sameShipmentAssignment(raw, itemIds, assignment.assignmentKey ? group.lineGroupKey : undefined);
 }
 
-function courierRouteItem(item: {
-  qty: number;
-  withAssembly: boolean;
-  product?: {
-    packQty?: number | null;
-    packWidthCm?: unknown;
-    packDepthCm?: unknown;
-    packHeightCm?: unknown;
-    unitPackWidthCm?: unknown;
-    unitPackDepthCm?: unknown;
-    unitPackHeightCm?: unknown;
-    widthCm?: unknown;
-    depthCm?: unknown;
-    heightCm?: unknown;
-    packGrossWeightKg?: unknown;
-    grossWeightKg?: unknown;
-    weightKg?: unknown;
-  } | null;
-}) {
-  return {
-    withAssembly: item.withAssembly,
-    qty: item.qty,
-    packQty: item.product?.packQty,
-    packWidthCm: firstPositiveNumber(item.product?.unitPackWidthCm),
-    packDepthCm: firstPositiveNumber(item.product?.unitPackDepthCm),
-    packHeightCm: firstPositiveNumber(item.product?.unitPackHeightCm),
-    packGrossWeightKg: courierUnitWeightKg(item.product),
-  };
-}
-
 function courierProviderForItem(
-  item: Parameters<typeof courierRouteItem>[0],
+  item: Pick<PackageSourceItem, "qty" | "product">,
 ): SmallParcelProvider | null {
   const routing = resolveCourierProvider({
     shippingMethod: "KURIR",
-    items: [courierRouteItem(item)],
+    items: derivePhysicalPackages([{ id: "routing", name: "", ...item }]).map(physicalPackageRouteItem),
   });
   return routing.kind === "single" ? routing.provider : null;
 }
@@ -2526,6 +2565,13 @@ export async function pickupAssignmentCodAmount(
           withAssembly: true,
           product: {
             select: {
+              name: true,
+              supplier: { select: { name: true } },
+              collection: { select: { name: true } },
+              barcode: true,
+              colorPrimary: true,
+              colorSecondary: true,
+              courierUnitsPerBox: true,
               packQty: true,
               packWidthCm: true,
               packDepthCm: true,
@@ -2574,14 +2620,6 @@ export async function pickupAssignmentCodAmount(
     .filter((key) => weights.has(key))
     .map((key) => ({ key, weight: weights.get(key) ?? 0 }));
   return splitAmountByWeights(Number(order.total), ordered).get(provider) ?? 0;
-}
-
-function firstPositiveNumber(...values: unknown[]) {
-  for (const value of values) {
-    const number = Number(value);
-    if (Number.isFinite(number) && number > 0) return number;
-  }
-  return null;
 }
 
 function isRetryableCreateError(error: unknown) {
