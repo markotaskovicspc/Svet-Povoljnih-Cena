@@ -21,7 +21,7 @@ export async function ananasOrderRows(take: number, filters?: SalesOrderExportFi
     const shipments = order.shipments as AnanasOrderShipment[];
     const items = order.items as AnanasOrderItem[];
     const detailId = ananasDetailId(order.id);
-    const common = { number: order.id, orderDate: order.createdAt.toISOString(), channel: "ANANAS", customer: order.customerName,
+    const common = { number: order.id, orderDate: order.createdAt.toISOString(), channel: "ANANAS", loyaltyType: "Nije primenljivo", customer: order.customerName,
       paymentMethod: order.paymentMethods, paymentStatus: "Prema Ananasu", purchaseIdentity: "Ananas",
       address: [address.streetName, address.streetNumber].filter(Boolean).join(" "), city: address.city ?? null, postalCode: address.postcode ?? null,
       pib: address.buyerType === "TIN" ? address.buyerId ?? null : null,

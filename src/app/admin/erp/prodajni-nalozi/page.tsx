@@ -11,9 +11,11 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function SalesOrdersOverviewPage({ searchParams }: { searchParams: Promise<{ channel?: string }> }) {
+export default async function SalesOrdersOverviewPage({ searchParams }: { searchParams: Promise<{ channel?: string; loyalty?: string }> }) {
   await requireAdminAction(["OPS"]);
-  const requestedChannel = (await searchParams).channel;
+  const params = await searchParams;
+  const loyalty = params.loyalty === "guest";
+  const requestedChannel = loyalty ? "WEB" : params.channel;
   const channel = ["WEB", "ANANAS", "MP", "VP", "INO"].includes(requestedChannel ?? "") ? requestedChannel : undefined;
   const erpModule = await getErpModule("prodajni-nalozi", { deferRows: true });
   if (!erpModule) notFound();
@@ -44,9 +46,11 @@ export default async function SalesOrdersOverviewPage({ searchParams }: { search
               {item.label}
             </Link>
           ))}
+        <Link href="/admin/erp/prodajni-nalozi?channel=WEB&loyalty=guest" aria-current={loyalty ? "page" : undefined} className="inline-flex h-9 items-center rounded-lg border px-4 text-sm font-medium hover:bg-muted">Gosti sa loyalty saglasnošću</Link>
         </nav>
+        {loyalty && <p className="mb-4 text-sm text-ink-500">Kupovine gostiju sa zabeleženom loyalty saglasnošću. Broj porudžbina i zbir iznosa nalaze se ispod tabele; datum i status možete dodatno filtrirati. Starije porudžbine bez sačuvane saglasnosti nisu naknadno procenjene prema ceni.</p>}
         {channel === "ANANAS" && <p className="mb-4 text-sm text-ink-500">Porudžbine preuzete sa Ananasa. Klik na broj otvara artikle, status pošiljke i povezane fiskalne račune. <Link className="underline" href="/admin/erp/ananas?view=orders">Ananas statistika i preuzimanje</Link></p>}
-        <ErpGrid key={channel ?? "ALL"} module={erpModule} fixedFilters={channel ? [{ id: "sales-channel", columnKey: "channel", operator: "equals", value: channel }] : undefined} />
+        <ErpGrid key={`${channel ?? "ALL"}:${loyalty}`} module={erpModule} fixedFilters={[...(channel ? [{ id: "sales-channel", columnKey: "channel", operator: "equals" as const, value: channel }] : []), ...(loyalty ? [{ id: "loyalty", columnKey: "loyaltyType", operator: "equals" as const, value: "Gost — loyalty" }] : [])]} />
       </div>
     </>
   );

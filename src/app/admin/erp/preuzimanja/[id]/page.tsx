@@ -587,6 +587,7 @@ export default async function PickupBatchPage({
         ]}
         actions={
           <div className="flex flex-wrap gap-2">
+            <a href={`/admin/erp/preuzimanja/${batch.id}/picking`} className="inline-flex h-9 items-center rounded-lg bg-foreground px-3 text-sm font-medium text-background">Digitalni picking / skeniraj</a>
             <Link
               href={`/admin/erp/preuzimanja/${batch.id}/stampa?section=picking&autoprint=1`}
               className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"

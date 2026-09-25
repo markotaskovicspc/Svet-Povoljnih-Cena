@@ -457,6 +457,9 @@ export const operationalErpModules: ErpModule[] = [
       text("number", "Broj porudžbine"),
       date("orderDate", "Datum porudžbine"),
       status("channel", "Kanal", ["WEB", "ANANAS", "MP", "VP", "INO"]),
+      status("loyaltyType", "Loyalty / kupac", ["Gost — loyalty", "Registrovan kupac", "Gost — bez loyalty saglasnosti", "Nije primenljivo"]),
+      text("loyaltyConsent", "Loyalty saglasnost"),
+      status("firstPurchaseBenefit", "Popust za prvu kupovinu", ["Da", "Ne"]),
       status("paymentMethod", "Način plaćanja", ADMIN_PAYMENT_METHOD_OPTIONS),
       status("paymentStatus", "Status plaćanja", ADMIN_PAYMENT_STATUS_OPTIONS),
       text("courierService", "Kurirska služba"),
@@ -1592,6 +1595,8 @@ async function salesOrderRows(
       shippingMethod: true,
       userId: true,
       guestEmail: true,
+      guestLoyaltyEmail: true,
+      guestLoyaltyConsentVersion: true,
       shipPhone: true,
       courierPaidAt: true,
       sefAcceptedAt: true,
@@ -1764,6 +1769,9 @@ async function salesOrderRows(
       }),
       customer,
       purchaseIdentity: order.userId ? "Ulogovan korisnik" : "Bez prijave",
+      loyaltyType: order.channel !== "WEB" ? "Nije primenljivo" : order.guestLoyaltyEmail ? "Gost — loyalty" : order.userId ? "Registrovan kupac" : "Gost — bez loyalty saglasnosti",
+      loyaltyConsent: order.guestLoyaltyConsentVersion ?? null,
+      firstPurchaseBenefit: Number(order.firstPurchaseDiscount ?? 0) > 0 ? "Da" : "Ne",
       pib: documentBuyer.pib ?? null,
       priceList: order.priceList
         ? `${order.priceList.code} · ${order.priceList.name} (${order.priceList.currency})`

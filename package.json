@@ -81,6 +81,7 @@
     "@vercel/functions": "^3.9.0",
     "@vercel/oidc-aws-credentials-provider": "^3.3.5",
     "@xmldom/xmldom": "0.8.13",
+    "@zxing/browser": "^0.1.5",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

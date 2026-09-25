@@ -1994,6 +1994,7 @@ model FiscalProductSync {
 }
 
 model Warehouse {
+  pickingPositions WarehousePickingPosition[]
   id        String   @id @default(cuid())
   code      String   @unique
   name      String
@@ -2815,6 +2816,7 @@ enum PickupBatchStatus {
 }
 
 model PickupBatch {
+  pickingEvents PickingScanEvent[]
   id                       String            @id @default(cuid())
   number                   String            @unique
   courier                  ShipmentService?
@@ -2903,7 +2905,7 @@ model PickupBatchLine {
   courierPickedUpAt        DateTime?
   courierPickedUpById      String?
   /// Explicit warehouse confirmation before any provider labels are created.
-  /// A future barcode scan writes the same fields.
+  /// Digital collection scans are recorded separately; packing still verifies dimensions.
   warehouseReadyAt         DateTime?
   warehouseReadyById       String?
   /// Exact provider identity for this physical package. New MyGLS labels use
@@ -3943,4 +3945,32 @@ model AnanasOrder {
 
   @@index([createdAt])
   @@index([needsRefresh, lastCheckedAt])
+}
+
+/// Position assignments are explicit SKU/supplier lists, not stock balances.
+model WarehousePickingPosition {
+  id String @id @default(cuid())
+  warehouseId String
+  number Int
+  routeOrder Int
+  skus String[] @default([])
+  supplierIds String[] @default([])
+  note String @default("")
+  updatedAt DateTime @updatedAt
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  @@unique([warehouseId, number])
+}
+
+/// Append-only, idempotent physical collection log; never posts stock or courier.
+model PickingScanEvent {
+  id String @id
+  batchId String
+  planHash String
+  rowKey String
+  delta Int
+  note String @default("")
+  actorId String
+  createdAt DateTime @default(now())
+  batch PickupBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  @@index([batchId, planHash])
 }

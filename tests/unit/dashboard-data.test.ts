@@ -30,10 +30,14 @@ describe("dashboard data snapshot", () => {
     expect(query.text).toContain('AND r."warehouseId" =');
     expect(query.text).not.toMatch(/generate_series/);
   });
-  it("retains cancelled-order inclusion, fiscal refunds and the 30-day zero-day divisor", () => {
+  it("excludes cancelled orders, includes Ananas without duplicates, retains fiscal refunds and the 30-day zero-day divisor", () => {
     const { text } = buildDashboardDataQuery(input);
     const orderSummary = text.slice(0, text.indexOf('AS "orderSummary"'));
-    expect(orderSummary).not.toContain("OTKAZANO");
+    expect(orderSummary).toContain("OTKAZANO");
+    expect(orderSummary).toContain("Otkazano");
+    expect(orderSummary).toContain('FROM "AnanasOrder"');
+    expect(orderSummary).toContain('COALESCE(o."externalOrderNo", o.number)');
+    expect(orderSummary).toContain('UNION ALL');
     expect(text).toContain('THEN f."totalGross" ELSE -f."totalGross" END');
     expect(text).toContain("/ 30.0");
     expect(text).toContain("AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Belgrade'");
