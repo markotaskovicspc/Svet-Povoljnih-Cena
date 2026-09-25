@@ -95,3 +95,16 @@ test('product image and link are persisted once and sent as distinct Messenger m
   assert.equal((await store.pool.query("SELECT * FROM spc_chat_outbox WHERE status='sent'")).rows.length,2);
  } finally {globalThis.fetch=originalFetch;await store.close();}
 });
+
+test('definite image rejection does not pause the conversation',async()=>{
+ const {store,worker,event}=await setup();const originalFetch=globalThis.fetch;
+ try {
+  await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
+  worker.accounts=[{channel:'facebook',id:'123',login:'facebook',token:'synthetic'}];
+  globalThis.fetch=async()=>({ok:false,status:400,json:async()=>({error:{code:100}})});
+  await store.withConversation(event.conversation,async(row,_state,c)=>{await store.enqueue(c,'image-rejected',row.id,{imageUrl:'https://example.test/product.png'});});
+  await worker.flush();
+  assert.equal((await store.pool.query('SELECT paused FROM spc_chat_conversations')).rows[0].paused,false);
+  assert.equal((await store.pool.query('SELECT status FROM spc_chat_outbox')).rows[0].status,'failed');
+ }finally{globalThis.fetch=originalFetch;await store.close();}
+});
