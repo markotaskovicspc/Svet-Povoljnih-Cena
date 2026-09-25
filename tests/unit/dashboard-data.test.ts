@@ -40,6 +40,11 @@ describe("dashboard data snapshot", () => {
     expect(orderSummary).toContain('UNION ALL');
     expect(orderSummary).toContain('AS today_ananas_total');
     expect(orderSummary).toContain('AS period_ananas_total');
+    expect(orderSummary).toContain('o.total - COALESCE(o.shipping, 0) AS total');
+    expect(orderSummary).toContain("SUM((item->>'gross')::numeric)");
+    expect(orderSummary).toContain('a.total - goods.total AS shipping');
+    expect(orderSummary).toContain('AS today_ananas_shipping');
+    expect(orderSummary).toContain('AS period_ananas_shipping');
     expect(orderSummary.match(/SUM\(o.shipping\) FILTER \(WHERE o.channel <> 'ANANAS'/g)).toHaveLength(2);
     expect(text).toContain('THEN f."totalGross" ELSE -f."totalGross" END');
     expect(text).toContain("/ 30.0");

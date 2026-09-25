@@ -206,13 +206,15 @@ async function OperationalCards({ data, input, warehouseLabel }: OperationalSect
             <StatCard label="Porudžbine danas" value={String(ordersToday)} amount={formatRsd(ordersTodayAmount)} breakdown={[
               { label: `SPC · ${ordersToday - (orderSummary.today_ananas ?? 0)} porudžbina`, value: formatRsd(ordersTodayAmount - (orderSummary.today_ananas_total ?? 0)) },
               { label: `Ananas · ${orderSummary.today_ananas ?? 0} porudžbina`, value: formatRsd(orderSummary.today_ananas_total ?? 0) },
-              { label: "Od toga SPC dostava", value: formatRsd(orderSummary.today_shipping) },
-            ]} hint={`Bez otkazanih · Iznosi uključuju dostavu · ${warehouseLabel}${warehouseId ? " · Uvezeni Ananas podaci dostupni su za sve magacine zajedno" : ""}`} />
+              { label: "SPC dostava (odvojeno)", value: formatRsd(orderSummary.today_shipping) },
+              { label: "Ananas dostava (odvojeno)", value: formatRsd(orderSummary.today_ananas_shipping ?? 0) },
+            ]} hint={`Bez otkazanih · Vrednost robe bez dostave · ${warehouseLabel}${warehouseId ? " · Uvezeni Ananas podaci dostupni su za sve magacine zajedno" : ""}`} />
             <StatCard label="Porudžbine u periodu" value={String(ordersInPeriod)} amount={formatRsd(ordersInPeriodAmount)} breakdown={[
               { label: `SPC · ${ordersInPeriod - (orderSummary.period_ananas ?? 0)} porudžbina`, value: formatRsd(ordersInPeriodAmount - (orderSummary.period_ananas_total ?? 0)) },
               { label: `Ananas · ${orderSummary.period_ananas ?? 0} porudžbina`, value: formatRsd(orderSummary.period_ananas_total ?? 0) },
-              { label: "Od toga SPC dostava", value: formatRsd(orderSummary.period_shipping) },
-            ]} hint={`Bez otkazanih · Iznosi uključuju dostavu · ${ordersPeriod.label} · ${warehouseLabel}`} />
+              { label: "SPC dostava (odvojeno)", value: formatRsd(orderSummary.period_shipping) },
+              { label: "Ananas dostava (odvojeno)", value: formatRsd(orderSummary.period_ananas_shipping ?? 0) },
+            ]} hint={`Bez otkazanih · Vrednost robe bez dostave · ${ordersPeriod.label} · ${warehouseLabel}`} />
             <StatCard label="Promet danas (neto fiskalizovano)" value={formatRsd(fiscal.today_net)} hint={warehouseLabel} />
             <StatCard label="Promet u periodu (neto fiskalizovano)" value={formatRsd(fiscal.period_net)} hint={`${fiscalPeriod.label} · ${warehouseLabel}`} />
           </div>

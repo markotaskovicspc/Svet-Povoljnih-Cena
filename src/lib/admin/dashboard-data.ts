@@ -70,6 +70,8 @@ export type DashboardDataInput = {
 type OrderSummary = {
   today_ananas?: number;
   today_ananas_total?: number;
+  today_ananas_shipping?: number;
+  period_ananas_shipping?: number;
   period_ananas_total?: number;
   period_ananas?: number;
   today_count: number;
@@ -130,15 +132,22 @@ export function buildDashboardDataQuery(input: DashboardDataInput, section: "all
       , COUNT(*) FILTER (WHERE o.channel = 'ANANAS' AND o."createdAt" >= ${ordersPeriod.start} AND o."createdAt" < ${ordersPeriod.endExclusive})::int AS period_ananas
       , COALESCE(SUM(o.total) FILTER (WHERE o.channel = 'ANANAS' AND o."createdAt" >= ${todayPeriod.start} AND o."createdAt" < ${todayPeriod.endExclusive}), 0)::double precision AS today_ananas_total
       , COALESCE(SUM(o.total) FILTER (WHERE o.channel = 'ANANAS' AND o."createdAt" >= ${ordersPeriod.start} AND o."createdAt" < ${ordersPeriod.endExclusive}), 0)::double precision AS period_ananas_total
+      , COALESCE(SUM(o.shipping) FILTER (WHERE o.channel = 'ANANAS' AND o."createdAt" >= ${todayPeriod.start} AND o."createdAt" < ${todayPeriod.endExclusive}), 0)::double precision AS today_ananas_shipping
+      , COALESCE(SUM(o.shipping) FILTER (WHERE o.channel = 'ANANAS' AND o."createdAt" >= ${ordersPeriod.start} AND o."createdAt" < ${ordersPeriod.endExclusive}), 0)::double precision AS period_ananas_shipping
       FROM (
-        SELECT o."createdAt", o.total, o.shipping, o.channel::text AS channel
+        SELECT o."createdAt", o.total - COALESCE(o.shipping, 0) AS total, o.shipping, o.channel::text AS channel
         FROM "Order" o
         WHERE o.status <> 'OTKAZANO'
           AND NOT (o.channel = 'ANANAS' AND EXISTS (SELECT 1 FROM "AnanasOrder" a WHERE a.id = COALESCE(o."externalOrderNo", o.number)))
           ${orderWarehouseSql}
         UNION ALL
-        SELECT a."createdAt", a.total, NULL::numeric AS shipping, 'ANANAS' AS channel
-        FROM "AnanasOrder" a WHERE a.status <> 'Otkazano' AND ${warehouseId === ""}
+        SELECT a."createdAt", goods.total, a.total - goods.total AS shipping, 'ANANAS' AS channel
+        FROM "AnanasOrder" a
+        CROSS JOIN LATERAL (
+          SELECT COALESCE(SUM((item->>'gross')::numeric), a.total) AS total
+          FROM jsonb_array_elements(a.items::jsonb) item
+        ) goods
+        WHERE a.status <> 'Otkazano' AND ${warehouseId === ""}
       ) o
       WHERE ((o."createdAt" >= ${todayPeriod.start} AND o."createdAt" < ${todayPeriod.endExclusive})
         OR (o."createdAt" >= ${ordersPeriod.start} AND o."createdAt" < ${ordersPeriod.endExclusive}))
