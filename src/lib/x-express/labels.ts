@@ -166,6 +166,7 @@ export function renderXExpressBatchLabelsHtml(
     * { box-sizing: border-box; }
     body { margin: 0; background: #f5f5f5; color: #000; font-family: Arial, Helvetica, sans-serif; }
     .screen-note { max-width: 195mm; margin: 5mm auto; border: 1px solid #111; background: #fff; padding: 3mm; font-size: 12px; line-height: 1.35; }
+    .print-button { display: block; margin-top: 3mm; padding: 10px 16px; font: inherit; cursor: pointer; }
     .sheet { width: 210mm; height: 296mm; margin: 0 auto 5mm; overflow: hidden; background: white; padding: 9mm; display: grid; grid-template-columns: repeat(2, 95mm); grid-template-rows: repeat(2, 138mm); gap: 2mm; align-items: start; justify-content: start; page-break-inside: avoid; break-inside: avoid-page; }
     .label { width: 95mm; height: 138mm; overflow: hidden; background: white; padding: 4mm 5mm 3mm; page-break-inside: avoid; break-inside: avoid-page; display: flex; flex-direction: column; }
     .topline { border: 1.5px solid #000; padding: 1.2mm; text-align: center; font-size: 8px; line-height: 1.1; font-weight: 800; margin-bottom: 1.5mm; }
@@ -198,7 +199,7 @@ export function renderXExpressBatchLabelsHtml(
   </style>
 </head>
 <body>
-  <aside class="screen-note"><strong>X Express ne vraća PDF adresnicu kroz API.</strong> ERP generiše adresnice po zvaničnoj X Express specifikaciji iz potvrđene adrese i sačuvanog API zahteva. Pakete prvo odštampajte i označite, pa tek onda pošiljke pošaljite X Express-u.</aside>
+  <aside class="screen-note"><strong>X Express ne vraća PDF adresnicu kroz API.</strong> ERP generiše adresnice po zvaničnoj X Express specifikaciji iz potvrđene adrese i sačuvanog API zahteva. Pakete prvo odštampajte i označite, pa tek onda pošiljke pošaljite X Express-u.${options.autoPrint ? '<button class="print-button" id="print-labels" type="button" disabled>Priprema adresnica…</button>' : ""}</aside>
   ${sheets
     .map(
       (sheet, index) => `<main class="sheet" data-sheet="${index + 1}">
@@ -206,7 +207,26 @@ export function renderXExpressBatchLabelsHtml(
   </main>`,
     )
     .join("\n  ")}
-  ${options.autoPrint ? "<script>window.addEventListener('load', () => window.print());</script>" : ""}
+  ${options.autoPrint ? `<script>
+    (() => {
+      const button = document.getElementById('print-labels');
+      button.addEventListener('click', () => window.print());
+      const preparePrint = async () => {
+        if (document.fonts) await document.fonts.ready;
+        // Safari still considers the navigation loading inside its load handler.
+        // Allow layout and paint, then leave that event before opening print UI.
+        window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+          window.setTimeout(() => {
+            button.disabled = false;
+            button.textContent = 'Štampaj adresnice';
+            window.print();
+          }, 250);
+        }));
+      };
+      if (document.readyState === 'complete') void preparePrint();
+      else window.addEventListener('load', preparePrint, { once: true });
+    })();
+  </script>` : ""}
 </body>
 </html>`;
 }
