@@ -79,3 +79,19 @@ test('plain confirmation creates pending order once, repeated confirmation does 
     assert(replies.some(t=>t.includes('već kreirana')));
   }finally{await store.close();}
 });
+
+test('product image and link are persisted once and sent as distinct Messenger messages',async()=>{
+ const {store,worker,calls,event}=await setup();const originalFetch=globalThis.fetch;const sent=[];
+ try {
+  await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
+  worker.accounts=[{channel:'facebook',id:'123',login:'facebook',token:'synthetic'}];
+  globalThis.fetch=async(_url,options)=>{sent.push(JSON.parse(options.body));return {ok:true,status:200,json:async()=>({message_id:'sent-'+sent.length})};};
+  worker.answerFn=async()=>({text:'Urban stolica 1499 RSD https://www.svetpovoljnihcena.rs/p/test',quoteCreated:false,images:[{url:'https://vyebjbcfhgujlvjnoxpl.supabase.co/storage/v1/object/public/product-media/test.png'}]});
+  const request={...event,id:'facebook:photo-request',text:'daj sliku'};
+  await store.accept(request);await worker.tick();await store.accept(request);await worker.tick();await worker.tick();
+  assert.equal(sent.length,2);assert(sent[0].message.text.includes('/p/test'));
+  assert.equal(sent[1].message.attachment.type,'image');assert.equal(sent[1].message.metadata,'spc-bot');
+  assert.equal(sent[1].recipient.id,'456');assert.equal(calls.length,0);
+  assert.equal((await store.pool.query("SELECT * FROM spc_chat_outbox WHERE status='sent'")).rows.length,2);
+ } finally {globalThis.fetch=originalFetch;await store.close();}
+});

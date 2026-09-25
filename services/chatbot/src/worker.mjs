@@ -31,6 +31,7 @@ export class Worker {
         if(recent.rows[0].n>25) {await this.store.pause(row.id,'Previše poruka; potrebna ručna provera');return;}
         try {
           let message;
+          let images=[];
           if (state.reclamationInFlight) {
             await this.store.pause(row.id,'Proveriti prethodno slanje reklamacije pre nastavka');
             await c.query(`UPDATE spc_chat_events SET status='failed' WHERE id=$1`,[job.id]);
@@ -65,6 +66,7 @@ export class Worker {
             if(state.reclamationInFlight) throw new Error('RECLAMATION_UNCERTAIN');
             const result=await this.answerFn({event,state,spc:this.spc,model:this.model,pause:reason=>this.store.pause(row.id,reason)});
             if(!result.quoteCreated) delete state.pending;
+            if(!state.handedOff && !state.reclamation) images=(result.images??[]).slice(0,3);
             message=result.quoteCreated ? quoteMessage(state.pending) : result.text;
             if(state.reclamation) message=`Prijava za ${state.reclamation.number}, artikal ${state.reclamation.sku}, količina ${state.reclamation.quantity}:\n${state.reclamation.description}\n\nZa slanje prijave napišite: POTVRĐUJEM ${state.reclamation.code}`;
             if(message.length>1850) {
@@ -78,6 +80,7 @@ export class Worker {
           await c.query('BEGIN');
           await this.store.save(c,row.id,state);
           await this.store.enqueue(c,`reply:${job.id}`,row.id,{text:message,allowPaused:state.handedOff===true || event.attachments.length>0 || message.includes('zaposleni')});
+          for(const [index,image] of images.entries()) await this.store.enqueue(c,`reply:${job.id}:image:${index}`,row.id,{imageUrl:image.url});
           await c.query(`UPDATE spc_chat_events SET status='done' WHERE id=$1`,[job.id]);
           await c.query('COMMIT');
         } catch {
@@ -108,10 +111,15 @@ export class Worker {
       await c.query(`UPDATE spc_chat_outbox SET status='sending' WHERE id=$1`,[out.id]);
       try {
         const host=account.login==='instagram'?'graph.instagram.com':'graph.facebook.com';
-        const payload={recipient:{id:row.sender},message:{text:message.text.slice(0,1900)}};
+        const payload={recipient:{id:row.sender},message:message.imageUrl?{attachment:{type:'image',payload:{url:message.imageUrl}}}:{text:message.text.slice(0,1900)}};
         if(row.channel==='facebook'){payload.messaging_type='RESPONSE';payload.message.metadata='spc-bot';}
         const res=await fetch(`https://${host}/${this.graphVersion}/${account.id}/messages`,{method:'POST',headers:{authorization:`Bearer ${account.token}`,'content-type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(12000),redirect:'error'});
         const data=await res.json();
+        if(message.imageUrl && res.status===400 && data.error?.code===100) {
+          // Definite media rejection: the product link was sent first, keep chat usable.
+          await c.query(`UPDATE spc_chat_outbox SET status='failed' WHERE id=$1`,[out.id]);
+          console.error('chat.image_rejected');return;
+        }
         if(!res.ok||!data.message_id) throw new Error('META_SEND_FAILED');
         await c.query(`UPDATE spc_chat_outbox SET status='sent',meta_id=$2 WHERE id=$1`,[out.id,data.message_id]);
       } catch {await this.store.pause(row.id,'Greška ili nepoznat ishod slanja; proveriti Meta inbox');await c.query(`UPDATE spc_chat_outbox SET status='uncertain' WHERE id=$1`,[out.id]);console.error('chat.send_uncertain');}

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { answer, quoteMessage } from '../src/agent.mjs';
 const model=process.env.OPENAI_MODEL??'gpt-5.4-mini';
-const item={sku:'TEST-001',name:'Urban test stolica',slug:'test-stolica',price:1499,available:true};
+const item={sku:'TEST-001',name:'Urban test stolica',slug:'test-stolica',price:1499,available:true,image:{url:'https://vyebjbcfhgujlvjnoxpl.supabase.co/storage/v1/object/public/product-media/test.png'}};
 const state={history:[],orders:[]};
 const calls=[];
 const spc=async input=>{
@@ -20,6 +20,7 @@ assert.match(state.history.at(-1).content,/Stefan/);
 assert.match(state.history.at(-1).content,/automatizovan/i);
 const photo=await turn('Daj sliku te stolice');
 assert(photo.text.includes('https://www.svetpovoljnihcena.rs/p/test-stolica'));
+assert.equal(photo.images?.[0]?.url,item.image.url);
 await turn('Hocu tri. Test Kupac, Test ulica 12, Beograd 11000, 0600000000, pouzece.');
 assert.equal(calls.filter(c=>c.action==='quote').length,0,'No invented email or premature quote');
 const final=await turn('test@example.com');
