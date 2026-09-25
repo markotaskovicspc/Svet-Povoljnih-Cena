@@ -68,6 +68,8 @@ export type DashboardDataInput = {
 };
 
 type OrderSummary = {
+  today_ananas?: number;
+  period_ananas?: number;
   today_count: number;
   today_total: number;
   today_shipping: number;
@@ -122,10 +124,20 @@ export function buildDashboardDataQuery(input: DashboardDataInput, section: "all
         COUNT(*) FILTER (WHERE o."createdAt" >= ${ordersPeriod.start} AND o."createdAt" < ${ordersPeriod.endExclusive})::int AS period_count,
         COALESCE(SUM(o.total) FILTER (WHERE o."createdAt" >= ${ordersPeriod.start} AND o."createdAt" < ${ordersPeriod.endExclusive}), 0)::double precision AS period_total,
         COALESCE(SUM(o.shipping) FILTER (WHERE o."createdAt" >= ${ordersPeriod.start} AND o."createdAt" < ${ordersPeriod.endExclusive}), 0)::double precision AS period_shipping
-      FROM "Order" o
+      , COUNT(*) FILTER (WHERE o.channel = 'ANANAS' AND o."createdAt" >= ${todayPeriod.start} AND o."createdAt" < ${todayPeriod.endExclusive})::int AS today_ananas
+      , COUNT(*) FILTER (WHERE o.channel = 'ANANAS' AND o."createdAt" >= ${ordersPeriod.start} AND o."createdAt" < ${ordersPeriod.endExclusive})::int AS period_ananas
+      FROM (
+        SELECT o."createdAt", o.total, o.shipping, o.channel::text AS channel
+        FROM "Order" o
+        WHERE o.status <> 'OTKAZANO'
+          AND NOT (o.channel = 'ANANAS' AND EXISTS (SELECT 1 FROM "AnanasOrder" a WHERE a.id = COALESCE(o."externalOrderNo", o.number)))
+          ${orderWarehouseSql}
+        UNION ALL
+        SELECT a."createdAt", a.total, NULL::numeric AS shipping, 'ANANAS' AS channel
+        FROM "AnanasOrder" a WHERE a.status <> 'Otkazano' AND ${warehouseId === ""}
+      ) o
       WHERE ((o."createdAt" >= ${todayPeriod.start} AND o."createdAt" < ${todayPeriod.endExclusive})
         OR (o."createdAt" >= ${ordersPeriod.start} AND o."createdAt" < ${ordersPeriod.endExclusive}))
-        ${orderWarehouseSql}
     ) result) AS "orderSummary",
     (SELECT COUNT(*)::int FROM "Reclamation" r
       WHERE r."createdAt" >= ${reclamationsPeriod.start} AND r."createdAt" < ${reclamationsPeriod.endExclusive}

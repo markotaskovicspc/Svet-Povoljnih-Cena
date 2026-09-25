@@ -175,10 +175,8 @@ async function OperationalCards({ data, input, warehouseLabel }: OperationalSect
   const fiscal = fiscalRows[0] ?? { today_net: 0, period_net: 0 };
   const ordersToday = orderSummary.today_count;
   const ordersTodayAmount = orderSummary.today_total;
-  const ordersTodayShipping = orderSummary.today_shipping;
   const ordersInPeriod = orderSummary.period_count;
   const ordersInPeriodAmount = orderSummary.period_total;
-  const ordersInPeriodShipping = orderSummary.period_shipping;
   const incoming = incomingRows[0] ?? {
     order_count: 0,
     remaining_qty: 0,
@@ -205,8 +203,8 @@ async function OperationalCards({ data, input, warehouseLabel }: OperationalSect
   );
   return <>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <StatCard label="Porudžbine danas" value={String(ordersToday)} amount={formatRsd(ordersTodayAmount)} hint={`Dostava ${formatRsd(ordersTodayShipping)} · ${warehouseLabel}`} />
-            <StatCard label="Porudžbine u periodu" value={String(ordersInPeriod)} amount={formatRsd(ordersInPeriodAmount)} hint={`Dostava ${formatRsd(ordersInPeriodShipping)} · ${ordersPeriod.label} · ${warehouseLabel}`} />
+            <StatCard label="Porudžbine danas" value={String(ordersToday)} amount={formatRsd(ordersTodayAmount)} hint={`Naše ${ordersToday - (orderSummary.today_ananas ?? 0)} · Ananas ${orderSummary.today_ananas ?? 0} · Bez otkazanih · ${warehouseId ? "Ananas nije raspoređen po lokalnim magacinima" : "Svi kanali · sa dostavom"}`} />
+            <StatCard label="Porudžbine u periodu" value={String(ordersInPeriod)} amount={formatRsd(ordersInPeriodAmount)} hint={`Naše ${ordersInPeriod - (orderSummary.period_ananas ?? 0)} · Ananas ${orderSummary.period_ananas ?? 0} · Bez otkazanih · ${ordersPeriod.label} · ${warehouseLabel}`} />
             <StatCard label="Promet danas (neto fiskalizovano)" value={formatRsd(fiscal.today_net)} hint={warehouseLabel} />
             <StatCard label="Promet u periodu (neto fiskalizovano)" value={formatRsd(fiscal.period_net)} hint={`${fiscalPeriod.label} · ${warehouseLabel}`} />
           </div>

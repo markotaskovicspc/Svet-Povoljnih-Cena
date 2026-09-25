@@ -187,6 +187,8 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       { source: "/:path*", headers: securityHeaders },
+      // Camera access is limited to the authenticated warehouse scanner document.
+      { source: "/admin/erp/preuzimanja/:id/picking", headers: [{ key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()" }] },
       { source: "/models/:path*.glb", headers: [{ key: "Content-Type", value: "model/gltf-binary" }] },
       { source: "/models/:path*.usdz", headers: [{ key: "Content-Type", value: "model/vnd.usdz+zip" }] },
       // Only immutable, explicitly versioned delivery files get long-lived caching.
