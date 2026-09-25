@@ -69,7 +69,7 @@ test('plain confirmation creates pending order once, repeated confirmation does 
   try {
     await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
     worker.answerFn=async()=>{throw Error('Confirmation must not call the model');};
-    await store.accept({...event,id:'facebook:plain-confirm',text:'potvrđujem'});
+    await store.accept({...event,id:'facebook:plain-confirm',text:'Moze potvrdjujem'});
     await worker.tick();
     assert.equal(calls.length,1);assert.equal(calls[0].action,'create_order');
     await store.accept({...event,id:'facebook:repeat-confirm',text:'da'});
@@ -107,4 +107,22 @@ test('definite image rejection does not pause the conversation',async()=>{
   assert.equal((await store.pool.query('SELECT paused FROM spc_chat_conversations')).rows[0].paused,false);
   assert.equal((await store.pool.query('SELECT status FROM spc_chat_outbox')).rows[0].status,'failed');
  }finally{globalThis.fetch=originalFetch;await store.close();}
+});
+
+test('model cannot claim an uncreated order is confirmed; pending offer remains available',async()=>{
+ const {store,worker,calls,event}=await setup();
+ try {
+  await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
+  await store.withConversation(event.conversation,async(row,state,c)=>{
+   state.pending={...state.pending,input:{lines:[{sku:'TEST',qty:1}],shipping:{firstName:'Test',lastName:'Kupac',phone:'0600000000',street:'Test',houseNumber:'1',postalCode:'11000',city:'Beograd'},guestEmail:'test@example.com',paymentMethod:'POUZECE_GOTOVINA',shippingMethod:'KURIR'},totals:{shipping:0,total:2000}};
+   await store.save(c,row.id,state);
+  });
+  worker.answerFn=async()=>({text:'Potvrđeno. Vaša porudžbina je kreirana.',quoteCreated:false});
+  await store.accept({...event,id:'facebook:ambiguous',text:'Je li to sve?'});await worker.tick();
+  const row=(await store.pool.query('SELECT state FROM spc_chat_conversations')).rows[0];
+  const state=store.decode(row.state);
+  assert(state.pending);assert.equal(state.orders.length,0);assert.equal(calls.length,0);
+  assert.match(state.history.at(-1).content,/još nije kreirana/);
+  assert(!state.history.at(-1).content.includes('Potvrđeno.'));
+ }finally{await store.close();}
 });

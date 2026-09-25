@@ -29,7 +29,8 @@ export function isConfirmation(text, code) {
 export function isOrderConfirmation(text, code) {
   if (isConfirmation(text, code)) return true;
   const normalized=String(text).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'dj').replace(/[.!]+$/,'').trim();
-  return ['da','potvrdjujem','potvrda','potvrdjujem porudzbinu','da potvrdjujem','da, potvrdjujem','moze','vazi','potvrdi','потврђујем','потврда','да','може','важи','потврди'].includes(normalized);
+  if (/^(?:(?:da|moze|vazi|potvrdjujem|potvrda|potvrdi|да|може|важи|потврђујем|потврда|потврди)[,\s]*)+$/.test(normalized)) return true;
+  return /^(?:(?:da|moze|vazi)[,\s]+)?potvrdjujem (?:ovu )?porudzbinu$/.test(normalized);
 }
 export function parseEvents(body, accounts) {
   if (!['page', 'instagram'].includes(body?.object)) return [];

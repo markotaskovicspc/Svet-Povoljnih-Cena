@@ -40,6 +40,6 @@ test('SPC signature is deterministic for same body and timestamp; binds both',()
 });
 
  test('order accepts plain confirmations but not questions, negation or changed details',()=>{
-  for(const text of ['Potvrđujem','potvrdjujem','potvrda','Da!','Može.','Потврђујем','POTVRĐUJEM ABC123']) assert(isOrderConfirmation(text,'ABC123'),text);
+  for(const text of ['Moze potvrdjujem','Može, potvrđujem!','da moze','potvrdjujem porudzbinu','Potvrđujem','potvrdjujem','potvrda','Da!','Može.','Потврђујем','POTVRĐUJEM ABC123']) assert(isOrderConfirmation(text,'ABC123'),text);
   for(const text of ['ne potvrđujem','da li je dostava besplatna?','može ali 2 komada','da, promeni adresu','POTVRĐUJEM OLD123','']) assert(!isOrderConfirmation(text,'ABC123'),text);
  });

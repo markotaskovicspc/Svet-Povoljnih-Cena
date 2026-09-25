@@ -65,7 +65,13 @@ export class Worker {
           } else {
             if(state.reclamationInFlight) throw new Error('RECLAMATION_UNCERTAIN');
             const result=await this.answerFn({event,state,spc:this.spc,model:this.model,pause:reason=>this.store.pause(row.id,reason)});
-            if(!result.quoteCreated) delete state.pending;
+            const normalizedReply=String(result.text??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'dj');
+            const unverifiedSuccess=!result.quoteCreated && !state.orders.some(o=>String(result.text).includes(o.number)) && /potvrdjeno|porudzbin[^.!?\n]{0,70}(?:kreiran|potvrdjen|evidentiran|primljen|uspesn)/i.test(normalizedReply);
+            if(unverifiedSuccess) {
+              result.text='Porudžbina još nije kreirana u sistemu. Za naručivanje je potrebna važeća ponuda i vaša potvrda.';
+              if(state.pending) result.text+='\n\n'+quoteMessage(state.pending);
+            }
+            if(!result.quoteCreated && !unverifiedSuccess) delete state.pending;
             if(!state.handedOff && !state.reclamation) images=(result.images??[]).slice(0,3);
             message=result.quoteCreated ? quoteMessage(state.pending) : result.text;
             if(state.reclamation) message=`Prijava za ${state.reclamation.number}, artikal ${state.reclamation.sku}, količina ${state.reclamation.quantity}:\n${state.reclamation.description}\n\nZa slanje prijave napišite: POTVRĐUJEM ${state.reclamation.code}`;
