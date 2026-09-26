@@ -141,10 +141,11 @@ export async function createAdminReclamation(
 // conversation-bound draft. Never expose this function as a public form action.
 export async function createSocialReclamation(
   input: CreateReclamationInput,
-  context: { orderId: string; id: string; note: string; type?: ReclamationType; request?: ReclamationRequest },
+  context: { orderId: string; id: string; note: string; type?: ReclamationType; request?: ReclamationRequest; customerReplyDraftOnly?: boolean },
 ): Promise<CreateReclamationResult> {
   return createReclamationRecord(input, {
     expectedOrderId: context.orderId, social: context,
+    customerReplyDraftOnly: context.customerReplyDraftOnly,
     allowedOrderStatuses: ["ISPORUCENO"], type: context.type, request: context.request,
   });
 }
@@ -159,6 +160,7 @@ async function createReclamationRecord(
     type?: ReclamationType | null;
     request?: ReclamationRequest | null;
     expectedOrderId?: string;
+    customerReplyDraftOnly?: boolean;
     social?: { id: string; note: string };
   },
 ): Promise<CreateReclamationResult> {
@@ -319,7 +321,7 @@ async function createReclamationRecord(
       });
       if (options.social) {
         // A lost HTTP response can recover the case without losing its receipt.
-        await enqueueBackgroundJob({ kind: "RECLAMATION_RECEIPT", payload: { reclamationId: created.id }, idempotencyKey: `reclamation-receipt:${created.id}` }, tx);
+        if (!options.customerReplyDraftOnly) await enqueueBackgroundJob({ kind: "RECLAMATION_RECEIPT", payload: { reclamationId: created.id }, idempotencyKey: `reclamation-receipt:${created.id}` }, tx);
         if (item.supplierExternalSku) await enqueueBackgroundJob({ kind: "SUPPLIER_RECLAMATION_EMAIL", payload: { reclamationId: created.id }, idempotencyKey: `supplier-reclamation:${created.id}` }, tx);
       }
       return created;
@@ -335,7 +337,7 @@ async function createReclamationRecord(
   }
 
   try {
-    await enqueueBackgroundJob({
+    if (!options.customerReplyDraftOnly) await enqueueBackgroundJob({
       kind: "RECLAMATION_RECEIPT",
       payload: { reclamationId: result.id },
       idempotencyKey: `reclamation-receipt:${result.id}`,

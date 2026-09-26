@@ -14,6 +14,7 @@ import {
 const schemas = {
   CHECKOUT_POST_COMMIT: z.object({
     orderId: z.string().min(1), accessToken: z.string().min(20),
+    customerReplyDraftOnly: z.boolean().optional(),
   }),
   PASSWORD_RESET_EMAIL: z.object({ to: z.email(), token: z.string().min(20) }),
   ABANDONED_CART_RECOVERY: z.object({
@@ -495,7 +496,7 @@ async function dispatchJob(job: JobRow) {
     case "CHECKOUT_POST_COMMIT": {
       const { prepareCheckoutFollowUp } = await import("@/lib/checkout/follow-up");
       const args = payload as z.infer<typeof schemas.CHECKOUT_POST_COMMIT>;
-      await prepareCheckoutFollowUp(args.orderId, args.accessToken);
+      await prepareCheckoutFollowUp(args.orderId, args.accessToken, args.customerReplyDraftOnly);
       return;
     }
     case "ABANDONED_CART_RECOVERY": {

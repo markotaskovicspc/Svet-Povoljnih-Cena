@@ -13,3 +13,13 @@ List/auto/spam headers and own replies are skipped. Messages over 10 MB and repe
 Authenticated GET /admin/email-drafts reports connection status and aggregate drafted/skipped/review counts without message content. Inspect review reasons, especially append_outcome_uncertain, processing_failed and message_too_large, in the ledger. Do not reset these blindly: check the mailbox first. IMAP errors and startup failures never stop the Meta worker.
 
 Tests: node --test test/email-drafts.test.mjs. Synthetic model test: node --env-file=.env.local scripts/email-draft-smoke.mjs (no mailbox writes or sends).
+
+## Confirmed ERP operations
+
+Deploy `/api/integrations/email-actions` before enabling `EMAIL_ACTIONS_ENABLED=true` on the worker. All email answers remain drafts for employees to send. No SMTP transport is used. This flag allows purchase, cancellation, and delivered-order reclamation operations only after the employee sends the server-generated summary and the customer replies affirmatively to that exact sent email.
+
+The worker checks the actual Sent folder, recipient, direct In-Reply-To, original request parent, and unchanged summary. Outlook may replace the draft Message-ID: the actual Sent Message-ID is used. Editing the summary or adding text outside the standard signature fails closed; generate a new summary instead. Sent copies must be saved in the mailbox's shared Sent folder. A draft, From address, quoted confirmation, or unrelated "yes" cannot authorize a write. Existing conversations need a new generated confirmation summary; old generic confirmations are not replayed.
+
+The encrypted operation ledger persists confirmation before the ERP call. A timeout retries the same token; purchase checkout-session and claim identifiers are deterministic. Completed operations return the existing receipt. Price/availability and cancellation eligibility are checked again by ERP. A changed request invalidates the old offer. Offers expire after 24 hours; completed writes remain recoverable. Payment refunds and carrier interception require staff review; reclamations require recorded delivery and create a ticket, not an approved remedy. Attachments stay in the original mailbox for staff review.
+
+Disable actions separately with `EMAIL_ACTIONS_ENABLED=false`; drafts and Messenger continue. An uncertain in-flight operation must be reconciled before re-enabling. Tests: `node --test test/email-actions.test.mjs` plus ERP `tests/unit/email-actions.test.ts`.

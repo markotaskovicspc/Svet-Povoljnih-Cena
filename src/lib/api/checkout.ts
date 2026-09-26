@@ -315,7 +315,7 @@ export async function createOrder(
   input: CreateOrderInput,
   userId: string | null,
   guestLoyalty: { email: string; consentVersion: string; consentAt: Date } | null = null,
-  options: { previewOnly?: boolean; expectedTotal?: number } = {},
+  options: { previewOnly?: boolean; expectedTotal?: number; customerReplyDraftOnly?: boolean } = {},
 ): Promise<
   { ok: true; data: CreateOrderResult } | { ok: false; error: CreateOrderError }
 > {
@@ -362,7 +362,7 @@ export async function createOrder(
       }
       // A replay must still return the saved order if optional queue repair fails.
       await queueCheckoutFollowUp(db, existing.id,
-        createCheckoutOrderAccessToken(input.checkoutSessionId)).catch(error => {
+        createCheckoutOrderAccessToken(input.checkoutSessionId), options.customerReplyDraftOnly).catch(error => {
         logOperationalError("checkout.follow_up.repair_failed", error, { orderId: existing.id });
       });
       return {
@@ -781,7 +781,7 @@ export async function createOrder(
           if (!checkoutRequestMatchesOrder(input, userId, existingOrder)) {
             throw new CheckoutSessionMismatchError();
           }
-          await queueCheckoutFollowUp(tx, existingOrder.id, accessToken);
+          await queueCheckoutFollowUp(tx, existingOrder.id, accessToken, options.customerReplyDraftOnly);
           return { ...existingOrder, reusedExisting: true };
         }
       }
@@ -1110,7 +1110,7 @@ export async function createOrder(
 
       // Durable outbox: only database writes run here, never provider/PDF code.
       // Commit the order and the obligation to notify together.
-      await queueCheckoutFollowUp(tx, order.id, accessToken);
+      await queueCheckoutFollowUp(tx, order.id, accessToken, options.customerReplyDraftOnly);
 
       return {
         ...order,

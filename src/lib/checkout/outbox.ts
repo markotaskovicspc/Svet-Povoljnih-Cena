@@ -10,12 +10,13 @@ export function queueCheckoutFollowUp(
   tx: Pick<Prisma.TransactionClient, "backgroundJob">,
   orderId: string,
   accessToken: string,
+  customerReplyDraftOnly = false,
 ) {
   return tx.backgroundJob.upsert({
     where: { idempotencyKey: checkoutFollowUpKey(orderId) },
     create: {
       kind: "CHECKOUT_POST_COMMIT",
-      payload: { orderId, accessToken },
+      payload: { orderId, accessToken, ...(customerReplyDraftOnly ? { customerReplyDraftOnly: true } : {}) },
       idempotencyKey: checkoutFollowUpKey(orderId),
       maxAttempts: 8,
     },

@@ -24,7 +24,7 @@ const server=http.createServer(async(req,res)=>{
     if(req.method==='GET'&&url.pathname==='/admin/email-drafts'){
       if(!emailWorker||emailWorker.status==='disabled')return reply(200,{status:'disabled'});
       const result=await store.pool.query('SELECT status,reason,count(*)::int AS count FROM spc_email_drafts GROUP BY status,reason');
-      return reply(200,{status:emailWorker.status,mailbox:'podrska@svetpovoljnihcena.rs',draftOnly:true,counts:result.rows});
+        return reply(200,{status:emailWorker.status,mailbox:'podrska@svetpovoljnihcena.rs',draftOnly:true,erpActionsEnabled:emailWorker.env.EMAIL_ACTIONS_ENABLED==='true',counts:result.rows});
     }
     if(isWebhook){
       if(!verifyMeta(raw,req.headers['x-hub-signature-256'],appSecret))return reply(401,{error:'Invalid signature'});

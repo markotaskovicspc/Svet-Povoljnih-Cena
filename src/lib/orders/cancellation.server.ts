@@ -14,7 +14,8 @@ const TRANSACTION_OPTIONS = { maxWait: 10_000, timeout: 30_000 } as const;
 export async function cancelWebOrderByCustomer(input: {
   orderId: string;
   requestedByUserId?: string | null;
-  requestedViaSocial?: "facebook" | "instagram";
+  requestedViaSocial?: "facebook" | "instagram" | "email";
+  customerReplyDraftOnly?: boolean;
 }) {
   const result = await db.$transaction(async (tx) => {
     await tx.$queryRaw(Prisma.sql`
@@ -201,7 +202,7 @@ export async function cancelWebOrderByCustomer(input: {
     const warehouseRecipients = Array.from(
       new Set(configuredWarehouseRecipients),
     );
-    await enqueueBackgroundJob(
+    if (!input.customerReplyDraftOnly) await enqueueBackgroundJob(
       {
         kind: "ORDER_STATUS_EMAIL",
         payload: { orderId: order.id, status: "OTKAZANO" },
