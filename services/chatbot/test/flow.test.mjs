@@ -82,6 +82,19 @@ test('plain confirmation creates pending order once, repeated confirmation does 
   }finally{await store.close();}
 });
 
+test('shopping photo reaches sales with positional context; later top-item reference retains it without reviving old quote',async()=>{
+ const {store,worker,calls,event}=await setup();let reads=0;const received=[];
+ try{
+  await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
+  worker.visionFn=async({state,event})=>{reads++;state.visualContext={eventId:event.id,createdAt:event.timestamp,images:[{imageNumber:1,readable:true,objects:[{position:'gore',description:'pegla'}]}]};};
+  worker.answerFn=async({state,event})=>{received.push({text:event.text,visual:state.visualContext,pending:state.pending});return {text:event.text?'Mislite na peglu sa slike?':'Koji artikal sa slike želite?',quoteCreated:false};};
+  await store.accept({...event,id:'photo',text:'',attachments:[{type:'image',url:'https://fbcdn.net/a'}]});await worker.tick();
+  await store.accept({...event,id:'position',text:'Ovu skroz gore hoću jednu',attachments:[]});await worker.tick();
+  assert.equal(reads,1);assert.equal(received.length,2);assert.equal(received[1].visual.images[0].objects[0].position,'gore');assert.equal(received[0].pending,undefined);assert.equal(calls.length,0);
+  const row=(await store.pool.query('SELECT * FROM spc_chat_conversations')).rows[0];assert.equal(row.paused,false);
+ }finally{await store.close();}
+});
+
 test('product image and link are persisted once and sent as distinct Messenger messages',async()=>{
  const {store,worker,calls,event}=await setup();const originalFetch=globalThis.fetch;const sent=[];
  try {

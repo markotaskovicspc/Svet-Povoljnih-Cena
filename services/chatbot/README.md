@@ -13,12 +13,25 @@ customer confirmation and business-side effects. No hosted shell/sandbox is expo
 - Facebook and Instagram adapters. Configure only the exact business account IDs.
 - Serbian AI sales/support, live SPC product search, collection of delivery data.
 - Signed 15-minute quotes produced by SPC's actual checkout calculation.
-- Exact customer confirmation code, replay-safe checkoutSessionId, server price check.
+- Plain DA confirmation, replay-safe checkoutSessionId, server price check.
 - Order status and text complaints for orders created in the same conversation.
 - Complaint confirmation and quarantine after uncertain writes (no unsafe retries).
 - Encrypted conversation state, order access tokens and webhook bodies at rest.
 - Operator inbox at `/`, pause/resume and manual reply, automatic pause for human echoes.
-- Images/attachments and outside-conversation orders hand off to staff. No refund tool.
+- Customer photos/collages are described with object positions, readable names and codes.
+  Subsequent "the one at the top" messages reuse that encrypted description for two hours.
+  The bot searches the current catalog and shows the candidate for customer confirmation
+  before preparing an order. Visual resemblance alone never establishes a SKU or price.
+  Up to three JPEG/PNG/WebP/GIF attachments per event, 8 MB each, accepted only from
+  HTTPS Meta media hosts; redirects, MIME and byte limits are checked. Failed/unclear
+  photos ask for a clearer image or product name, without stopping the conversation.
+  Existing active reclamation photo uploads stay attached to their selected item.
+  Email attachment reading is not included in this chat image feature. No refund tool.
+
+Image checks: `node --test test/vision.test.mjs` and the worker flow tests.
+From the repository checkout (requires the root sharp dev dependency), run
+`node --env-file=.env.local scripts/vision-smoke.mjs` in this service directory
+for a synthetic image-to-catalog-to-confirmed-quote test without ERP writes or sends.
 - Send-window checks and quarantine for uncertain sends. No automated HUMAN_AGENT tags.
 
 ## Deliberate first-release boundaries

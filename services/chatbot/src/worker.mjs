@@ -8,10 +8,12 @@ import {checkCart} from './cart-check.mjs';
 import {readMetaHistory} from './meta-history.mjs';
 import {classifyCancellation,cancellationMessage} from './cancellation.mjs';
 import {classifyReclamation,reclamationMessage,receiveClaimPhotos,prepareReclamation} from './reclamation.mjs';
+import {receiveProductImages,activeVisualContext} from './vision.mjs';
 
 export class Worker {
-  constructor({store,spc,accounts,model,graphVersion,enabled=false,testSenders=[],answerFn=answer,intentFn=classifyOrderIntent,cartCheckFn=checkCart,cancellationIntentFn=classifyCancellation,reclamationIntentFn=classifyReclamation}) {
+  constructor({store,spc,accounts,model,graphVersion,enabled=false,testSenders=[],answerFn=answer,intentFn=classifyOrderIntent,cartCheckFn=checkCart,cancellationIntentFn=classifyCancellation,reclamationIntentFn=classifyReclamation,visionFn=receiveProductImages}) {
     Object.assign(this,{store,spc,accounts,model,graphVersion,enabled,testSenders,answerFn,intentFn,cartCheckFn,cancellationIntentFn,reclamationIntentFn}); this.busy=false;
+    this.visionFn=visionFn;
   }
   async start() {
     // LISTEN starts work immediately; timer only recovers missed notifications/retries.
@@ -57,6 +59,13 @@ export class Worker {
             state.historyVersion=2;
           }
           if(state.reclamationContext&&Date.now()-state.reclamationContext.createdAt>2*3600000)delete state.reclamationContext;
+          if(!activeVisualContext(state))delete state.visualContext;
+          if(event.attachments.length&&!state.reclamationContext){
+            delete state.pending;delete state.confirming;delete state.cancellation;
+            state.claimAttachments=event.attachments.slice(0,5).map(a=>({...a,timestamp:Date.now()}));
+            await this.visionFn({state,event,model:this.model});
+            await this.store.save(c,row.id,state);
+          }
           let reclamationIntent;
           if(state.reclamation?.reclamationToken&&!event.attachments.length) {
             delete state.pending;delete state.confirming;delete state.cancellation;
@@ -156,7 +165,7 @@ export class Worker {
             delete state.cancellation;
           } else if (state.cancellation && cancellationIntent==='unclear') {
             message=cancellationMessage(state.cancellation);
-          } else if (event.attachments.length) {
+          } else if (event.attachments.length && state.reclamationContext) {
             delete state.cancellation;delete state.pending;delete state.confirming;
             if(state.reclamationContext) {
               const previous=state.reclamation;
@@ -167,9 +176,6 @@ export class Worker {
                 await prepareReclamation({input:{...previous.input,number:previous.number},event,state,spc:this.spc});
                 if(state.reclamation)message=reclamationMessage(state.reclamation)+(imported.failed?'\nNeki prilozi nisu dodati; podrška će ih proveriti.':'');
               } else message+=' Opišite problem i napišite da li želite zamenu, popravku ili drugi dogovor.';
-            } else {
-              state.claimAttachments=event.attachments.slice(0,5).map(a=>({...a,timestamp:Date.now()}));
-              message='Primio sam prilog. Da li se odnosi na reklamaciju i, ako da, na koju porudžbinu i artikal?';
             }
           } else if (state.pending && intent==='cancel') {
             delete state.pending;delete state.confirming;
@@ -183,6 +189,7 @@ export class Worker {
               state.orders.push({number:result.data.number,accessToken:result.data.accessToken,items:state.pending.input?.lines?.map(l=>({...l,name:state.pending.productNames?.[l.sku]})),createdAt:Date.now()});
               message=`Porudžbina ${result.data.number} je uspešno kreirana. Ukupno: ${result.data.total} RSD, sa dostavom. Potvrda stiže i na mejl.`;
               delete state.pending;delete state.confirming;
+              delete state.visualContext;
             } else {
               const code=result.error?.code;
               console.error('chat.order_rejected',{code:typeof code==='string'&&/^[A-Z_]+$/.test(code)?code:'UNKNOWN'});
