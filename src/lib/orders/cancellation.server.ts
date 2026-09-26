@@ -14,6 +14,7 @@ const TRANSACTION_OPTIONS = { maxWait: 10_000, timeout: 30_000 } as const;
 export async function cancelWebOrderByCustomer(input: {
   orderId: string;
   requestedByUserId?: string | null;
+  requestedViaSocial?: "facebook" | "instagram";
 }) {
   const result = await db.$transaction(async (tx) => {
     await tx.$queryRaw(Prisma.sql`
@@ -156,7 +157,9 @@ export async function cancelWebOrderByCustomer(input: {
         orderId: order.id,
         status: "OTKAZANO",
         actorId: null,
-        note: input.requestedByUserId
+        note: input.requestedViaSocial
+          ? `Kupac je potvrdio otkazivanje kroz ${input.requestedViaSocial} razgovor pre fiskalizacije.`
+          : input.requestedByUserId
           ? "Kupac je otkazao porudžbinu kroz Moj nalog pre fiskalizacije."
           : "Kupac je otkazao porudžbinu kroz zaštićeni link pre fiskalizacije.",
       },

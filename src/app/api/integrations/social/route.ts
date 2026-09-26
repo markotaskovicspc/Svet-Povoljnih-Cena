@@ -12,17 +12,22 @@ import { checkoutFollowUpKey } from "@/lib/checkout/outbox";
 import { trackedDispatch } from "@/lib/email/tracking";
 import { getEmailConfig } from "@/lib/email/config";
 import { createHash } from "node:crypto";
+import { cancelWebOrderByCustomer } from "@/lib/orders/cancellation.server";
+import { canCustomerCancelStatus, OrderCancellationError } from "@/lib/orders/cancellation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 const identity = z.object({ channel: z.enum(["facebook", "instagram"]), conversationId: z.string().min(3).max(200) });
 const quotePayload = identity.extend({ input: createOrderSchema, total: z.number().nonnegative(), expiresAt: z.number() });
+const cancellationPayload = identity.extend({ purpose: z.literal("cancel_order"), number: z.string(), expiresAt: z.number() });
 const requestSchema = z.discriminatedUnion("action", [
   identity.extend({ action: z.literal("support_handoff"), id: z.string().min(1).max(300), reason: z.string().max(200), transcript: z.string().max(10000) }),
-  z.object({ action: z.literal("search"), query: z.string().trim().min(1).max(100) }),
+  z.object({ action: z.literal("search"), query: z.string().trim().min(1).max(100), quantity: z.number().int().positive().max(1000).default(1) }),
   identity.extend({ action: z.literal("quote"), input: createOrderSchema }),
   identity.extend({ action: z.literal("create_order"), quoteToken: z.string().max(20000) }),
   z.object({ action: z.literal("order_status"), number: z.string().max(80), accessToken: z.string().max(200) }),
+  identity.extend({ action: z.literal("prepare_cancellation"), number: z.string().max(80), accessToken: z.string().max(200) }),
+  identity.extend({ action: z.literal("cancel_order"), cancellationToken: z.string().max(4000), accessToken: z.string().max(200) }),
   z.object({ action: z.literal("reclamation"), input: createReclamationSchema, accessToken: z.string().max(200) }),
 ]);
 
@@ -49,11 +54,14 @@ export async function POST(req: Request) {
     }
     if (body.action === "search") {
       const exact = await getProductBySku(body.query);
-      const products = exact ? [exact] : (await listProducts({ nameKeyword: body.query, limit: 6 }, { throwOnError: true })).items;
+      const candidates = exact ? [exact] : (await listProducts({ nameKeyword: body.query, limit: 6 }, { throwOnError: true })).items;
+      // Listing caches can outlive a SKU/publication/stock change.
+      const refreshed = exact ? [exact] : await Promise.all(candidates.map(p => getProductBySku(p.sku)));
+      const products = refreshed.filter((p): p is NonNullable<typeof p> => p !== null);
       return NextResponse.json({ ok: true, items: products.map(p => ({
         sku: p.sku, name: p.name, slug: p.slug,
         price: resolveProductPriceQuote(p, { loggedIn: false }).payable.effective,
-        available: p.stock > 0, image: p.media.images[0] ?? null,
+        available: p.stock >= body.quantity, checkedQuantity: body.quantity, availabilitySource: p.availabilitySource, image: p.media.images[0] ?? null,
       })) });
     }
     if (body.action === "quote") {
@@ -89,6 +97,39 @@ export async function POST(req: Request) {
         });
       }
       return NextResponse.json(result);
+    }
+    if (body.action === "prepare_cancellation" || body.action === "cancel_order") {
+      let number: string;
+      let expiresAt = Date.now() + 15 * 60_000;
+      if (body.action === "cancel_order") {
+        const token = cancellationPayload.safeParse(readSocialQuote(body.cancellationToken, secret));
+        if (!token.success || token.data.channel !== body.channel || token.data.conversationId !== body.conversationId) return new Response(null, { status: 403 });
+        number = token.data.number;
+        expiresAt = token.data.expiresAt;
+      } else number = body.number;
+      const order = await db.order.findUnique({ where: { number }, select: {
+        id: true, number: true, status: true, channel: true, publicAccessTokenHash: true,
+        fiscal: { select: { id: true } }, fiscalDocuments: { where: { kind: "SALE" }, select: { id: true } },
+        reshipments: { select: { id: true } }, items: { select: { name: true, sku: true, qty: true } },
+      } });
+      if (!order || !verifyOrderAccessToken({ token: body.accessToken, tokenHash: order.publicAccessTokenHash })) return new Response(null, { status: 403 });
+      if (order.status === "OTKAZANO") return NextResponse.json({ ok: true, alreadyCancelled: true, number });
+      if (order.channel !== "WEB" || !canCustomerCancelStatus(order.status) || order.fiscal || order.fiscalDocuments.length || order.reshipments.length) {
+        return NextResponse.json({ ok: false, error: { code: "CANCELLATION_NOT_ALLOWED" } });
+      }
+      if (body.action === "prepare_cancellation") return NextResponse.json({ ok: true, number, items: order.items, expiresAt,
+        cancellationToken: signSocialQuote({ purpose: "cancel_order", channel: body.channel, conversationId: body.conversationId, number, expiresAt }, secret),
+      });
+      if (expiresAt < Date.now()) return NextResponse.json({ ok: false, error: { code: "CANCELLATION_EXPIRED" } });
+      // The existing transaction rechecks eligibility under a row lock and releases reservations exactly once.
+      try {
+        const result = await cancelWebOrderByCustomer({ orderId: order.id, requestedViaSocial: body.channel });
+        return NextResponse.json({ ok: true, number, alreadyCancelled: result.alreadyCancelled,
+          paymentReviewRequired: result.paymentReviewRequired, shipmentReviewRequired: result.activeShipmentCount > 0 || result.pickupBatchNumbers.length > 0 });
+      } catch (error) {
+        if (error instanceof OrderCancellationError) return NextResponse.json({ ok: false, error: { code: `CANCELLATION_${error.code}` } });
+        throw error;
+      }
     }
     if (body.action === "order_status") {
       const order = await db.order.findUnique({ where: { number: body.number }, select: { number: true, status: true, publicAccessTokenHash: true } });

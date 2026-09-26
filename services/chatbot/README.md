@@ -120,3 +120,10 @@ The worker retains up to 120 messages per customer/channel in encrypted state. E
 Completed order receipts separate old purchases from the current selection. Contact details are stored separately from ordered items. A separate cart check validates product names, quantities, and literal customer selection evidence before quoting; legacy quotes are checked before confirmation. Short replies refer to the latest question, and the duplicate-order notice applies only immediately after an order receipt.
 
 Regression smoke: node --env-file=.env.local scripts/context-smoke.mjs (synthetic data and mock ERP only).
+
+### Customer cancellation and catalog verification
+A customer may request cancellation of an entire order created in the same conversation. Preparation verifies the stored order access token and returns a signed, channel/conversation/order-bound 15-minute request. The worker displays the order and items, then requires a separate natural-language confirmation immediately after that prompt. Negative, partial, conditional and unrelated replies never cancel. The agent has no cancellation-write tool. ERP reuses the existing locked, idempotent cancellation transaction, reservation release, refund review and notification jobs. Fiscalized/ineligible orders and partial cancellations go to support; unknown orders require a protected order link or staff verification. Uncertain writes retry the same request, and operator resume is blocked until cancellation is reconciled.
+
+Search results are refreshed by exact SKU and availability is checked for the requested quantity. A checkout stock/publication rejection is retained for 15 minutes and escalated to support instead of offering the same item as a new alternative. Customer contact details remain available. No production customer orders are created or cancelled by smoke tests.
+
+Additional model regressions: `scripts/cancellation-smoke.mjs` and `scripts/catalog-smoke.mjs` (synthetic conversations, mock ERP).

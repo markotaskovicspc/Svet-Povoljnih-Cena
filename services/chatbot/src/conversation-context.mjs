@@ -2,7 +2,7 @@ import {isOrderConfirmation} from './security.mjs';
 
 export const HISTORY_LIMIT=120;
 export function isOrderReceipt(message,orders=[]) {
-  return message?.role==='assistant' && /^Porudžbina .+ je (?:uspešno|već) kreirana\./.test(message.content)
+  return message?.role==='assistant' && /^Porudžbina .+ je (?:(?:uspešno|već) kreirana|(?:već )?otkazana)\./.test(message.content)
     && orders.some(o=>message.content.includes(o.number));
 }
 export function currentPurchaseHistory(state) {
@@ -11,7 +11,7 @@ export function currentPurchaseHistory(state) {
   return history.slice(boundary+1);
 }
 export function repeatsCompletedOrder(state,text) {
-  return isOrderConfirmation(text) && isOrderReceipt(state.history?.at(-1),state.orders);
+  return isOrderConfirmation(text) && /kreirana\./.test(state.history?.at(-1)?.content??'') && isOrderReceipt(state.history?.at(-1),state.orders);
 }
 export function customerFromQuote(input) {
   if(!input)return undefined;
