@@ -2,11 +2,14 @@ import { orderErrorMessage } from './delivery.mjs';
 import { classifyOrderIntent } from './order-intent.mjs';
 import { randomUUID } from 'node:crypto';
 import { answer, quoteMessage } from './agent.mjs';
-import { inWindow, isConfirmation, isOrderConfirmation } from './security.mjs';
+import { inWindow, isConfirmation } from './security.mjs';
+import {HISTORY_LIMIT,repeatsCompletedOrder,customerFromQuote} from './conversation-context.mjs';
+import {checkCart} from './cart-check.mjs';
+import {readMetaHistory} from './meta-history.mjs';
 
 export class Worker {
-  constructor({store,spc,accounts,model,graphVersion,enabled=false,testSenders=[],answerFn=answer,intentFn=classifyOrderIntent}) {
-    Object.assign(this,{store,spc,accounts,model,graphVersion,enabled,testSenders,answerFn,intentFn}); this.busy=false;
+  constructor({store,spc,accounts,model,graphVersion,enabled=false,testSenders=[],answerFn=answer,intentFn=classifyOrderIntent,cartCheckFn=checkCart}) {
+    Object.assign(this,{store,spc,accounts,model,graphVersion,enabled,testSenders,answerFn,intentFn,cartCheckFn}); this.busy=false;
   }
   async start() {
     // LISTEN starts work immediately; timer only recovers missed notifications/retries.
@@ -39,7 +42,30 @@ export class Worker {
         const recent=await c.query(`SELECT count(*)::int AS n FROM spc_chat_events WHERE conversation=$1 AND created_at>now()-interval '1 minute'`,[row.id]);
         if(recent.rows[0].n>25) {await this.store.pause(row.id,'Previše poruka; potrebna ručna provera');return;}
         try {
+          if(state.historyVersion!==2){
+            const recovered=await this.store.history(c,row.id,event);
+            const local=recovered.length?recovered:state.history;
+            const account=this.accounts.find(a=>a.channel===row.channel&&a.id===row.account);
+            try {
+              const before=local.length?Number(local[0].timestamp)||0:event.timestamp;
+              const older=before?await readMetaHistory({account,sender:row.sender,before,graphVersion:this.graphVersion}):[];
+              state.history=[...older,...local].slice(-HISTORY_LIMIT);
+              state.historyImport=account?'available':'local';
+            } catch {state.history=local;state.historyImport='unavailable';console.error('chat.history_import_unavailable');}
+            state.historyVersion=2;
+          }
           let intent;
+          if(state.pending?.input?.lines && !state.pending.selectionChecked && !state.confirming) {
+            const items=[];
+            for(const line of state.pending.input.lines){
+              const found=await this.spc({action:'search',query:line.sku});
+              const product=found.items?.find(p=>p.sku===line.sku);
+              items.push({...line,name:product?.name??state.pending.productNames?.[line.sku]??''});
+            }
+            const selection=await this.cartCheckFn({state,event,items,model:this.model});
+            if(selection.ok)state.pending.selectionChecked=true;
+            else {delete state.pending;delete state.confirming;}
+          }
           if(state.pending && !state.reclamationInFlight && !event.attachments.length) {
             if(state.confirming?.eventId===event.id || isConfirmation(event.text,state.pending.code)) intent='confirm';
             else intent=await this.intentFn({text:event.text,history:state.history,pending:state.pending,model:this.model});
@@ -66,7 +92,8 @@ export class Worker {
           } else if (state.pending && intent==='confirm') {
             const result=await this.spc({action:'create_order',channel:event.channel,conversationId:row.id,quoteToken:state.confirming.quoteToken});
             if(result.ok) {
-              state.orders.push({number:result.data.number,accessToken:result.data.accessToken});
+              state.customer=customerFromQuote(state.pending.input)??state.customer;
+              state.orders.push({number:result.data.number,accessToken:result.data.accessToken,items:state.pending.input?.lines?.map(l=>({...l,name:state.pending.productNames?.[l.sku]})),createdAt:Date.now()});
               message=`Porudžbina ${result.data.number} je uspešno kreirana. Ukupno: ${result.data.total} RSD, sa dostavom. Potvrda stiže i na mejl.`;
               delete state.pending;delete state.confirming;
             } else {
@@ -86,7 +113,7 @@ export class Worker {
               state.reclamationInFlight=false; delete state.reclamation;
               if(!result.ok) state.supportRequest={reason:'Reklamacija zahteva proveru'};
             }
-          } else if (!state.pending && !state.reclamation && state.orders.length && isOrderConfirmation(event.text)) {
+          } else if (!state.pending && !state.reclamation && repeatsCompletedOrder(state,event.text)) {
             message=`Porudžbina ${state.orders.at(-1).number} je već kreirana. Nije napravljena nova porudžbina. Ako želite izmenu, napišite šta menjate.`;
           } else {
             if(state.reclamationInFlight) throw new Error('RECLAMATION_UNCERTAIN');
@@ -107,8 +134,8 @@ export class Worker {
               message='Za ovu ponudu potreban je zaposleni. Prosledio sam mu razgovor da proveri sve stavke i dostavu.';
             }
           }
-          state.history.push({role:'user',content:event.text || '[Prilog kupca]'},{role:'assistant',content:message});
-          state.history=state.history.slice(-30);
+          state.history.push({role:'user',content:event.text || '[Prilog kupca]',timestamp:event.timestamp},{role:'assistant',content:message,timestamp:Date.now()});
+          state.history=state.history.slice(-HISTORY_LIMIT);
           await c.query('BEGIN');
           if(state.supportRequest) {
             const payload={action:'support_handoff',id:job.id,channel:event.channel,conversationId:row.id,

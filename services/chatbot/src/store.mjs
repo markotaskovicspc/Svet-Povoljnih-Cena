@@ -48,6 +48,19 @@ export class Store {
     } finally { if (locked) await c.query('SELECT pg_advisory_unlock(hashtextextended($1,0))',[id]); c.release(); }
   }
   async save(c, id, state) { await c.query('UPDATE spc_chat_conversations SET state=$2,updated_at=now() WHERE id=$1',[id,seal(state,this.key)]); }
+  async history(c,id,event) {
+    const rows=await c.query(`SELECT payload,created_at,'event' AS kind FROM spc_chat_events WHERE conversation=$1 AND id<>$2 AND status IN ('done','skipped')
+      UNION ALL SELECT payload,created_at,'reply' AS kind FROM spc_chat_outbox WHERE conversation=$1 AND status='sent'
+      ORDER BY created_at DESC LIMIT 240`,[id,event.id]);
+    return rows.rows.flatMap(r=>{
+      const p=this.decode(r.payload);
+      if(r.kind==='event'&&p.botEcho)return [];
+      const timestamp=r.kind==='event'?p.timestamp:new Date(r.created_at).getTime();
+      if(timestamp>event.timestamp)return [];
+      const content=p.text||(p.attachments?.length?'[Prilog kupca]':'');
+      return content?[{role:r.kind==='reply'||p.echo?'assistant':'user',content,timestamp}]:[];
+    }).sort((a,b)=>a.timestamp-b.timestamp).slice(-120);
+  }
   async pause(id, reason) { await this.pool.query('UPDATE spc_chat_conversations SET paused=true,reason=$2,updated_at=now() WHERE id=$1',[id,reason]); }
   async enqueue(c, id, conversation, message) { await c.query('INSERT INTO spc_chat_outbox(id,conversation,payload) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[id,conversation,seal(message,this.key)]); }
   decode(value) { return unseal(value,this.key); }

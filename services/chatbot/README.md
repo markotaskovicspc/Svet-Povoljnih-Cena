@@ -113,3 +113,10 @@ The original app `955130280916178` offers Facebook Login only; its add-use-case 
 did not offer Messenger or Instagram. User authorized a new app named `SPC Chat Prodaja`.
 Final app ID, account subscriptions and callback verification must be recorded after
 the Meta setup succeeds. These are not implied by a passing local test.
+
+### Conversation context
+The worker retains up to 120 messages per customer/channel in encrypted state. Existing conversations recover earlier received messages and delivered replies from the local event archive. On initial recovery, a sender-scoped Meta Conversations read imports up to 100 older text messages when the channel permits it; import failure falls back to local history and never replays historical messages as orders. Staff takeover remains in effect until an operator resumes the conversation.
+
+Completed order receipts separate old purchases from the current selection. Contact details are stored separately from ordered items. A separate cart check validates product names, quantities, and literal customer selection evidence before quoting; legacy quotes are checked before confirmation. Short replies refer to the latest question, and the duplicate-order notice applies only immediately after an order receipt.
+
+Regression smoke: node --env-file=.env.local scripts/context-smoke.mjs (synthetic data and mock ERP only).

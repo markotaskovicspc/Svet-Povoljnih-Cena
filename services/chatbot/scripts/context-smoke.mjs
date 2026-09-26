@@ -1,0 +1,26 @@
+import assert from 'node:assert/strict';
+import {answer,quoteMessage} from '../src/agent.mjs';
+import {checkCart} from '../src/cart-check.mjs';
+const model=process.env.OPENAI_MODEL??'gpt-5.4-mini';
+const shipping={firstName:'Test',lastName:'Kupac',phone:'0600000000',street:'Test ulica',houseNumber:'12',city:'Beograd',postalCode:'11000'};
+const old={input:{lines:[{sku:'110143',qty:1}],guestEmail:'test@example.com',shipping,paymentMethod:'POUZECE_GOTOVINA',shippingMethod:'KURIR'},totals:{shipping:1299,total:34155},productNames:{'110143':'Ležaj VENUS'}};
+const state={orders:[{number:'OLD-BED'}],history:[{role:'user',content:'Test Kupac, Test ulica 12, Beograd 11000, 0600000000, test@example.com, pouzeće.'},{role:'assistant',content:quoteMessage(old)},{role:'user',content:'Potvrđujem'},{role:'assistant',content:'Porudžbina OLD-BED je uspešno kreirana. Ukupno: 34155 RSD.'},{role:'user',content:'Imate pegle?'},{role:'assistant',content:'Pegla GOLD CORE 999 RSD, AQUA STEAM 1399 RSD.'},{role:'user',content:'Daj gold core jednu'},{role:'assistant',content:'Mogu da pripremim novu ponudu. Želiš?'},{role:'user',content:'Da'},{role:'assistant',content:'Pošalji podatke za dostavu.'}]};
+const event={channel:'facebook',conversation:'synthetic-context-only',text:'Imaš sve moje podatke, upotrebi iste za ovu novu porudžbinu.'};
+assert.equal((await checkCart({state,event,items:[{sku:'110143',name:'Ležaj VENUS',qty:1}],model})).ok,false);
+assert.equal((await checkCart({state,event,items:[{sku:'210005',name:'Pegla GOLD CORE',qty:1}],model})).ok,true);
+const calls=[];
+const spc=async p=>{
+ calls.push(p);
+ if(p.action==='search')return {ok:true,items:[{sku:'210005',name:'Pegla GOLD CORE',price:999,available:true,slug:'test-iron'}]};
+ if(p.action==='quote')return {ok:true,input:p.input,totals:{shipping:299,total:1298},quoteToken:'synthetic',expiresAt:Date.now()+900000};
+ throw Error('No production writes allowed');
+};
+const result=await answer({state,event,spc,model});
+assert(result.quoteCreated,'Reuse prior contact details and prepare iron quote');
+assert.deepEqual(state.pending.input.lines,[{sku:'210005',qty:1}]);
+assert.equal(state.pending.input.guestEmail,'test@example.com');
+assert.equal(state.customer.shipping.firstName,'Test');
+assert(!calls.some(p=>p.action==='create_order'));
+const uncertain={history:[{role:'user',content:'Kupila sam 6 pegli, možda bih još 4 ali moram da proverim.'}],orders:[]};
+assert.equal((await checkCart({state:uncertain,event:{text:'Evo adrese za fenove'},items:[{sku:'210005',name:'Pegla GOLD CORE',qty:6}],model})).ok,false);
+console.log(JSON.stringify({ok:true,synthetic:true,checks:['old bed rejected','new iron selected','previous customer details reused','past six irons not added','no ERP writes']}));

@@ -42,6 +42,7 @@ const server=http.createServer(async(req,res)=>{
       if(body.action==='pause')await store.pause(body.id,'Ručna pauza');
       else if(body.action==='resume')await store.withConversation(body.id,async(_row,state,c)=>{
         delete state.pending;delete state.reclamation;delete state.handedOff;
+        delete state.historyVersion;
         if(state.reclamationInFlight)throw new Error('Reconcile reclamation before resuming');
         await store.save(c,body.id,state);await c.query('UPDATE spc_chat_conversations SET paused=false,reason=NULL WHERE id=$1',[body.id]);
         // Old messages stay handled by the human; do not reply to stale backlog.

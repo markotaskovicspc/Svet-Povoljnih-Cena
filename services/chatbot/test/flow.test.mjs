@@ -5,6 +5,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { Store } from '../src/store.mjs';
 import { isOrderConfirmation } from '../src/security.mjs';
 import { Worker } from '../src/worker.mjs';
+import {currentPurchaseHistory} from '../src/conversation-context.mjs';
 
 // Real embedded PostgreSQL for persistence and transaction tests. Advisory locks
 // are represented by a single test executor (cross-process locks need staging).
@@ -115,7 +116,7 @@ test('model cannot claim an uncreated order is confirmed; pending offer remains 
  try {
   await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
   await store.withConversation(event.conversation,async(row,state,c)=>{
-   state.pending={...state.pending,input:{lines:[{sku:'TEST',qty:1}],shipping:{firstName:'Test',lastName:'Kupac',phone:'0600000000',street:'Test',houseNumber:'1',postalCode:'11000',city:'Beograd'},guestEmail:'test@example.com',paymentMethod:'POUZECE_GOTOVINA',shippingMethod:'KURIR'},totals:{shipping:0,total:2000}};
+   state.pending={...state.pending,selectionChecked:true,input:{lines:[{sku:'TEST',qty:1}],shipping:{firstName:'Test',lastName:'Kupac',phone:'0600000000',street:'Test',houseNumber:'1',postalCode:'11000',city:'Beograd'},guestEmail:'test@example.com',paymentMethod:'POUZECE_GOTOVINA',shippingMethod:'KURIR'},totals:{shipping:0,total:2000}};
    await store.save(c,row.id,state);
   });
   worker.answerFn=async()=>({text:'Potvrđeno. Vaša porudžbina je kreirana.',quoteCreated:false});
@@ -140,6 +141,51 @@ for(const [intent,keepsOffer] of [['question',true],['change',false],['cancel',f
   }finally{await store.close();}
  });
 }
+
+test('yes to a new iron purchase or support question never becomes an old bed receipt',async()=>{
+ for(const question of ['Pegla GOLD CORE je 999 din. Da pripremim ponudu?','Želiš da prosledim otkaz kolegi?']){
+  const {store,worker,calls,event}=await setup();let answers=0;
+  try{
+   await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
+   await store.withConversation(event.conversation,async(row,state,c)=>{
+    delete state.pending;state.historyVersion=2;state.orders=[{number:'OLD-BED'}];
+    state.history=[{role:'assistant',content:'Porudžbina OLD-BED je uspešno kreirana. Ukupno: 34155 RSD.'},{role:'user',content:'Daj GOLD CORE jednu'},{role:'assistant',content:question}];
+    await store.save(c,row.id,state);
+   });
+   worker.answerFn=async({state})=>{answers++;assert(currentPurchaseHistory(state).some(m=>m.content==='Daj GOLD CORE jednu'));return {text:'Pripremam novu ponudu.'};};
+   await store.accept({...event,id:'facebook:new-yes',text:'Da'});await worker.tick();
+   assert.equal(answers,1);assert.equal(calls.length,0);
+  }finally{await store.close();}
+ }
+});
+
+test('legacy wrong-product offer fails selection check before any ERP order write',async()=>{
+ const {store,worker,event}=await setup();const actions=[];
+ try{
+  worker.spc=async p=>{actions.push(p.action);return {ok:true,items:[{sku:'BED',name:'Ležaj VENUS'}]};};
+  worker.cartCheckFn=async()=>({ok:false});
+  worker.answerFn=async()=>({text:'Želiš jednu peglu GOLD CORE, na iste podatke?'});
+  await store.withConversation(event.conversation,async(row,state,c)=>{state.pending.input={lines:[{sku:'BED',qty:1}]};await store.save(c,row.id,state);});
+  await worker.tick();assert(!actions.includes('create_order'));
+  const state=store.decode((await store.pool.query('SELECT state FROM spc_chat_conversations')).rows[0].state);
+  assert.equal(state.pending,undefined);assert.equal(state.orders.length,0);
+ }finally{await store.close();}
+});
+
+test('history recovery includes earlier customer details and staff replies without replaying them',async()=>{
+ const {store,event}=await setup();
+ try{
+  const old={...event,id:'facebook:old-contact',text:'test@example.com',timestamp:event.timestamp-10000};
+  await store.accept(old);await store.pool.query("UPDATE spc_chat_events SET status='done' WHERE id=$1",[old.id]);
+  const staff={...event,id:'facebook:old-staff',text:'GOLD CORE je izbor kupca.',echo:true,botEcho:false,timestamp:event.timestamp-5000};
+  await store.accept(staff);await store.pool.query("UPDATE spc_chat_events SET status='skipped' WHERE id=$1",[staff.id]);
+  const history=await store.history(store.pool,event.conversation,event);
+  assert.deepEqual(history.map(m=>m.role),['user','assistant']);
+  assert(history.some(m=>m.content==='test@example.com'));
+  assert(!history.some(m=>m.content===event.text));
+  assert.equal((await store.pool.query('SELECT * FROM spc_chat_outbox')).rows.length,0);
+ }finally{await store.close();}
+});
 test('semantic decision is persisted and not reinterpreted after uncertain ERP write',async()=>{
  const {store,worker,event}=await setup();let classifications=0,attempts=0;
  worker.intentFn=async()=>{classifications++;return 'confirm';};
