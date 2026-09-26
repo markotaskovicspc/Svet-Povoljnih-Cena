@@ -27,9 +27,10 @@ export class EmailOperations {
   const rows=(await this.c.query("SELECT * FROM spc_email_operations WHERE sender_hash=$1 AND status IN ('prepared','executing','completed') ORDER BY created_at DESC LIMIT 30",[senderKey(message.sender)])).rows;
   const row=rows.find(r=>sentSummaryMatches(sent,message,this.decode(r.payload)));
   if(!row)return null;
-  if(row.status!=='prepared')return this.execute(row,message);
+  if(row.status==='executing')return this.execute(row,message);
   const operation=this.decode(row.payload);
   const intent=await this.classify({message,operation,model:this.model});
+  if(row.status==='completed')return intent==='confirm'?this.execute(row,message):null;
   if(intent==='confirm'){
    await this.c.query("UPDATE spc_email_operations SET status='executing',decision_id=$2,updated_at=now() WHERE id=$1",[row.id,id]);
    return this.execute(row,message);
