@@ -14,9 +14,10 @@ export async function beginReclamation({number,sku,event,state,spc}) {
   if(!result.ok)return {ok:false,error:'Porudžbina nije povezana sa ovim razgovorom ili je pristup istekao. Traži mejl sa porudžbine i uz saglasnost kupca koristi verify_reclamation_order. Ako nema mejl, handoff; ne traži lozinku niti kod za Facebook prijavu.'};
   const order=result.order;
   if(order.status!=='ISPORUCENO') {
+    state.claimStatusNotice=`Porudžbina ${order.number} postoji, ali u sistemu još nije označena kao isporučena. Tek kada isporuka bude evidentirana mogu da otvorim tiket za reklamaciju i nastavim postupak ovde u chatu. Ako je roba već stigla, prijavljeni problem prosleđujem podršci da proveri status isporuke. Kada se status ažurira, javi se ovde da nastavimo.`;
     state.supportRequest={reason:`Prijava problema ${number}: status isporuke zahteva proveru`};
     delete state.reclamation;delete state.reclamationContext;
-    return {ok:false,error:'Status u sistemu još nije ISPORUCENO. Ne osporavaj da je kupac primio robu. Uzmi opis i prosledi podršci; ne menjaj status porudžbine.',order};
+    return {ok:false,error:'Porudžbina POSTOJI. Samo status isporuke još nije ISPORUCENO. Nikad ne reci da porudžbina nije kreirana. Ne osporavaj da je kupac primio robu. Uzmi opis i prosledi podršci; ne menjaj status porudžbine.',order};
   }
   if(!sku)return {ok:true,order,message:'Utvrdi tačnu stavku iz ove porudžbine, ne iz današnjeg kataloga. Pozovi begin_reclamation ponovo sa izabranom šifrom pre traženja fotografije.'};
   const item=order.items.find(i=>i.sku===sku);
@@ -60,7 +61,7 @@ export async function prepareReclamation({input,event,state,spc}) {
 }
 export function reclamationMessage(pending) {
   const i=pending.input;
-  return `Da li potvrđujete slanje reklamacije za porudžbinu ${pending.number}?\n${pending.name} (${i.sku}) × ${i.quantity}\nProblem: ${i.description}\nŽeljeni ishod: ${remedies[i.request]??'dogovor sa podrškom'}\nFotografije: ${i.photos.length}\n\nDovoljno je „Da, pošalji“ ili „Ne“. Prijem reklamacije nije odobrenje zamene ili povraćaja.`;
+  return `Da li potvrđujete slanje reklamacije za porudžbinu ${pending.number}?\n${pending.name} (${i.sku}) × ${i.quantity}\nProblem: ${i.description}\nŽeljeni ishod: ${remedies[i.request]??'dogovor sa podrškom'}\nFotografije: ${i.photos.length}\n\nDovoljno je „DA“ ili „Ne“. Prijem reklamacije nije odobrenje zamene ili povraćaja.`;
 }
 const decision=z.object({intent:z.enum(['confirm','decline','other','unclear'])});
 export async function classifyReclamation({text,history=[],pending,model}) {

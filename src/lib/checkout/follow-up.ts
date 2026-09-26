@@ -4,7 +4,7 @@ import { enqueueBackgroundJob, processBackgroundJob } from "@/lib/background-job
 import { isCashOnDeliveryPaymentMethod } from "@/lib/payments/fulfillment-readiness";
 
 /** Runs only in a worker, after checkout has committed and returned success. */
-export async function prepareCheckoutFollowUp(orderId: string, accessToken: string) {
+export async function prepareCheckoutFollowUp(orderId: string, accessToken: string, customerReplyDraftOnly = false) {
   const order = await db.order.findUniqueOrThrow({
     where: { id: orderId },
     select: {
@@ -18,7 +18,7 @@ export async function prepareCheckoutFollowUp(orderId: string, accessToken: stri
   });
   // Persist every child job before running any provider. If interrupted here,
   // retrying the parent repairs missing jobs using the same idempotency keys.
-  const buyer = await enqueueBackgroundJob({
+  const buyer = customerReplyDraftOnly ? null : await enqueueBackgroundJob({
     kind: "BUYER_RECEIPT", payload: { orderId, accessToken },
     idempotencyKey: `buyer-receipt:${orderId}`,
   });
@@ -51,6 +51,6 @@ export async function prepareCheckoutFollowUp(orderId: string, accessToken: stri
   // These are independent jobs with their own retries. A broken supplier PDF
   // cannot prevent the buyer job from running. Documents retain their existing
   // courier schedule and supplier-order/payment prerequisites in the worker.
-  await Promise.allSettled([buyer, ...supplierJobs].map(job => processBackgroundJob(job.id)));
+  await Promise.allSettled([...(buyer ? [buyer] : []), ...supplierJobs].map(job => processBackgroundJob(job.id)));
   await Promise.allSettled(documentJobs.map(job => processBackgroundJob(job.id)));
 }

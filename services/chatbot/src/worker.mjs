@@ -8,10 +8,13 @@ import {checkCart} from './cart-check.mjs';
 import {readMetaHistory} from './meta-history.mjs';
 import {classifyCancellation,cancellationMessage} from './cancellation.mjs';
 import {classifyReclamation,reclamationMessage,receiveClaimPhotos,prepareReclamation} from './reclamation.mjs';
+import {receiveProductImages,activeVisualContext} from './vision.mjs';
+import {receiveLoyalty} from './loyalty.mjs';
 
 export class Worker {
-  constructor({store,spc,accounts,model,graphVersion,enabled=false,testSenders=[],answerFn=answer,intentFn=classifyOrderIntent,cartCheckFn=checkCart,cancellationIntentFn=classifyCancellation,reclamationIntentFn=classifyReclamation}) {
+  constructor({store,spc,accounts,model,graphVersion,enabled=false,testSenders=[],answerFn=answer,intentFn=classifyOrderIntent,cartCheckFn=checkCart,cancellationIntentFn=classifyCancellation,reclamationIntentFn=classifyReclamation,visionFn=receiveProductImages}) {
     Object.assign(this,{store,spc,accounts,model,graphVersion,enabled,testSenders,answerFn,intentFn,cartCheckFn,cancellationIntentFn,reclamationIntentFn}); this.busy=false;
+    this.visionFn=visionFn;
   }
   async start() {
     // LISTEN starts work immediately; timer only recovers missed notifications/retries.
@@ -57,7 +60,15 @@ export class Worker {
             state.historyVersion=2;
           }
           if(state.reclamationContext&&Date.now()-state.reclamationContext.createdAt>2*3600000)delete state.reclamationContext;
+          if(!activeVisualContext(state))delete state.visualContext;
+          if(event.attachments.length&&!state.reclamationContext){
+            delete state.pending;delete state.confirming;delete state.cancellation;
+            state.claimAttachments=event.attachments.slice(0,5).map(a=>({...a,timestamp:Date.now()}));
+            await this.visionFn({state,event,model:this.model});
+            await this.store.save(c,row.id,state);
+          }
           let reclamationIntent;
+          const loyaltyMessage=await receiveLoyalty({event,state,spc:this.spc});
           if(state.reclamation?.reclamationToken&&!event.attachments.length) {
             delete state.pending;delete state.confirming;delete state.cancellation;
             reclamationIntent=state.submittingReclamation?.eventId===event.id?'confirm':await this.reclamationIntentFn({text:event.text,history:state.history,pending:state.reclamation,model:this.model});
@@ -93,7 +104,9 @@ export class Worker {
           }
           let message;
           let images=[];
-          if (state.reclamationInFlight) {
+          if(loyaltyMessage){
+            message=loyaltyMessage;
+          } else if (state.reclamationInFlight) {
             await this.store.pause(row.id,'Proveriti prethodno slanje reklamacije pre nastavka');
             await c.query(`UPDATE spc_chat_events SET status='failed' WHERE id=$1`,[job.id]);
             return;
@@ -156,7 +169,7 @@ export class Worker {
             delete state.cancellation;
           } else if (state.cancellation && cancellationIntent==='unclear') {
             message=cancellationMessage(state.cancellation);
-          } else if (event.attachments.length) {
+          } else if (event.attachments.length && state.reclamationContext) {
             delete state.cancellation;delete state.pending;delete state.confirming;
             if(state.reclamationContext) {
               const previous=state.reclamation;
@@ -167,9 +180,6 @@ export class Worker {
                 await prepareReclamation({input:{...previous.input,number:previous.number},event,state,spc:this.spc});
                 if(state.reclamation)message=reclamationMessage(state.reclamation)+(imported.failed?'\nNeki prilozi nisu dodati; podrška će ih proveriti.':'');
               } else message+=' Opišite problem i napišite da li želite zamenu, popravku ili drugi dogovor.';
-            } else {
-              state.claimAttachments=event.attachments.slice(0,5).map(a=>({...a,timestamp:Date.now()}));
-              message='Primio sam prilog. Da li se odnosi na reklamaciju i, ako da, na koju porudžbinu i artikal?';
             }
           } else if (state.pending && intent==='cancel') {
             delete state.pending;delete state.confirming;
@@ -183,6 +193,7 @@ export class Worker {
               state.orders.push({number:result.data.number,accessToken:result.data.accessToken,items:state.pending.input?.lines?.map(l=>({...l,name:state.pending.productNames?.[l.sku]})),createdAt:Date.now()});
               message=`Porudžbina ${result.data.number} je uspešno kreirana. Ukupno: ${result.data.total} RSD, sa dostavom. Potvrda stiže i na mejl.`;
               delete state.pending;delete state.confirming;
+              delete state.visualContext;
             } else {
               const code=result.error?.code;
               console.error('chat.order_rejected',{code:typeof code==='string'&&/^[A-Z_]+$/.test(code)?code:'UNKNOWN'});
@@ -193,11 +204,14 @@ export class Worker {
             message=`Porudžbina ${state.orders.at(-1).number} je već kreirana. Nije napravljena nova porudžbina. Ako želite izmenu, napišite šta menjate.`;
           } else {
             if(state.reclamationInFlight) throw new Error('RECLAMATION_UNCERTAIN');
+            delete state.claimStatusNotice;
             const result=await this.answerFn({event,state,spc:this.spc,model:this.model,pause:reason=>this.store.pause(row.id,reason)});
             const normalizedReply=String(result.text??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'dj');
             const unverifiedSuccess=!result.quoteCreated && !state.orders.some(o=>String(result.text).includes(o.number)) && /potvrdjeno|porudzbin[^.!?\n]{0,70}(?:kreiran|potvrdjen|evidentiran|primljen|uspesn)/i.test(normalizedReply);
             if(unverifiedSuccess) {
-              result.text='Porudžbina još nije kreirana u sistemu. Za naručivanje je potrebna važeća ponuda i vaša potvrda.';
+              result.text=state.orders.length
+                ? 'Nije kreirana nova porudžbina. Prethodne porudžbine su sačuvane. Napišite broj porudžbine koju želite da proverim.'
+                : 'Porudžbina još nije kreirana u sistemu. Za naručivanje je potrebna važeća ponuda i vaša potvrda.';
               if(state.pending) result.text+='\n\n'+quoteMessage(state.pending);
             }
             if(!result.quoteCreated && !unverifiedSuccess && intent!=='question') delete state.pending;
@@ -210,6 +224,8 @@ export class Worker {
             if(!state.reclamation && /reklamacija[^.!?\n]{0,90}(?:zabelezena|kreirana|primljena|evidentirana)|prijava[^.!?\n]{0,70}(?:zabelezena|kreirana|evidentirana)/i.test(normalizedReply) && !(state.reclamations??[]).some(r=>String(result.text).includes(r.number))) message='Prijava još nije potvrđena u sistemu. Pripremimo sažetak reklamacije za vašu potvrdu.';
             if(state.reclamation?.reclamationToken) message=reclamationMessage(state.reclamation);
             else if(state.reclamation) {delete state.reclamation;message='Pripremimo ponovo kratak sažetak reklamacije. Napišite koji artikal prijavljujete.';}
+            if(state.claimStatusNotice){message=state.claimStatusNotice;delete state.claimStatusNotice;images=[];}
+            if(state.loyaltyPending){message=state.loyaltyPending.summary;images=[];delete state.pending;delete state.confirming;}
             if(message.length>1850) {
               delete state.pending; delete state.reclamation;delete state.cancellation;
               state.supportRequest={reason:'Složena ponuda zahteva zaposlenog'};

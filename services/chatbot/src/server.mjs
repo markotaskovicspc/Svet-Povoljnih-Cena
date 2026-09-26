@@ -2,7 +2,7 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { equal, verifyMeta, parseEvents } from './security.mjs';
 
-export async function createHttpServer({store,worker,accounts,adminToken,appSecret,verifyToken}) {
+export async function createHttpServer({store,worker,emailWorker,accounts,adminToken,appSecret,verifyToken}) {
 const page=await readFile(new URL('../public/index.html',import.meta.url));
 const server=http.createServer(async(req,res)=>{
   res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');
@@ -21,6 +21,11 @@ const server=http.createServer(async(req,res)=>{
     let bytes=0;const chunks=[];
     for await(const chunk of req){bytes+=chunk.length;if(bytes>256*1024)return reply(413,{error:'Too large'});chunks.push(chunk);}
     const raw=Buffer.concat(chunks);
+    if(req.method==='GET'&&url.pathname==='/admin/email-drafts'){
+      if(!emailWorker||emailWorker.status==='disabled')return reply(200,{status:'disabled'});
+      const result=await store.pool.query('SELECT status,reason,count(*)::int AS count FROM spc_email_drafts GROUP BY status,reason');
+        return reply(200,{status:emailWorker.status,mailbox:'podrska@svetpovoljnihcena.rs',draftOnly:true,erpActionsEnabled:emailWorker.env.EMAIL_ACTIONS_ENABLED==='true',counts:result.rows});
+    }
     if(isWebhook){
       if(!verifyMeta(raw,req.headers['x-hub-signature-256'],appSecret))return reply(401,{error:'Invalid signature'});
       let body;try{body=JSON.parse(raw);}catch{return reply(400,{error:'Invalid JSON'});}

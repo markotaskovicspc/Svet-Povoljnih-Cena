@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict';
+import {answer} from '../src/agent.mjs';
+import {draftEmail} from '../src/email-draft-agent.mjs';
+const model=process.env.OPENAI_MODEL??'gpt-5.4-mini',calls=[];
+const product={sku:'TESTIRON',name:'Test pegla',price:2000,loyaltyPrice:1400,available:true};
+const spc=async input=>{
+ calls.push(input);
+ if(input.action==='search')return {ok:true,items:[product]};
+ if(input.action==='prepare_loyalty')return {ok:true,email:input.email,challenge:'synthetic-consent',summary:'Loyalty saglasnost: DA',expiresAt:Date.now()+60000};
+ if(input.action==='quote')return {ok:true,input:input.input,quoteToken:'synthetic-offer',loyaltyApplied:true,totals:{shipping:400,total:1590,firstPurchaseDiscount:210}};
+ throw Error('Unexpected write: '+input.action);
+};
+const state={orders:[],history:[{role:'user',content:'Želim jednu Test peglu TESTIRON.'},{role:'assistant',content:'Test pegla (TESTIRON): 2000 RSD, uz loyalty saglasnost 1400 RSD. Želite li članstvo?'}],customer:{guestEmail:'synthetic@example.test',shipping:{firstName:'Test',lastName:'Kupac',phone:'0601234567',street:'Test',houseNumber:'1',city:'Kragujevac',postalCode:'34000'},paymentMethod:'POUZECE_GOTOVINA',shippingMethod:'KURIR'}};
+const event={channel:'facebook',conversation:'synthetic-test',text:'Želim loyalty, mejl synthetic@example.test.',attachments:[],timestamp:Date.now()};
+await answer({event,state,spc,model});
+assert(state.loyaltyPending);assert(!calls.some(c=>c.action==='quote'));
+delete state.loyaltyPending;state.loyalty={proof:'synthetic-proof',email:'synthetic@example.test',expiresAt:Date.now()+60000};
+state.history.push({role:'user',content:'DA za loyalty saglasnost.'},{role:'assistant',content:'Loyalty je aktiviran. Porudžbina još nije kreirana.'});
+await answer({event:{...event,text:'Pripremi ponudu za jednu TESTIRON peglu, moje podatke već imaš, kurir, pouzeće gotovina.'},state,spc,model});
+assert.equal(calls.find(c=>c.action==='quote')?.loyaltyProof,'synthetic-proof');
+const emailCalls=[];
+await draftEmail({message:{sender:'synthetic@example.test',text:'Želim da pristupim loyalty programu za peglu TESTIRON.',attachments:[]},history:[],context:{loyaltyAccepted:false},spc,model,prepareAction:async input=>{emailCalls.push(input);return {ok:true,kind:'loyalty',summary:'Synthetic consent',token:'synthetic'};}});
+assert.equal(emailCalls[0]?.action,'prepare_loyalty');
+console.log('Loyalty chat consent, separate priced quote and email consent tools passed with synthetic data; no ERP writes or outgoing messages.');

@@ -16,6 +16,13 @@ beforeEach(() => {
   mocks.process.mockResolvedValue({ claimed: true, ok: true });
 });
 
+it("email draft workflow skips automatic buyer receipt while retaining fulfillment jobs", async () => {
+  await prepareCheckoutFollowUp("o1", "access-token-1234567890", true);
+  expect(mocks.enqueue.mock.calls.map(([args]) => args.kind)).not.toContain("BUYER_RECEIPT");
+  expect(mocks.process).not.toHaveBeenCalledWith("buyer-receipt:o1");
+  expect(mocks.process).toHaveBeenCalledWith("supplier-order:supplier1:checkout");
+});
+
 it("persists all independent jobs before invoking any provider and runs buyer despite broken supplier PDF", async () => {
   mocks.process.mockImplementation(async (id: string) => {
     expect(mocks.enqueue).toHaveBeenCalledTimes(4);

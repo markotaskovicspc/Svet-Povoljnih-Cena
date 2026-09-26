@@ -13,12 +13,25 @@ customer confirmation and business-side effects. No hosted shell/sandbox is expo
 - Facebook and Instagram adapters. Configure only the exact business account IDs.
 - Serbian AI sales/support, live SPC product search, collection of delivery data.
 - Signed 15-minute quotes produced by SPC's actual checkout calculation.
-- Exact customer confirmation code, replay-safe checkoutSessionId, server price check.
+- Plain DA confirmation, replay-safe checkoutSessionId, server price check.
 - Order status and text complaints for orders created in the same conversation.
 - Complaint confirmation and quarantine after uncertain writes (no unsafe retries).
 - Encrypted conversation state, order access tokens and webhook bodies at rest.
 - Operator inbox at `/`, pause/resume and manual reply, automatic pause for human echoes.
-- Images/attachments and outside-conversation orders hand off to staff. No refund tool.
+- Customer photos/collages are described with object positions, readable names and codes.
+  Subsequent "the one at the top" messages reuse that encrypted description for two hours.
+  The bot searches the current catalog and shows the candidate for customer confirmation
+  before preparing an order. Visual resemblance alone never establishes a SKU or price.
+  Up to three JPEG/PNG/WebP/GIF attachments per event, 8 MB each, accepted only from
+  HTTPS Meta media hosts; redirects, MIME and byte limits are checked. Failed/unclear
+  photos ask for a clearer image or product name, without stopping the conversation.
+  Existing active reclamation photo uploads stay attached to their selected item.
+  Email attachment reading is not included in this chat image feature. No refund tool.
+
+Image checks: `node --test test/vision.test.mjs` and the worker flow tests.
+From the repository checkout (requires the root sharp dev dependency), run
+`node --env-file=.env.local scripts/vision-smoke.mjs` in this service directory
+for a synthetic image-to-catalog-to-confirmed-quote test without ERP writes or sends.
 - Send-window checks and quarantine for uncertain sends. No automated HUMAN_AGENT tags.
 
 ## Deliberate first-release boundaries
@@ -128,7 +141,15 @@ Search results are refreshed by exact SKU and availability is checked for the re
 
 Additional model regressions: `scripts/cancellation-smoke.mjs` and `scripts/catalog-smoke.mjs` (synthetic conversations, mock ERP).
 
-## Reklamacije kroz chat
+## Loyalty kroz chat i mejl
+
+Katalog vraća javnu cenu i važeću loyalty ponudu iz ERP pricing engine-a. Saglasnost se priprema odvojeno od kupovine, uz javni tekst `/loyalty/uslovi` koji prikazuje postojeću verziju izjave. Sledeće nedvosmisleno `DA` aktivira samo članstvo; porudžbina zahteva novu ponudu i zasebnu potvrdu. Nema prijave na marketing. Odbijanje ostavlja kupovinu bez loyalty pogodnosti.
+
+ERP čuva verziju/vreme pristanka i potpisani pristup vezuje za kanal, razgovor i mejl, najduže 30 dana. Ne prihvata modelov `guestLoyalty` kao dokaz. Ponuda i konačni upis koriste isti postojeći checkout obračun; popust za prvu kupovinu proverava ERP po fiskalnoj istoriji. Izmena cene zahteva novu potvrdu. Ponovljeni zahtev koristi isti dokaz i ne produžava mu rok.
+
+Mejl koristi postojeći dnevnik operacija: saglasnost mora stvarno biti poslata iz nacrta, a odgovor mora odgovarati tom neizmenjenom sažetku i pošiljaocu. Sve poruke ostaju nacrti. Testovi: `test/loyalty.test.mjs`, loyalty scenariji u `flow.test.mjs` i `email-actions.test.mjs`, ERP `channel-loyalty.test.ts`. `scripts/loyalty-smoke.mjs` poziva model samo sa sintetičkim podacima i lažnim ERP klijentom.
+
+## Reklamacioni tok
 
 Bot razlikuje kvar, fizičko oštećenje, nedostajući/pogrešan artikal, upit o isporuci i otkazivanje. `begin_reclamation` čita stvarne stavke i postojeće reklamacije uz dokaz pristupa. Za porudžbinu sa drugog kanala `verify_reclamation_order` šalje kod isključivo na podudarni mejl porudžbine. Provera važi 10 minuta i najviše 5 pokušaja; rezultujući pristup važi 2 sata, vezan za kanal i razgovor i ne daje pravo otkazivanja/kupovine.
 

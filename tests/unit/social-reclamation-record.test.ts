@@ -18,6 +18,11 @@ it("writes linked metadata, photos and requested outcome in the existing ERP rec
   expect(await createSocialReclamation(input, context)).toMatchObject({ ok: true, number: "R-1-SPC-TEST" });
   expect(m.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ id: context.id, orderId: order.id, orderItemId: "item", sku: "IRON", request: "ZAMENA", type: "KVAR", adminNote: context.note, events: { create: expect.objectContaining({ status: "PRIMLJENO", note: context.note }) } }) }));
 });
+it("email workflow records the case without sending an automatic customer receipt", async () => {
+  expect(await createSocialReclamation(input, { ...context, customerReplyDraftOnly: true })).toMatchObject({ ok: true });
+  expect(m.create).toHaveBeenCalled();
+  expect(m.enqueue.mock.calls.some(([job]) => job.kind === 'RECLAMATION_RECEIPT')).toBe(false);
+});
 it("rechecks idempotency under the order lock before incrementing counters or creating another case", async () => {
   m.lockedExisting.mockResolvedValue({ id: context.id, number: "R-1-SPC-TEST" });
   expect(await createSocialReclamation(input, context)).toMatchObject({ ok: true });

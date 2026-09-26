@@ -8,6 +8,6 @@ export function productPresentation(product) {
       image.hostname==='vyebjbcfhgujlvjnoxpl.supabase.co' &&
       image.pathname.startsWith('/storage/v1/object/public/product-media/') && !image.search) imageUrl=image.href;
   } catch {}
-  const caption=[`${product.name} (${product.sku})`,`${product.price} RSD`,url].filter(Boolean).join('\n');
+  const caption=[`${product.name} (${product.sku})`,`${product.price} RSD`,product.loyaltyPrice>0&&product.loyaltyPrice<product.price?`Uz loyalty saglasnost: ${product.loyaltyPrice} RSD`:null,url].filter(Boolean).join('\n');
   return {sku:product.sku,url,imageUrl,caption};
 }

@@ -81,6 +81,31 @@ test('plain confirmation creates pending order once, repeated confirmation does 
     assert(replies.some(t=>t.includes('već kreirana')));
   }finally{await store.close();}
 });
+test('loyalty DA activates only consent even with a stale purchase; next offer needs its own DA',async()=>{
+ const {store,worker,event}=await setup();const actions=[];
+ worker.spc=async input=>{actions.push(input.action);return {ok:true,email:'buyer@example.com',proof:'accepted',expiresAt:Date.now()+60000};};
+ try{
+  await store.pool.query('DELETE FROM spc_chat_events');
+  await store.withConversation(event.conversation,async(row,state,c)=>{state.loyaltyPending={challenge:'consent',email:'buyer@example.com'};await store.save(c,row.id,state);});
+  await store.accept({...event,text:'DA'});await worker.tick();await worker.tick();
+  assert.deepEqual(actions,['accept_loyalty']);
+  const state=store.decode((await store.pool.query('SELECT state FROM spc_chat_conversations')).rows[0].state);
+  assert.equal(state.pending,undefined);assert.equal(state.orders.length,0);assert.equal(state.loyalty.proof,'accepted');
+ }finally{await store.close();}
+});
+
+test('shopping photo reaches sales with positional context; later top-item reference retains it without reviving old quote',async()=>{
+ const {store,worker,calls,event}=await setup();let reads=0;const received=[];
+ try{
+  await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
+  worker.visionFn=async({state,event})=>{reads++;state.visualContext={eventId:event.id,createdAt:event.timestamp,images:[{imageNumber:1,readable:true,objects:[{position:'gore',description:'pegla'}]}]};};
+  worker.answerFn=async({state,event})=>{received.push({text:event.text,visual:state.visualContext,pending:state.pending});return {text:event.text?'Mislite na peglu sa slike?':'Koji artikal sa slike želite?',quoteCreated:false};};
+  await store.accept({...event,id:'photo',text:'',attachments:[{type:'image',url:'https://fbcdn.net/a'}]});await worker.tick();
+  await store.accept({...event,id:'position',text:'Ovu skroz gore hoću jednu',attachments:[]});await worker.tick();
+  assert.equal(reads,1);assert.equal(received.length,2);assert.equal(received[1].visual.images[0].objects[0].position,'gore');assert.equal(received[0].pending,undefined);assert.equal(calls.length,0);
+  const row=(await store.pool.query('SELECT * FROM spc_chat_conversations')).rows[0];assert.equal(row.paused,false);
+ }finally{await store.close();}
+});
 
 test('product image and link are persisted once and sent as distinct Messenger messages',async()=>{
  const {store,worker,calls,event}=await setup();const originalFetch=globalThis.fetch;const sent=[];
@@ -359,5 +384,25 @@ test('verification code is processed outside the model and grants only claim acc
   await store.withConversation(event.conversation,async(row,state,c)=>{delete state.pending;state.claimVerification={challenge:'challenge'};await store.save(c,row.id,state);});
   await store.accept({...event,id:'fb:code',text:'123456'});await worker.tick();
   const state=store.decode((await store.pool.query('SELECT state FROM spc_chat_conversations')).rows[0].state);assert.equal(state.claimOrders['SPC-EXTERNAL'].proof,'signed-proof');assert.equal(state.orders.length,0);assert(!JSON.stringify(state.history).includes('123456'));
+ }finally{await store.close();}
+});
+
+test('complaint before delivery acknowledges existing order instead of denying creation',async()=>{
+ const {store,worker,event}=await setup();
+ try{
+  await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
+  await store.withConversation(event.conversation,async(row,state,c)=>{delete state.pending;state.orders=[{number:'SPC-TEST-1',accessToken:'owned'}];await store.save(c,row.id,state);});
+  worker.answerFn=async({state,event})=>{
+   const {beginReclamation}=await import('../src/reclamation.mjs');
+   await beginReclamation({number:'SPC-TEST-1',sku:'TEST',event,state,spc:async()=>({ok:true,order:{number:'SPC-TEST-1',status:'KREIRANO',items:[{sku:'TEST',name:'Bokserice',qty:1}]}})});
+   return {text:'Porudžbina je kreirana, ali još nije isporučena.',quoteCreated:false};
+  };
+  await store.accept({...event,id:'facebook:claim-before-delivery',text:'Hoću da reklamiram, iscepano je'});await worker.tick();
+  const state=store.decode((await store.pool.query('SELECT state FROM spc_chat_conversations')).rows[0].state);
+  assert.match(state.history.at(-1).content,/SPC-TEST-1 postoji/);
+  assert.match(state.history.at(-1).content,/u sistemu još nije označena kao isporučena/);
+  assert.match(state.history.at(-1).content,/Tek kada isporuka bude evidentirana mogu da otvorim tiket/);
+  assert.doesNotMatch(state.history.at(-1).content,/nije kreirana/);
+  assert.equal(state.orders.length,1);assert(!state.reclamation);assert(!state.claimStatusNotice);
  }finally{await store.close();}
 });
