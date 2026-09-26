@@ -141,7 +141,15 @@ Search results are refreshed by exact SKU and availability is checked for the re
 
 Additional model regressions: `scripts/cancellation-smoke.mjs` and `scripts/catalog-smoke.mjs` (synthetic conversations, mock ERP).
 
-## Reklamacije kroz chat
+## Loyalty kroz chat i mejl
+
+Katalog vraća javnu cenu i važeću loyalty ponudu iz ERP pricing engine-a. Saglasnost se priprema odvojeno od kupovine, uz javni tekst `/loyalty/uslovi` koji prikazuje postojeću verziju izjave. Sledeće nedvosmisleno `DA` aktivira samo članstvo; porudžbina zahteva novu ponudu i zasebnu potvrdu. Nema prijave na marketing. Odbijanje ostavlja kupovinu bez loyalty pogodnosti.
+
+ERP čuva verziju/vreme pristanka i potpisani pristup vezuje za kanal, razgovor i mejl, najduže 30 dana. Ne prihvata modelov `guestLoyalty` kao dokaz. Ponuda i konačni upis koriste isti postojeći checkout obračun; popust za prvu kupovinu proverava ERP po fiskalnoj istoriji. Izmena cene zahteva novu potvrdu. Ponovljeni zahtev koristi isti dokaz i ne produžava mu rok.
+
+Mejl koristi postojeći dnevnik operacija: saglasnost mora stvarno biti poslata iz nacrta, a odgovor mora odgovarati tom neizmenjenom sažetku i pošiljaocu. Sve poruke ostaju nacrti. Testovi: `test/loyalty.test.mjs`, loyalty scenariji u `flow.test.mjs` i `email-actions.test.mjs`, ERP `channel-loyalty.test.ts`. `scripts/loyalty-smoke.mjs` poziva model samo sa sintetičkim podacima i lažnim ERP klijentom.
+
+## Reklamacioni tok
 
 Bot razlikuje kvar, fizičko oštećenje, nedostajući/pogrešan artikal, upit o isporuci i otkazivanje. `begin_reclamation` čita stvarne stavke i postojeće reklamacije uz dokaz pristupa. Za porudžbinu sa drugog kanala `verify_reclamation_order` šalje kod isključivo na podudarni mejl porudžbine. Provera važi 10 minuta i najviše 5 pokušaja; rezultujući pristup važi 2 sata, vezan za kanal i razgovor i ne daje pravo otkazivanja/kupovine.
 

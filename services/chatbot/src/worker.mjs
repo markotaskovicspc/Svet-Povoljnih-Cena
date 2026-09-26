@@ -9,6 +9,7 @@ import {readMetaHistory} from './meta-history.mjs';
 import {classifyCancellation,cancellationMessage} from './cancellation.mjs';
 import {classifyReclamation,reclamationMessage,receiveClaimPhotos,prepareReclamation} from './reclamation.mjs';
 import {receiveProductImages,activeVisualContext} from './vision.mjs';
+import {receiveLoyalty} from './loyalty.mjs';
 
 export class Worker {
   constructor({store,spc,accounts,model,graphVersion,enabled=false,testSenders=[],answerFn=answer,intentFn=classifyOrderIntent,cartCheckFn=checkCart,cancellationIntentFn=classifyCancellation,reclamationIntentFn=classifyReclamation,visionFn=receiveProductImages}) {
@@ -67,6 +68,7 @@ export class Worker {
             await this.store.save(c,row.id,state);
           }
           let reclamationIntent;
+          const loyaltyMessage=await receiveLoyalty({event,state,spc:this.spc});
           if(state.reclamation?.reclamationToken&&!event.attachments.length) {
             delete state.pending;delete state.confirming;delete state.cancellation;
             reclamationIntent=state.submittingReclamation?.eventId===event.id?'confirm':await this.reclamationIntentFn({text:event.text,history:state.history,pending:state.reclamation,model:this.model});
@@ -102,7 +104,9 @@ export class Worker {
           }
           let message;
           let images=[];
-          if (state.reclamationInFlight) {
+          if(loyaltyMessage){
+            message=loyaltyMessage;
+          } else if (state.reclamationInFlight) {
             await this.store.pause(row.id,'Proveriti prethodno slanje reklamacije pre nastavka');
             await c.query(`UPDATE spc_chat_events SET status='failed' WHERE id=$1`,[job.id]);
             return;
@@ -221,6 +225,7 @@ export class Worker {
             if(state.reclamation?.reclamationToken) message=reclamationMessage(state.reclamation);
             else if(state.reclamation) {delete state.reclamation;message='Pripremimo ponovo kratak sažetak reklamacije. Napišite koji artikal prijavljujete.';}
             if(state.claimStatusNotice){message=state.claimStatusNotice;delete state.claimStatusNotice;images=[];}
+            if(state.loyaltyPending){message=state.loyaltyPending.summary;images=[];delete state.pending;delete state.confirming;}
             if(message.length>1850) {
               delete state.pending; delete state.reclamation;delete state.cancellation;
               state.supportRequest={reason:'Složena ponuda zahteva zaposlenog'};

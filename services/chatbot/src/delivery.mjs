@@ -18,6 +18,7 @@ export function orderErrorMessage(code) {
     INACTIVE:'Artikal više nije dostupan za poručivanje.',
     PAYMENT_UNAVAILABLE:'Izabrani način plaćanja nije dostupan.',
     GUEST_REQUIRES_EMAIL:'Za porudžbinu je potreban vaš mejl.',
+    LOYALTY_CONSENT_REQUIRED:'Potrebna je nova loyalty saglasnost, pa nova ponuda za potvrdu.',
   };
   return 'Porudžbina nije kreirana. '+(reasons[code]??'Sistem nije prihvatio porudžbinu. Potrebna je provera zaposlenog.');
 }

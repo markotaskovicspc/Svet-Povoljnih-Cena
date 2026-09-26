@@ -15,17 +15,21 @@ import { createHash } from "node:crypto";
 import { cancelWebOrderByCustomer } from "@/lib/orders/cancellation.server";
 import { canCustomerCancelStatus, OrderCancellationError } from "@/lib/orders/cancellation";
 import { handleSocialReclamation, socialReclamationActions } from "@/lib/social/reclamations";
+import {prepareChannelLoyalty,acceptChannelLoyalty,channelLoyalty} from '@/lib/loyalty/channel.server';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 const identity = z.object({ channel: z.enum(["facebook", "instagram"]), conversationId: z.string().min(3).max(200) });
-const quotePayload = identity.extend({ input: createOrderSchema, total: z.number().nonnegative(), expiresAt: z.number() });
+const loyaltyContext=z.object({email:z.email(),consentVersion:z.string(),consentAt:z.string()}).nullable().optional();
+const quotePayload = identity.extend({ input: createOrderSchema, total: z.number().nonnegative(), expiresAt: z.number(),loyaltyProof:z.string().optional(),loyalty:loyaltyContext });
 const cancellationPayload = identity.extend({ purpose: z.literal("cancel_order"), number: z.string(), expiresAt: z.number() });
 const requestSchema = z.discriminatedUnion("action", [
   ...socialReclamationActions,
   identity.extend({ action: z.literal("support_handoff"), id: z.string().min(1).max(300), reason: z.string().max(200), transcript: z.string().max(10000), reclamationId: z.string().regex(/^[A-Za-z0-9_-]{1,100}$/).optional() }),
   z.object({ action: z.literal("search"), query: z.string().trim().min(1).max(100), quantity: z.number().int().positive().max(1000).default(1) }),
-  identity.extend({ action: z.literal("quote"), input: createOrderSchema }),
+  identity.extend({ action: z.literal("prepare_loyalty"), email:z.email() }),
+  identity.extend({ action: z.literal("accept_loyalty"), email:z.email(),challenge:z.string().max(5000) }),
+  identity.extend({ action: z.literal("quote"), input: createOrderSchema,loyaltyProof:z.string().max(5000).optional() }),
   identity.extend({ action: z.literal("create_order"), quoteToken: z.string().max(20000) }),
   z.object({ action: z.literal("order_status"), number: z.string().max(80), accessToken: z.string().max(200) }),
   identity.extend({ action: z.literal("prepare_cancellation"), number: z.string().max(80), accessToken: z.string().max(200) }),
@@ -47,6 +51,11 @@ export async function POST(req: Request) {
   if (!parsed.success) return NextResponse.json({ error: "INVALID", issues: parsed.error.flatten() }, { status: 400 });
   const body = parsed.data;
   try {
+    if(body.action==='prepare_loyalty')return NextResponse.json(prepareChannelLoyalty(body,secret));
+    if(body.action==='accept_loyalty'){
+      const result=await acceptChannelLoyalty(body.challenge,body,secret);
+      return NextResponse.json(result?{ok:true,...result}:{ok:false,error:{code:'LOYALTY_CONSENT_EXPIRED'}});
+    }
     if (body.action === "support_handoff") {
       if (getEmailConfig().provider === "none") return NextResponse.json({ ok: false, error: "EMAIL_NOT_CONFIGURED" }, { status: 503 });
       const caseLink = body.reclamationId ? `\nReklamacija u ERP-u: https://www.svetpovoljnihcena.rs/admin/erp/reklamacije-dnevnik/${encodeURIComponent(body.reclamationId)}` : "";
@@ -64,25 +73,28 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, items: products.map(p => ({
         sku: p.sku, name: p.name, slug: p.slug,
         price: resolveProductPriceQuote(p, { loggedIn: false }).payable.effective,
+        loyaltyPrice: resolveProductPriceQuote(p, { loggedIn: false }).loyaltyOffer?.effective ?? null,
         available: p.stock >= body.quantity, checkedQuantity: body.quantity, availabilitySource: p.availabilitySource, image: p.media.images[0] ?? null,
       })) });
     }
     if (body.action === "quote") {
+      const loyalty=await channelLoyalty(body.loyaltyProof,{...body,email:body.input.guestEmail??''},secret);
+      if(body.loyaltyProof&&!loyalty)return NextResponse.json({ok:false,error:{code:'LOYALTY_CONSENT_REQUIRED'}});
       // Auth identity and discounts cannot be supplied by the model.
-      const input = createOrderSchema.parse({ ...body.input, checkoutSessionId: undefined, guestLoyalty: false, useSavedCard: false,
+      const input = createOrderSchema.parse({ ...body.input, checkoutSessionId: undefined, guestLoyalty: Boolean(loyalty), useSavedCard: false,
         analytics: undefined, voucherCode: undefined,
         notes: `[${body.channel.toUpperCase()}] ${body.conversationId}`,
       });
       if (!["POUZECE_GOTOVINA", "UPLATA_NA_RACUN"].includes(input.paymentMethod)) {
         return NextResponse.json({ ok: false, error: { code: "CHAT_PAYMENT_UNSUPPORTED" } });
       }
-      const preview = await createOrder(input, null, null, { previewOnly: true });
+      const preview = await createOrder(input, null, loyalty, { previewOnly: true });
       if (!preview.ok) return NextResponse.json(preview);
       input.checkoutSessionId = `social_${randomUUID().replaceAll("-", "")}`;
       const expiresAt = Date.now() + 15 * 60_000;
-      const quoteToken = signSocialQuote({ channel: body.channel, conversationId: body.conversationId, input, total: preview.data.total, expiresAt }, secret);
+      const quoteToken = signSocialQuote({ channel: body.channel, conversationId: body.conversationId, input, total: preview.data.total, expiresAt,loyaltyProof:body.loyaltyProof,loyalty }, secret);
       const { id: _id, number: _number, accessToken: _token, ...totals } = preview.data;
-      return NextResponse.json({ ok: true, quoteToken, expiresAt, totals, input });
+      return NextResponse.json({ ok: true, quoteToken, expiresAt, totals, input,loyaltyApplied:Boolean(loyalty) });
     }
     if (body.action === "create_order") {
       const quote = quotePayload.parse(readSocialQuote(body.quoteToken, secret));
@@ -90,7 +102,9 @@ export async function POST(req: Request) {
       // Permit recovery of a committed order after response loss, even after expiry.
       const existing = await db.checkoutSession.findUnique({ where: { id: quote.input.checkoutSessionId! }, select: { orderId: true } });
       if (quote.expiresAt < Date.now() && !existing?.orderId) return NextResponse.json({ ok: false, error: { code: "QUOTE_EXPIRED" } });
-      const result = await createOrder(quote.input, null, null, { expectedTotal: quote.total });
+      const loyalty=existing?.orderId&&quote.loyalty?{...quote.loyalty,consentAt:new Date(quote.loyalty.consentAt)}:await channelLoyalty(quote.loyaltyProof,{...body,email:quote.input.guestEmail??''},secret);
+      if(quote.input.guestLoyalty&&!loyalty)return NextResponse.json({ok:false,error:{code:'LOYALTY_CONSENT_REQUIRED'}});
+      const result = await createOrder(quote.input, null, loyalty, { expectedTotal: quote.total });
       if (result.ok) {
         after(async () => {
           try {

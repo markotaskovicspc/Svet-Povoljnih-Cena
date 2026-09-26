@@ -45,10 +45,15 @@ export class EmailOperations {
   const row=(await this.c.query("SELECT * FROM spc_email_operations WHERE id=$1 AND status='prepared'",[id])).rows[0];
   return row?this.decode(row.payload):null;
  }
+ async loyalty(sender){
+  const rows=(await this.c.query("SELECT result FROM spc_email_operations WHERE sender_hash=$1 AND status='completed' AND result IS NOT NULL ORDER BY created_at DESC LIMIT 100",[senderKey(sender)])).rows;
+  return rows.map(r=>this.decode(r.result)).find(r=>r.ok&&r.kind==='loyalty'&&r.expiresAt>Date.now())??null;
+ }
  async prepare(id,message,input){
   if(!message.messageId)return {ok:false,error:{code:'MISSING_REPLY_ID'}};
   const existing=await this.existing(id);if(existing)return existing;
-  const result=await this.call({...input,sender:message.sender,requestId:id},this.env);
+  const loyalty=input.action==='prepare_purchase'?await this.loyalty(message.sender):null;
+  const result=await this.call({...input,...(loyalty?{loyaltyProof:loyalty.proof}:{}),sender:message.sender,requestId:id},this.env);
   if(!result.ok||!result.token)return result;
   const operation=operationRecord(result,message);
   await this.c.query('INSERT INTO spc_email_operations(id,sender_hash,payload) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[id,senderKey(message.sender),this.encode(operation)]);

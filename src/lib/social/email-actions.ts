@@ -8,33 +8,43 @@ import {createReclamationSchema,createSocialReclamation} from "@/lib/api/reclama
 import {cancelWebOrderByCustomer} from "@/lib/orders/cancellation.server";
 import {canCustomerCancelStatus,OrderCancellationError} from "@/lib/orders/cancellation";
 import {signSocialQuote,readSocialQuote} from "./security";
+import {prepareChannelLoyalty,acceptChannelLoyalty,channelLoyalty} from '@/lib/loyalty/channel.server';
 
 const id=z.string().regex(/^[a-f0-9]{64}$/);
 const base=z.object({sender:z.email(),requestId:id});
 const claim=createReclamationSchema.extend({category:z.enum(['KVAR','FIZICKO_OSTECENJE','NEDOSTAJE_ARTIKAL','POGRESAN_ARTIKAL']),request:z.enum(['POPRAVKA','ZAMENA','POVRACAJ_NOVCA','UMANJENJE_CENE']).nullable()});
 export const emailActionSchema=z.discriminatedUnion('action',[
  base.extend({action:z.literal('prepare_cancel'),number:z.string().max(80)}),
- base.extend({action:z.literal('prepare_purchase'),input:createOrderSchema}),
+ base.extend({action:z.literal('prepare_loyalty')}),
+ base.extend({action:z.literal('prepare_purchase'),input:createOrderSchema,loyaltyProof:z.string().max(5000).optional()}),
  base.extend({action:z.literal('prepare_claim'),input:claim}),
  z.object({action:z.literal('execute'),sender:z.email(),token:z.string().max(30000),confirmed:z.literal(true)}),
 ]);
 const tokenSchema=z.discriminatedUnion('kind',[
  base.extend({purpose:z.literal('email_action'),kind:z.literal('cancel'),expiresAt:z.number(),orderId:z.string(),number:z.string()}),
- base.extend({purpose:z.literal('email_action'),kind:z.literal('purchase'),expiresAt:z.number(),input:createOrderSchema,total:z.number()}),
+ base.extend({purpose:z.literal('email_action'),kind:z.literal('loyalty'),expiresAt:z.number(),challenge:z.string()}),
+ base.extend({purpose:z.literal('email_action'),kind:z.literal('purchase'),expiresAt:z.number(),input:createOrderSchema,total:z.number(),loyaltyProof:z.string().optional(),loyalty:z.object({email:z.email(),consentVersion:z.string(),consentAt:z.string()}).nullable().optional()}),
  base.extend({purpose:z.literal('email_action'),kind:z.literal('claim'),expiresAt:z.number(),orderId:z.string(),input:claim,claimId:z.string()}),
 ]);
 const owner=(sender:string)=>({OR:[{guestEmail:{equals:sender,mode:'insensitive' as const}},{user:{email:{equals:sender,mode:'insensitive' as const}}}]});
 const failure=(code:string)=>({ok:false as const,error:{code}});
 const digest=(s:string)=>createHash('sha256').update(s).digest('hex');
 export async function handleEmailAction(body:z.infer<typeof emailActionSchema>,secret:string){
+ const scope={channel:'email' as const,conversationId:digest(body.sender.toLowerCase()),email:body.sender.toLowerCase()};
  if(body.action==='execute'){
   let token;
   try{token=tokenSchema.parse(readSocialQuote(body.token,secret));}catch{return failure('INVALID_EMAIL_ACTION');}
   if(token.sender.toLowerCase()!==body.sender.toLowerCase())return failure('EMAIL_OWNER_MISMATCH');
+  if(token.kind==='loyalty'){
+   const result=await acceptChannelLoyalty(token.challenge,scope,secret);
+   return result?{ok:true as const,kind:'loyalty',...result}:failure('OFFER_EXPIRED');
+  }
   if(token.kind==='purchase'){
    const existing=await db.checkoutSession.findUnique({where:{id:token.input.checkoutSessionId!},select:{orderId:true}});
    if(token.expiresAt<Date.now()&&!existing?.orderId)return failure('OFFER_EXPIRED');
-   const result=await createOrder(token.input,null,null,{expectedTotal:token.total,customerReplyDraftOnly:true});
+   const loyalty=existing?.orderId&&token.loyalty?{...token.loyalty,consentAt:new Date(token.loyalty.consentAt)}:await channelLoyalty(token.loyaltyProof,scope,secret);
+   if(token.input.guestLoyalty&&!loyalty)return failure('LOYALTY_CONSENT_REQUIRED');
+   const result=await createOrder(token.input,null,loyalty,{expectedTotal:token.total,customerReplyDraftOnly:true});
    if(!result.ok)return result;
    return {ok:true as const,kind:'purchase',number:result.data.number,orderId:result.data.id,total:result.data.total};
   }
@@ -54,14 +64,22 @@ export async function handleEmailAction(body:z.infer<typeof emailActionSchema>,s
  }
  const expiresAt=Date.now()+24*60*60000;
  const common={purpose:'email_action' as const,sender:body.sender.toLowerCase(),requestId:body.requestId,expiresAt};
+ if(body.action==='prepare_loyalty'){
+  const prepared=prepareChannelLoyalty(scope,secret);
+  return {ok:true,kind:'loyalty',summary:prepared.summary,expiresAt,token:signSocialQuote({...common,kind:'loyalty',challenge:prepared.challenge},secret)};
+ }
  if(body.action==='prepare_purchase'){
+  const loyalty=await channelLoyalty(body.loyaltyProof,scope,secret);
+  if(body.loyaltyProof&&!loyalty)return failure('LOYALTY_CONSENT_REQUIRED');
   if(!['POUZECE_GOTOVINA','UPLATA_NA_RACUN'].includes(body.input.paymentMethod))return failure('PAYMENT_UNSUPPORTED');
   const input=createOrderSchema.parse({lines:body.input.lines,shipping:body.input.shipping,paymentMethod:body.input.paymentMethod,shippingMethod:body.input.shippingMethod,billingSameAsShipping:true,guestEmail:body.sender.toLowerCase(),consent:true,checkoutSessionId:`email_${body.requestId}`,notes:`[EMAIL] zahtev ${body.requestId}`});
   const products=await Promise.all(input.lines.map(l=>getProductBySku(l.sku)));
   if(products.some(p=>!p))return failure('PRODUCT_NOT_FOUND');
-  const result=await createOrder(input,null,null,{previewOnly:true});if(!result.ok)return result;
+  input.guestLoyalty=Boolean(loyalty);
+  const result=await createOrder(input,null,loyalty,{previewOnly:true});if(!result.ok)return result;
   const summary=`Potvrdite porudžbinu:\n${input.lines.map((l,n)=>`${products[n]!.name} (${l.sku}) × ${l.qty}`).join('\n')}\n${input.shipping.firstName} ${input.shipping.lastName}, ${input.shipping.phone}\n${input.shipping.street} ${input.shipping.houseNumber}, ${input.shipping.postalCode} ${input.shipping.city}\nPlaćanje: ${input.paymentMethod==='UPLATA_NA_RACUN'?'uplata na račun':'pouzećem, gotovina'}\nDostava: ${result.data.shipping} RSD\nUkupno: ${result.data.total} RSD\nUslovi: https://www.svetpovoljnihcena.rs/uslovi-kupovine\nOdgovorite na ovaj mejl sa „DA“ da naručite i prihvatite uslove. Ponuda važi 24 sata, uz ponovnu proveru cene i dostupnosti pre upisa.`;
-  return {ok:true,kind:'purchase',summary,expiresAt,token:signSocialQuote({...common,kind:'purchase',input,total:result.data.total},secret)};
+  const benefit=loyalty?`Loyalty pogodnosti su uključene u obračun.${result.data.firstPurchaseDiscount>0?` Popust za prvu kupovinu: ${result.data.firstPurchaseDiscount} RSD.`:''}\n`:'';
+  return {ok:true,kind:'purchase',summary:benefit+summary,expiresAt,token:signSocialQuote({...common,kind:'purchase',input,total:result.data.total,loyaltyProof:body.loyaltyProof,loyalty},secret)};
  }
  const number=body.action==='prepare_cancel'?body.number:body.input.orderNumberOrFiscal;
  const order=await db.order.findFirst({where:{number,...owner(body.sender)},select:{id:true,number:true,status:true,channel:true,items:{select:{sku:true,name:true,qty:true}},fiscal:{select:{id:true}},fiscalDocuments:{where:{kind:'SALE'},select:{id:true}},reshipments:{select:{id:true}}}});

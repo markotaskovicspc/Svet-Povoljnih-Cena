@@ -81,6 +81,18 @@ test('plain confirmation creates pending order once, repeated confirmation does 
     assert(replies.some(t=>t.includes('već kreirana')));
   }finally{await store.close();}
 });
+test('loyalty DA activates only consent even with a stale purchase; next offer needs its own DA',async()=>{
+ const {store,worker,event}=await setup();const actions=[];
+ worker.spc=async input=>{actions.push(input.action);return {ok:true,email:'buyer@example.com',proof:'accepted',expiresAt:Date.now()+60000};};
+ try{
+  await store.pool.query('DELETE FROM spc_chat_events');
+  await store.withConversation(event.conversation,async(row,state,c)=>{state.loyaltyPending={challenge:'consent',email:'buyer@example.com'};await store.save(c,row.id,state);});
+  await store.accept({...event,text:'DA'});await worker.tick();await worker.tick();
+  assert.deepEqual(actions,['accept_loyalty']);
+  const state=store.decode((await store.pool.query('SELECT state FROM spc_chat_conversations')).rows[0].state);
+  assert.equal(state.pending,undefined);assert.equal(state.orders.length,0);assert.equal(state.loyalty.proof,'accepted');
+ }finally{await store.close();}
+});
 
 test('shopping photo reaches sales with positional context; later top-item reference retains it without reviving old quote',async()=>{
  const {store,worker,calls,event}=await setup();let reads=0;const received=[];

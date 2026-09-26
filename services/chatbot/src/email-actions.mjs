@@ -49,6 +49,7 @@ export function operationReply(result){
  }
  if(result.kind==='cancel')return `Porudžbina ${result.number} je ${result.alreadyCancelled?'već ':''}otkazana u sistemu.${result.paymentReviewRequired||result.shipmentReviewRequired?' Podrška zasebno proverava uplatu/povraćaj i eventualno zaustavljanje isporuke.':''}`;
  if(result.kind==='purchase')return `Porudžbina ${result.number} je uspešno kreirana. Ukupno sa dostavom: ${result.total} RSD.`;
+ if(result.kind==='loyalty')return 'Loyalty pogodnosti su aktivirane. Porudžbina još nije kreirana. Odgovorite da pripremimo ponudu za izabrane artikle; dobićete konačan iznos za posebnu potvrdu.';
  return `Reklamacija ${result.number} je evidentirana. Podrška će obraditi prijavu; prijem nije odobrenje zamene ili povraćaja novca.`;
 }
 export function operationRecord(prepared,source){return {...prepared,sourceMessageId:source.messageId,messageId:`<spc-action-${randomUUID()}@svetpovoljnihcena.rs>`};}

@@ -9,6 +9,7 @@ import {prepareCancellation} from './cancellation.mjs';
 import {beginReclamation,prepareReclamation} from './reclamation.mjs';
 import {refreshCatalogContext} from './catalog-context.mjs';
 import {activeVisualContext,visualSelectionPresented} from './vision.mjs';
+import {activeLoyalty,prepareLoyalty} from './loyalty.mjs';
 setTracingDisabled(true);
 const address = z.object({firstName:z.string(),lastName:z.string(),phone:z.string(),street:z.string(),houseNumber:z.string(),city:z.string(),postalCode:z.string()});
 const purchase = z.object({guestEmail:z.email(),shipping:address,lines:z.array(z.object({sku:z.string(),qty:z.number().int().positive()})),paymentMethod:z.enum(['POUZECE_GOTOVINA','UPLATA_NA_RACUN']),shippingMethod:z.enum(['KURIR','KAMION'])});
@@ -19,6 +20,7 @@ export async function answer({event,state,spc,pause,model}) {
   const products = new Map();
   const presentations = new Map();
   const tools = [
+    tool({name:'prepare_loyalty',description:'Prikaži posebnu loyalty saglasnost za mejl koji je kupac dostavio. Ne aktivira članstvo i ne kreira porudžbinu. Sačekaj kupčevo sledeće DA.',parameters:z.object({email:z.email()}),execute:input=>prepareLoyalty({...input,event,state,spc})}),
     tool({name:'check_product_quantity',description:'Proveri aktuelnu dostupnost tačne šifre i tražene količine pre prikupljanja podataka. Ne tumači dostupnost jednog komada kao dostupnost šest.',parameters:z.object({sku:z.string(),quantity:z.number().int().positive().max(1000)}),execute:async({sku,quantity})=>{
       const result=await spc({action:'search',query:sku,quantity});
       const product=result.items?.find(p=>p.sku===sku);
@@ -42,6 +44,7 @@ export async function answer({event,state,spc,pause,model}) {
       return {ok:true,...product,url:presentation.url,imageQueued:Boolean(presentation.imageUrl),message:'Server dodaje naziv, cenu i link. Ako imageQueued=true fotografija je pripremljena za slanje; inače uputi na link za fotografije. Ne tvrdi da je dostavljena.'};
     }}),
     tool({name:'prepare_order',description:'Kada imaš sve podatke, pripremi proverenu ponudu za potvrdu kupca. Ovo NE kreira porudžbinu.',parameters:purchase,execute:async input=>{
+      if(state.loyaltyPending)return {ok:false,error:'Sačekaj odvojenu loyalty potvrdu kupca. Ne pripremaj porudžbinu u istoj poruci.'};
       const customerText=[...state.history.filter(m=>m.role==='user').map(m=>m.content),event.text].join('\n');
       const providedEmails=customerText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)??[];
       if(state.customer?.guestEmail)providedEmails.push(state.customer.guestEmail);
@@ -62,7 +65,8 @@ export async function answer({event,state,spc,pause,model}) {
         state.supportRequest={reason:`Ponovljeni problem pri pripremi artikla ${rejected.sku}`};
         return {ok:false,error:'Ova ponuda je već odbijena. Ne nudi isti artikal kao zamenu i ne traži ponovo iste podatke. Upit je pripremljen za podršku; ponudi drugi artikal samo ako ga kupac želi.'};
       }
-      const result = await spc({action:'quote',channel:event.channel,conversationId:event.conversation,input:{...input,consent:true,billingSameAsShipping:true,shipping:{...input.shipping,country:'RS'}}});
+      const result = await spc({action:'quote',channel:event.channel,conversationId:event.conversation,loyaltyProof:activeLoyalty(state,input.guestEmail)?.proof,input:{...input,consent:true,billingSameAsShipping:true,shipping:{...input.shipping,country:'RS'}}});
+      if(result.error?.code==='LOYALTY_CONSENT_REQUIRED')delete state.loyalty;
       if(!result.ok && ['INACTIVE','OUT_OF_STOCK'].includes(result.error?.code)) {
         quoteRejected=true;
         state.customer=customerFromQuote(input);
@@ -98,7 +102,8 @@ export async function answer({event,state,spc,pause,model}) {
     tool({name:'request_reclamation',description:'Pripremi sažetak prijave za tačan artikal i porudžbinu. Problem: kvar, oštećenje, nedostajući ili pogrešan artikal. Pitaj željeni ishod, null ako kupac ne želi da bira. Ovo ništa ne upisuje niti odobrava zamenu/povraćaj.',parameters:z.object({number:z.string(),sku:z.string(),quantity:z.number().int().positive().max(999),description:z.string().min(5).max(250),category:z.enum(['KVAR','FIZICKO_OSTECENJE','NEDOSTAJE_ARTIKAL','POGRESAN_ARTIKAL']),request:z.enum(['POPRAVKA','ZAMENA','POVRACAJ_NOVCA','UMANJENJE_CENE']).nullable()}),execute:async input=>prepareReclamation({input,event,state,spc})}),
     tool({name:'handoff',description:'Obavesti SPC podršku za zahtev za kolegu ili nerešen problem sa kupovinom. Ne koristi za nepovezane teme ili zabranjene zahteve. Razgovor ostaje aktivan.',parameters:z.object({reason:z.string().max(200)}),execute:async({reason})=>{state.supportRequest={reason};delete state.pending;delete state.confirming;return {ok:true,message:'Upit je pripremljen za slanje podršci emailom. Nastavi da pomažeš oko drugih proizvoda; ne tvrdi da je kolega već preuzeo razgovor.'};}}),
   ];
-  const agent=new Agent({name:'SPC prodaja i podrška',model,instructions:salesInstructions,tools,modelSettings:{parallelToolCalls:false}});
+  const loyaltyInstructions=`\nLOYALTY: Katalog vraća price (cena bez članstva) i loyaltyPrice (ponuda uz saglasnost). Ako je loyaltyPrice niža, kratko navedi obe i ponudi pogodnost jednom, bez pritiska. Ne računaj dodatnih 15% sam: samo ERP ponuda potvrđuje pravo i iznos. Za aktiviranje traži mejl i pozovi prepare_loyalty. Članstvo nikad ne aktivira model; server prihvata odvojeno DA. DA za članstvo NIJE DA za kupovinu. Ako kupac odbije, nastavi bez pogodnosti i ne nagovaraj ponovo. Ne prijavljuj na marketing. Trenutno aktivno članstvo: ${JSON.stringify(activeLoyalty(state)?{email:state.loyalty.email}:null)}. Odbijeno: ${Boolean(state.loyaltyDeclined)}. Posle aktivacije koristi aktuelne izabrane proizvode i podatke iz istorije za prepare_order, bez vraćanja na stare porudžbine.`;
+  const agent=new Agent({name:'SPC prodaja i podrška',model,instructions:salesInstructions+loyaltyInstructions,tools,modelSettings:{parallelToolCalls:false}});
   const context = JSON.stringify({reclamationContext:state.reclamationContext??null,submittedReclamations:state.reclamations??[],verifiedClaimOrders:Object.entries(state.claimOrders??{}).map(([number,o])=>({number,items:o.items})),complaintVerificationPending:Boolean(state.claimVerification),customer:state.customer??null,pendingOrder:state.pending ? {input:state.pending.input,totals:state.pending.totals} : null,lastQuoteRejection:state.quoteRejection??null,completedOrders:state.orders.map(o=>({number:o.number,items:o.items,status:o.status})),currentPurchase:currentPurchaseHistory(state),note:'Prethodne završene porudžbine su istorija, nikad podrazumevana nova korpa. Aktuelni kupčev izbor ima prednost. Kontakt podatke smeš ponovo upotrebiti u sažetku za potvrdu.'});
   const history=state.history.slice(-HISTORY_LIMIT).map(m=>m.role==='assistant'?assistant(m.content):user(m.content));
   const visual=activeVisualContext(state);
@@ -116,5 +121,6 @@ export async function answer({event,state,spc,pause,model}) {
 
 export function quoteMessage(pending) {
   const i=pending.input, s=i.shipping;
-  return `Proverite porudžbinu:\n${i.lines.map(l=>`${pending.productNames?.[l.sku] ? pending.productNames[l.sku]+' ('+l.sku+')' : l.sku} × ${l.qty}`).join('\n')}\n${s.firstName} ${s.lastName}, ${s.phone}\n${s.street} ${s.houseNumber}, ${s.postalCode} ${s.city}\nMejl: ${i.guestEmail}\nPlaćanje: ${i.paymentMethod==='POUZECE_GOTOVINA'?'pouzećem, gotovina':'uplata na račun'}\nDostava (${i.shippingMethod==='KAMION'?'kamion':'kurir'}): ${pending.totals.shipping} RSD\nUKUPNO: ${pending.totals.total} RSD\n\nUslovi kupovine: https://www.svetpovoljnihcena.rs/uslovi-kupovine\nZa potvrdu porudžbine i prihvatanje uslova napišite: DA\nPonuda važi 15 minuta. Za ispravku napišite šta menjate.`;
+  const benefit=pending.loyaltyApplied?`Loyalty pogodnosti uključene u obračun.${pending.totals.firstPurchaseDiscount>0?` Popust za prvu kupovinu: ${pending.totals.firstPurchaseDiscount} RSD.`:''}\n`:'';
+  return `${benefit}Proverite porudžbinu:\n${i.lines.map(l=>`${pending.productNames?.[l.sku] ? pending.productNames[l.sku]+' ('+l.sku+')' : l.sku} × ${l.qty}`).join('\n')}\n${s.firstName} ${s.lastName}, ${s.phone}\n${s.street} ${s.houseNumber}, ${s.postalCode} ${s.city}\nMejl: ${i.guestEmail}\nPlaćanje: ${i.paymentMethod==='POUZECE_GOTOVINA'?'pouzećem, gotovina':'uplata na račun'}\nDostava (${i.shippingMethod==='KAMION'?'kamion':'kurir'}): ${pending.totals.shipping} RSD\nUKUPNO: ${pending.totals.total} RSD\n\nUslovi kupovine: https://www.svetpovoljnihcena.rs/uslovi-kupovine\nZa potvrdu porudžbine i prihvatanje uslova napišite: DA\nPonuda važi 15 minuta. Za ispravku napišite šta menjate.`;
 }

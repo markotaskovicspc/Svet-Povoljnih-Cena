@@ -18,6 +18,25 @@ test('quoted confirmation is excluded from intent input',()=>{
  assert.equal(latestEmailText('Ne, sačekajte\n\nOn Friday customer wrote:\nDa, potvrđujem'),'Ne, sačekajte');
  assert.equal(latestEmailText('> Potvrđujem'),'');
 });
+test('sent loyalty consent activates separately; only same sender gets proof on later purchase',async()=>{
+ const db=new PGlite();await db.exec(operationTable);const calls=[];
+ const ops=new EmailOperations({c:db,encode:JSON.stringify,decode:JSON.parse,env:{},classify:async()=> 'confirm',call:async input=>{
+  calls.push(input);
+  if(input.action==='execute')return {ok:true,kind:'loyalty',proof:'private-proof',expiresAt:Date.now()+60000};
+  return {ok:true,kind:input.action==='prepare_loyalty'?'loyalty':'purchase',token:'signed',summary:'Tačan sažetak'};
+ }});
+ try{
+  await ops.prepare('l'.repeat(64),source,{action:'prepare_loyalty'});
+  assert.equal(await ops.loyalty(source.sender),null);
+  const reply=await ops.respond('r'.repeat(64),{...message,text:'DA'},sent);
+  assert.match(reply.body,/Porudžbina još nije kreirana/);
+  assert.equal(calls.filter(c=>c.action==='execute').length,1);
+  await ops.prepare('p'.repeat(64),source,{action:'prepare_purchase',input:{}});
+  assert.equal(calls.at(-1).loyaltyProof,'private-proof');
+  await ops.prepare('q'.repeat(64),{...source,sender:'other@example.com'},{action:'prepare_purchase',input:{}});
+  assert.equal(calls.at(-1).loyaltyProof,undefined);
+ }finally{await db.close();}
+});
 test('unsent drafts do nothing; durable confirmation retries same token and receipt without duplicate actions',async()=>{
  const db=new PGlite();await db.exec(operationTable);const key='ab'.repeat(32);
  let calls=0;const seen=[];

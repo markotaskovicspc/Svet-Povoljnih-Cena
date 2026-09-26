@@ -139,6 +139,7 @@ export class EmailDraftWorker {
       await c.query('UPDATE spc_email_drafts SET attempts=attempts+1 WHERE id=$1',[row.id]);
       const history=await this.history(message);
       const context=await emailContext(message.sender,this.env.SPC_BASE_URL,this.env.SOCIAL_INTEGRATION_SECRET);
+      context.loyaltyAccepted=Boolean(operations&&await operations.loyalty(message.sender));
       let result=recovered;
       if(!result&&operations){
         const saved=await operations.existing(row.id);
