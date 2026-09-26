@@ -6,10 +6,11 @@ import { inWindow, isConfirmation } from './security.mjs';
 import {HISTORY_LIMIT,repeatsCompletedOrder,customerFromQuote} from './conversation-context.mjs';
 import {checkCart} from './cart-check.mjs';
 import {readMetaHistory} from './meta-history.mjs';
+import {classifyCancellation,cancellationMessage} from './cancellation.mjs';
 
 export class Worker {
-  constructor({store,spc,accounts,model,graphVersion,enabled=false,testSenders=[],answerFn=answer,intentFn=classifyOrderIntent,cartCheckFn=checkCart}) {
-    Object.assign(this,{store,spc,accounts,model,graphVersion,enabled,testSenders,answerFn,intentFn,cartCheckFn}); this.busy=false;
+  constructor({store,spc,accounts,model,graphVersion,enabled=false,testSenders=[],answerFn=answer,intentFn=classifyOrderIntent,cartCheckFn=checkCart,cancellationIntentFn=classifyCancellation}) {
+    Object.assign(this,{store,spc,accounts,model,graphVersion,enabled,testSenders,answerFn,intentFn,cartCheckFn,cancellationIntentFn}); this.busy=false;
   }
   async start() {
     // LISTEN starts work immediately; timer only recovers missed notifications/retries.
@@ -55,6 +56,13 @@ export class Worker {
             state.historyVersion=2;
           }
           let intent;
+          let cancellationIntent;
+          if(state.cancellation && !state.reclamationInFlight && !event.attachments.length) {
+            // Purchase and cancellation confirmations never share an active draft.
+            delete state.pending;delete state.confirming;
+            cancellationIntent=state.cancelling?.eventId===event.id?'confirm':await this.cancellationIntentFn({text:event.text,history:state.history,pending:state.cancellation,model:this.model});
+            if(cancellationIntent==='other') delete state.cancellation;
+          }
           if(state.pending?.input?.lines && !state.pending.selectionChecked && !state.confirming) {
             const items=[];
             for(const line of state.pending.input.lines){
@@ -81,7 +89,34 @@ export class Worker {
             await this.store.pause(row.id,'Proveriti prethodno slanje reklamacije pre nastavka');
             await c.query(`UPDATE spc_chat_events SET status='failed' WHERE id=$1`,[job.id]);
             return;
+          } else if (state.cancellation && cancellationIntent==='confirm') {
+            const pending=state.cancellation,order=state.orders.find(o=>o.number===pending.number);
+            if(!order || (pending.expiresAt<Date.now()&&!state.cancelling)) {
+              message='Potvrda otkazivanja je istekla. Porudžbina nije otkazana. Napišite ponovo koju porudžbinu želite da otkažete.';
+              delete state.cancellation;delete state.cancelling;
+            } else {
+              state.cancelling={eventId:event.id};await this.store.save(c,row.id,state);
+              const result=await this.spc({action:'cancel_order',channel:event.channel,conversationId:row.id,cancellationToken:pending.cancellationToken,accessToken:order.accessToken});
+              if(result.ok) {
+                order.status='OTKAZANO';
+                message=`Porudžbina ${order.number} je ${result.alreadyCancelled?'već ':''}otkazana.`;
+                if(result.paymentReviewRequired||result.shipmentReviewRequired||result.alreadyCancelled) {
+                  message+=' Ako je već plaćena ili predata kuriru, podrška će proveriti uplatu i isporuku.';
+                  state.supportRequest={reason:`Provera uplate/isporuke nakon otkazivanja ${order.number}`};
+                }
+              } else {
+                message=`Porudžbina ${order.number} nije otkazana. Trenutni status zahteva proveru podrške; prosleđujem zahtev kolegama.`;
+                state.supportRequest={reason:`Otkazivanje nije izvršeno: ${order.number}`};
+              }
+              delete state.cancellation;delete state.cancelling;
+            }
+          } else if (state.cancellation && cancellationIntent==='decline') {
+            message=`U redu, ne otkazujemo porudžbinu ${state.cancellation.number}.`;
+            delete state.cancellation;
+          } else if (state.cancellation && cancellationIntent==='unclear') {
+            message=cancellationMessage(state.cancellation);
           } else if (event.attachments.length) {
+            delete state.cancellation;
             state.supportRequest={reason:'Prilog/slika zahteva pregled zaposlenog'};
             message='Primili smo prilog. Upit šaljem podršci na proveru. Za druge proizvode možeš nastaviti ovde.';
           } else if (state.pending && intent==='cancel') {
@@ -127,9 +162,13 @@ export class Worker {
             if(!result.quoteCreated && !unverifiedSuccess && intent!=='question') delete state.pending;
             if(!state.supportRequest && !state.reclamation) images=(result.images??[]).slice(0,3);
             message=result.quoteCreated ? quoteMessage(state.pending) : result.text;
+            if(state.cancellation) {message=cancellationMessage(state.cancellation);images=[];}
+            else if(/(?:porudzbina[^.!?\n]{0,70} je (?:uspesno )?(?:otkazana|stornirana)|(?:otkazao|stornirao) sam|^otkazano[.!])/i.test(normalizedReply) && !state.orders.some(o=>o.status==='OTKAZANO'&&String(result.text).includes(o.number))) {
+              message='Otkazivanje još nije potvrđeno u sistemu. Napišite broj porudžbine koju želite da otkažete, pa ću proveriti mogućnost otkazivanja.';
+            }
             if(state.reclamation) message=`Prijava za ${state.reclamation.number}, artikal ${state.reclamation.sku}, količina ${state.reclamation.quantity}:\n${state.reclamation.description}\n\nZa slanje prijave napišite: POTVRĐUJEM ${state.reclamation.code}`;
             if(message.length>1850) {
-              delete state.pending; delete state.reclamation;
+              delete state.pending; delete state.reclamation;delete state.cancellation;
               state.supportRequest={reason:'Složena ponuda zahteva zaposlenog'};
               message='Za ovu ponudu potreban je zaposleni. Prosledio sam mu razgovor da proveri sve stavke i dostavu.';
             }

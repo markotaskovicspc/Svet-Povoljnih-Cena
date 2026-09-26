@@ -142,6 +142,58 @@ for(const [intent,keepsOffer] of [['question',true],['change',false],['cancel',f
  });
 }
 
+async function setupCancellation() {
+ const ctx=await setup();
+ await ctx.store.withConversation(ctx.event.conversation,async(row,state,c)=>{
+  state.historyVersion=2;delete state.pending;
+  state.orders=[{number:'SPC-TEST-1',accessToken:'private'}];
+  state.cancellation={number:'SPC-TEST-1',items:[{sku:'CHAIR',name:'Stolica',qty:6}],cancellationToken:'cancel-signed',expiresAt:Date.now()+900000};
+  await ctx.store.save(c,row.id,state);
+ });
+ ctx.worker.cancellationIntentFn=async()=> 'confirm';
+ ctx.worker.answerFn=async()=>({text:'Kako mogu da pomognem?',quoteCreated:false});
+ return ctx;
+}
+test('cancellation executes only after confirmation and repeated yes cannot create an order',async()=>{
+ const {store,worker,calls,event}=await setupCancellation();
+ try {
+  await worker.tick();assert.equal(calls.length,1);assert.equal(calls[0].action,'cancel_order');
+  await store.accept({...event,id:'facebook:repeat',text:'Da'});await worker.tick();assert.equal(calls.length,1);
+  const state=store.decode((await store.pool.query('SELECT state FROM spc_chat_conversations')).rows[0].state);
+  assert.equal(state.orders[0].status,'OTKAZANO');assert.equal(state.cancellation,undefined);
+ }finally{await store.close();}
+});
+test('declining, changing topic, uncertain consent and expired request never cancel',async()=>{
+ for(const intent of ['decline','other','unclear','expired']) {
+  const {store,worker,calls,event}=await setupCancellation();
+  try {
+   worker.cancellationIntentFn=async()=>intent==='expired'?'confirm':intent;
+   if(intent==='expired')await store.withConversation(event.conversation,async(row,state,c)=>{state.cancellation.expiresAt=Date.now()-1000;await store.save(c,row.id,state);});
+   await worker.tick();assert.equal(calls.length,0,intent);
+  }finally{await store.close();}
+ }
+});
+test('cancellation timeout retries same signed request after restart, even past expiry',async()=>{
+ const {store,worker,event}=await setupCancellation();const calls=[];
+ worker.spc=async p=>{calls.push(p);if(calls.length===1)throw Error('lost response');return {ok:true,alreadyCancelled:true};};
+ try {
+  await worker.tick();await store.pool.query("UPDATE spc_chat_events SET next_at=now() WHERE id=$1",[event.id]);
+  await store.withConversation(event.conversation,async(row,state,c)=>{state.cancellation.expiresAt=Date.now()-1;await store.save(c,row.id,state);});
+  await worker.tick();
+  assert.deepEqual(calls.filter(c=>c.action==='cancel_order').map(c=>c.cancellationToken),['cancel-signed','cancel-signed']);
+  assert.equal((await store.pool.query('SELECT * FROM spc_chat_outbox')).rows.length,1);
+ }finally{await store.close();}
+});
+test('blocked cancellation escalates once without claiming success or pausing new questions',async()=>{
+ const {store,worker}=await setupCancellation();
+ worker.spc=async p=>p.action==='cancel_order'?{ok:false,error:{code:'CANCELLATION_FISCALIZED'}}:{ok:true};
+ try {
+  await worker.tick();const row=(await store.pool.query('SELECT * FROM spc_chat_conversations')).rows[0];
+  assert.equal(row.paused,false);assert.match(store.decode(row.state).history.at(-1).content,/nije otkazana/);
+  assert.equal((await store.pool.query('SELECT * FROM spc_chat_support')).rows.length,1);
+ }finally{await store.close();}
+});
+
 test('yes to a new iron purchase or support question never becomes an old bed receipt',async()=>{
  for(const question of ['Pegla GOLD CORE je 999 din. Da pripremim ponudu?','Želiš da prosledim otkaz kolegi?']){
   const {store,worker,calls,event}=await setup();let answers=0;

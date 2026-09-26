@@ -41,7 +41,8 @@ const server=http.createServer(async(req,res)=>{
       const body=JSON.parse(raw);if(typeof body.id!=='string'||body.id.length>200)return reply(400,{error:'Invalid conversation'});
       if(body.action==='pause')await store.pause(body.id,'Ručna pauza');
       else if(body.action==='resume')await store.withConversation(body.id,async(_row,state,c)=>{
-        delete state.pending;delete state.reclamation;delete state.handedOff;
+        if(state.cancelling)throw new Error('Reconcile cancellation before resuming');
+        delete state.pending;delete state.reclamation;delete state.handedOff;delete state.cancellation;
         delete state.historyVersion;
         if(state.reclamationInFlight)throw new Error('Reconcile reclamation before resuming');
         await store.save(c,body.id,state);await c.query('UPDATE spc_chat_conversations SET paused=false,reason=NULL WHERE id=$1',[body.id]);
