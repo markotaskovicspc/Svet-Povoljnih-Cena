@@ -61,7 +61,7 @@ export async function prepareReclamation({input,event,state,spc}) {
 }
 export function reclamationMessage(pending) {
   const i=pending.input;
-  return `Da li potvrđujete slanje reklamacije za porudžbinu ${pending.number}?\n${pending.name} (${i.sku}) × ${i.quantity}\nProblem: ${i.description}\nŽeljeni ishod: ${remedies[i.request]??'dogovor sa podrškom'}\nFotografije: ${i.photos.length}\n\nDovoljno je „Da, pošalji“ ili „Ne“. Prijem reklamacije nije odobrenje zamene ili povraćaja.`;
+  return `Da li potvrđujete slanje reklamacije za porudžbinu ${pending.number}?\n${pending.name} (${i.sku}) × ${i.quantity}\nProblem: ${i.description}\nŽeljeni ishod: ${remedies[i.request]??'dogovor sa podrškom'}\nFotografije: ${i.photos.length}\n\nDovoljno je „DA“ ili „Ne“. Prijem reklamacije nije odobrenje zamene ili povraćaja.`;
 }
 const decision=z.object({intent:z.enum(['confirm','decline','other','unclear'])});
 export async function classifyReclamation({text,history=[],pending,model}) {
