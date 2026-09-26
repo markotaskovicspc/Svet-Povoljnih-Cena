@@ -60,7 +60,7 @@ export async function handleEmailAction(body:z.infer<typeof emailActionSchema>,s
   const products=await Promise.all(input.lines.map(l=>getProductBySku(l.sku)));
   if(products.some(p=>!p))return failure('PRODUCT_NOT_FOUND');
   const result=await createOrder(input,null,null,{previewOnly:true});if(!result.ok)return result;
-  const summary=`Potvrdite porudžbinu:\n${input.lines.map((l,n)=>`${products[n]!.name} (${l.sku}) × ${l.qty}`).join('\n')}\n${input.shipping.firstName} ${input.shipping.lastName}, ${input.shipping.phone}\n${input.shipping.street} ${input.shipping.houseNumber}, ${input.shipping.postalCode} ${input.shipping.city}\nPlaćanje: ${input.paymentMethod==='UPLATA_NA_RACUN'?'uplata na račun':'pouzećem, gotovina'}\nDostava: ${result.data.shipping} RSD\nUkupno: ${result.data.total} RSD\nUslovi: https://www.svetpovoljnihcena.rs/uslovi-kupovine\nOdgovorite na ovaj mejl sa „Potvrđujem“ da naručite i prihvatite uslove. Ponuda važi 24 sata, uz ponovnu proveru cene i dostupnosti pre upisa.`;
+  const summary=`Potvrdite porudžbinu:\n${input.lines.map((l,n)=>`${products[n]!.name} (${l.sku}) × ${l.qty}`).join('\n')}\n${input.shipping.firstName} ${input.shipping.lastName}, ${input.shipping.phone}\n${input.shipping.street} ${input.shipping.houseNumber}, ${input.shipping.postalCode} ${input.shipping.city}\nPlaćanje: ${input.paymentMethod==='UPLATA_NA_RACUN'?'uplata na račun':'pouzećem, gotovina'}\nDostava: ${result.data.shipping} RSD\nUkupno: ${result.data.total} RSD\nUslovi: https://www.svetpovoljnihcena.rs/uslovi-kupovine\nOdgovorite na ovaj mejl sa „DA“ da naručite i prihvatite uslove. Ponuda važi 24 sata, uz ponovnu proveru cene i dostupnosti pre upisa.`;
   return {ok:true,kind:'purchase',summary,expiresAt,token:signSocialQuote({...common,kind:'purchase',input,total:result.data.total},secret)};
  }
  const number=body.action==='prepare_cancel'?body.number:body.input.orderNumberOrFiscal;
@@ -69,7 +69,7 @@ export async function handleEmailAction(body:z.infer<typeof emailActionSchema>,s
  if(body.action==='prepare_cancel'){
   if(order.status==='OTKAZANO')return {ok:true,kind:'cancel',alreadyCancelled:true,number:order.number};
   if(order.channel!=='WEB'||!canCustomerCancelStatus(order.status)||order.fiscal||order.fiscalDocuments.length||order.reshipments.length)return failure('CANCELLATION_NOT_ALLOWED');
-  const summary=`Da li potvrđujete otkazivanje cele porudžbine ${order.number}?\n${order.items.map(i=>`${i.name} (${i.sku}) × ${i.qty}`).join('\n')}\nOdgovorite na ovaj mejl sa „Da, otkažite“. Ako je porudžbina plaćena ili predata kuriru, podrška zasebno proverava povraćaj i isporuku. Zahtev važi 24 sata.`;
+  const summary=`Da li potvrđujete otkazivanje cele porudžbine ${order.number}?\n${order.items.map(i=>`${i.name} (${i.sku}) × ${i.qty}`).join('\n')}\nOdgovorite na ovaj mejl sa „DA“. Ako je porudžbina plaćena ili predata kuriru, podrška zasebno proverava povraćaj i isporuku. Zahtev važi 24 sata.`;
   return {ok:true,kind:'cancel',summary,expiresAt,token:signSocialQuote({...common,kind:'cancel',orderId:order.id,number:order.number},secret)};
  }
  if(order.status!=='ISPORUCENO')return failure('ORDER_NOT_DELIVERED');
@@ -77,6 +77,6 @@ export async function handleEmailAction(body:z.infer<typeof emailActionSchema>,s
  if(body.input.photos.length)return failure('EMAIL_PHOTOS_REQUIRE_STAFF');
  const claimId=`email_${digest(body.requestId+JSON.stringify(body.input))}`;
  const requestLabels={POPRAVKA:'popravka',ZAMENA:'zamena',POVRACAJ_NOVCA:'povraćaj novca',UMANJENJE_CENE:'umanjenje cene'};
- const summary=`Da li potvrđujete podnošenje reklamacije za ${order.number}?\n${item.name} (${item.sku}) × ${body.input.quantity}\nProblem: ${body.input.description}\nŽeljeni ishod: ${body.input.request?requestLabels[body.input.request]:'dogovor sa podrškom'}\nOdgovorite na ovaj mejl sa „Da, pošaljite reklamaciju“. Prijem nije odobrenje zamene ili povraćaja. Zahtev važi 24 sata.`;
+ const summary=`Da li potvrđujete podnošenje reklamacije za ${order.number}?\n${item.name} (${item.sku}) × ${body.input.quantity}\nProblem: ${body.input.description}\nŽeljeni ishod: ${body.input.request?requestLabels[body.input.request]:'dogovor sa podrškom'}\nOdgovorite na ovaj mejl sa „DA“. Prijem nije odobrenje zamene ili povraćaja. Zahtev važi 24 sata.`;
  return {ok:true,kind:'claim',summary,expiresAt,token:signSocialQuote({...common,kind:'claim',orderId:order.id,input:body.input,claimId},secret)};
 }
