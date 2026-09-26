@@ -12,6 +12,8 @@ const products=[{sku:'210005',name:'Pegla GOLDCORE',price:999,available:true,slu
 const calls=[];const spc=async input=>{calls.push(input);if(input.action==='search')return {ok:true,items:products.filter(p=>(p.sku+' '+p.name).toLowerCase().includes(input.query.toLowerCase()))};if(input.action==='quote')return {ok:true,input:input.input,quoteToken:'synthetic',totals:{shipping:400,total:1399},expiresAt:Date.now()+900000};throw Error('Unexpected write');};
 const now=Date.now();const state={history:[],orders:[],customer:{guestEmail:'test@example.test',shipping:{firstName:'Test',lastName:'Kupac',phone:'0601234567',street:'Test ulica',houseNumber:'12',city:'Kragujevac',postalCode:'34000'},paymentMethod:'POUZECE_GOTOVINA',shippingMethod:'KURIR'},visualContext:{createdAt:now,eventId:'photo',images:[{imageNumber:1,...visual}],failed:0}};
 const event={id:'selection',channel:'facebook',conversation:'synthetic',timestamp:now,text:'Ovu skroz gore želim jednu, koristi moje podatke.',attachments:[]};
+const imageOnly=await answer({state,event:{...event,id:'photo',text:''},spc,model});
+assert.equal(imageOnly.quoteCreated,false);assert(!calls.some(c=>c.action==='quote'));
 const first=await answer({state,event,spc,model});assert.equal(first.quoteCreated,false);assert.match(first.text,/GOLDCORE|210005/i);assert(!calls.some(c=>c.action==='quote'));
 state.history.push({role:'user',content:event.text,timestamp:now},{role:'assistant',content:first.text,timestamp:now+1});
 const second=await answer({state,event:{...event,id:'yes',text:'Da, tu peglu GOLDCORE, jednu.'},spc,model});
