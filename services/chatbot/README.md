@@ -127,3 +127,15 @@ A customer may request cancellation of an entire order created in the same conve
 Search results are refreshed by exact SKU and availability is checked for the requested quantity. A checkout stock/publication rejection is retained for 15 minutes and escalated to support instead of offering the same item as a new alternative. Customer contact details remain available. No production customer orders are created or cancelled by smoke tests.
 
 Additional model regressions: `scripts/cancellation-smoke.mjs` and `scripts/catalog-smoke.mjs` (synthetic conversations, mock ERP).
+
+## Reklamacije kroz chat
+
+Bot razlikuje kvar, fizičko oštećenje, nedostajući/pogrešan artikal, upit o isporuci i otkazivanje. `begin_reclamation` čita stvarne stavke i postojeće reklamacije uz dokaz pristupa. Za porudžbinu sa drugog kanala `verify_reclamation_order` šalje kod isključivo na podudarni mejl porudžbine. Provera važi 10 minuta i najviše 5 pokušaja; rezultujući pristup važi 2 sata, vezan za kanal i razgovor i ne daje pravo otkazivanja/kupovine.
+
+`request_reclamation` pravi potpisan sažetak, bez upisa. Kupac ga potvrđuje prirodnim odgovorom na poslednji sažetak. Izmena, negacija, uslov, prilog ili druga tema nisu potvrda. Upis je idempotentan i re-proveren pod ERP zaključavanjem porudžbine; timeout ponavlja isti potpisani zahtev. Prijava se vidi u ERP dnevniku reklamacija sa stanjem PRIMLJENO, željenim ishodom, fotografijama i relevantnom prepiskom. Nedostajući/pogrešan artikal se opisuje u belešci (bez menjanja postojećih ERP enum vrednosti). Podrška dobija email sa direktnim linkom preko trajnog reda; chat nastavlja da radi.
+
+Fotografije: najviše 5, samo HTTPS Meta CDN bez preusmeravanja, najviše 10 MB pri preuzimanju i 40 MP dekodiranja, normalizacija u JPEG do 1600 px, privatni reclamation-uploads bucket i provera pripadnosti porudžbini/artiklu. Ako upload nije moguć, bot prijavljuje neuspeh i prosleđuje proveru podršci. Nema javnog objavljivanja fotografija.
+
+Ako status nije ISPORUCENO, nema automatskog upisa ili menjanja statusa: opis ide zaposlenom na proveru. Bot ne odobrava zamenu, povraćaj, popust ili kurira. Legacy reclamationInFlight pauze ostaju dok operater ne proveri raniji neizvestan upis.
+
+Provera: npm test; scripts/reclamation-smoke.mjs koristi stvarni model sa izmišljenim porudžbinama i lažnim ERP klijentom, bez produkcijskih upisa. ERP testovi: social-reclamations, social-reclamation-record i social-route.

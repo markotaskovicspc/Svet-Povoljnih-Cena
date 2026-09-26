@@ -290,3 +290,74 @@ test('legacy automatic handoff resumes on a new question, while manual pauses re
   }finally{await store.close();}
  }
 });
+import {reclamationMessage} from '../src/reclamation.mjs';
+async function setupReclamation() {
+ const ctx=await setup();
+ await ctx.store.withConversation(ctx.event.conversation,async(row,state,c)=>{
+  state.historyVersion=2;delete state.pending;
+  state.orders=[{number:'SPC-TEST-1',accessToken:'private'}];
+  state.reclamation={number:'SPC-TEST-1',name:'Pegla',input:{sku:'IRON',quantity:1,description:'Ne greje',request:'ZAMENA',category:'KVAR',photos:[]},expiresAt:Date.now()+900000,reclamationToken:'signed-claim'};
+  state.reclamationContext={number:'SPC-TEST-1',sku:'IRON',name:'Pegla',photos:[],createdAt:Date.now()};
+  state.history=[{role:'assistant',content:reclamationMessage(state.reclamation)}];await ctx.store.save(c,row.id,state);
+ });
+ ctx.worker.reclamationIntentFn=async()=> 'confirm';ctx.worker.answerFn=async()=>({text:'Kako mogu da pomognem?'});
+ return ctx;
+}
+test('claim confirmation writes once, queues linked support email and leaves conversation usable',async()=>{
+ const {store,worker,event}=await setupReclamation();const calls=[];
+ worker.spc=async p=>{calls.push(p);return p.action==='submit_reclamation'?{ok:true,id:'case-id',number:'R-1-SPC-TEST-1'}:{ok:true};};
+ try {
+  await worker.tick();await store.accept({...event,id:'fb:second-yes',text:'da'});await worker.tick();
+  assert.equal(calls.filter(c=>c.action==='submit_reclamation').length,1);
+  const support=calls.find(c=>c.action==='support_handoff');assert.equal(support.reclamationId,'case-id');
+  const row=(await store.pool.query('SELECT * FROM spc_chat_conversations')).rows[0];assert.equal(row.paused,false);assert.equal(store.decode(row.state).reclamation,undefined);
+  await store.accept({...event,id:'fb:other-product',text:'A peglu drugu?'});await worker.tick();assert.equal((await store.pool.query('SELECT * FROM spc_chat_outbox')).rows.length,3);
+ } finally {await store.close();}
+});
+test('claim timeout persists same signed submission and recovers once after expiry',async()=>{
+ const {store,worker,event}=await setupReclamation();const calls=[];let attempts=0;
+ worker.spc=async p=>{calls.push(p);if(p.action==='submit_reclamation'&&++attempts===1)throw Error('response lost');return {ok:true,id:'case',number:'R-1-SPC-TEST-1'};};
+ try {
+  await worker.tick();await store.pool.query('UPDATE spc_chat_events SET next_at=now() WHERE id=$1',[event.id]);
+  await store.withConversation(event.conversation,async(row,state,c)=>{state.reclamation.expiresAt=Date.now()-1;await store.save(c,row.id,state);});
+  worker.reclamationIntentFn=async()=>{throw Error('must not reinterpret confirmed retry');};await worker.tick();
+  assert.deepEqual(calls.filter(c=>c.action==='submit_reclamation').map(c=>c.reclamationToken),['signed-claim','signed-claim']);
+  assert.equal((await store.pool.query('SELECT * FROM spc_chat_outbox')).rows.length,1);assert.equal((await store.pool.query('SELECT paused FROM spc_chat_conversations')).rows[0].paused,false);
+ } finally {await store.close();}
+});
+test('claim decline, question, changed item and expired confirmation do not write to ERP',async()=>{
+ for(const intent of ['decline','other','unclear','expired']) {
+  const {store,worker,event}=await setupReclamation();const calls=[];worker.spc=async p=>{calls.push(p);return {ok:true};};
+  try {
+   worker.reclamationIntentFn=async()=>intent==='expired'?'confirm':intent;
+   if(intent==='expired')await store.withConversation(event.conversation,async(row,state,c)=>{state.reclamation.expiresAt=Date.now()-1;await store.save(c,row.id,state);});
+   await worker.tick();assert(!calls.some(c=>c.action==='submit_reclamation'),intent);
+  } finally {await store.close();}
+ }
+});
+test('claim photos are bound to selected item and force a fresh summary, never auto-submit',async()=>{
+ const {store,worker,event}=await setupReclamation();const calls=[];
+ worker.spc=async p=>{calls.push(p);if(p.action==='reclamation_photo')return {ok:true,photo:{url:'reclamation/SPC-TEST-1/IRON/date/photo.jpg',bytes:200}};
+  if(p.action==='prepare_reclamation')return {ok:true,number:p.number,name:'Pegla',input:p.input,reclamationToken:'new-signed-claim',expiresAt:Date.now()+900000};throw Error('no writes');};
+ try {
+  await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
+  await store.accept({...event,id:'fb:photo',text:'da',attachments:[{type:'image',url:'https://scontent.fbcdn.net/test.jpg'}]});await worker.tick();
+  assert.deepEqual(calls.map(c=>c.action),['reclamation_photo','prepare_reclamation']);assert.equal(calls[0].sku,'IRON');
+  const state=store.decode((await store.pool.query('SELECT state FROM spc_chat_conversations')).rows[0].state);
+  assert.equal(state.reclamation.input.photos.length,1);assert.match(state.history.at(-1).content,/Fotografije: 1/);
+ }finally{await store.close();}
+});
+test('failed claim creation notifies support without a fake case receipt or a paused chat',async()=>{
+ const {store,worker}=await setupReclamation();worker.spc=async p=>p.action==='submit_reclamation'?{ok:false,reason:'ORDER_NOT_DELIVERED'}:{ok:true};
+ try {await worker.tick();const row=(await store.pool.query('SELECT * FROM spc_chat_conversations')).rows[0];assert.equal(row.paused,false);assert.match(store.decode(row.state).history.at(-1).content,/još nije upisana/);assert.equal((await store.pool.query('SELECT * FROM spc_chat_support')).rows.length,1);}finally{await store.close();}
+});
+test('verification code is processed outside the model and grants only claim access',async()=>{
+ const {store,worker,event}=await setup();worker.answerFn=async()=>{throw Error('code must not go to model');};
+ worker.spc=async p=>{assert.equal(p.action,'reclamation_verify_finish');return {ok:true,proof:'signed-proof',order:{number:'SPC-EXTERNAL',items:[{sku:'IRON',name:'Pegla'}]}};};
+ try {
+  await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
+  await store.withConversation(event.conversation,async(row,state,c)=>{delete state.pending;state.claimVerification={challenge:'challenge'};await store.save(c,row.id,state);});
+  await store.accept({...event,id:'fb:code',text:'123456'});await worker.tick();
+  const state=store.decode((await store.pool.query('SELECT state FROM spc_chat_conversations')).rows[0].state);assert.equal(state.claimOrders['SPC-EXTERNAL'].proof,'signed-proof');assert.equal(state.orders.length,0);assert(!JSON.stringify(state.history).includes('123456'));
+ }finally{await store.close();}
+});

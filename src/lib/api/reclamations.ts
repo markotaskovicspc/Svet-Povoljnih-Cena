@@ -137,6 +137,18 @@ export async function createAdminReclamation(
   });
 }
 
+// Only called by the authenticated social bridge after validating its signed,
+// conversation-bound draft. Never expose this function as a public form action.
+export async function createSocialReclamation(
+  input: CreateReclamationInput,
+  context: { orderId: string; id: string; note: string; type?: ReclamationType; request?: ReclamationRequest },
+): Promise<CreateReclamationResult> {
+  return createReclamationRecord(input, {
+    expectedOrderId: context.orderId, social: context,
+    allowedOrderStatuses: ["ISPORUCENO"], type: context.type, request: context.request,
+  });
+}
+
 async function createReclamationRecord(
   input: CreateReclamationInput,
   options: {
@@ -146,10 +158,19 @@ async function createReclamationRecord(
     allowedOrderStatuses?: readonly OrderStatus[];
     type?: ReclamationType | null;
     request?: ReclamationRequest | null;
+    expectedOrderId?: string;
+    social?: { id: string; note: string };
   },
 ): Promise<CreateReclamationResult> {
   const order = await lookupOrderForReclamation(input.orderNumberOrFiscal);
   if (!order) return { ok: false, reason: "ORDER_NOT_FOUND" };
+  if (options.expectedOrderId && order.id !== options.expectedOrderId) return { ok: false, reason: "UNAUTHORIZED" };
+  // Recover a committed social submission even if the status changed or photo
+  // storage is temporarily unavailable after the original response was lost.
+  if (options.social) {
+    const existing = await db.reclamation.findUnique({ where: { id: options.social.id }, select: { id: true, number: true, orderId: true } });
+    if (existing?.orderId === order.id) return { ok: true, id: existing.id, number: existing.number };
+  }
   if (options.expectedUserId && order.userId !== options.expectedUserId) {
     return { ok: false, reason: "UNAUTHORIZED" };
   }
@@ -211,6 +232,10 @@ async function createReclamationRecord(
         FOR UPDATE
       `;
       if (!lockedOrder) throw new Error("Porudžbina više ne postoji.");
+      if (options.social) {
+        const existing = await tx.reclamation.findUnique({ where: { id: options.social.id }, select: { id: true, number: true } });
+        if (existing) return existing;
+      }
       if (
         options.allowedOrderStatuses &&
         !options.allowedOrderStatuses.includes(lockedOrder.status as OrderStatus)
@@ -246,8 +271,9 @@ async function createReclamationRecord(
         existing.map((row) => row.number),
       );
 
-      return tx.reclamation.create({
+      const created = await tx.reclamation.create({
         data: {
+          ...(options.social ? { id: options.social.id, adminNote: options.social.note } : {}),
           number,
           orderId: order.id,
           orderItemId: item.id,
@@ -282,7 +308,7 @@ async function createReclamationRecord(
           events: {
             create: {
               status: "PRIMLJENO",
-              note: options.actorId
+              note: options.social ? options.social.note : options.actorId
                 ? "Reklamacija ručno uneta u administraciji"
                 : "Reklamacija primljena",
               actorId: options.actorId ?? null,
@@ -291,6 +317,12 @@ async function createReclamationRecord(
         },
         select: { id: true, number: true },
       });
+      if (options.social) {
+        // A lost HTTP response can recover the case without losing its receipt.
+        await enqueueBackgroundJob({ kind: "RECLAMATION_RECEIPT", payload: { reclamationId: created.id }, idempotencyKey: `reclamation-receipt:${created.id}` }, tx);
+        if (item.supplierExternalSku) await enqueueBackgroundJob({ kind: "SUPPLIER_RECLAMATION_EMAIL", payload: { reclamationId: created.id }, idempotencyKey: `supplier-reclamation:${created.id}` }, tx);
+      }
+      return created;
     });
   } catch (error) {
     if (error instanceof ReclamationQuantityError) {

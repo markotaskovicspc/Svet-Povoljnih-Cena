@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {classifyReclamation,reclamationMessage} from '../src/reclamation.mjs';
+import {answer} from '../src/agent.mjs';
+const model=process.env.OPENAI_MODEL??'gpt-5.4-mini';
+const pending={number:'SPC-TEST-IRON',name:'Pegla',input:{sku:'IRON',quantity:1,description:'Ne greje',category:'KVAR',request:'ZAMENA',photos:[]}};
+const history=[{role:'assistant',content:reclamationMessage(pending)}];
+for(const [text,expected] of [['Da, pošalji','confirm'],['Може пријави','confirm'],['Ne salji ipak','decline'],['Da ali tražim povraćaj umesto zamene','other'],['Pošalji ako je zamena besplatna','other'],['A koliko košta druga pegla?','other']])assert.equal(await classifyReclamation({text,history,pending,model}),expected,text);
+assert.notEqual(await classifyReclamation({text:'da',history:[...history,{role:'assistant',content:'Želiš sliku nove pegle?'}],pending,model}),'confirm');
+const calls=[];
+const order={number:pending.number,status:'ISPORUCENO',items:[{sku:'IRON',name:'Pegla GOLD CORE',qty:1}],reclamations:[]};
+const spc=async p=>{calls.push(p);if(p.action==='reclamation_details')return {ok:true,order};if(p.action==='prepare_reclamation')return {ok:true,number:order.number,name:order.items[0].name,input:p.input,expiresAt:Date.now()+900000,reclamationToken:'synthetic'};throw Error('Unexpected operation: '+p.action);};
+const state={history:[],orders:[{number:'SPC-OLD-BED',accessToken:'synthetic',items:[{sku:'BED',name:'Krevet',qty:1}]},{number:order.number,accessToken:'synthetic',items:order.items}]};
+const event={text:'Pegla GOLD CORE iz porudžbine SPC-TEST-IRON ne greje uopšte. Jedna je kupljena, hoću zamenu. Nemam slike i ne želim da šaljem. Pripremi prijavu.',channel:'facebook',conversation:'synthetic'};
+const reply=await answer({event,state,spc,model});if(!state.reclamation)console.log(JSON.stringify({reply,calls,state}));assert.equal(state.reclamation?.input.sku,'IRON');assert.equal(state.reclamation.input.request,'ZAMENA');assert(!calls.some(c=>['quote','create_order','submit_reclamation'].includes(c.action)));
+const missingState={history:[],orders:[{number:order.number,accessToken:'synthetic',items:order.items}]};calls.length=0;
+const missingReply=await answer({event:{...event,text:'U porudžbini SPC-TEST-IRON fali pegla GOLD CORE. Nije stigao taj jedan komad, želim zamenu odnosno da pošaljete ono što nedostaje. Fotografiju nemam. Pripremi prijavu.'},state:missingState,spc,model});if(!missingState.reclamation)console.log(JSON.stringify({missingReply,calls,state:missingState}));assert.equal(missingState.reclamation?.input.category,'NEDOSTAJE_ARTIKAL');
+console.log(JSON.stringify({ok:true,synthetic:true,checks:['natural consent','negative and conditional answers','new topic','iron complaint never selects old bed','missing item classification','no real ERP mutations']}));
