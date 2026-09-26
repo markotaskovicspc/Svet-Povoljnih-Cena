@@ -375,7 +375,8 @@ test('complaint before delivery acknowledges existing order instead of denying c
   await store.accept({...event,id:'facebook:claim-before-delivery',text:'Hoću da reklamiram, iscepano je'});await worker.tick();
   const state=store.decode((await store.pool.query('SELECT state FROM spc_chat_conversations')).rows[0].state);
   assert.match(state.history.at(-1).content,/SPC-TEST-1 postoji/);
-  assert.match(state.history.at(-1).content,/nakon isporuke/);
+  assert.match(state.history.at(-1).content,/u sistemu još nije označena kao isporučena/);
+  assert.match(state.history.at(-1).content,/Tek kada isporuka bude evidentirana mogu da otvorim tiket/);
   assert.doesNotMatch(state.history.at(-1).content,/nije kreirana/);
   assert.equal(state.orders.length,1);assert(!state.reclamation);assert(!state.claimStatusNotice);
  }finally{await store.close();}

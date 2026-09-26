@@ -14,7 +14,7 @@ export async function beginReclamation({number,sku,event,state,spc}) {
   if(!result.ok)return {ok:false,error:'Porudžbina nije povezana sa ovim razgovorom ili je pristup istekao. Traži mejl sa porudžbine i uz saglasnost kupca koristi verify_reclamation_order. Ako nema mejl, handoff; ne traži lozinku niti kod za Facebook prijavu.'};
   const order=result.order;
   if(order.status!=='ISPORUCENO') {
-    state.claimStatusNotice=`Porudžbina ${order.number} postoji, ali još nije označena kao isporučena. Automatsku reklamaciju otvaramo nakon isporuke. Prijavljeni problem prosleđujem podršci da proveri porudžbinu i isporuku.`;
+    state.claimStatusNotice=`Porudžbina ${order.number} postoji, ali u sistemu još nije označena kao isporučena. Tek kada isporuka bude evidentirana mogu da otvorim tiket za reklamaciju i nastavim postupak ovde u chatu. Ako je roba već stigla, prijavljeni problem prosleđujem podršci da proveri status isporuke. Kada se status ažurira, javi se ovde da nastavimo.`;
     state.supportRequest={reason:`Prijava problema ${number}: status isporuke zahteva proveru`};
     delete state.reclamation;delete state.reclamationContext;
     return {ok:false,error:'Porudžbina POSTOJI. Samo status isporuke još nije ISPORUCENO. Nikad ne reci da porudžbina nije kreirana. Ne osporavaj da je kupac primio robu. Uzmi opis i prosledi podršci; ne menjaj status porudžbine.',order};
