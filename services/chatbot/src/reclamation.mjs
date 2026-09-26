@@ -14,9 +14,10 @@ export async function beginReclamation({number,sku,event,state,spc}) {
   if(!result.ok)return {ok:false,error:'Porudžbina nije povezana sa ovim razgovorom ili je pristup istekao. Traži mejl sa porudžbine i uz saglasnost kupca koristi verify_reclamation_order. Ako nema mejl, handoff; ne traži lozinku niti kod za Facebook prijavu.'};
   const order=result.order;
   if(order.status!=='ISPORUCENO') {
+    state.claimStatusNotice=`Porudžbina ${order.number} postoji, ali još nije označena kao isporučena. Automatsku reklamaciju otvaramo nakon isporuke. Prijavljeni problem prosleđujem podršci da proveri porudžbinu i isporuku.`;
     state.supportRequest={reason:`Prijava problema ${number}: status isporuke zahteva proveru`};
     delete state.reclamation;delete state.reclamationContext;
-    return {ok:false,error:'Status u sistemu još nije ISPORUCENO. Ne osporavaj da je kupac primio robu. Uzmi opis i prosledi podršci; ne menjaj status porudžbine.',order};
+    return {ok:false,error:'Porudžbina POSTOJI. Samo status isporuke još nije ISPORUCENO. Nikad ne reci da porudžbina nije kreirana. Ne osporavaj da je kupac primio robu. Uzmi opis i prosledi podršci; ne menjaj status porudžbine.',order};
   }
   if(!sku)return {ok:true,order,message:'Utvrdi tačnu stavku iz ove porudžbine, ne iz današnjeg kataloga. Pozovi begin_reclamation ponovo sa izabranom šifrom pre traženja fotografije.'};
   const item=order.items.find(i=>i.sku===sku);

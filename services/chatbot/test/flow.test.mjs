@@ -361,3 +361,22 @@ test('verification code is processed outside the model and grants only claim acc
   const state=store.decode((await store.pool.query('SELECT state FROM spc_chat_conversations')).rows[0].state);assert.equal(state.claimOrders['SPC-EXTERNAL'].proof,'signed-proof');assert.equal(state.orders.length,0);assert(!JSON.stringify(state.history).includes('123456'));
  }finally{await store.close();}
 });
+
+test('complaint before delivery acknowledges existing order instead of denying creation',async()=>{
+ const {store,worker,event}=await setup();
+ try{
+  await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
+  await store.withConversation(event.conversation,async(row,state,c)=>{delete state.pending;state.orders=[{number:'SPC-TEST-1',accessToken:'owned'}];await store.save(c,row.id,state);});
+  worker.answerFn=async({state,event})=>{
+   const {beginReclamation}=await import('../src/reclamation.mjs');
+   await beginReclamation({number:'SPC-TEST-1',sku:'TEST',event,state,spc:async()=>({ok:true,order:{number:'SPC-TEST-1',status:'KREIRANO',items:[{sku:'TEST',name:'Bokserice',qty:1}]}})});
+   return {text:'Porudžbina je kreirana, ali još nije isporučena.',quoteCreated:false};
+  };
+  await store.accept({...event,id:'facebook:claim-before-delivery',text:'Hoću da reklamiram, iscepano je'});await worker.tick();
+  const state=store.decode((await store.pool.query('SELECT state FROM spc_chat_conversations')).rows[0].state);
+  assert.match(state.history.at(-1).content,/SPC-TEST-1 postoji/);
+  assert.match(state.history.at(-1).content,/nakon isporuke/);
+  assert.doesNotMatch(state.history.at(-1).content,/nije kreirana/);
+  assert.equal(state.orders.length,1);assert(!state.reclamation);assert(!state.claimStatusNotice);
+ }finally{await store.close();}
+});

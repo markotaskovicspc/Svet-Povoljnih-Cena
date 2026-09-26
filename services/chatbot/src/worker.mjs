@@ -193,11 +193,14 @@ export class Worker {
             message=`Porudžbina ${state.orders.at(-1).number} je već kreirana. Nije napravljena nova porudžbina. Ako želite izmenu, napišite šta menjate.`;
           } else {
             if(state.reclamationInFlight) throw new Error('RECLAMATION_UNCERTAIN');
+            delete state.claimStatusNotice;
             const result=await this.answerFn({event,state,spc:this.spc,model:this.model,pause:reason=>this.store.pause(row.id,reason)});
             const normalizedReply=String(result.text??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'dj');
             const unverifiedSuccess=!result.quoteCreated && !state.orders.some(o=>String(result.text).includes(o.number)) && /potvrdjeno|porudzbin[^.!?\n]{0,70}(?:kreiran|potvrdjen|evidentiran|primljen|uspesn)/i.test(normalizedReply);
             if(unverifiedSuccess) {
-              result.text='Porudžbina još nije kreirana u sistemu. Za naručivanje je potrebna važeća ponuda i vaša potvrda.';
+              result.text=state.orders.length
+                ? 'Nije kreirana nova porudžbina. Prethodne porudžbine su sačuvane. Napišite broj porudžbine koju želite da proverim.'
+                : 'Porudžbina još nije kreirana u sistemu. Za naručivanje je potrebna važeća ponuda i vaša potvrda.';
               if(state.pending) result.text+='\n\n'+quoteMessage(state.pending);
             }
             if(!result.quoteCreated && !unverifiedSuccess && intent!=='question') delete state.pending;
@@ -210,6 +213,7 @@ export class Worker {
             if(!state.reclamation && /reklamacija[^.!?\n]{0,90}(?:zabelezena|kreirana|primljena|evidentirana)|prijava[^.!?\n]{0,70}(?:zabelezena|kreirana|evidentirana)/i.test(normalizedReply) && !(state.reclamations??[]).some(r=>String(result.text).includes(r.number))) message='Prijava još nije potvrđena u sistemu. Pripremimo sažetak reklamacije za vašu potvrdu.';
             if(state.reclamation?.reclamationToken) message=reclamationMessage(state.reclamation);
             else if(state.reclamation) {delete state.reclamation;message='Pripremimo ponovo kratak sažetak reklamacije. Napišite koji artikal prijavljujete.';}
+            if(state.claimStatusNotice){message=state.claimStatusNotice;delete state.claimStatusNotice;images=[];}
             if(message.length>1850) {
               delete state.pending; delete state.reclamation;delete state.cancellation;
               state.supportRequest={reason:'Složena ponuda zahteva zaposlenog'};
