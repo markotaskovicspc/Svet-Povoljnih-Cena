@@ -14,6 +14,7 @@ import { getEmailConfig } from "@/lib/email/config";
 import { createHash } from "node:crypto";
 import { cancelWebOrderByCustomer } from "@/lib/orders/cancellation.server";
 import { canCustomerCancelStatus, OrderCancellationError } from "@/lib/orders/cancellation";
+import { handleSocialReclamation, socialReclamationActions } from "@/lib/social/reclamations";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,7 +22,8 @@ const identity = z.object({ channel: z.enum(["facebook", "instagram"]), conversa
 const quotePayload = identity.extend({ input: createOrderSchema, total: z.number().nonnegative(), expiresAt: z.number() });
 const cancellationPayload = identity.extend({ purpose: z.literal("cancel_order"), number: z.string(), expiresAt: z.number() });
 const requestSchema = z.discriminatedUnion("action", [
-  identity.extend({ action: z.literal("support_handoff"), id: z.string().min(1).max(300), reason: z.string().max(200), transcript: z.string().max(10000) }),
+  ...socialReclamationActions,
+  identity.extend({ action: z.literal("support_handoff"), id: z.string().min(1).max(300), reason: z.string().max(200), transcript: z.string().max(10000), reclamationId: z.string().regex(/^[A-Za-z0-9_-]{1,100}$/).optional() }),
   z.object({ action: z.literal("search"), query: z.string().trim().min(1).max(100), quantity: z.number().int().positive().max(1000).default(1) }),
   identity.extend({ action: z.literal("quote"), input: createOrderSchema }),
   identity.extend({ action: z.literal("create_order"), quoteToken: z.string().max(20000) }),
@@ -47,7 +49,8 @@ export async function POST(req: Request) {
   try {
     if (body.action === "support_handoff") {
       if (getEmailConfig().provider === "none") return NextResponse.json({ ok: false, error: "EMAIL_NOT_CONFIGURED" }, { status: 503 });
-      const text = `Potreban je odgovor SPC podrške.\nKanal: ${body.channel}\nRazgovor: ${body.conversationId}\nRazlog: ${body.reason}\n\nPoslednje poruke:\n${body.transcript}\n\nOtvorite Meta Business Suite inbox i pronađite razgovor. Bot nastavlja da pomaže oko novih pitanja dok zaposleni ne preuzme razgovor.`;
+      const caseLink = body.reclamationId ? `\nReklamacija u ERP-u: https://www.svetpovoljnihcena.rs/admin/erp/reklamacije-dnevnik/${encodeURIComponent(body.reclamationId)}` : "";
+      const text = `Potreban je odgovor SPC podrške.\nKanal: ${body.channel}\nRazgovor: ${body.conversationId}\nRazlog: ${body.reason}${caseLink}\n\nPoslednje poruke:\n${body.transcript}\n\nOtvorite Meta Business Suite inbox i pronađite razgovor. Bot nastavlja da pomaže oko novih pitanja dok zaposleni ne preuzme razgovor.`;
       const escaped = text.replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[c]!);
       const result = await trackedDispatch({ kind: "social_support_handoff", to: "podrska@svetpovoljnihcena.rs", subject: `SPC ${body.channel} — upit za podršku`, text, html: `<pre style="white-space:pre-wrap">${escaped}</pre>`, idempotencyKey: `social-support:${createHash('sha256').update(body.conversationId+':'+body.id).digest('hex')}` });
       return NextResponse.json({ ok: result.ok && result.provider !== "none" });
@@ -136,7 +139,8 @@ export async function POST(req: Request) {
       if (!order || !verifyOrderAccessToken({ token: body.accessToken, tokenHash: order.publicAccessTokenHash })) return new Response(null, { status: 403 });
       return NextResponse.json({ ok: true, number: order.number, status: order.status });
     }
-    return NextResponse.json(await createGuestReclamation(body.input, body.accessToken));
+    if (body.action === "reclamation") return NextResponse.json(await createGuestReclamation(body.input, body.accessToken));
+    return NextResponse.json(await handleSocialReclamation(body, secret));
   } catch {
     // Never log raw requests, addresses, tokens or upstream error bodies.
     console.error("social.integration.request_failed", { action: body.action });

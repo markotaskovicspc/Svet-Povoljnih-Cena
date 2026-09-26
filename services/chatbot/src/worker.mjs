@@ -7,10 +7,11 @@ import {HISTORY_LIMIT,repeatsCompletedOrder,customerFromQuote} from './conversat
 import {checkCart} from './cart-check.mjs';
 import {readMetaHistory} from './meta-history.mjs';
 import {classifyCancellation,cancellationMessage} from './cancellation.mjs';
+import {classifyReclamation,reclamationMessage,receiveClaimPhotos,prepareReclamation} from './reclamation.mjs';
 
 export class Worker {
-  constructor({store,spc,accounts,model,graphVersion,enabled=false,testSenders=[],answerFn=answer,intentFn=classifyOrderIntent,cartCheckFn=checkCart,cancellationIntentFn=classifyCancellation}) {
-    Object.assign(this,{store,spc,accounts,model,graphVersion,enabled,testSenders,answerFn,intentFn,cartCheckFn,cancellationIntentFn}); this.busy=false;
+  constructor({store,spc,accounts,model,graphVersion,enabled=false,testSenders=[],answerFn=answer,intentFn=classifyOrderIntent,cartCheckFn=checkCart,cancellationIntentFn=classifyCancellation,reclamationIntentFn=classifyReclamation}) {
+    Object.assign(this,{store,spc,accounts,model,graphVersion,enabled,testSenders,answerFn,intentFn,cartCheckFn,cancellationIntentFn,reclamationIntentFn}); this.busy=false;
   }
   async start() {
     // LISTEN starts work immediately; timer only recovers missed notifications/retries.
@@ -55,6 +56,13 @@ export class Worker {
             } catch {state.history=local;state.historyImport='unavailable';console.error('chat.history_import_unavailable');}
             state.historyVersion=2;
           }
+          if(state.reclamationContext&&Date.now()-state.reclamationContext.createdAt>2*3600000)delete state.reclamationContext;
+          let reclamationIntent;
+          if(state.reclamation?.reclamationToken&&!event.attachments.length) {
+            delete state.pending;delete state.confirming;delete state.cancellation;
+            reclamationIntent=state.submittingReclamation?.eventId===event.id?'confirm':await this.reclamationIntentFn({text:event.text,history:state.history,pending:state.reclamation,model:this.model});
+            if(reclamationIntent==='other')delete state.reclamation;
+          }
           let intent;
           let cancellationIntent;
           if(state.cancellation && !state.reclamationInFlight && !event.attachments.length) {
@@ -89,6 +97,39 @@ export class Worker {
             await this.store.pause(row.id,'Proveriti prethodno slanje reklamacije pre nastavka');
             await c.query(`UPDATE spc_chat_events SET status='failed' WHERE id=$1`,[job.id]);
             return;
+          } else if (state.claimVerification && /^\s*\d{6}\s*$/.test(event.text)) {
+            const verify=state.claimVerification;
+            const result=await this.spc({action:'reclamation_verify_finish',channel:event.channel,conversationId:row.id,challenge:verify.challenge,code:event.text.trim()});
+            if(result.ok) {
+              state.claimOrders??={};state.claimOrders[result.order.number]={proof:result.proof,items:result.order.items};
+              delete state.claimVerification;
+              message='Porudžbina je povezana sa ovim razgovorom. Na koji artikal se odnosi problem: '+result.order.items.map(i=>i.name).slice(0,6).join(', ')+'?';
+            } else {
+              message='Kod nije prihvaćen ili je istekao. Možete zatražiti novi kod ili pomoć kolege.';
+              if(result.error?.code!=='VERIFICATION_INVALID')delete state.claimVerification;
+            }
+          } else if (state.reclamation?.reclamationToken && reclamationIntent==='confirm') {
+            const pending=state.reclamation;
+            if(pending.expiresAt<Date.now()&&!state.submittingReclamation) {
+              message='Sažetak prijave je istekao. Prijava nije poslata. Napišite da obnovimo prijavu sa istim podacima.';delete state.reclamation;
+            } else {
+              state.submittingReclamation={eventId:event.id};await this.store.save(c,row.id,state);
+              const result=await this.spc({action:'submit_reclamation',channel:event.channel,conversationId:row.id,reclamationToken:pending.reclamationToken});
+              if(result.ok) {
+                state.reclamations??=[];if(!state.reclamations.some(r=>r.number===result.number))state.reclamations.push({number:result.number,orderNumber:pending.number,sku:pending.input.sku});
+                message='Reklamacija '+result.number+' je zabeležena. Kolege će pregledati prijavu i javiti se o daljim koracima.';
+                state.supportRequest={reason:'Nova reklamacija '+result.number,reclamationId:result.id};
+                delete state.reclamationContext;
+              } else {
+                message='Reklamacija još nije upisana. Prikupljeni zahtev šaljem podršci da proveri porudžbinu i prijavu.';
+                state.supportRequest={reason:'Reklamacija za '+pending.number+' zahteva proveru'};
+              }
+              delete state.reclamation;delete state.submittingReclamation;
+            }
+          } else if (state.reclamation?.reclamationToken && reclamationIntent==='decline') {
+            message='U redu, prijava reklamacije nije poslata.';delete state.reclamation;delete state.reclamationContext;
+          } else if (state.reclamation?.reclamationToken && reclamationIntent==='unclear') {
+            message=reclamationMessage(state.reclamation);
           } else if (state.cancellation && cancellationIntent==='confirm') {
             const pending=state.cancellation,order=state.orders.find(o=>o.number===pending.number);
             if(!order || (pending.expiresAt<Date.now()&&!state.cancelling)) {
@@ -116,9 +157,20 @@ export class Worker {
           } else if (state.cancellation && cancellationIntent==='unclear') {
             message=cancellationMessage(state.cancellation);
           } else if (event.attachments.length) {
-            delete state.cancellation;
-            state.supportRequest={reason:'Prilog/slika zahteva pregled zaposlenog'};
-            message='Primili smo prilog. Upit šaljem podršci na proveru. Za druge proizvode možeš nastaviti ovde.';
+            delete state.cancellation;delete state.pending;delete state.confirming;
+            if(state.reclamationContext) {
+              const previous=state.reclamation;
+              const imported=await receiveClaimPhotos({event,state,spc:this.spc});
+              message=imported.added?'Fotografije su dodate prijavi.':'Fotografiju trenutno nisam uspeo da dodam. Prijavu možemo nastaviti bez nje, a podrška će proveriti prilog.';
+              if(imported.failed) {state.supportRequest={reason:'Prilog reklamacije zahteva ručnu proveru'};message+=' Deo priloga zahteva proveru podrške.';}
+              if(previous?.input) {
+                await prepareReclamation({input:{...previous.input,number:previous.number},event,state,spc:this.spc});
+                if(state.reclamation)message=reclamationMessage(state.reclamation)+(imported.failed?'\nNeki prilozi nisu dodati; podrška će ih proveriti.':'');
+              } else message+=' Opišite problem i napišite da li želite zamenu, popravku ili drugi dogovor.';
+            } else {
+              state.claimAttachments=event.attachments.slice(0,5).map(a=>({...a,timestamp:Date.now()}));
+              message='Primio sam prilog. Da li se odnosi na reklamaciju i, ako da, na koju porudžbinu i artikal?';
+            }
           } else if (state.pending && intent==='cancel') {
             delete state.pending;delete state.confirming;
             message='U redu, odustali smo od ove ponude. Porudžbina nije kreirana.';
@@ -136,17 +188,6 @@ export class Worker {
               console.error('chat.order_rejected',{code:typeof code==='string'&&/^[A-Z_]+$/.test(code)?code:'UNKNOWN'});
               message=orderErrorMessage(code);
               delete state.pending;
-            }
-          } else if (state.reclamation && isConfirmation(event.text,state.reclamation.code)) {
-            const r=state.reclamation,order=state.orders.find(o=>o.number===r.number);
-            if (!order || Date.now()-r.createdAt>15*60_000) {message='Potvrda reklamacije je istekla. Pošaljite ponovo opis problema.';delete state.reclamation;}
-            else {
-              // Reclamation API has no idempotency contract: never blindly retry a write.
-              state.reclamationInFlight=true; await this.store.save(c,row.id,state);
-              const result=await this.spc({action:'reclamation',input:{orderNumberOrFiscal:r.number,sku:r.sku,quantity:r.quantity,description:r.description,photos:[]},accessToken:order.accessToken});
-              message=result.ok ? `Reklamacija ${result.number} je zabeležena. Kolege će pregledati prijavu.` : 'Prijavu treba da proveri zaposleni. Prosleđujem mu razgovor.';
-              state.reclamationInFlight=false; delete state.reclamation;
-              if(!result.ok) state.supportRequest={reason:'Reklamacija zahteva proveru'};
             }
           } else if (!state.pending && !state.reclamation && repeatsCompletedOrder(state,event.text)) {
             message=`Porudžbina ${state.orders.at(-1).number} je već kreirana. Nije napravljena nova porudžbina. Ako želite izmenu, napišite šta menjate.`;
@@ -166,19 +207,21 @@ export class Worker {
             else if(/(?:porudzbina[^.!?\n]{0,70} je (?:uspesno )?(?:otkazana|stornirana)|(?:otkazao|stornirao) sam|^otkazano[.!])/i.test(normalizedReply) && !state.orders.some(o=>o.status==='OTKAZANO'&&String(result.text).includes(o.number))) {
               message='Otkazivanje još nije potvrđeno u sistemu. Napišite broj porudžbine koju želite da otkažete, pa ću proveriti mogućnost otkazivanja.';
             }
-            if(state.reclamation) message=`Prijava za ${state.reclamation.number}, artikal ${state.reclamation.sku}, količina ${state.reclamation.quantity}:\n${state.reclamation.description}\n\nZa slanje prijave napišite: POTVRĐUJEM ${state.reclamation.code}`;
+            if(!state.reclamation && /reklamacija[^.!?\n]{0,90}(?:zabelezena|kreirana|primljena|evidentirana)|prijava[^.!?\n]{0,70}(?:zabelezena|kreirana|evidentirana)/i.test(normalizedReply) && !(state.reclamations??[]).some(r=>String(result.text).includes(r.number))) message='Prijava još nije potvrđena u sistemu. Pripremimo sažetak reklamacije za vašu potvrdu.';
+            if(state.reclamation?.reclamationToken) message=reclamationMessage(state.reclamation);
+            else if(state.reclamation) {delete state.reclamation;message='Pripremimo ponovo kratak sažetak reklamacije. Napišite koji artikal prijavljujete.';}
             if(message.length>1850) {
               delete state.pending; delete state.reclamation;delete state.cancellation;
               state.supportRequest={reason:'Složena ponuda zahteva zaposlenog'};
               message='Za ovu ponudu potreban je zaposleni. Prosledio sam mu razgovor da proveri sve stavke i dostavu.';
             }
           }
-          state.history.push({role:'user',content:event.text || '[Prilog kupca]',timestamp:event.timestamp},{role:'assistant',content:message,timestamp:Date.now()});
+          state.history.push({role:'user',content:/^\s*\d{6}\s*$/.test(event.text)&&Boolean(state.claimVerification||state.claimOrders)?'[Kod za proveru porudžbine]':event.text || '[Prilog kupca]',timestamp:event.timestamp},{role:'assistant',content:message,timestamp:Date.now()});
           state.history=state.history.slice(-HISTORY_LIMIT);
           await c.query('BEGIN');
           if(state.supportRequest) {
             const payload={action:'support_handoff',id:job.id,channel:event.channel,conversationId:row.id,
-              reason:state.supportRequest.reason,transcript:state.history.slice(-8).map(m=>`${m.role==='user'?'Kupac':'SPC'}: ${m.content}`).join('\n').slice(-6000)};
+              reason:state.supportRequest.reason,reclamationId:state.supportRequest.reclamationId,transcript:state.history.slice(-8).map(m=>`${m.role==='user'?'Kupac':'SPC'}: ${m.content}`).join('\n').slice(-6000)};
             await c.query('INSERT INTO spc_chat_support(id,conversation,payload) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[job.id,row.id,this.store.encode(payload)]);
             delete state.supportRequest;
           }

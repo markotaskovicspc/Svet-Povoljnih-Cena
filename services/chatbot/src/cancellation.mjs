@@ -28,7 +28,7 @@ export async function prepareCancellation({number,event,state,spc}) {
   if (!order) return {ok:false,error:'Ova porudžbina nije potvrđena u ovom razgovoru. Ponudi zaštićeni link iz mejla ili handoff zaposlenom; sam broj nije dokaz identiteta.'};
   const result=await spc({action:'prepare_cancellation',number,accessToken:order.accessToken,channel:event.channel,conversationId:event.conversation});
   if(result.ok) {
-    delete state.pending;delete state.confirming;delete state.reclamation;
+    delete state.pending;delete state.confirming;delete state.reclamation;delete state.reclamationContext;
     if(result.alreadyCancelled){order.status='OTKAZANO';delete state.cancellation;return {ok:true,alreadyCancelled:true,number};}
     state.cancellation=result;
     return {ok:true,message:'Sistem traži potvrdu otkazivanja. Porudžbina još nije otkazana.'};
