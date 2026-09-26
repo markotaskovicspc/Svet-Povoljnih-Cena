@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/admin/page-header";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { savePosition } from "./actions";
+import styles from "./picking-map.module.css";
 export const dynamic = "force-dynamic";
 export default async function PickingPositionsPage({ searchParams }: { searchParams: Promise<{ warehouse?: string; position?: string; q?: string }> }) {
   await requireAdminAction(["OPS"]);
@@ -27,14 +28,14 @@ export default async function PickingPositionsPage({ searchParams }: { searchPar
         <button className="rounded bg-foreground px-4 py-2 text-background">Prikaži</button>
       </form>
       <p className="text-sm text-muted-foreground">{occupied} / 240 popunjenih pozicija. Svaki magacin ima zasebne dodele. Više šifara i dobavljača može deliti poziciju; konkretna šifra ima prednost nad opštom dodelom dobavljača. Ovo je raspored robe, ne evidencija količina na lageru.</p>
-      <div className="overflow-x-auto rounded-xl border bg-muted/20 p-4">
-        <div className="min-w-[1000px] space-y-2" aria-label="Skica magacina">
-          {pickingLayout.map((blocks, r) => <div key={r} className={`flex gap-10 ${r > 0 && r % 2 === 0 ? "pt-6" : ""}`}>{blocks.map((block, b) => <div key={b} className="grid flex-1 grid-cols-15 gap-1" style={{ gridTemplateColumns: "repeat(15, minmax(0, 1fr))" }}>{block.map(n => {
+      <div className={styles.viewport} role="region" aria-label="Skica magacina sa picking pozicijama" tabIndex={0}>
+        <div className={styles.floorplan}>
+          {pickingLayout.map((blocks, r) => <div key={r} className={styles.row} style={{ gridRow: 2 + r * 2 }}>{blocks.map((block, b) => <div key={b} className={styles.shelf} style={{ gridColumn: b === 0 ? 1 : 3 }}>{block.map(n => {
             const entry = positions.find(p => p.number === n);
             const supplierNames = suppliers.filter(s => entry?.supplierIds.includes(s.id)).map(s => s.name);
             const assigned = !!(entry?.skus.length || entry?.supplierIds.length);
             const match = !q || [String(n), ...(entry?.skus ?? []), ...supplierNames, entry?.note ?? ""].some(v => v.toLocaleLowerCase("sr").includes(q));
-            return <Link key={n} href={`?warehouse=${warehouse?.id ?? ""}&position=${n}&q=${encodeURIComponent(params.q ?? "")}#position-editor`} title={[...(entry?.skus ?? []), ...supplierNames].join(", ") || "Prazna pozicija"} aria-label={`Pozicija ${n}${assigned ? ", popunjena" : ", prazna"}`} className={`rounded border py-3 text-center text-xs font-semibold ${selected === n ? "bg-foreground text-background ring-2 ring-blue-500" : assigned ? "border-emerald-300 bg-emerald-100 text-emerald-950" : "bg-background"} ${match ? "" : "opacity-20"}`}>{n}</Link>;
+            return <Link key={n} href={`?warehouse=${warehouse?.id ?? ""}&position=${n}&q=${encodeURIComponent(params.q ?? "")}#position-editor`} title={[...(entry?.skus ?? []), ...supplierNames].join(", ") || "Prazna pozicija"} aria-label={`Pozicija ${n}${assigned ? ", popunjena" : ", prazna"}`} aria-current={selected === n ? "location" : undefined} className={`${styles.position} ${assigned ? styles.assigned : ""} ${selected === n ? styles.selected : ""} ${match ? "" : styles.dimmed}`}>{n}</Link>;
           })}</div>)}</div>)}
         </div>
       </div>

@@ -4,6 +4,8 @@
 
 U ERP → Picking pozicije izabrati magacin. Skica prati 240 numerisanih pozicija iz dokumenta „Magacin picking pozicije.pdf“. Zelena polja imaju dodeljene artikle ili dobavljače. Svaki magacin ima zaseban raspored.
 
+Raspored prati i prolaze iz PDF-a: širok središnji prolaz, razmake između pojedinačnih redova, širi poslednji prolaz i obris magacina sa crnim oznakama na vrhu i dnu. Na užem ekranu skica se pomera vodoravno kako bi brojevi ostali čitljivi.
+
 Klik na poziciju otvara unos više SKU (novi red, zarez ili tačka-zarez), više dobavljača, napomene i redosleda obilaska. Konkretna SKU dodela ima prednost nad dodelom dobavljača. Početni redosled je numerički; prilagoditi stvarnom početku obilaska i mestu pakovanja. Pozicije ne predstavljaju količine na lageru.
 
 ## Odvajanje
