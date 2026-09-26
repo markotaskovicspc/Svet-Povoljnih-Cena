@@ -16,6 +16,9 @@ export async function syncAnanasOrders(from: Date, to: Date, source: "ORDERS_MAN
     return tx.ananasSyncRun.create({ data: { from, to, source, status: "RUNNING" } });
   }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
   const api = new AnanasClient(fetch, AbortSignal.timeout(180000));
+  // Leave room for the last API request and recording the result. Refreshing
+  // old statuses must not invalidate a fully imported creation-date window.
+  const refreshUntil = Date.now() + 120000;
   try {
     const incoming = (await api.orders(new URLSearchParams({ dateFrom: from.toISOString(), dateTo: new Date(to.getTime() - 1).toISOString() }))).map(normalizeAnanasOrder);
     const standardIds = new Set(incoming.map(row => row.id));
@@ -40,21 +43,34 @@ export async function syncAnanasOrders(from: Date, to: Date, source: "ORDERS_MAN
     const open = await db.ananasOrder.findMany({ where: { OR: [
       { needsRefresh: true, lastCheckedAt: { lt: new Date(Date.now() - 10 * 60000) } },
       { lastCheckedAt: { lt: new Date(Date.now() - 7 * 86400000) } },
-    ] }, orderBy: [{ lastCheckedAt: "asc" }, { id: "asc" }], take: 40 });
+    ] }, orderBy: [{ lastCheckedAt: "asc" }, { id: "asc" }], take: 10 });
+    let checked = 0;
+    let warning: string | undefined;
     for (const order of open) {
-      const refreshed = (await api.orders(new URLSearchParams({ orderId: order.id }))).map(normalizeAnanasOrder);
-      if (refreshed.some(o => o.id !== order.id)) throw new Error("Ananas odgovor ne odgovara traženoj porudžbini.");
-      const raw = await api.shipments(new URLSearchParams({ search: order.id }));
-      const shipments = normalizeAnanasShipments(raw);
-      if (shipments.some(s => s.orderId !== order.id)) throw new Error("Ananas pošiljka ne odgovara traženoj porudžbini.");
-      const replacement = refreshed[0] ?? ((order.billingAddress as { source?: string })?.source === "SHIPMENTS" && raw.length ? ordersFromAnanasShipments(raw)[0] : undefined);
-      const items = replacement?.items ?? order.items as { quantity: number }[];
-      const status = ananasOrderStatus(shipments, items.reduce((sum, item) => sum + item.quantity, 0));
-      await db.ananasOrder.update({ where: { id: order.id }, data: { ...replacement, shipments, ...status, lastCheckedAt: new Date() } });
-      await new Promise(resolve => setTimeout(resolve, 250));
+      if (Date.now() >= refreshUntil) break;
+      try {
+        // FBA orders are available through shipments; the standard orders API
+        // consistently returns an empty list for them.
+        const fromShipments = (order.billingAddress as { source?: string })?.source === "SHIPMENTS";
+        const refreshed = fromShipments ? [] : (await api.orders(new URLSearchParams({ orderId: order.id }))).map(normalizeAnanasOrder);
+        if (refreshed.some(o => o.id !== order.id)) throw new Error("Ananas odgovor ne odgovara traženoj porudžbini.");
+        const raw = await api.shipments(new URLSearchParams({ search: order.id }));
+        const shipments = normalizeAnanasShipments(raw);
+        if (shipments.some(s => s.orderId !== order.id)) throw new Error("Ananas pošiljka ne odgovara traženoj porudžbini.");
+        const replacement = refreshed[0] ?? (fromShipments && raw.length ? ordersFromAnanasShipments(raw)[0] : undefined);
+        const items = replacement?.items ?? order.items as { quantity: number }[];
+        const status = ananasOrderStatus(shipments, items.reduce((sum, item) => sum + item.quantity, 0));
+        await db.ananasOrder.update({ where: { id: order.id }, data: { ...replacement, shipments, ...status, lastCheckedAt: new Date() } });
+        checked++;
+        await new Promise(resolve => setTimeout(resolve, 250));
+      } catch (error) {
+        warning = `Porudžbine za izabrani period su preuzete. Provera starijih statusa nije završena: ${ananasError(error)}`;
+        // Keep the failed record eligible for retry. Later records still get a
+        // turn within this bounded batch, unless its time budget has expired.
+      }
     }
-    await db.ananasSyncRun.update({ where: { id: run.id }, data: { status: "SUCCESS", count: orders.length, finishedAt: new Date() } });
-    return { count: orders.length, checked: open.length, runId: run.id };
+    await db.ananasSyncRun.update({ where: { id: run.id }, data: { status: "SUCCESS", count: orders.length, error: warning ?? null, finishedAt: new Date() } });
+    return { count: orders.length, checked, runId: run.id, ...(warning ? { warning } : {}) };
   } catch (error) {
     const message = `Ananas uvoz porudžbina: ${ananasError(error)}`;
     await db.ananasSyncRun.update({ where: { id: run.id }, data: { status: "FAILED", error: message, finishedAt: new Date() } });

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   orders: vi.fn(), shipments: vi.fn(), shipmentsInPeriod: vi.fn(), upsert: vi.fn(), find: vi.fn(), update: vi.fn(), runCreate: vi.fn(), runUpdate: vi.fn(), running: vi.fn(),
 }));
@@ -17,6 +17,7 @@ beforeEach(() => {
   mocks.orders.mockResolvedValue([raw]); mocks.shipments.mockResolvedValue([]); mocks.shipmentsInPeriod.mockResolvedValue([]); mocks.find.mockResolvedValue([]); mocks.upsert.mockResolvedValue({});
 });
 const start = new Date("2026-09-24T00:00:00Z"), end = new Date("2026-09-25T00:00:00Z");
+afterEach(() => { vi.restoreAllMocks(); });
 describe("read-only order synchronization", () => {
   it("imports FBA orders absent from the orders endpoint, including cancelled unconfirmed shipments", async () => {
     mocks.orders.mockResolvedValue([]);
@@ -45,6 +46,33 @@ describe("read-only order synchronization", () => {
     await expect(syncAnanasOrders(start, end)).rejects.toThrow();
     expect(mocks.upsert).not.toHaveBeenCalled();
     expect(mocks.runUpdate.mock.calls[0][0].data.status).toBe("FAILED");
+  });
+  it("refreshes FBA records through shipments without an empty standard-order request", async () => {
+    mocks.find.mockResolvedValue([{ id: "FBA-ORDER", billingAddress: { source: "SHIPMENTS" }, items: [{ quantity: 1 }] }]);
+    mocks.shipments.mockResolvedValue([{ orderId: "FBA-ORDER", suborderId: "FBA-ORDER-FBA-1", createdDate: "2026-09-24T10:00:00Z", status: "DELIVERED", totalPrice: 3048,
+      items: [{ merchantInventoryId: 7, orderedQuantity: 1, unitPrice: 2699, totalPrice: 2699 }] }]);
+    const result = await syncAnanasOrders(start, end);
+    expect(mocks.orders).toHaveBeenCalledTimes(1); // New creation-date window only.
+    expect(mocks.update.mock.calls[0][0].data).toMatchObject({ status: "Isporučeno", total: 3048 });
+    expect(result.checked).toBe(1);
+  });
+  it("keeps a complete new-order import successful when an old status request times out", async () => {
+    mocks.find.mockResolvedValue([{ id: "old", billingAddress: { source: "SHIPMENTS" }, items: [] }]);
+    mocks.shipments.mockRejectedValue(new DOMException("timeout", "TimeoutError"));
+    const result = await syncAnanasOrders(start, end);
+    expect(result).toMatchObject({ count: 1, checked: 0, warning: expect.stringContaining("starijih statusa") });
+    expect(mocks.runUpdate.mock.calls.at(-1)?.[0].data).toMatchObject({ status: "SUCCESS", count: 1, error: expect.stringContaining("starijih statusa") });
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+  it("stops old status checks at the time budget and reports only completed checks", async () => {
+    let now = start.getTime();
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    mocks.find.mockResolvedValue([{ id: "old-1", billingAddress: { source: "SHIPMENTS" }, items: [] }, { id: "old-2", billingAddress: { source: "SHIPMENTS" }, items: [] }]);
+    mocks.shipments.mockImplementation(async () => { now += 121000; return []; });
+    const result = await syncAnanasOrders(start, end);
+    expect(result.checked).toBe(1);
+    expect(mocks.shipments).toHaveBeenCalledTimes(1);
+    expect(mocks.runUpdate.mock.calls.at(-1)?.[0].data).toMatchObject({ status: "SUCCESS", count: 1 });
   });
   it("does not advance the successful cursor when shipment retrieval fails", async () => {
     mocks.shipmentsInPeriod.mockRejectedValue(new Error("Ananas čitanje nije uspelo (HTTP 429)."));
