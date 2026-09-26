@@ -132,6 +132,10 @@ const nextConfig: NextConfig = {
     // Sharp is externalized by Next.js. Include its Linux runtime explicitly so
     // Vercel functions receive both the native addon and the libvips shared lib.
     "/*": [
+      // Public assets are otherwise served only by the CDN. PDF attachments
+      // read these files locally inside checkout, cron and admin functions.
+      "public/documents/garantni-list-logo.jpeg",
+      "public/documents/spc-pdf-geist-regular.ttf",
       "node_modules/sharp/**/*",
       "node_modules/@img/sharp-linux-x64/**/*",
       "node_modules/@img/sharp-libvips-linux-x64/**/*",

@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "NEXT_DIST_DIR=${NEXT_DIST_DIR:-.next-dev} next dev",
-    "build": "npm run db:generate && npm run check:checkout-isolation && npm run db:deploy:production && next build",
+    "build": "npm run db:generate && npm run check:checkout-isolation && npm run db:deploy:production && next build && node scripts/check-email-assets.mjs",
     "start": "next start",
     "lint": "eslint",
     "test": "npm run test:unit",

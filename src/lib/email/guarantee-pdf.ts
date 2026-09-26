@@ -49,7 +49,7 @@ type RenderedItem = GuaranteeItem & {
   rowHeight: number;
 };
 
-let logoDataUriPromise: Promise<string> | null = null;
+let logoDataUriPromise: Promise<string | null> | null = null;
 
 export function guaranteeItemsForOrder(items: OrderItem[]) {
   return items.filter(
@@ -89,7 +89,16 @@ export async function buildGuaranteePdf(input: GuaranteePdfInput) {
 function loadLogoDataUri() {
   logoDataUriPromise ??= readFile(
     join(process.cwd(), "public", "documents", "garantni-list-logo.jpeg"),
-  ).then((buffer) => `data:image/jpeg;base64,${buffer.toString("base64")}`);
+  )
+    .then((buffer) => `data:image/jpeg;base64,${buffer.toString("base64")}`)
+    .catch((error: NodeJS.ErrnoException) => {
+      // Branding is optional; the guarantee and its legal content are not.
+      // A missing logo must never stop the buyer's confirmation email.
+      logoDataUriPromise = null;
+      if (error.code !== "ENOENT") throw error;
+      console.warn("[email:guarantee] Logo missing; using text header.");
+      return null;
+    });
   return logoDataUriPromise;
 }
 
@@ -124,7 +133,7 @@ function paginateItems(items: RenderedItem[]) {
 
 function guaranteePageSvg(input: Omit<GuaranteePdfInput, "items"> & {
   items: RenderedItem[];
-  logoDataUri: string;
+  logoDataUri: string | null;
   pageIndex: number;
   pageCount: number;
 }) {
@@ -182,7 +191,9 @@ function guaranteePageSvg(input: Omit<GuaranteePdfInput, "items"> & {
       .rule { stroke: #d5dbe2; stroke-width: 1; }
     </style>
     <rect width="1240" height="1754" fill="#ffffff"/>
-    <image x="205" y="28" width="830" height="198" preserveAspectRatio="xMidYMid meet" href="${input.logoDataUri}" xlink:href="${input.logoDataUri}"/>
+    ${input.logoDataUri
+      ? `<image x="205" y="28" width="830" height="198" preserveAspectRatio="xMidYMid meet" href="${input.logoDataUri}" xlink:href="${input.logoDataUri}"/>`
+      : `<text x="620" y="145" text-anchor="middle" class="title">Svet Povoljnih Cena</text>`}
 
     <text x="145" y="275" class="title">GARANTNI LIST</text>
     <text x="145" y="316" class="subtitle">Komercijalna garancija za robu</text>
