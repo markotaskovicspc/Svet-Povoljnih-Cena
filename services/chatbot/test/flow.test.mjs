@@ -42,7 +42,7 @@ test('staff command reads manual messages, creates immediately once, and leaves 
   await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
   const manual={...event,id:'facebook:manual',echo:true,botEcho:false,text:'Dogovorili smo jednu peglu, pouzećem.',timestamp:event.timestamp+1};
   await store.accept(manual);await worker.tick();
-  const command={...manual,id:'facebook:command',text:'/porudzbina',timestamp:event.timestamp+2};
+  const command={...manual,id:'facebook:command',sentByApp:true,text:'/porudzbina',timestamp:event.timestamp+2};
   worker.staffPrepareFn=async({state})=>{assert(state.history.some(m=>m.role==='assistant'&&m.content===manual.text));return {ok:true,quote:{quoteToken:'staff-quote'},items:[{sku:'IRON',qty:1}],fingerprint:'staff-cart'};};
   await store.accept(command);await worker.tick();await store.accept(command);await worker.tick();
   assert.equal(calls.length,1);assert.equal(calls[0].action,'create_order');

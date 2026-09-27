@@ -145,7 +145,7 @@ Additional model regressions: `scripts/cancellation-smoke.mjs` and `scripts/cata
 
 ## Komanda prodavca u Messenger-u
 
-Prodavac u Meta inboxu šalje tačno `/porudzbina` (prihvata se i `/porudžbina`). Komanda je vidljiva kupcu. Samo Facebook page echo bez bot oznake/app-origin oznake može je pokrenuti; kupčeva ista poruka nikad nije privilegovana potvrda. Nepoznata aplikacija nema ovo ovlašćenje. Potrebna je aktivna 24h komunikacija kupca da bi rezultat mogao da se vrati u razgovor.
+Prodavac u Meta inboxu šalje tačno `/porudzbina` (prihvata se i `/porudžbina`). Komanda je vidljiva kupcu. Samo potpisani Facebook page echo bez bot oznake može je pokrenuti; kupčeva ista poruka nikad nije privilegovana potvrda. Business Suite poruke mogu imati app_id i zato se ne odbijaju samo zbog te oznake. Poruke našeg bota isključuju se i preko outbox identifikatora. Potrebna je aktivna 24h komunikacija kupca da bi rezultat mogao da se vrati u razgovor.
 
 Radnik osvežava dostupnu istoriju (najviše 500 poruka), uključujući poruke zaposlenih, i izdvaja poslednji dogovor. Proverava izbor, podatke, aktuelni katalog, dogovorene cene i postojeću loyalty saglasnost. Potpuna i prihvaćena ERP ponuda upisuje se odmah, bez novog kupčevog DA. Nedostajući/nejasni podaci, odustajanje, promenjen dogovor i razlika u ceni zaustavljaju upis. Zaposleni dopuni razgovor pa ponovi komandu. Ne podržava proizvoljno ručno zadat popust.
 
@@ -170,3 +170,4 @@ Fotografije: najviše 5, samo HTTPS Meta CDN bez preusmeravanja, najviše 10 MB 
 Ako status nije ISPORUCENO, nema automatskog upisa ili menjanja statusa: opis ide zaposlenom na proveru. Bot ne odobrava zamenu, povraćaj, popust ili kurira. Legacy reclamationInFlight pauze ostaju dok operater ne proveri raniji neizvestan upis.
 
 Provera: npm test; scripts/reclamation-smoke.mjs koristi stvarni model sa izmišljenim porudžbinama i lažnim ERP klijentom, bez produkcijskih upisa. ERP testovi: social-reclamations, social-reclamation-record i social-route.
+

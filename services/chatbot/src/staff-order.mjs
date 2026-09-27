@@ -7,7 +7,9 @@ import {activeLoyalty} from './loyalty.mjs';
 import {orderErrorMessage} from './delivery.mjs';
 
 export const isOrderCommandText=text=>/^\/porud[zž]bina\s*$/i.test(String(text).trim());
-export const isStaffOrderCommand=event=>event.channel==='facebook'&&event.echo===true&&!event.botEcho&&!event.sentByApp&&isOrderCommandText(event.text);
+// Business Suite also supplies app_id on human Page replies. Authentication is
+// the signed Page-origin echo; worker additionally excludes our outbox IDs.
+export const isStaffOrderCommand=event=>event.channel==='facebook'&&event.echo===true&&!event.botEcho&&isOrderCommandText(event.text);
 const address=z.object({firstName:z.string(),lastName:z.string(),phone:z.string(),street:z.string(),houseNumber:z.string(),city:z.string(),postalCode:z.string()});
 const inputSchema=z.object({guestEmail:z.email(),shipping:address,lines:z.array(z.object({sku:z.string(),qty:z.number().int().positive().max(1000)})).min(1).max(30),paymentMethod:z.enum(['POUZECE_GOTOVINA','UPLATA_NA_RACUN']),shippingMethod:z.enum(['KURIR','KAMION'])});
 const extracted=z.object({input:inputSchema.nullable(),reason:z.string().max(400),agreedTotal:z.number().nonnegative().nullable(),priceEvidence:z.string().nullable(),unitPrices:z.array(z.object({sku:z.string(),price:z.number().nonnegative(),evidence:z.string()}))});

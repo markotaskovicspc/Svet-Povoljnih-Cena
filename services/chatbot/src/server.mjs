@@ -35,6 +35,11 @@ const server=http.createServer(async(req,res)=>{
     if(req.method==='GET'&&url.pathname==='/admin/conversations'){
       const result=await store.pool.query('SELECT id,channel,paused,reason,last_customer,updated_at FROM spc_chat_conversations ORDER BY updated_at DESC LIMIT 100');return reply(200,result.rows);
     }
+    if(req.method==='GET'&&url.pathname==='/admin/staff-commands'){
+      const rows=await store.pool.query('SELECT id,conversation,payload,status,attempts,created_at FROM spc_chat_events ORDER BY created_at DESC LIMIT 2000');
+      const commands=rows.rows.flatMap(r=>{const p=store.decode(r.payload);return /^\/porud[zž]bina\s*$/i.test(p.text??'')?[{id:r.id,conversation:r.conversation,status:r.status,attempts:r.attempts,created_at:r.created_at,echo:p.echo,botEcho:p.botEcho,sentByApp:p.sentByApp,timestamp:p.timestamp}]:[];});
+      return reply(200,commands);
+    }
     if(req.method==='GET'&&url.pathname==='/admin/conversation'){
       const result=await store.pool.query('SELECT state FROM spc_chat_conversations WHERE id=$1',[url.searchParams.get('id')]);
       if(!result.rowCount)return reply(404,{error:'Not found'});

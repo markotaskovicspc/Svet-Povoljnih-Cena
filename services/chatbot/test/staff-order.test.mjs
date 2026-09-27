@@ -6,11 +6,12 @@ import {productOffer} from '../src/product-media.mjs';
 const input={guestEmail:'buyer@example.com',shipping:{firstName:'Petar',lastName:'Petrović',phone:'0601234567',street:'Test',houseNumber:'12',city:'Kragujevac',postalCode:'34000'},lines:[{sku:'IRON',qty:1}],paymentMethod:'POUZECE_GOTOVINA',shippingMethod:'KURIR'};
 const event={id:'command-1',channel:'facebook',conversation:'page:buyer',echo:true,text:'/porudzbina',timestamp:Date.now()};
 const state=()=>({history:[{role:'user',content:'Želim jednu peglu IRON. Petar Petrović, 0601234567, Test 12, Kragujevac 34000, buyer@example.com, pouzećem.',timestamp:Date.now()-1000}],orders:[]});
-test('only native outgoing page command is privileged; customer, bot, other app and spoofed echoes are not',()=>{
+test('Page command includes Business Suite app echoes; customer, bot and spoofed echoes are not privileged',()=>{
  const envelope=message=>({object:'page',entry:[{id:'page',messaging:[{sender:{id:'page'},recipient:{id:'buyer'},timestamp:Date.now(),message:{mid:'test',is_echo:true,text:'/porudzbina',...message}}]}]});
  const parse=body=>parseEvents(body,[{id:'page',channel:'facebook'}]);
  assert(isStaffOrderCommand(parse(envelope({}))[0]));
- for(const message of [{metadata:'spc-bot'},{app_id:'other-app'},{text:'Kupac kaže /porudzbina'}])assert(!isStaffOrderCommand(parse(envelope(message))[0]));
+ assert(isStaffOrderCommand(parse(envelope({app_id:'business-suite'}))[0]));
+ for(const message of [{metadata:'spc-bot'},{text:'Kupac kaže /porudzbina'}])assert(!isStaffOrderCommand(parse(envelope(message))[0]));
  assert(!isStaffOrderCommand({...event,echo:false}));assert(!isStaffOrderCommand({...event,channel:'instagram'}));
  const bad=envelope({});bad.entry[0].messaging[0].sender.id='attacker';assert.equal(parse(bad).length,0);
 });
