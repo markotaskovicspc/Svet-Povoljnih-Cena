@@ -153,6 +153,8 @@ Potpisana ERP ponuda se čuva pre upisa; prekid veze ponavlja isti zahtev, ne no
 
 ## Loyalty ponude
 
+Komanda prodavca pretražuje kraći naziv modela kada puna fraza sa bojom nema rezultate; varijanta i količina se i dalje proveravaju. Više autentičnih kupčevih citata može potvrditi isti artikal. Cene moraju imati dokaz u prepisci (uključujući srpski zapis brojeva i citate pod navodnicima). Za dogovorenu loyalty cenu servis može preko `existing_loyalty` proveriti već evidentirano članstvo po dostavljenom mejlu. Ova provera ne upisuje saglasnost niti kreira člana; dokaz važi 15 minuta, vezan je za kanal, razgovor i mejl i ponovo proverava članstvo. Kada plaćanje nije pomenuto, prodavčeva komanda koristi standardno pouzeće gotovinom; izričit drugačiji dogovor ima prednost.
+
 Katalog vraća javnu cenu i važeću loyalty ponudu iz ERP pricing engine-a. Saglasnost se priprema odvojeno od kupovine, uz javni tekst `/loyalty/uslovi` koji prikazuje postojeću verziju izjave. Sledeće nedvosmisleno `DA` aktivira samo članstvo; porudžbina zahteva novu ponudu i zasebnu potvrdu. Nema prijave na marketing. Odbijanje ostavlja kupovinu bez loyalty pogodnosti.
 
 ERP čuva verziju/vreme pristanka i potpisani pristup vezuje za kanal, razgovor i mejl, najduže 30 dana. Ne prihvata modelov `guestLoyalty` kao dokaz. Ponuda i konačni upis koriste isti postojeći checkout obračun; popust za prvu kupovinu proverava ERP po fiskalnoj istoriji. Izmena cene zahteva novu potvrdu. Ponovljeni zahtev koristi isti dokaz i ne produžava mu rok.

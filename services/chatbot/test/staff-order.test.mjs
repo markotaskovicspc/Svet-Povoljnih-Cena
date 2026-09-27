@@ -1,11 +1,39 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {parseEvents} from '../src/security.mjs';
-import {isStaffOrderCommand,prepareStaffOrder,executeStaffOrder} from '../src/staff-order.mjs';
+import {isStaffOrderCommand,prepareStaffOrder,executeStaffOrder,searchStaffProducts,hasCitedAmount} from '../src/staff-order.mjs';
+import {validCartEvidence} from '../src/cart-check.mjs';
 import {productOffer} from '../src/product-media.mjs';
 const input={guestEmail:'buyer@example.com',shipping:{firstName:'Petar',lastName:'Petrović',phone:'0601234567',street:'Test',houseNumber:'12',city:'Kragujevac',postalCode:'34000'},lines:[{sku:'IRON',qty:1}],paymentMethod:'POUZECE_GOTOVINA',shippingMethod:'KURIR'};
 const event={id:'command-1',channel:'facebook',conversation:'page:buyer',echo:true,text:'/porudzbina',timestamp:Date.now()};
 const state=()=>({history:[{role:'user',content:'Želim jednu peglu IRON. Petar Petrović, 0601234567, Test 12, Kragujevac 34000, buyer@example.com, pouzećem.',timestamp:Date.now()-1000}],orders:[]});
+test('empty full-name lookup falls back to model name; multiple genuine confirmations support one cart line',async()=>{
+ const calls=[];const found=await searchStaffProducts(async p=>{calls.push(p.query);return {ok:true,items:p.query==='ELEGANCE SEAT'?[{sku:'CHAIR'}]:[]};},'ELEGANCE SEAT crna');
+ assert.deepEqual(calls,['ELEGANCE SEAT crna','ELEGANCE SEAT']);assert.equal(found.items[0].sku,'CHAIR');
+ const items=[{sku:'CHAIR',qty:14}],messages=['14 komada','14 komada crne'];
+ const checked={matches:true,evidence:messages.map(customerQuote=>({sku:'CHAIR',qty:14,customerQuote}))};
+ assert(validCartEvidence(checked,items,messages));
+ assert(validCartEvidence({...checked,evidence:[{sku:'CHAIR',qty:14,customerQuote:'"14 komada" / "14 komada crne"'}]},items,messages));
+ assert(!validCartEvidence({...checked,evidence:[...checked.evidence,{sku:'OTHER',qty:1,customerQuote:'14 komada'}]},items,messages));
+ assert(!validCartEvidence(checked,items,['14 komada']));
+});
+test('price citations allow quotation marks but never a fabricated or omitted price',async()=>{
+ const context=state();context.history.push({role:'assistant',content:'Cena je 1.000 din.'});
+ assert(hasCitedAmount('"Cena je 1.000 din."',1000,context.history));
+ assert(!hasCitedAmount('"Cena je 1.000 din."',1200,context.history));
+ assert(!hasCitedAmount('"Cena je 1.200 din."',1200,context.history));
+ for(const unitPrices of [[],[{sku:'IRON',price:1200,evidence:'Cena je 1.000 din.'}]]){
+  const r=await prepareStaffOrder({event,state:context,model:'test',spc:()=>{throw Error('must stop before quote');},extractFn:async()=>({input,reason:'',agreedTotal:null,priceEvidence:null,unitPrices}),cartCheckFn:async()=>({ok:true})});assert(!r.ok);
+ }
+});
+test('staff loyalty price reuses a recorded membership without accepting new consent',async()=>{
+ const context=state();context.history.push({role:'assistant',content:'Cena je 700 din.'});let active=true,quoteCalls=0;
+ const plan={input,reason:'',agreedTotal:null,priceEvidence:null,unitPrices:[{sku:'IRON',price:700,evidence:'Cena je 700 din.'}]};
+ const spc=async p=>{if(p.action==='search')return {ok:true,items:[{sku:'IRON',name:'Pegla',price:1000,loyaltyPrice:700,available:true}]};if(p.action==='existing_loyalty')return {ok:true,active,email:input.guestEmail,proof:active?'existing-proof':undefined,expiresAt:Date.now()+60000};if(p.action==='quote'){quoteCalls++;assert.equal(p.loyaltyProof,'existing-proof');return {ok:true,totals:{total:700}};}throw Error('No enrollment/write');};
+ const prepare=()=>prepareStaffOrder({event,state:context,spc,model:'test',extractFn:async()=>plan,cartCheckFn:async()=>({ok:true})});
+ assert((await prepare()).ok);assert.equal(quoteCalls,1);delete context.loyalty;active=false;
+ assert(!(await prepare()).ok);assert.equal(quoteCalls,1);
+});
 test('Page command includes Business Suite app echoes; customer, bot and spoofed echoes are not privileged',()=>{
  const envelope=message=>({object:'page',entry:[{id:'page',messaging:[{sender:{id:'page'},recipient:{id:'buyer'},timestamp:Date.now(),message:{mid:'test',is_echo:true,text:'/porudzbina',...message}}]}]});
  const parse=body=>parseEvents(body,[{id:'page',channel:'facebook'}]);

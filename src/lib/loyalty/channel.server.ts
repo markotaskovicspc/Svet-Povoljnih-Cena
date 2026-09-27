@@ -7,7 +7,7 @@ import {LOYALTY_CONSENT_VERSION} from "./shared";
 
 const scopeSchema=z.object({channel:z.enum(['facebook','instagram','email']),conversationId:z.string().min(3).max(200),email:z.email()});
 type Scope=z.infer<typeof scopeSchema>;
-const tokenSchema=scopeSchema.extend({purpose:z.enum(['loyalty_invitation','loyalty_access']),version:z.string(),nonce:z.string(),expiresAt:z.number(),consentAt:z.string().optional()});
+const tokenSchema=scopeSchema.extend({purpose:z.enum(['loyalty_invitation','loyalty_access','loyalty_existing']),version:z.string(),nonce:z.string(),expiresAt:z.number(),consentAt:z.string().optional()});
 const digest=(value:string)=>createHash('sha256').update(value).digest('hex');
 const normalized=(scope:Scope)=>({...scope,email:scope.email.trim().toLowerCase()});
 const duration=30*24*60*60*1000;
@@ -45,10 +45,25 @@ export async function acceptChannelLoyalty(challenge:string,scope:Scope,secret:s
 }
 export async function channelLoyalty(proof:string|undefined,scope:Scope,secret:string){
  if(!proof)return null;
+ const existing=read(proof,scope,secret,'loyalty_existing');
+ if(existing){
+  if(existing.expiresAt<Date.now()||!existing.consentAt)return null;
+  const member=await db.guestLoyaltyMembership.findUnique({where:{email:existing.email}});
+  if(!member||member.consentVersion!==existing.version||member.consentAt.toISOString()!==existing.consentAt)return null;
+  return {email:member.email,consentVersion:member.consentVersion,consentAt:member.consentAt};
+ }
  const data=read(proof,scope,secret,'loyalty_access');
  if(!data||data.expiresAt<Date.now()||!data.consentAt)return null;
  const record=await db.verificationToken.findUnique({where:{token:digest('channel-loyalty:'+data.nonce)}});
  const member=await db.guestLoyaltyMembership.findUnique({where:{email:data.email}});
  if(!record||record.expires.getTime()!==data.expiresAt||!member||member.consentVersion!==data.version)return null;
  return {email:data.email,consentVersion:data.version,consentAt:new Date(data.consentAt)};
+}
+// Reuse a recorded membership; never manufacture consent from a chat claim.
+export async function existingChannelLoyalty(raw:Scope,secret:string){
+ const scope=normalized(scopeSchema.parse(raw));
+ const member=await db.guestLoyaltyMembership.findUnique({where:{email:scope.email}});
+ if(!member||member.consentVersion!==LOYALTY_CONSENT_VERSION)return {ok:true as const,active:false as const};
+ const expiresAt=Date.now()+15*60*1000;
+ return {ok:true as const,active:true as const,email:scope.email,expiresAt,proof:signSocialQuote({...scope,purpose:'loyalty_existing',version:member.consentVersion,consentAt:member.consentAt.toISOString(),nonce:randomUUID(),expiresAt},secret)};
 }

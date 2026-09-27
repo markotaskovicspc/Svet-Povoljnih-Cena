@@ -5,9 +5,21 @@ vi.mock('@/lib/db',()=>{
  const db={verificationToken:{findUnique:async({where}:any)=>m.records.get(where.token),upsert:async({where,create}:any)=>{if(!m.records.has(where.token))m.records.set(where.token,create);return m.records.get(where.token);}},guestLoyaltyMembership:{findUnique:async({where}:any)=>m.members.get(where.email),upsert:async({where,create,update}:any)=>{const value=m.members.has(where.email)?{...m.members.get(where.email),...update}:create;m.members.set(where.email,value);return value;}},$transaction:async(fn:any)=>fn(db)};
  return {db};
 });
-import {prepareChannelLoyalty,acceptChannelLoyalty,channelLoyalty} from '@/lib/loyalty/channel.server';
+import {prepareChannelLoyalty,acceptChannelLoyalty,channelLoyalty,existingChannelLoyalty} from '@/lib/loyalty/channel.server';
+import {LOYALTY_CONSENT_VERSION} from '@/lib/loyalty/shared';
 const secret='synthetic-loyalty-secret'.repeat(3),scope={channel:'facebook' as const,conversationId:'conversation-test',email:'buyer@example.com'};
 beforeEach(()=>{m.records.clear();m.members.clear();vi.useRealTimers();});
+it('reuses existing consent without enrolling, and rejects wrong scope, revocation and expiry',async()=>{
+ expect(await existingChannelLoyalty(scope,secret)).toEqual({ok:true,active:false});expect(m.members.size).toBe(0);
+ m.members.set(scope.email,{email:scope.email,consentVersion:LOYALTY_CONSENT_VERSION,consentAt:new Date()});
+ const before=m.members.get(scope.email),found=await existingChannelLoyalty(scope,secret);
+ if(!found.active)throw Error('expected membership');
+ expect(await channelLoyalty(found.proof,scope,secret)).toMatchObject({email:scope.email});
+ expect(m.members.get(scope.email)).toBe(before);expect(m.records.size).toBe(0);
+ expect(await channelLoyalty(found.proof,{...scope,conversationId:'other'},secret)).toBeNull();
+ vi.useFakeTimers();vi.advanceTimersByTime(16*60000);expect(await channelLoyalty(found.proof,scope,secret)).toBeNull();vi.useRealTimers();
+ m.members.clear();expect(await channelLoyalty(found.proof,scope,secret)).toBeNull();
+});
 it('requires explicit acceptance, binds proof to conversation/email/channel and persists a stable retry',async()=>{
  const prepared=prepareChannelLoyalty(scope,secret);
  expect(m.members.size).toBe(0);

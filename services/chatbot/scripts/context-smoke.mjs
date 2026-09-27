@@ -7,7 +7,7 @@ const old={input:{lines:[{sku:'110143',qty:1}],guestEmail:'test@example.com',shi
 const state={orders:[{number:'OLD-BED'}],history:[{role:'user',content:'Test Kupac, Test ulica 12, Beograd 11000, 0600000000, test@example.com, pouzeće.'},{role:'assistant',content:quoteMessage(old)},{role:'user',content:'Potvrđujem'},{role:'assistant',content:'Porudžbina OLD-BED je uspešno kreirana. Ukupno: 34155 RSD.'},{role:'user',content:'Imate pegle?'},{role:'assistant',content:'Pegla GOLD CORE 999 RSD, AQUA STEAM 1399 RSD.'},{role:'user',content:'Daj gold core jednu'},{role:'assistant',content:'Mogu da pripremim novu ponudu. Želiš?'},{role:'user',content:'Da'},{role:'assistant',content:'Pošalji podatke za dostavu.'}]};
 const event={channel:'facebook',conversation:'synthetic-context-only',text:'Imaš sve moje podatke, upotrebi iste za ovu novu porudžbinu.'};
 assert.equal((await checkCart({state,event,items:[{sku:'110143',name:'Ležaj VENUS',qty:1}],model})).ok,false);
-assert.equal((await checkCart({state,event,items:[{sku:'210005',name:'Pegla GOLD CORE',qty:1}],model})).ok,true);
+assert.equal((await checkCart({state,event,items:[{sku:'210005',name:'Pegla GOLD CORE',qty:1}],model,onDecision:d=>console.log('synthetic iron selection',JSON.stringify(d))})).ok,true);
 const calls=[];
 const spc=async p=>{
  calls.push(p);
