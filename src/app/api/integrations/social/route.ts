@@ -16,6 +16,7 @@ import { cancelWebOrderByCustomer } from "@/lib/orders/cancellation.server";
 import { canCustomerCancelStatus, OrderCancellationError } from "@/lib/orders/cancellation";
 import { handleSocialReclamation, socialReclamationActions } from "@/lib/social/reclamations";
 import {prepareChannelLoyalty,acceptChannelLoyalty,channelLoyalty,existingChannelLoyalty} from '@/lib/loyalty/channel.server';
+import {socialProductDetails} from '@/lib/social/product-details';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +28,7 @@ const requestSchema = z.discriminatedUnion("action", [
   ...socialReclamationActions,
   identity.extend({ action: z.literal("support_handoff"), id: z.string().min(1).max(300), reason: z.string().max(200), transcript: z.string().max(10000), reclamationId: z.string().regex(/^[A-Za-z0-9_-]{1,100}$/).optional() }),
   z.object({ action: z.literal("search"), query: z.string().trim().min(1).max(100), quantity: z.number().int().positive().max(1000).default(1) }),
+  z.object({ action: z.literal("product_details"), sku:z.string().trim().min(1).max(100) }),
   identity.extend({ action: z.literal("prepare_loyalty"), email:z.email() }),
   identity.extend({ action: z.literal("existing_loyalty"), email:z.email() }),
   identity.extend({ action: z.literal("accept_loyalty"), email:z.email(),challenge:z.string().max(5000) }),
@@ -54,6 +56,10 @@ export async function POST(req: Request) {
   try {
     if(body.action==='prepare_loyalty')return NextResponse.json(prepareChannelLoyalty(body,secret));
     if(body.action==='existing_loyalty')return NextResponse.json(await existingChannelLoyalty(body,secret));
+    if(body.action==='product_details'){
+      const product=await getProductBySku(body.sku);
+      return NextResponse.json(product?{ok:true,product:socialProductDetails(product)}:{ok:false,error:{code:'PRODUCT_NOT_FOUND'}});
+    }
     if(body.action==='accept_loyalty'){
       const result=await acceptChannelLoyalty(body.challenge,body,secret);
       return NextResponse.json(result?{ok:true,...result}:{ok:false,error:{code:'LOYALTY_CONSENT_EXPIRED'}});

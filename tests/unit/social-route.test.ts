@@ -19,6 +19,14 @@ const input={guestEmail:'buyer@example.com',lines:[{sku:'210.025',qty:1}],shippi
 function request(data:unknown,signed=true){const body=JSON.stringify(data),ts=String(Date.now());return new Request('https://spc.test/api/integrations/social',{method:'POST',body,headers:{'x-spc-timestamp':ts,'x-spc-signature':signed?createHmac('sha256',secret).update(`${ts}.${body}`).digest('hex'):'invalid'}});}
 beforeEach(()=>{vi.clearAllMocks();process.env.SOCIAL_INTEGRATION_SECRET=secret;mocks.session.mockResolvedValue(null);mocks.create.mockResolvedValue({ok:true,data:{id:'',number:'',accessToken:'',total:2000,subtotal:1010,savings:0,shipping:990,assemblyTotal:0,paymentMethod:'POUZECE_GOTOVINA',shippingMethod:'KURIR',voucherDiscount:0,firstPurchaseDiscount:0,savedCardDiscount:0}});});
 describe('SPC social order bridge',()=>{
+  it('reads public product details by exact SKU without invoking checkout',async()=>{
+    expect((await POST(request({action:'product_details',sku:'FEN'},false))).status).toBe(401);
+    expect(mocks.product).not.toHaveBeenCalled();
+    mocks.product.mockResolvedValue({sku:'FEN',slug:'fen',name:'Fen',description:'Dužina 23 cm',dimensionsCm:{w:0,d:0,h:0},materials:[],stock:99});
+    const r=await(await POST(request({action:'product_details',sku:'FEN'}))).json();
+    expect(r).toMatchObject({ok:true,product:{sku:'FEN',description:'Dužina 23 cm',dimensions:null}});expect(r.product).not.toHaveProperty('stock');expect(mocks.create).not.toHaveBeenCalled();
+    mocks.product.mockResolvedValue(null);expect(await(await POST(request({action:'product_details',sku:'missing'}))).json()).toEqual({ok:false,error:{code:'PRODUCT_NOT_FOUND'}});
+  });
   it('rejects unsigned requests before invoking any business operation',async()=>{expect((await POST(request({action:'search',query:'komoda'},false))).status).toBe(401);expect(mocks.create).not.toHaveBeenCalled();});
   it('quotes through checkout in preview mode and removes caller-controlled loyalty',async()=>{
     const r=await POST(request({action:'quote',channel:'facebook',conversationId:'fb:123:456',input:{...input,guestLoyalty:true,voucherCode:'UNTRUSTED'}}));const body=await r.json();

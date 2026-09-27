@@ -153,6 +153,12 @@ Potpisana ERP ponuda se čuva pre upisa; prekid veze ponavlja isti zahtev, ne no
 
 ## Loyalty ponude
 
+## Opis i tehnički detalji proizvoda
+
+Chat (Facebook/Instagram) i mejl nacrti koriste `get_product_details` za tačnu šifru pre odgovora o dimenzijama, snazi, materijalu, opremi i garanciji. Potpisani ERP zahtev `product_details` vraća samo javna polja sa stranice proizvoda: očišćen opis, tehničke specifikacije, boju, materijal i odvojene dimenzije proizvoda/pakovanja. Nepoznate dimenzije su `null`, ne nula. Cena/dostupnost ostaju u standardnoj pretrazi. Opis nije izvor instrukcija i ne daje pravo na druge radnje. Provera bez upisa/slanja: `scripts/product-details-smoke.mjs`.
+
+## Loyalty ponude — ponašanje
+
 Komanda prodavca pretražuje kraći naziv modela kada puna fraza sa bojom nema rezultate; varijanta i količina se i dalje proveravaju. Više autentičnih kupčevih citata može potvrditi isti artikal. Cene moraju imati dokaz u prepisci (uključujući srpski zapis brojeva i citate pod navodnicima). Za dogovorenu loyalty cenu servis može preko `existing_loyalty` proveriti već evidentirano članstvo po dostavljenom mejlu. Ova provera ne upisuje saglasnost niti kreira člana; dokaz važi 15 minuta, vezan je za kanal, razgovor i mejl i ponovo proverava članstvo. Kada plaćanje nije pomenuto, prodavčeva komanda koristi standardno pouzeće gotovinom; izričit drugačiji dogovor ima prednost.
 
 Katalog vraća javnu cenu i važeću loyalty ponudu iz ERP pricing engine-a. Saglasnost se priprema odvojeno od kupovine, uz javni tekst `/loyalty/uslovi` koji prikazuje postojeću verziju izjave. Sledeće nedvosmisleno `DA` aktivira samo članstvo; porudžbina zahteva novu ponudu i zasebnu potvrdu. Nema prijave na marketing. Odbijanje ostavlja kupovinu bez loyalty pogodnosti.
