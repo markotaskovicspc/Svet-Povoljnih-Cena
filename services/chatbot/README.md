@@ -143,6 +143,16 @@ Additional model regressions: `scripts/cancellation-smoke.mjs` and `scripts/cata
 
 ## Loyalty kroz chat i mejl
 
+## Komanda prodavca u Messenger-u
+
+Prodavac u Meta inboxu šalje tačno `/porudzbina` (prihvata se i `/porudžbina`). Komanda je vidljiva kupcu. Samo Facebook page echo bez bot oznake/app-origin oznake može je pokrenuti; kupčeva ista poruka nikad nije privilegovana potvrda. Nepoznata aplikacija nema ovo ovlašćenje. Potrebna je aktivna 24h komunikacija kupca da bi rezultat mogao da se vrati u razgovor.
+
+Radnik osvežava dostupnu istoriju (najviše 500 poruka), uključujući poruke zaposlenih, i izdvaja poslednji dogovor. Proverava izbor, podatke, aktuelni katalog, dogovorene cene i postojeću loyalty saglasnost. Potpuna i prihvaćena ERP ponuda upisuje se odmah, bez novog kupčevog DA. Nedostajući/nejasni podaci, odustajanje, promenjen dogovor i razlika u ceni zaustavljaju upis. Zaposleni dopuni razgovor pa ponovi komandu. Ne podržava proizvoljno ručno zadat popust.
+
+Potpisana ERP ponuda se čuva pre upisa; prekid veze ponavlja isti zahtev, ne novu porudžbinu. Druga komanda ne preskače neizvestan prethodni upis. Bot ostaje pauziran nakon komande; samo rezultat komande sme biti poslat dok prodavac vodi razgovor. Za proveru: `test/staff-order.test.mjs`, staff scenariji u `test/flow.test.mjs`, `scripts/staff-order-smoke.mjs` (stvarni model, izmišljeni podaci, bez ERP upisa/slanja).
+
+## Loyalty ponude
+
 Katalog vraća javnu cenu i važeću loyalty ponudu iz ERP pricing engine-a. Saglasnost se priprema odvojeno od kupovine, uz javni tekst `/loyalty/uslovi` koji prikazuje postojeću verziju izjave. Sledeće nedvosmisleno `DA` aktivira samo članstvo; porudžbina zahteva novu ponudu i zasebnu potvrdu. Nema prijave na marketing. Odbijanje ostavlja kupovinu bez loyalty pogodnosti.
 
 ERP čuva verziju/vreme pristanka i potpisani pristup vezuje za kanal, razgovor i mejl, najduže 30 dana. Ne prihvata modelov `guestLoyalty` kao dokaz. Ponuda i konačni upis koriste isti postojeći checkout obračun; popust za prvu kupovinu proverava ERP po fiskalnoj istoriji. Izmena cene zahteva novu potvrdu. Ponovljeni zahtev koristi isti dokaz i ne produžava mu rok.

@@ -10,11 +10,13 @@ import {classifyCancellation,cancellationMessage} from './cancellation.mjs';
 import {classifyReclamation,reclamationMessage,receiveClaimPhotos,prepareReclamation} from './reclamation.mjs';
 import {receiveProductImages,activeVisualContext} from './vision.mjs';
 import {receiveLoyalty} from './loyalty.mjs';
+import {isOrderCommandText,isStaffOrderCommand,prepareStaffOrder,executeStaffOrder} from './staff-order.mjs';
 
 export class Worker {
-  constructor({store,spc,accounts,model,graphVersion,enabled=false,testSenders=[],answerFn=answer,intentFn=classifyOrderIntent,cartCheckFn=checkCart,cancellationIntentFn=classifyCancellation,reclamationIntentFn=classifyReclamation,visionFn=receiveProductImages}) {
+  constructor({store,spc,accounts,model,graphVersion,enabled=false,testSenders=[],answerFn=answer,intentFn=classifyOrderIntent,cartCheckFn=checkCart,cancellationIntentFn=classifyCancellation,reclamationIntentFn=classifyReclamation,visionFn=receiveProductImages,staffPrepareFn=prepareStaffOrder,historyFn=readMetaHistory}) {
     Object.assign(this,{store,spc,accounts,model,graphVersion,enabled,testSenders,answerFn,intentFn,cartCheckFn,cancellationIntentFn,reclamationIntentFn}); this.busy=false;
     this.visionFn=visionFn;
+    this.staffPrepareFn=staffPrepareFn;this.historyFn=historyFn;
   }
   async start() {
     // LISTEN starts work immediately; timer only recovers missed notifications/retries.
@@ -34,6 +36,19 @@ export class Worker {
         const events=await c.query(`SELECT * FROM spc_chat_events WHERE conversation=$1 AND status='pending' ORDER BY created_at,id LIMIT 1`,[row.id]);
         const job=events.rows[0]; if(!job || new Date(job.next_at)>new Date()) return;
         const event=this.store.decode(job.payload);
+        if(isStaffOrderCommand(event)&&this.allowed(row.sender)&&inWindow(event.timestamp)&&inWindow(Number(row.last_customer))){
+          const ours=await c.query('SELECT id FROM spc_chat_outbox WHERE meta_id=$1',[event.id.substring(event.channel.length+1)]);
+          if(!ours.rowCount){
+            try{await this.staffOrder({event,row,state,c,job});}
+            catch{
+              await c.query('ROLLBACK');
+              if(job.attempts>=2){await this.store.pause(row.id,'Proveriti ishod komande /porudzbina');await c.query("UPDATE spc_chat_events SET status='failed',attempts=attempts+1 WHERE id=$1",[job.id]);}
+              else await c.query("UPDATE spc_chat_events SET attempts=attempts+1,next_at=now()+interval '10 seconds' WHERE id=$1",[job.id]);
+              console.error('chat.staff_order_failed');
+            }
+            return;
+          }
+        }
         // Recover only legacy bot handoffs. Operator and safety pauses stay intact.
         if(!event.echo && row.paused && state.handedOff && !state.reclamationInFlight &&
           !/Ručna pauza|Razgovor preuzeo zaposleni|Odgovor zaposlenog|Previše poruka|Greška|Nepotvrđen|Proveriti|Reklamacija zahteva proveru/i.test(row.reason??'')) {
@@ -43,6 +58,12 @@ export class Worker {
         }
         if(event.echo || row.paused || !this.allowed(row.sender) || !inWindow(event.timestamp)) {
           await c.query(`UPDATE spc_chat_events SET status='skipped' WHERE id=$1`,[job.id]); return;
+        }
+        if(isOrderCommandText(event.text)){
+          await c.query('BEGIN');
+          await this.store.enqueue(c,`reply:${job.id}`,row.id,{text:'Ovu komandu koristi prodavac. Za naručivanje napišite koji artikal želite; ako već imate ponudu, potvrdite je odgovorom DA.'});
+          await c.query("UPDATE spc_chat_events SET status='done' WHERE id=$1",[job.id]);
+          await c.query('COMMIT');return;
         }
         const recent=await c.query(`SELECT count(*)::int AS n FROM spc_chat_events WHERE conversation=$1 AND created_at>now()-interval '1 minute'`,[row.id]);
         if(recent.rows[0].n>25) {await this.store.pause(row.id,'Previše poruka; potrebna ručna provera');return;}
@@ -274,6 +295,31 @@ export class Worker {
         console.error('chat.support_email_pending');
       }
     });
+  }
+  async staffOrder({event,row,state,c,job}){
+    // A staff command executes once but never resumes autonomous replies.
+    await this.store.pause(row.id,'Odgovor zaposlenog u Meta inboxu');
+    let message;
+    if(state.staffOrder?.eventId!==event.id){
+      const local=await this.store.history(c,row.id,event);
+      const account=this.accounts.find(a=>a.channel===row.channel&&a.id===row.account);
+      const remote=account?await this.historyFn({account,sender:row.sender,before:event.timestamp,graphVersion:this.graphVersion,maxMessages:500}):[];
+      const seen=new Set();
+      state.history=[...(state.history??[]),...remote,...local].filter(m=>!m.timestamp||m.timestamp<=event.timestamp).sort((a,b)=>(a.timestamp??0)-(b.timestamp??0)).filter(m=>{const key=m.role+':'+m.content+':'+Math.floor((m.timestamp??0)/1000);if(seen.has(key))return false;seen.add(key);return true;}).slice(-500);
+    }
+    message=await executeStaffOrder({event,state,spc:this.spc,save:()=>this.store.save(c,row.id,state),prepare:async()=>{
+      const prepared=await this.staffPrepareFn({event,state,spc:this.spc,model:this.model});
+      const newer=await c.query("SELECT payload FROM spc_chat_events WHERE conversation=$1 AND id<>$2 ORDER BY created_at DESC LIMIT 30",[row.id,event.id]);
+      const changed=newer.rows.some(r=>{const e=this.store.decode(r.payload);return e.timestamp>event.timestamp&&!e.botEcho&&!isStaffOrderCommand(e);});
+      return changed?{ok:false,message:'Porudžbina nije kreirana jer je dogovor dopunjen nakon komande. Kada završite izmene, ponovite /porudzbina.'}:prepared;
+    }});
+    state.history.push({role:'assistant',content:event.text,timestamp:event.timestamp},{role:'assistant',content:message,timestamp:Date.now()});
+    state.history=state.history.slice(-HISTORY_LIMIT);
+    await c.query('BEGIN');
+    await this.store.save(c,row.id,state);
+    await this.store.enqueue(c,`reply:${job.id}`,row.id,{text:message,allowPaused:true,staffCommand:true});
+    await c.query("UPDATE spc_chat_events SET status='done' WHERE id=$1",[job.id]);
+    await c.query('COMMIT');
   }
   async flush() {
     const result=await this.store.pool.query(`SELECT DISTINCT conversation FROM spc_chat_outbox WHERE status IN ('pending','sending') LIMIT 8`);

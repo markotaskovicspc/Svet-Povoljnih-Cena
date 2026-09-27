@@ -36,6 +36,41 @@ test('duplicate webhook creates only one persisted event, one order and one outb
     assert(!row.state.includes('test-private'));
   }finally{await store.close();}
 });
+test('staff command reads manual messages, creates immediately once, and leaves bot paused',async()=>{
+ const {store,worker,event,calls}=await setup();
+ try{
+  await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
+  const manual={...event,id:'facebook:manual',echo:true,botEcho:false,text:'Dogovorili smo jednu peglu, pouzećem.',timestamp:event.timestamp+1};
+  await store.accept(manual);await worker.tick();
+  const command={...manual,id:'facebook:command',text:'/porudzbina',timestamp:event.timestamp+2};
+  worker.staffPrepareFn=async({state})=>{assert(state.history.some(m=>m.role==='assistant'&&m.content===manual.text));return {ok:true,quote:{quoteToken:'staff-quote'},items:[{sku:'IRON',qty:1}],fingerprint:'staff-cart'};};
+  await store.accept(command);await worker.tick();await store.accept(command);await worker.tick();
+  assert.equal(calls.length,1);assert.equal(calls[0].action,'create_order');
+  const row=(await store.pool.query('SELECT * FROM spc_chat_conversations')).rows[0];assert.equal(row.paused,true);
+  assert.equal(store.decode(row.state).orders.length,1);
+  const out=(await store.pool.query('SELECT payload FROM spc_chat_outbox')).rows;assert.equal(out.length,1);assert.equal(store.decode(out[0].payload).allowPaused,true);
+ }finally{await store.close();}
+});
+test('customer slash command cannot authorize a pending order',async()=>{
+ const {store,worker,event,calls}=await setup();
+ try{
+  await store.pool.query('DELETE FROM spc_chat_events');await store.accept({...event,text:'/porudzbina'});await worker.tick();
+  assert.equal(calls.length,0);assert.equal(store.decode((await store.pool.query('SELECT state FROM spc_chat_conversations')).rows[0].state).orders.length,0);
+ }finally{await store.close();}
+});
+test('staff command retries the persisted quote after an uncertain ERP write, without rebuilding it',async()=>{
+ const {store,worker,event}=await setup();let prepares=0,writes=0;const tokens=[];
+ try{
+  await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
+  worker.staffPrepareFn=async()=>{prepares++;return {ok:true,quote:{quoteToken:'same-staff-quote'},items:[{sku:'IRON',qty:1}],fingerprint:'cart'};};
+  worker.spc=async p=>{tokens.push(p.quoteToken);if(++writes===1)throw Error('timeout');return {ok:true,data:{number:'STAFF-1',accessToken:'private',total:1400}};};
+  const command={...event,id:'facebook:command-retry',echo:true,botEcho:false,text:'/porudzbina'};
+  await store.accept(command);await worker.tick();
+  await store.pool.query('UPDATE spc_chat_events SET next_at=now() WHERE id=$1',[command.id]);await worker.tick();
+  assert.equal(prepares,1);assert.deepEqual(tokens,['same-staff-quote','same-staff-quote']);
+  const state=store.decode((await store.pool.query('SELECT state FROM spc_chat_conversations')).rows[0].state);assert.equal(state.staffOrder.status,'completed');assert.equal(state.orders.length,1);
+ }finally{await store.close();}
+});
 test('human takeover prevents a queued confirmation from creating an order',async()=>{
   const {store,worker,calls,event}=await setup();
   try{await store.accept({...event,id:'facebook:human-echo',echo:true,botEcho:false,text:'Preuzimam'});await worker.tick();assert.equal(calls.length,0);assert.equal((await store.pool.query('SELECT paused FROM spc_chat_conversations')).rows[0].paused,true);}finally{await store.close();}

@@ -41,11 +41,12 @@ export function parseEvents(body, accounts) {
     for (const event of entry.messaging ?? []) {
       if (!event.message?.mid || !Number.isFinite(event.timestamp)) continue;
       const echo = event.message.is_echo === true;
+      if(echo&&event.sender?.id!==entry.id)continue;
       const sender = echo ? event.recipient?.id : event.sender?.id;
       if (!sender || (!echo && event.recipient?.id !== entry.id)) continue;
       events.push({ id: `${channel}:${event.message.mid}`, channel, account: entry.id, sender,
         conversation: `${channel}:${entry.id}:${sender}`, timestamp: event.timestamp,
-        echo, botEcho: event.message.metadata === 'spc-bot', text: String(event.message.text ?? '').slice(0, 6000),
+        echo, botEcho: event.message.metadata === 'spc-bot', sentByApp:Boolean(event.message.app_id), text: String(event.message.text ?? '').slice(0, 6000),
         attachments: (event.message.attachments ?? []).slice(0, 5).map(a => ({type:a.type, url:a.payload?.url})),
       });
     }
