@@ -268,8 +268,8 @@ describe("X Express shipment persistence", () => {
       Name: "QA Primalac",
       TownId: 746606,
       StreetName: "Severna transferzala",
-      StreetNumber: "bb",
-      Description: null,
+      StreetNumber: "1",
+      Description: "Kućni broj (bb)",
     });
     expect(addRequest?.headers["x-api-user"]).toBe("integration-user");
     expect(addRequest?.headers["x-api-key"]).toBe("integration-key");
@@ -281,7 +281,7 @@ describe("X Express shipment persistence", () => {
       }>
     ).find((waypoint) => waypoint.WaypointType === "DELIVERY");
     expect(deliveryWaypoint?.Address.Description).toBe(
-      "Isporuka webshop porudžbine",
+      "Isporuka - kućni broj (bb)",
     );
     expect(JSON.stringify(addRequest?.body)).not.toContain("Pozvati primaoca");
     expect(addRequest?.body.Packages).toEqual([

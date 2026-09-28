@@ -57,6 +57,8 @@ beforeAll(async () => {
         provider: "X_EXPRESS",
         status: "FAILED",
         providerStatusCode: "ADDRESS_REPLACED",
+        trackingNo: `${prefix}-FIRST`,
+        providerShipmentId: `${prefix}-FIRST`,
         rawCreateResponse: assignment(firstIssuedItem.id),
         createdAt: new Date("2026-08-28T10:00:00.000Z"),
         updatedAt: new Date("2026-08-28T10:00:00.000Z"),
@@ -69,6 +71,8 @@ beforeAll(async () => {
         purpose: "ORDER_DELIVERY",
         provider: "MYGLS",
         status: "OUT_FOR_DELIVERY",
+        trackingNo: `${prefix}-FIRST`,
+        providerShipmentId: `${prefix}-FIRST`,
         rawCreateResponse: assignment(firstIssuedItem.id),
         createdAt: new Date("2026-08-28T10:01:00.000Z"),
         updatedAt: new Date("2026-08-28T10:01:00.000Z"),
@@ -81,6 +85,8 @@ beforeAll(async () => {
         purpose: "ORDER_DELIVERY",
         provider: "X_EXPRESS",
         status: "DELIVERED",
+        trackingNo: `${prefix}-SECOND`,
+        providerShipmentId: `${prefix}-SECOND`,
         rawCreateResponse: assignment(secondIssuedItem.id),
         createdAt: new Date("2026-08-28T10:01:00.000Z"),
         updatedAt: new Date("2026-08-28T10:01:00.000Z"),
@@ -112,7 +118,7 @@ describe("sales-order ERP export filters", () => {
     expect(fixtureRows[0]?.values.paymentMethod).toBe("Pouzeće — gotovina");
     expect(fixtureRows[0]?.values.paymentStatus).toBe("Plaća se kuriru");
     const changedCourierRow = fixtureRows.find(
-      (row) => row.values.sku === firstIssuedItemSku,
+      (row) => row.detailId === issuedInsideId && row.values.sku === firstIssuedItemSku,
     );
     expect(changedCourierRow?.values.courierService).toBe("MyGLS");
     expect(changedCourierRow?.values.courierStatus).toBe("Na isporuci");
@@ -133,7 +139,7 @@ describe("sales-order ERP export filters", () => {
       String(row.values.number).startsWith(prefix),
     );
 
-    expect(fixtureRows.map((row) => row.detailId)).toEqual([issuedInsideId]);
+    expect(fixtureRows.map((row) => row.detailId)).toEqual([issuedInsideId, issuedInsideId]);
     expect(fixtureRows[0]?.values.fiscalized).toBe(true);
   });
 

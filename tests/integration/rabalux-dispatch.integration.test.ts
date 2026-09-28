@@ -19,10 +19,9 @@ vi.mock("@/lib/email", async (original) => ({
 }));
 vi.mock("@/lib/rabalux/documents", async (original) => ({
   ...await original<typeof import("@/lib/rabalux/documents")>(),
-  buildRabaluxShipmentAttachments: async () => [
-    { filename: "adresnica-test.html", content: "", contentType: "text/html" },
-    { filename: "pak-lista-test.pdf", content: "", contentType: "application/pdf" },
-  ],
+  buildRabaluxCompleteAttachments: async () => [
+    "adresnica-test.pdf", "pak-lista-test.pdf", "predracun-rabalux-test.pdf", "obrazac-za-odustajanje-test.pdf",
+  ].map(filename => ({ filename, content: Buffer.from("%PDF-1.7 test fixture"), contentType: "application/pdf" })),
 }));
 
 import { db } from "@/lib/db";
@@ -38,6 +37,7 @@ let supplierItemId = "";
 let dcItemId = "";
 let batchId = "";
 let warehouseId = "";
+let ownsWarehouse = false;
 let supplierId = "";
 let actorId = "";
 const productIds: string[] = [];
@@ -68,7 +68,11 @@ beforeAll(async () => {
     email: `${prefix}@example.invalid`, passwordHash: "not-used", role: "OPS",
   } });
   actorId = actor.id;
-  const warehouse = await db.warehouse.create({ data: {
+  const existingWarehouse = await db.warehouse.findFirst({
+    where: { active: true, isDefault: true }, orderBy: { createdAt: "asc" },
+  });
+  ownsWarehouse = !existingWarehouse;
+  const warehouse = existingWarehouse ?? await db.warehouse.create({ data: {
     code: prefix, name: prefix, isDefault: true, active: true,
   } });
   warehouseId = warehouse.id;
@@ -119,7 +123,7 @@ afterAll(async () => {
   if (batchId) await db.pickupBatch.delete({ where: { id: batchId } });
   if (orderId) await db.order.delete({ where: { id: orderId } });
   await db.product.deleteMany({ where: { id: { in: productIds } } });
-  if (warehouseId) await db.warehouse.delete({ where: { id: warehouseId } });
+  if (ownsWarehouse && warehouseId) await db.warehouse.delete({ where: { id: warehouseId } });
   if (actorId) await db.adminUser.delete({ where: { id: actorId } });
 });
 

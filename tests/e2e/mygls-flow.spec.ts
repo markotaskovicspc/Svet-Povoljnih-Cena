@@ -3,6 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { PDFDocument } from "pdf-lib";
+import { readMyGlsPageText } from "@/lib/mygls/label-redaction";
 import { config as loadEnv } from "dotenv";
 import { applyShipmentEvent } from "@/lib/courier/registry";
 
@@ -96,7 +97,8 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
         shipFirstName: "QA",
         shipLastName: "MyGLS kupac",
         shipPhone: "+38160111222",
-        shipStreet: "Testna 13A sprat 2",
+        shipStreet: "Testna (13A)",
+        shipHouseNumber: "13A",
         shipCity: "Beograd",
         shipPostalCode: "11000",
         shipCountry: "RS",
@@ -229,8 +231,9 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
       await page
         .getByRole("button", { name: "Učitaj porudžbine", exact: true })
         .click();
-      await expect(page.getByRole("status")).toContainText(
-        "Učitano paketa: 13 iz 2 porudžbina",
+      // New batches already load eligible orders; explicit reload is idempotent.
+      await expect(page.getByRole("status").filter({ hasText: /Učitano paketa:|Nema novih porudžbina/ })).toContainText(
+        /Učitano paketa: 13 iz 2 porudžbina|Nema novih porudžbina/,
       );
       const groupRow = page.getByRole("row").filter({
         has: page.getByRole("link", {
@@ -289,7 +292,7 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
       });
       await expect(actionError).toBeVisible({ timeout: 120_000 });
       await expect(actionError).toContainText(
-        "mora sadržati ulicu i kućni broj",
+        "mora sadržati ulicu i važeći kućni broj",
       );
 
       const [requestLog, shipments, failedBatch] = await Promise.all([
@@ -318,6 +321,11 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
         where: { number: fixture.invalidOrderNumber },
         data: { shipStreet: "Testna 14" },
       });
+      const operator = await db.adminUser.findUniqueOrThrow({ where: { email: fixture.adminEmail } });
+      await db.pickupBatchLine.updateMany({
+        where: { batchId },
+        data: { warehouseReadyAt: new Date(), warehouseReadyById: operator.id },
+      });
       await page.goto(`/admin/erp/preuzimanja/${batchId}`, {
         waitUntil: "domcontentloaded",
       });
@@ -345,7 +353,7 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
       );
       await clickPromise;
 
-      await expect(page.getByRole("status")).toContainText(
+      await expect(page.getByRole("status").filter({ hasText: /Učitano paketa:|pošiljki je uspešno poslato/ })).toContainText(
         "2 pošiljki je uspešno poslato u sistem kurira",
         { timeout: 120_000 },
       );
@@ -432,8 +440,8 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
       expect(parcel.PickupAddress.HouseNumber).toBe("1");
       expect(parcel.DeliveryAddress).toMatchObject({
         Street: "Testna",
-        HouseNumber: "13A",
-        HouseNumberInfo: "sprat 2",
+        HouseNumber: "13",
+        HouseNumberInfo: "(13A)",
         City: "Beograd",
         ZipCode: "11000",
       });
@@ -490,7 +498,7 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
       const dialog = await dialogPromise;
       await dialog.accept();
       await clickPromise;
-      await expect(page.getByRole("status")).toContainText(
+      await expect(page.getByRole("status").filter({ hasText: /Učitano paketa:|pošiljki je uspešno poslato/ })).toContainText(
         "2 pošiljki je uspešno poslato u sistem kurira",
         { timeout: 120_000 },
       );
@@ -516,13 +524,13 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
       expect(batchLabels.headers()["content-type"]).toContain("application/pdf");
       expect(batchLabels.headers()["cache-control"]).toBe("private, no-store");
       expect(batchLabels.headers()["x-courier-label-source"]).toBe(
-        "mygls-provider-pdfs-merged",
+        "mygls-provider-pdfs-packed",
       );
       expect(batchLabels.headers()["x-courier-label-count"]).toBe("13");
       const batchPdfBytes = await batchLabels.body();
       expect(batchPdfBytes.subarray(0, 4).toString()).toBe("%PDF");
       const batchPdf = await PDFDocument.load(batchPdfBytes);
-      expect(batchPdf.getPageCount()).toBe(13);
+      expect(batchPdf.getPageCount()).toBe(4);
 
       expect(shipmentLabel.status()).toBe(200);
       expect(shipmentLabel.headers()["content-type"]).toContain("application/pdf");
@@ -531,7 +539,10 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
         "mygls-provider-pdf",
       );
       const shipmentPdf = await PDFDocument.load(await shipmentLabel.body());
-      expect(shipmentPdf.getPageCount()).toBe(12);
+      expect(shipmentPdf.getPageCount()).toBe(3);
+      const boxLabels = shipmentPdf.getPages().flatMap(page => readMyGlsPageText(shipmentPdf, page))
+        .filter(block => block.text.startsWith("U kutiji:"));
+      expect(boxLabels.map(block => block.text)).toEqual(Array(12).fill("U kutiji: 1 kom"));
     });
 
     await test.step("picking štampa razlikuje komade od fizičkih paketa", async () => {
@@ -544,8 +555,8 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
       const row = page.getByRole("row").filter({
         has: page.getByText(fixture.sku, { exact: true }),
       });
-      await expect(row.locator("td").nth(3)).toHaveText("13");
       await expect(row.locator("td").nth(4)).toHaveText("13");
+      await expect(row.locator("td").nth(5)).toHaveText("13");
       await expect(
         page.getByRole("link", { name: "Otvori sve kurirske adresnice" }),
       ).toHaveAttribute("href", `/api/admin/erp/preuzimanja/${batchId}/labels`);

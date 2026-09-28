@@ -1,9 +1,29 @@
-import {beforeEach,expect,it,vi} from 'vitest';
-const m=vi.hoisted(()=>({records:new Map(),members:new Map()}));
-vi.mock('server-only',()=>({}));
-vi.mock('@/lib/db',()=>{
- const db={verificationToken:{findUnique:async({where}:any)=>m.records.get(where.token),upsert:async({where,create}:any)=>{if(!m.records.has(where.token))m.records.set(where.token,create);return m.records.get(where.token);}},guestLoyaltyMembership:{findUnique:async({where}:any)=>m.members.get(where.email),upsert:async({where,create,update}:any)=>{const value=m.members.has(where.email)?{...m.members.get(where.email),...update}:create;m.members.set(where.email,value);return value;}},$transaction:async(fn:any)=>fn(db)};
- return {db};
+import { beforeEach, expect, it, vi } from "vitest";
+
+type Token = { token: string; identifier: string; expires: Date };
+type Membership = { email: string; consentVersion: string; consentAt: Date };
+const m = vi.hoisted(() => ({ records: new Map<string, Token>(), members: new Map<string, Membership>() }));
+vi.mock("server-only", () => ({}));
+vi.mock("@/lib/db", () => {
+  const tables = {
+    verificationToken: {
+      findUnique: async ({ where }: { where: { token: string } }) => m.records.get(where.token),
+      upsert: async ({ where, create }: { where: { token: string }; create: Token }) => {
+        if (!m.records.has(where.token)) m.records.set(where.token, create);
+        return m.records.get(where.token);
+      },
+    },
+    guestLoyaltyMembership: {
+      findUnique: async ({ where }: { where: { email: string } }) => m.members.get(where.email),
+      upsert: async ({ where, create, update }: { where: { email: string }; create: Membership; update: Partial<Membership> }) => {
+        const existing = m.members.get(where.email);
+        const value = existing ? { ...existing, ...update } : create;
+        m.members.set(where.email, value);
+        return value;
+      },
+    },
+  };
+  return { db: { ...tables, $transaction: async <T>(fn: (tx: typeof tables) => Promise<T>) => fn(tables) } };
 });
 import {prepareChannelLoyalty,acceptChannelLoyalty,channelLoyalty} from '@/lib/loyalty/channel.server';
 const secret='synthetic-loyalty-secret'.repeat(3),scope={channel:'facebook' as const,conversationId:'conversation-test',email:'buyer@example.com'};

@@ -46,6 +46,7 @@ beforeAll(async () => {
           service: "COURIER_SMALL",
           provider: "X_EXPRESS",
           trackingNo: "AAA0850300001",
+          providerShipmentId: `status-test-${runId}`,
           status: "CREATED",
         },
       },
@@ -119,12 +120,12 @@ describe("X Express webhook-only status synchronization", () => {
       data: { status: "DELIVERED" },
     });
     const beforeRun = new Date();
-    await expect(syncXExpressShipmentStatuses(1)).resolves.toEqual({
-      ok: true,
-      recordsRead: 0,
-      recordsOk: 0,
-      recordsFail: 0,
-    });
+    const terminal = await db.shipment.findUniqueOrThrow({ where: { id: shipmentId } });
+    // Other integration fixtures may still have active shipments in this schema.
+    await expect(syncXExpressShipmentStatuses(1)).resolves.toMatchObject({ ok: true, recordsFail: 0 });
+    const afterSync = await db.shipment.findUniqueOrThrow({ where: { id: shipmentId } });
+    expect(afterSync.lastStatusSyncAt).toEqual(terminal.lastStatusSyncAt);
+    expect(afterSync.updatedAt).toEqual(terminal.updatedAt);
     const run = await db.courierSyncRun.findFirstOrThrow({
       where: {
         provider: "X_EXPRESS",
