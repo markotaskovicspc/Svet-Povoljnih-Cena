@@ -37,7 +37,8 @@ export function parseEvents(body, accounts) {
   const channel = body.object === 'page' ? 'facebook' : 'instagram';
   const events = [];
   for (const entry of body.entry ?? []) {
-    if (!accounts.some(a => a.channel === channel && a.id === entry.id)) continue;
+    const account=accounts.find(a => a.channel === channel && a.id === entry.id);
+    if (!account) continue;
     for (const event of entry.messaging ?? []) {
       if (!event.message?.mid || !Number.isFinite(event.timestamp)) continue;
       const echo = event.message.is_echo === true;
@@ -46,7 +47,7 @@ export function parseEvents(body, accounts) {
       if (!sender || (!echo && event.recipient?.id !== entry.id)) continue;
       events.push({ id: `${channel}:${event.message.mid}`, channel, account: entry.id, sender,
         conversation: `${channel}:${entry.id}:${sender}`, timestamp: event.timestamp,
-        echo, botEcho: event.message.metadata === 'spc-bot', sentByApp:Boolean(event.message.app_id), text: String(event.message.text ?? '').slice(0, 6000),
+        echo, botEcho: event.message.metadata === 'spc-bot' || (echo && Boolean(account.appId) && String(event.message.app_id??'')===account.appId), sentByApp:Boolean(event.message.app_id), text: String(event.message.text ?? '').slice(0, 6000),
         attachments: (event.message.attachments ?? []).slice(0, 5).map(a => ({type:a.type, url:a.payload?.url})),
       });
     }

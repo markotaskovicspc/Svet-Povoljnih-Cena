@@ -5,6 +5,7 @@ DATABASE_URL=
 CHAT_DATA_KEY=
 CHAT_ADMIN_TOKEN=
 META_APP_SECRET=
+META_APP_ID=
 META_VERIFY_TOKEN=
 # Set supported Graph API version from the Meta app dashboard.
 META_GRAPH_VERSION=v25.0
@@ -12,5 +13,8 @@ META_ACCOUNTS_JSON=[]
 SPC_BASE_URL=https://www.svetpovoljnihcena.rs
 SOCIAL_INTEGRATION_SECRET=
 BOT_ENABLED=false
+# Global capability; channel activation is separate in the operator panel.
+# Requires approved comment-reading/reply permissions and comment webhooks.
+COMMENTS_ENABLED=false
 TEST_SENDER_IDS=
 PORT=8080

@@ -1,8 +1,9 @@
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { equal, verifyMeta, parseEvents } from './security.mjs';
+import {parseComments} from './comments.mjs';
 
-export async function createHttpServer({store,worker,emailWorker,accounts,adminToken,appSecret,verifyToken}) {
+export async function createHttpServer({store,worker,emailWorker,commentWorker,accounts,adminToken,appSecret,verifyToken}) {
 const page=await readFile(new URL('../public/index.html',import.meta.url));
 const server=http.createServer(async(req,res)=>{
   res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');
@@ -30,7 +31,18 @@ const server=http.createServer(async(req,res)=>{
       if(!verifyMeta(raw,req.headers['x-hub-signature-256'],appSecret))return reply(401,{error:'Invalid signature'});
       let body;try{body=JSON.parse(raw);}catch{return reply(400,{error:'Invalid JSON'});}
       for(const event of parseEvents(body,accounts))await store.accept(event);
-      reply(200,{ok:true});void worker.tick();return;
+      if(commentWorker)for(const event of parseComments(body,accounts))await commentWorker.accept(event);
+      reply(200,{ok:true});void worker.tick();if(commentWorker)void commentWorker.tick();return;
+    }
+    if(req.method==='GET'&&url.pathname==='/admin/comments'){
+      if(!commentWorker)return reply(200,{available:false,settings:[],events:[]});
+      const rows=await store.pool.query('SELECT id,channel,post_id,comment_id,status,reason,public_status,created_at FROM spc_comment_events ORDER BY created_at DESC LIMIT 100');
+      return reply(200,{available:commentWorker.enabled,settings:await commentWorker.settings(),events:rows.rows});
+    }
+    if(req.method==='POST'&&url.pathname==='/admin/comments/settings'){
+      const body=JSON.parse(raw);
+      if(!commentWorker||!['facebook','instagram'].includes(body.channel)||typeof body.enabled!=='boolean')return reply(400,{error:'Invalid comment settings'});
+      await commentWorker.configure(body.channel,body.enabled);return reply(200,{ok:true,settings:await commentWorker.settings()});
     }
     if(req.method==='GET'&&url.pathname==='/admin/conversations'){
       const result=await store.pool.query('SELECT id,channel,paused,reason,last_customer,updated_at FROM spc_chat_conversations ORDER BY updated_at DESC LIMIT 100');return reply(200,result.rows);

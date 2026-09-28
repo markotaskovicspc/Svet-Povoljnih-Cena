@@ -80,6 +80,7 @@ export class Worker {
             } catch {state.history=local;state.historyImport='unavailable';console.error('chat.history_import_unavailable');}
             state.historyVersion=2;
           }
+          await this.store.importCommentContext(c,row.id,state,event);
           if(state.reclamationContext&&Date.now()-state.reclamationContext.createdAt>2*3600000)delete state.reclamationContext;
           if(!activeVisualContext(state))delete state.visualContext;
           if(event.attachments.length&&!state.reclamationContext){

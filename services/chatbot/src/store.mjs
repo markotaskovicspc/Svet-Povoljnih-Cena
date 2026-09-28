@@ -31,7 +31,8 @@ export class Store {
       if (inserted.rowCount && !event.echo) await c.query(`UPDATE spc_chat_conversations SET last_customer=GREATEST(last_customer,$2),updated_at=now() WHERE id=$1`, [event.conversation,event.timestamp]);
       if (event.echo && !event.botEcho) {
         const ours = await c.query('SELECT id FROM spc_chat_outbox WHERE meta_id=$1',[event.id.substring(event.channel.length+1)]);
-        if (!ours.rowCount) await c.query(`UPDATE spc_chat_conversations SET paused=true,reason='Odgovor zaposlenog u Meta inboxu',updated_at=now() WHERE id=$1`,[event.conversation]);
+        const comment=this.commentsEnabled&&!ours.rowCount?await c.query('SELECT id FROM spc_comment_events WHERE meta_id=$1',[event.id.substring(event.channel.length+1)]):{rowCount:0};
+        if (!ours.rowCount&&!comment.rowCount) await c.query(`UPDATE spc_chat_conversations SET paused=true,reason='Odgovor zaposlenog u Meta inboxu',updated_at=now() WHERE id=$1`,[event.conversation]);
       }
       await c.query(`SELECT pg_notify('spc_chat_wakeup','')`);
       await c.query('COMMIT');
@@ -62,6 +63,16 @@ export class Store {
     }).sort((a,b)=>a.timestamp-b.timestamp).slice(-120);
   }
   async pause(id, reason) { await this.pool.query('UPDATE spc_chat_conversations SET paused=true,reason=$2,updated_at=now() WHERE id=$1',[id,reason]); }
+  async importCommentContext(c,id,state,event){
+    if(!this.commentsEnabled)return;
+    const rows=await c.query("SELECT id,response,payload,created_at FROM spc_comment_events WHERE conversation=$1 AND status='sent' AND created_at<=$2 ORDER BY created_at DESC LIMIT 1",[id,new Date(event.timestamp)]);
+    const origin=rows.rows[0];if(!origin||state.commentOriginId===origin.id)return;
+    const source=this.decode(origin.payload),reply=this.decode(origin.response);
+    state.history=state.history.filter(m=>!(m.role==='assistant'&&m.content===reply.text&&Number(m.timestamp)>=Number(source.timestamp)));
+    state.history.push({role:'user',content:`Komentar kupca na objavu ${source.postId}: ${source.text}`,timestamp:Number(source.timestamp)}, {role:'assistant',content:reply.text,timestamp:new Date(origin.created_at).getTime()});
+    state.commentOriginId=origin.id;
+    state.commentOrigin={postId:source.postId,text:source.text,product:reply.product??null};
+  }
   async enqueue(c, id, conversation, message) { await c.query('INSERT INTO spc_chat_outbox(id,conversation,payload) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[id,conversation,seal(message,this.key)]); }
   decode(value) { return unseal(value,this.key); }
   encode(value) { return seal(value,this.key); }
