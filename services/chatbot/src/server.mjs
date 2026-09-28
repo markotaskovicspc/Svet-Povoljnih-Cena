@@ -2,6 +2,7 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { equal, verifyMeta, parseEvents } from './security.mjs';
 import {parseComments} from './comments.mjs';
+import {completeOperatorQuote} from './operator-order.mjs';
 
 export async function createHttpServer({store,worker,emailWorker,commentWorker,accounts,adminToken,appSecret,verifyToken}) {
 const page=await readFile(new URL('../public/index.html',import.meta.url));
@@ -61,6 +62,7 @@ const server=http.createServer(async(req,res)=>{
     }
     if(req.method==='POST'&&url.pathname==='/admin/action'){
       const body=JSON.parse(raw);if(typeof body.id!=='string'||body.id.length>200)return reply(400,{error:'Invalid conversation'});
+      if(body.action==='complete_quote')return reply(200,await completeOperatorQuote({id:body.id,quoteToken:body.quoteToken,secret:process.env.SOCIAL_INTEGRATION_SECRET,store,spc:worker.spc}));
       if(body.action==='pause')await store.pause(body.id,'Ručna pauza');
       else if(body.action==='resume')await store.withConversation(body.id,async(_row,state,c)=>{
         if(state.cancelling)throw new Error('Reconcile cancellation before resuming');
