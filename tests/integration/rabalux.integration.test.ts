@@ -307,6 +307,8 @@ afterAll(async () => {
       createdAt: { gte: testStartedAt },
       kind: {
         in: [
+          "CHECKOUT_POST_COMMIT",
+          "SUPPLIER_SHIPPING_DOCUMENTS_EMAIL",
           "RABALUX_MEDIA_PRODUCT",
           "BUYER_RECEIPT",
           "SUPPLIER_ORDER_EMAIL",
@@ -1078,6 +1080,12 @@ describe("Rabalux checkout integration", () => {
     if (!retry.ok) return;
     expect(retry.data.id).toBe(first.data.id);
 
+    // Checkout commits an outbox job; providers run only after that response.
+    const followUp = await db.backgroundJob.findUniqueOrThrow({
+      where: { idempotencyKey: `checkout-follow-up:${first.data.id}` },
+    });
+    expect(await processBackgroundJob(followUp.id)).toMatchObject({ claimed: true, ok: true });
+
     const order = await db.order.findUniqueOrThrow({
       where: { id: first.data.id },
       include: {
@@ -1103,7 +1111,7 @@ describe("Rabalux checkout integration", () => {
     ).resolves.toMatchObject({
       firstName: "Test",
       lastName: "Kupac",
-      address: "Test ulica 1",
+      address: "Test ulica (1)",
       city: "Beograd",
       postalCode: "11000",
       phone: "0601234567",

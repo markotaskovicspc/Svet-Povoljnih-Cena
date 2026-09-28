@@ -1,3 +1,4 @@
+import { boxQuantity } from "@/lib/courier/label-quantity";
 import { packedItemsLabel } from "@/lib/courier/parcel-contents";
 import type { ShipmentPurpose } from "@prisma/client";
 import type { PhysicalPackage } from "@/lib/courier/packages";
@@ -17,7 +18,7 @@ export type XExpressArticleItem = {
   product?: { barcode: string | null } | null;
 };
 
-export type XExpressArticleLabel = { name: string; sku: string | null; barcode: string | null };
+export type XExpressArticleLabel = { name: string; sku: string | null; barcode: string | null; packedQuantity?: number };
 
 function article(item: XExpressArticleItem): XExpressArticleLabel {
   return { name: item.name, sku: item.sku?.trim() || null, barcode: item.product?.barcode?.replace(/\s/g, "") || null };
@@ -33,16 +34,17 @@ export function buildXExpressArticleLabels(args: {
   return args.codes.flatMap((Code, index) => {
     const pkg = args.packages?.[index];
     if (pkg?.packedItems?.length) {
-      return [{ Code, name: packedItemsLabel(pkg.packedItems)!, sku: null, barcode: null }];
+      return [{ Code, name: packedItemsLabel(pkg.packedItems)!, sku: null, barcode: null, packedQuantity: boxQuantity(pkg) }];
     }
     const item = pkg?.orderItemId
       ? args.items.find((item) => item.id === pkg.orderItemId)
       : args.items.length === 1 ? args.items[0] : undefined;
-    if (!item) return [];
+    if (!item) return pkg ? [{ Code, name: pkg.content?.trim() || "Roba", sku: null, barcode: null, packedQuantity: boxQuantity(pkg) }] : [];
     const customPart = args.purpose === "RECLAMATION_REPLACEMENT" &&
       pkg?.content?.trim() && pkg.content.trim() !== item?.name.trim();
     return [{
       Code,
+      ...(pkg ? { packedQuantity: boxQuantity(pkg) } : {}),
       ...(item && !customPart ? article(item) : {
         name: pkg?.content?.trim() || "Roba", sku: null, barcode: null,
       }),
@@ -64,7 +66,9 @@ export function resolveXExpressArticleLabel(args: {
     if (entry && typeof entry.name === "string" &&
         (entry.sku === null || typeof entry.sku === "string") &&
         (entry.barcode === null || typeof entry.barcode === "string")) {
-      return { name: entry.name, sku: entry.sku, barcode: entry.barcode };
+      return { name: entry.name, sku: entry.sku, barcode: entry.barcode,
+        ...(Number.isSafeInteger(entry.packedQuantity) && entry.packedQuantity > 0 ? { packedQuantity: entry.packedQuantity } : {}),
+      };
     }
   }
   const assignment = readShipmentAssignment(args.raw);

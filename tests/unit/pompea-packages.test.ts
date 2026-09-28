@@ -60,7 +60,7 @@ describe("one Pompea parcel per order", () => {
   it("prints one concise courier label without misidentifying the parcel with one product barcode", () => {
     const packages = derivePhysicalPackages([item("A", 2), item("B", 3)]);
     const labels = buildXExpressArticleLabels({ codes: ["CODE"], packages, items: [], purpose: "ORDER_DELIVERY" });
-    expect(labels).toEqual([{ Code: "CODE", name: "POMPEA · 2 stavki · 5 kom", sku: null, barcode: null }]);
+    expect(labels).toEqual([{ Code: "CODE", name: "POMPEA · 2 stavki · 5 kom", sku: null, barcode: null, packedQuantity: 5 }]);
   });
   it("rejects corrupt saved contents and missing prices instead of silently dropping merchandise or COD", () => {
     expect(readPackedItems(null)).toEqual([]);

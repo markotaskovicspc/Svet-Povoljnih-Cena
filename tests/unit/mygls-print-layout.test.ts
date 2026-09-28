@@ -79,3 +79,50 @@ describe("GLS print layout", () => {
       .rejects.toThrow("format adresnice nije prepoznat");
   });
 });
+
+
+it("matches box quantities to PDF parcel identities even when returned in reverse order", async () => {
+  const result = await enlargeMyGlsArticleText(await providerPdf(2), [
+    { clientReference: "TRACK-1", quantity: 1 },
+    { clientReference: "TRACK-0", quantity: 2 },
+  ]);
+  const doc = await PDFDocument.load(result);
+  const blocks = readMyGlsPageText(doc, doc.getPage(0));
+  const quantities = blocks.filter(b => b.text.startsWith("U kutiji:"));
+  expect(quantities.map(b => [b.x, b.text])).toEqual([[199, "U kutiji: 2 kom"], [597, "U kutiji: 1 kom"]]);
+  expect(blocks.filter(b => b.text.includes("EAN:"))).toHaveLength(2);
+  expect((await addMyGlsProductBarcodes(result)).barcodeCount).toBe(2);
+  expect(await enlargeMyGlsArticleText(result, [{ quantity: 2 }, { quantity: 1 }])).toEqual(result);
+});
+
+it("never guesses a mixed box quantity from PDF page order", async () => {
+  await expect(enlargeMyGlsArticleText(await providerPdf(2), [{ quantity: 2 }, { quantity: 1 }]))
+    .rejects.toThrow("tačnom GLS adresnicom");
+  await expect(enlargeMyGlsArticleText(await providerPdf(2), [{ quantity: 2 }]))
+    .rejects.toThrow("Broj kutija");
+  await expect(enlargeMyGlsArticleText(await providerPdf(1), [{ quantity: 0 }]))
+    .rejects.toThrow("Broj kutija");
+});
+
+it("can safely annotate legacy labels when every box has the same quantity", async () => {
+  const doc = await PDFDocument.load(await enlargeMyGlsArticleText(await providerPdf(5), Array.from({ length: 5 }, () => ({ quantity: 2 }))));
+  expect(doc.getPages().flatMap(p => readMyGlsPageText(doc, p)).filter(b => b.text === "U kutiji: 2 kom")).toHaveLength(5);
+});
+
+it("recognizes GLS numbers split into rotated prefix, parcel and check digit", async () => {
+  const { pushGraphicsState, popGraphicsState, concatTransformationMatrix } = await import("pdf-lib");
+  const doc = await PDFDocument.load(await providerPdf(2));
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const page = doc.getPage(0);
+  for (const [index, suffix] of ["2790857", "2790858"].entries()) {
+    page.pushOperators(pushGraphicsState(), concatTransformationMatrix(-1, 0, 0, -1, index ? 770 : 370, 500));
+    ["0900", suffix, index ? "7" : "0"].forEach((text, part) => page.drawText(text, { x: part * 35, y: 0, size: 8, font }));
+    page.pushOperators(popGraphicsState());
+  }
+  const result = await enlargeMyGlsArticleText(await doc.save(), [
+    { quantity: 1, parcelNumber: "90027908587" }, { quantity: 2, parcelNumber: "90027908570" },
+  ]);
+  const output = await PDFDocument.load(result);
+  expect(readMyGlsPageText(output, output.getPage(0)).filter(b => b.text.startsWith("U kutiji:")).map(b => [b.x, b.text]))
+    .toEqual([[199, "U kutiji: 2 kom"], [597, "U kutiji: 1 kom"]]);
+});

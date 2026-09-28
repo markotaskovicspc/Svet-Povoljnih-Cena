@@ -1,3 +1,4 @@
+import { boxQuantity } from "@/lib/courier/label-quantity";
 import { packedItemsLabel, parcelOrderItemIds } from "@/lib/courier/parcel-contents";
 import { NextResponse } from "next/server";
 import type { Prisma, ShipmentPurpose } from "@prisma/client";
@@ -43,6 +44,9 @@ export async function GET(
           purpose: true,
           lineGroupKey: true,
           packedItems: true,
+          packedQuantity: true,
+          providerParcelNumber: true,
+          providerClientReference: true,
           packageNo: true,
           orderItem: { select: { name: true } },
         },
@@ -191,13 +195,16 @@ export async function GET(
   }
 
   if (batch.provider === MYGLS_PROVIDER) {
-    const sourcePdfs = await Promise.all(
-      shipments.map((shipment) =>
-        downloadMyGlsLabelPdf(shipment.labelObjectKey!),
-      ),
-    );
     let pdf: Buffer;
     try {
+      const sourcePdfs = await Promise.all(
+        shipments.map((shipment) =>
+          downloadMyGlsLabelPdf(shipment.labelObjectKey!, batch.lines
+            .filter(line => shipmentMatchesLine(shipment, line))
+            .map(line => ({ quantity: boxQuantity(line), parcelNumber: line.providerParcelNumber,
+              clientReference: line.providerClientReference }))),
+        ),
+      );
       pdf = await packMyGlsLabels(sourcePdfs.map((bytes, index) => ({
         bytes,
         packageCount: Math.max(1, shipments[index]!.packageCount),
@@ -241,6 +248,9 @@ export async function GET(
       autoPrint: true,
       packageContentsByShipmentId,
       packageOrderItemIdsByShipmentId,
+      packageQuantitiesByShipmentId: Object.fromEntries(shipments.map(shipment => [shipment.id, batch.lines
+        .filter(line => shipmentMatchesLine(shipment, line))
+        .sort((a, b) => a.packageNo - b.packageNo).map(boxQuantity)])),
     });
   } catch (error) {
     return labelConflict(

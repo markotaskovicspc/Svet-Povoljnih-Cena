@@ -1,3 +1,4 @@
+import { boxQuantity } from "@/lib/courier/label-quantity";
 import "server-only";
 
 import { randomUUID } from "node:crypto";
@@ -41,6 +42,7 @@ export type MyGlsPackageAssignment = {
   parcelId: number;
   parcelNumber: number;
   codAmount: number;
+  packedQuantity?: number;
 };
 
 /**
@@ -523,6 +525,7 @@ function buildPackageAssignments(
       );
     }
     return {
+      packedQuantity: boxQuantity(packages[index]!),
       packageNo: packages[index]?.packageNo ?? index + 1,
       orderItemId: packages[index]?.orderItemId ?? null,
       clientReference: parcel.ClientReference,
@@ -553,6 +556,7 @@ export function readMyGlsPackageAssignments(
     ) return [];
     return [{
       packageNo,
+      ...(Number.isSafeInteger(item.packedQuantity) && Number(item.packedQuantity) > 0 ? { packedQuantity: Number(item.packedQuantity) } : {}),
       orderItemId:
         typeof item.orderItemId === "string" ? item.orderItemId : null,
       clientReference: String(item.clientReference ?? ""),

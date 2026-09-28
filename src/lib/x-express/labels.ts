@@ -140,6 +140,7 @@ export function renderXExpressBatchLabelsHtml(
     title?: string;
     autoPrint?: boolean;
     packageContentsByShipmentId?: Readonly<Record<string, readonly string[]>>;
+    packageQuantitiesByShipmentId?: Readonly<Record<string, readonly number[]>>;
     packageOrderItemIdsByShipmentId?: Readonly<Record<string, readonly (string | null)[]>>;
   } = {},
 ) {
@@ -152,6 +153,7 @@ export function renderXExpressBatchLabelsHtml(
       shipment,
       options.packageContentsByShipmentId?.[shipment.id],
       options.packageOrderItemIdsByShipmentId?.[shipment.id],
+      options.packageQuantitiesByShipmentId?.[shipment.id],
     ),
   );
   const sheets = chunkLabels(labels, 4);
@@ -178,6 +180,7 @@ export function renderXExpressBatchLabelsHtml(
     .recipient strong { display: block; font-size: 18px; line-height: 1.1; }
     .route { display: flex; align-items: baseline; justify-content: space-between; gap: 3mm; margin-top: 2mm; }
     .route-code { font-size: 30px; line-height: 1; font-weight: 900; }
+    .box-quantity { font-size: 14px; font-weight: 800; white-space: nowrap; }
     .pkg { font-size: 28px; line-height: 1; font-weight: 900; }
     .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; margin-top: 2.5mm; font-size: 9px; line-height: 1.2; overflow-wrap: anywhere; }
     .note { margin-top: 2mm; font-size: 8.5px; line-height: 1.15; white-space: pre-wrap; }
@@ -243,6 +246,7 @@ function renderShipmentLabels(
   shipment: XExpressLabelShipment,
   packageContents?: readonly string[],
   packageOrderItemIds?: readonly (string | null)[],
+  packageQuantities?: readonly number[],
 ) {
   const trackingCodes = readTrackingCodes(shipment);
   const count = Math.max(1, shipment.packageCount || trackingCodes.length || 1);
@@ -263,6 +267,9 @@ function renderShipmentLabels(
   if (packageOrderItemIds && packageOrderItemIds.length !== count) {
     throw new Error(`X Express pošiljka ${shipment.id} nema identitet artikla za svih ${count} paketa.`);
   }
+  if (packageQuantities && (packageQuantities.length !== count || packageQuantities.some(q => !Number.isSafeInteger(q) || q < 1))) {
+    throw new Error(`X Express pošiljka ${shipment.id} nema broj komada za svih ${count} kutija.`);
+  }
   return trackingCodes.map((code, index) =>
     renderLabel(
       shipment,
@@ -271,6 +278,7 @@ function renderShipmentLabels(
       count,
       packageContents?.[index],
       packageOrderItemIds?.[index],
+      packageQuantities?.[index],
     ),
   );
 }
@@ -282,6 +290,7 @@ function renderLabel(
   count: number,
   packageContentOverride?: string,
   orderItemId?: string | null,
+  packedQuantity?: number,
 ) {
   const order = shipment.order;
   const labelData = readLabelData(shipment.rawCreateResponse);
@@ -315,6 +324,7 @@ function renderLabel(
     raw: shipment.rawCreateResponse, code: trackingCode, items: order.items,
     content, orderItemId, purpose: shipment.purpose,
   });
+  const quantity = article?.packedQuantity ?? packedQuantity;
   const sender = labelData?.sender;
   const recipient = labelData?.recipient;
   const senderAddress = sender
@@ -338,7 +348,7 @@ function renderLabel(
     <div class="barcode">${code128Svg(trackingCode)}</div>
     <div class="code">${escapeHtml(trackingCode)}</div>
     <div class="recipient">Primalac:<strong>${escapeHtml(recipientName)}<br />${escapeHtml(recipientAddress)}<br />${escapeHtml(recipientPostalCity)}<br />${escapeHtml(recipient?.phone ?? order.shipPhone)}</strong></div>
-    <div class="route"><span class="route-code">${escapeHtml(route)}</span><span class="pkg">${index}/${count}</span></div>
+    <div class="route"><span class="route-code">${escapeHtml(route)}</span>${quantity != null ? `<span class="box-quantity">U kutiji: ${quantity} kom</span>` : ""}<span class="pkg">${index}/${count}</span></div>
     ${article && (article.sku || article.barcode) ? renderArticle(article) : ""}
     <div class="meta">
       <div><strong>API referenca:</strong> ${escapeHtml(reference)}<br /><strong>Porudžbina:</strong> ${escapeHtml(order.number)}${article && (article.sku || article.barcode) ? "" : `<br /><strong>Sadržaj:</strong> ${escapeHtml(article?.name || content)}`}</div>

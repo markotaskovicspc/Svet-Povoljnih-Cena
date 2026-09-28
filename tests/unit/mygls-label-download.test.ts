@@ -65,3 +65,16 @@ describe("MyGLS stored label download", () => {
     await expect(downloadMyGlsLabelPdf("existing.pdf")).rejects.toThrow();
   });
 });
+
+it("adds the saved box quantity on reprint without removing the article barcode", async () => {
+  storage.download.mockResolvedValue({ data: new Blob([new Uint8Array(await pdf())]), error: null });
+  const downloaded = await downloadMyGlsLabelPdf("existing.pdf", [{ quantity: 2 }]);
+  const doc = await PDFDocument.load(downloaded);
+  expect(readMyGlsPageText(doc, doc.getPage(0)).map(b => b.text)).toContain("U kutiji: 2 kom");
+  expect(doc.getPage(0).node.has(PDFName.of("SPCArticleBarcodesV1"))).toBe(true);
+});
+
+it("does not silently omit requested quantities on an unsupported layout", async () => {
+  storage.download.mockResolvedValue({ data: new Blob([new Uint8Array(await pdf(true))]), error: null });
+  await expect(downloadMyGlsLabelPdf("existing.pdf", [{ quantity: 2 }, { quantity: 1 }])).rejects.toThrow();
+});

@@ -1,3 +1,4 @@
+import type { LabelBoxQuantity } from "@/lib/courier/label-quantity";
 import "server-only";
 
 import type { Prisma } from "@prisma/client";
@@ -62,7 +63,7 @@ export async function uploadMyGlsLabelPdf(args: {
   };
 }
 
-export async function downloadMyGlsLabelPdf(objectKey: string) {
+export async function downloadMyGlsLabelPdf(objectKey: string, quantities: readonly LabelBoxQuantity[] = []) {
   const cfg = getMyGlsConfig();
   const client = createAdminClient();
   const { data, error } = await client.storage.from(cfg.labelBucket).download(objectKey);
@@ -72,9 +73,9 @@ export async function downloadMyGlsLabelPdf(objectKey: string) {
   const label = await redactMyGlsSenderContactPdf(await data.arrayBuffer());
   let printable = label.bytes;
   try {
-    printable = await enlargeMyGlsArticleText(printable);
+    printable = await enlargeMyGlsArticleText(printable, quantities);
   } catch (error) {
-    if (!(error instanceof MyGlsPrintLayoutError)) throw error;
+    if (quantities.length || !(error instanceof MyGlsPrintLayoutError)) throw error;
     console.warn("[mygls-label] Article enlargement omitted: unsupported label layout.");
   }
   try {
