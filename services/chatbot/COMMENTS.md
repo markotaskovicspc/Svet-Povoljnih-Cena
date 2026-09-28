@@ -4,7 +4,7 @@ New top-level Facebook Page and Instagram media comments arrive on the same sign
 
 The AI classifies sales questions, support cases and non-actionable comments. It can only read the catalogue/specifications. Sales questions get one private reply; only a confirmed successful private send gets the fixed public acknowledgement (no public price). Support cases are sent once to the existing support email integration. Other comments are skipped.
 
-The private reply and original comment become context in the existing conversation. A private reply never opens the normal 24-hour response window: only an actual incoming customer message does. An existing manual pause or active inbox conversation is preserved. Limit: one initial private reply per sender/account in 24 hours, and at most 600 initial send attempts per account per hour. No catch-up of comments made before channel activation. Ambiguous sends are marked uncertain for human inspection, never automatically repeated.
+The private reply and original comment become context in the existing conversation. A private reply never opens or extends the normal 24-hour response window: only an actual incoming customer message does. A new product question may receive a private reply in an existing bot conversation; a manual staff pause still suppresses it. Limit: one initial private reply per sender/account in 24 hours, and at most 600 initial send attempts per account per hour. No catch-up of comments made before channel activation. Ambiguous sends are marked uncertain for human inspection, never automatically repeated.
 
 ## Activation
 

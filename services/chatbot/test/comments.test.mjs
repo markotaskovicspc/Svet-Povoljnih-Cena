@@ -54,14 +54,17 @@ test('disabled, old, own comments and recent repeated sender do not trigger unso
   await worker.accept(event());await worker.tick();await worker.accept({...event(),id:'facebook:123:123_11',commentId:'123_11'});await worker.tick();assert.equal(sends.length,2);
  }finally{await store.close();}
 });
-test('manual takeover and active inbox prevent a competing funnel; support is escalated without sales DM',async()=>{
+test('a new product question reaches an existing bot conversation; staff takeover and support remain separate',async()=>{
  const {store,worker,sends,support}=await setup();try{
   await store.accept({id:'facebook:customer',channel:'facebook',account:'123',sender:'456',conversation:'facebook:123:456',text:'Već pričamo',timestamp:Date.now(),attachments:[]});
-  await worker.accept(event());await worker.tick();assert.equal(sends.length,0);
+  const before=(await store.pool.query('SELECT last_customer FROM spc_chat_conversations')).rows[0].last_customer;
+  await worker.accept(event());await worker.tick();assert.equal(sends.length,2);
+  assert.equal((await store.pool.query('SELECT last_customer FROM spc_chat_conversations')).rows[0].last_customer,before);
   await store.pool.query('UPDATE spc_chat_conversations SET last_customer=0,paused=true');
-  await worker.accept({...event(),id:'facebook:123:123_11',commentId:'123_11'});await worker.tick();assert.equal(sends.length,0);
+  await worker.accept({...event(),id:'facebook:123:123_11',commentId:'123_11'});await worker.tick();assert.equal(sends.length,2);
+  assert.equal((await store.pool.query("SELECT reason FROM spc_comment_events WHERE comment_id='123_11'")).rows[0].reason,'Razgovor je preuzeo zaposleni');
   worker.prepare=async()=>({kind:'support',text:''});
-  await worker.accept({...event(),id:'facebook:123:123_12',commentId:'123_12',sender:'457',text:'Stiglo polomljeno'});await worker.tick();await worker.tick();await worker.tick();assert.equal(support.length,1);assert.equal(support[0].action,'support_handoff');assert.equal(sends.length,0);
+  await worker.accept({...event(),id:'facebook:123:123_12',commentId:'123_12',sender:'457',text:'Stiglo polomljeno'});await worker.tick();await worker.tick();await worker.tick();assert.equal(support.length,1);assert.equal(support[0].action,'support_handoff');assert.equal(sends.length,2);
  }finally{await store.close();}
 });
 test('definite DM rejection has no public claim; public failure never resends a successful DM',async()=>{

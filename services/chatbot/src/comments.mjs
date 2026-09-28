@@ -1,6 +1,5 @@
 import {Agent,run,tool,setTracingDisabled,user} from '@openai/agents';
 import {z} from 'zod';
-import {inWindow} from './security.mjs';
 setTracingDisabled(true);
 const WEEK=7*86400000;
 const PUBLIC_REPLY='Poslali smo Vam detalje u privatnoj poruci 😊';
@@ -119,8 +118,11 @@ export class CommentWorker{
    }
    // Recheck after model preparation: a staff member may have taken over meanwhile.
    const duplicate=await c.query("SELECT id FROM spc_comment_events WHERE channel=$1 AND account=$2 AND sender=$3 AND id<>$4 AND status IN ('sent','sending','uncertain') AND attempted_at>now()-interval '24 hours' LIMIT 1",[row.channel,row.account,row.sender,row.id]);
-   const conversations=await c.query('SELECT paused,last_customer FROM spc_chat_conversations WHERE channel=$1 AND account=$2 AND sender=$3',[row.channel,row.account,row.sender]);
-   if(duplicate.rows.length||conversations.rows.some(r=>r.paused||inWindow(Number(r.last_customer)))){await c.query("UPDATE spc_comment_events SET status='ignored',reason='Postojeći razgovor ili već poslata privatna poruka' WHERE id=$1",[row.id]);return;}
+   const conversations=await c.query('SELECT paused FROM spc_chat_conversations WHERE channel=$1 AND account=$2 AND sender=$3',[row.channel,row.account,row.sender]);
+   // A new public question is actionable even when this customer recently used the bot.
+   // Preserve staff takeover and the limit on initial comment replies.
+   const blockedReason=conversations.rows.some(r=>r.paused)?'Razgovor je preuzeo zaposleni':duplicate.rows.length?'Već poslata privatna poruka iz komentara u poslednja 24 sata':null;
+   if(blockedReason){await c.query("UPDATE spc_comment_events SET status='ignored',reason=$2 WHERE id=$1",[row.id,blockedReason]);return;}
    const rate=await c.query("SELECT count(*)::int AS n FROM spc_comment_events WHERE channel=$1 AND account=$2 AND attempted_at>now()-interval '1 hour'",[row.channel,row.account]);
    if(rate.rows[0].n>=600){await c.query("UPDATE spc_comment_events SET next_at=now()+interval '5 minutes',reason='Čeka dozvoljeni tempo slanja' WHERE id=$1",[row.id]);return;}
    const current=(await this.settings()).find(s=>s.channel===row.channel);
