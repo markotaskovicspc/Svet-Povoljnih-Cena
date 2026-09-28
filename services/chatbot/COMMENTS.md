@@ -6,7 +6,7 @@ The comment agent receives the post caption, attachment text and GPT visual desc
 
 The AI classifies sales questions, support cases and non-actionable comments. It can only read the catalogue/specifications. Sales questions get one private reply; only a confirmed successful private send gets the fixed public acknowledgement (no public price). Support cases are sent once to the existing support email integration. Other comments are skipped.
 
-The private reply and original comment become context in the existing conversation. A private reply never opens or extends the normal 24-hour response window: only an actual incoming customer message does. A new product question may receive a private reply in an existing bot conversation; a manual staff pause still suppresses it. Limit: one initial private reply per sender/account in 24 hours, and at most 600 initial send attempts per account per hour. No catch-up of comments made before channel activation. Ambiguous sends are marked uncertain for human inspection, never automatically repeated.
+The private reply and original comment become context in the existing conversation. A private reply never opens or extends the normal 24-hour response window: only an actual incoming customer message does. Each distinct actionable comment may receive one private reply, including multiple questions from the same sender on the same or different posts. Duplicate webhook delivery cannot resend the reply. A manual staff pause still suppresses it. Limit: at most 600 initial send attempts per account per hour. No catch-up of comments made before channel activation, or automatic replay of previously ignored comments. Ambiguous sends are marked uncertain for human inspection, never automatically repeated.
 
 ## Activation
 

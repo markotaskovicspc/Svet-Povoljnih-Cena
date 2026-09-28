@@ -134,11 +134,10 @@ export class CommentWorker{
     await c.query("UPDATE spc_comment_events SET status='prepared',response=$2 WHERE id=$1",[row.id,this.store.encode(prepared)]);
    }
    // Recheck after model preparation: a staff member may have taken over meanwhile.
-   const duplicate=await c.query("SELECT id FROM spc_comment_events WHERE channel=$1 AND account=$2 AND sender=$3 AND id<>$4 AND status IN ('sent','sending','uncertain') AND attempted_at>now()-interval '24 hours' LIMIT 1",[row.channel,row.account,row.sender,row.id]);
    const conversations=await c.query('SELECT paused FROM spc_chat_conversations WHERE channel=$1 AND account=$2 AND sender=$3',[row.channel,row.account,row.sender]);
-   // A new public question is actionable even when this customer recently used the bot.
-   // Preserve staff takeover and the limit on initial comment replies.
-   const blockedReason=conversations.rows.some(r=>r.paused)?'Razgovor je preuzeo zaposleni':duplicate.rows.length?'Već poslata privatna poruka iz komentara u poslednja 24 sata':null;
+   // Each distinct comment may receive a reply, including repeat senders.
+   // Event IDs and durable send states prevent duplicates; staff takeover still applies.
+   const blockedReason=conversations.rows.some(r=>r.paused)?'Razgovor je preuzeo zaposleni':null;
    if(blockedReason){await c.query("UPDATE spc_comment_events SET status='ignored',reason=$2 WHERE id=$1",[row.id,blockedReason]);return;}
    const rate=await c.query("SELECT count(*)::int AS n FROM spc_comment_events WHERE channel=$1 AND account=$2 AND attempted_at>now()-interval '1 hour'",[row.channel,row.account]);
    if(rate.rows[0].n>=600){await c.query("UPDATE spc_comment_events SET next_at=now()+interval '5 minutes',reason='Čeka dozvoljeni tempo slanja' WHERE id=$1",[row.id]);return;}

@@ -54,12 +54,26 @@ test('ambiguous send and process restart never repeat DM or falsely publish sent
   await store.pool.query("UPDATE spc_comment_events SET status='sending'");await worker.tick();assert.equal((await store.pool.query('SELECT status FROM spc_comment_events')).rows[0].status,'uncertain');
  }finally{await store.close();}
 });
-test('disabled, old, own comments and recent repeated sender do not trigger unsolicited messages',async()=>{
+test('disabled and pre-activation comments do not trigger messages',async()=>{
  const {store,worker,sends}=await setup();try{
   await worker.configure('facebook',false);await worker.accept(event());assert.equal((await store.pool.query('SELECT * FROM spc_comment_events')).rows.length,0);
   await worker.configure('facebook',true);await worker.accept({...event(),timestamp:Date.now()-86400000});assert.equal((await store.pool.query('SELECT * FROM spc_comment_events')).rows.length,0);
-  await store.pool.query("UPDATE spc_comment_settings SET activated_at=now()-interval '1 minute'");
-  await worker.accept(event());await worker.tick();await worker.accept({...event(),id:'facebook:123:123_11',commentId:'123_11'});await worker.tick();assert.equal(sends.length,2);
+  assert.equal(sends.length,0);
+ }finally{await store.close();}
+});
+
+for(const channel of ['facebook','instagram'])test(`${channel}: distinct questions by the same sender are answered on the same or different posts without replaying a comment`,async()=>{
+ const {store,worker,sends}=await setup();try{
+  const account=channel==='facebook'?'123':'124';
+  await worker.configure(channel,true);await store.pool.query("UPDATE spc_comment_settings SET activated_at=now()-interval '1 minute'");
+  const events=[0,1,2].map(i=>({...event(),channel,account,id:`${channel}:${account}:${account}_${10+i}`,commentId:`${account}_${10+i}`,postId:`${account}_${i===2?8:9}`,text:i===1?'Koje su dimenzije?':'Cena?'}));
+  for(const e of events){await worker.accept(e);await worker.accept(e);await worker.tick();}
+  for(const e of events)await worker.accept(e);
+  await worker.tick();
+  assert.deepEqual(sends.filter(s=>s.url.endsWith('/messages')).map(s=>s.body.recipient.comment_id),events.map(e=>e.commentId));
+  assert.equal(sends.length,6);
+  assert.equal((await store.pool.query("SELECT * FROM spc_comment_events WHERE status='sent' AND public_status='sent'")).rows.length,3);
+  assert.equal(Number((await store.pool.query('SELECT last_customer FROM spc_chat_conversations')).rows[0].last_customer),0);
  }finally{await store.close();}
 });
 test('a new product question reaches an existing bot conversation; staff takeover and support remain separate',async()=>{
