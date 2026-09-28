@@ -71,7 +71,7 @@ export class Store {
     state.history=state.history.filter(m=>!(m.role==='assistant'&&m.content===reply.text&&Number(m.timestamp)>=Number(source.timestamp)));
     state.history.push({role:'user',content:`Komentar kupca na objavu ${source.postId}: ${source.text}`,timestamp:Number(source.timestamp)}, {role:'assistant',content:reply.text,timestamp:new Date(origin.created_at).getTime()});
     state.commentOriginId=origin.id;
-    state.commentOrigin={postId:source.postId,text:source.text,product:reply.product??null};
+    state.commentOrigin={postId:source.postId,text:source.text,product:reply.product??null,post:reply.post??null};
   }
   async enqueue(c, id, conversation, message) { await c.query('INSERT INTO spc_chat_outbox(id,conversation,payload) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[id,conversation,seal(message,this.key)]); }
   decode(value) { return unseal(value,this.key); }

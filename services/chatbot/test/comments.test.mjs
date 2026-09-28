@@ -92,11 +92,13 @@ test('sent receipt recovers missing local context without another external send'
 });
 test('customer reply opens the normal chat with original comment and selected product, never creates an order from a comment',async()=>{
  const {store,worker}=await setup();try{
+  const post=worker.post.bind(worker);worker.post=async(...args)=>({...await post(...args),visual:{images:[{imageNumber:1,readable:true,objects:[{position:'gore levo',description:'crni sto',visibleName:'LOFT',visibleSku:'210026'}]}],failed:0,omitted:0}});
   await worker.accept(event());await worker.tick();
   let answers=0;const bot=new Worker({store,accounts:[],enabled:true,graphVersion:'v26.0',model:'test',spc:async()=>{throw Error('No ERP action expected');},answerFn:async({state,event:e})=>{answers++;assert.equal(state.commentOrigin.product.sku,'210026');assert(state.history.some(m=>m.content.includes('Cena?')));assert.equal(state.history.filter(m=>m.role==='assistant'&&m.content.includes('1.999')).length,1);assert.equal(e.text,'Dva komada');return {text:'Pošaljite podatke za dostavu.',quoteCreated:false};}});
   const incoming={id:'facebook:incoming',channel:'facebook',account:'123',sender:'456',conversation:'facebook:123:456',timestamp:Date.now()+100,text:'Dva komada',attachments:[],echo:false};
   await store.accept(incoming);await bot.tick();assert.equal(answers,1);
   const conversation=(await store.pool.query('SELECT * FROM spc_chat_conversations')).rows[0];assert.equal(Number(conversation.last_customer),incoming.timestamp);assert.equal(store.decode(conversation.state).orders.length,0);
+  assert.equal(store.decode(conversation.state).commentOrigin.post.visual.images[0].objects[0].position,'gore levo');
  }finally{await store.close();}
 });
 test('staff takeover during drafting suppresses the DM; service off does not accept comments',async()=>{
