@@ -3,11 +3,19 @@ import assert from 'node:assert/strict';
 import {randomBytes} from 'node:crypto';
 import {PGlite} from '@electric-sql/pglite';
 import {Store} from '../src/store.mjs';
-import {CommentWorker,parseComments} from '../src/comments.mjs';
+import {CommentWorker,parseComments,searchCommentProducts} from '../src/comments.mjs';
 import {parseEvents} from '../src/security.mjs';
 import {Worker} from '../src/worker.mjs';
 const accounts=[{channel:'facebook',id:'123',login:'facebook',token:'test',appId:'789'},{channel:'instagram',id:'124',login:'facebook',token:'test',appId:'789'}];
 const event=()=>({id:'facebook:123:123_10',channel:'facebook',account:'123',commentId:'123_10',postId:'123_9',sender:'456',text:'Cena?',timestamp:Date.now()});
+test('catalogue lookup recovers from a verbose model query without hiding real ERP errors',async()=>{
+ const calls=[],products=[{sku:'210026',name:'Kompjuter sto LOFT'},{sku:'210029',name:'Otvorena polica LOFT'}];
+ const r=await searchCommentProducts(async p=>{calls.push(p.query);return {ok:true,items:p.query==='LOFT'?products:[]};},'LOFT radni sto 1999 SPC katalog');
+ assert.deepEqual(r.items,products);assert.deepEqual(calls,['LOFT radni sto 1999 SPC katalog','LOFT']);
+ const failedCalls=[];const failure={ok:false,error:{code:'UNAVAILABLE'}};
+ assert.equal(await searchCommentProducts(async p=>{failedCalls.push(p.query);return failure;},'Sto LOFT'),failure);assert.equal(failedCalls.length,1);
+ const emptyCalls=[];await searchCommentProducts(async p=>{emptyCalls.push(p.query);return {ok:true,items:[]};},'model jedan drugi treci cetvrti');assert.equal(emptyCalls.length,4);
+});
 async function setup(){
  const db=new PGlite(),store=new Store(undefined,randomBytes(32).toString('hex'));await store.pool.end();
  const query=async(sql,args)=>{if(sql.includes('pg_try_advisory_lock'))return {rows:[{locked:true}],rowCount:1};if(sql.includes('pg_advisory_unlock')||sql.includes('pg_notify'))return {rows:[],rowCount:0};if(!args&&sql.includes('CREATE TABLE')){await db.exec(sql);return {rows:[]};}const r=await db.query(sql,args);return {...r,rowCount:r.rows.length||r.affectedRows||0};};
