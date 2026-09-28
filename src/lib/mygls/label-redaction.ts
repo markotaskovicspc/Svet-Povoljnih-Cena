@@ -115,6 +115,39 @@ export function readMyGlsPageText(document: PDFDocument, page: ReturnType<PDFDoc
   );
 }
 
+/** Page-space text positions, including GLS's rotated, split parcel numbers. */
+export function readMyGlsPositionedPageText(document: PDFDocument, page: ReturnType<PDFDocument["getPage"]>) {
+  const contents = page.node.Contents();
+  if (!contents) return [];
+  const fontMaps = readFontMaps(page.node.Resources());
+  type Matrix = [number, number, number, number, number, number];
+  let matrix: Matrix = [1, 0, 0, 1, 0, 0];
+  const stack: Matrix[] = [];
+  return contentStreams(document, contents).flatMap(stream => {
+    const content = Buffer.from(decodePDFRawStream(stream).decode()).toString("latin1");
+    const number = "[-+]?\\d*\\.?\\d+";
+    // Consume complete text objects so q/Q characters inside strings aren't operators.
+    const operators = new RegExp(`\\bBT\\b[\\s\\S]*?\\bET\\b|((?:${number}\\s+){6})cm\\b|(?:^|\\s)([qQ])(?=\\s|$)`, "g");
+    const positioned: TextBlock[] = [];
+    for (const op of content.matchAll(operators)) {
+      if (op[2] === "q") { stack.push([...matrix]); continue; }
+      if (op[2] === "Q") { matrix = stack.pop() ?? [1, 0, 0, 1, 0, 0]; continue; }
+      if (op[1]) {
+        const [a, b, c, d, e, f] = op[1].trim().split(/\s+/).map(Number) as Matrix;
+        const [ma, mb, mc, md, me, mf] = matrix;
+        matrix = [ma*a + mc*b, mb*a + md*b, ma*c + mc*d, mb*c + md*d, ma*e + mc*f + me, mb*e + md*f + mf];
+        continue;
+      }
+      positioned.push(...readTextBlocks(op[0], fontMaps).map(block => ({
+        ...block,
+        x: matrix[0]*block.x + matrix[2]*block.y + matrix[4],
+        y: matrix[1]*block.x + matrix[3]*block.y + matrix[5],
+      })));
+    }
+    return positioned;
+  });
+}
+
 /** Remove selected text operators before replacing a provider content field. */
 export function removeMyGlsPageText(
   document: PDFDocument,

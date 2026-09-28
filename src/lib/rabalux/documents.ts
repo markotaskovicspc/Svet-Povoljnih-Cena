@@ -1,3 +1,4 @@
+import { myGlsBoxQuantities } from "@/lib/courier/label-quantity";
 import "server-only";
 
 import { db } from "@/lib/db";
@@ -183,7 +184,7 @@ export async function buildRabaluxShipmentAttachments(args: {
     contentType: "application/pdf",
   };
   if (shipment.provider === MYGLS_PROVIDER && shipment.labelObjectKey) {
-    const label = await downloadMyGlsLabelPdf(shipment.labelObjectKey);
+    const label = await downloadMyGlsLabelPdf(shipment.labelObjectKey, myGlsBoxQuantities(shipment.rawCreateResponse));
     return [
       {
         filename: `adresnica-${safe(args.orderNumber)}.pdf`,

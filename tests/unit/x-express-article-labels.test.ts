@@ -80,3 +80,23 @@ describe("X Express article identification", () => {
     expect(html).not.toContain("<img");
   });
 });
+
+
+it("prints per-box quantities by tracking code, not the order quantity or snapshot order", () => {
+  const articleLabels = buildXExpressArticleLabels({ codes, packages: packages.map((p, i) => ({ ...p, packedQuantity: i ? 1 : 2 })), items, purpose: "ORDER_DELIVERY" });
+  const html = renderXExpressLabelsHtml({ ...shipment, rawCreateResponse: { articleLabels: articleLabels.reverse() } });
+  const labels = [...html.matchAll(/<section class="label">([\s\S]*?)<\/section>/g)].map(m => m[1]);
+  expect(labels[0]).toContain("U kutiji: 2 kom");
+  expect(labels[1]).toContain("U kutiji: 1 kom");
+  expect(labels[0]).toContain('class="pkg">1/2');
+  expect(labels[1]).toContain('class="pkg">2/2');
+});
+
+it("reprints existing labels using picking quantities and rejects incomplete quantities", () => {
+  const html = renderXExpressBatchLabelsHtml([shipment], { packageQuantitiesByShipmentId: { [shipment.id]: [2, 1] } });
+  expect(html).toContain("U kutiji: 2 kom");
+  expect(html).toContain("U kutiji: 1 kom");
+  expect(() => renderXExpressBatchLabelsHtml([shipment], { packageQuantitiesByShipmentId: { [shipment.id]: [2] } })).toThrow("broj komada");
+  // A legacy individual label without a saved box quantity must not invent it from item.qty.
+  expect(renderXExpressLabelsHtml(shipment)).not.toContain("U kutiji:");
+});

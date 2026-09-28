@@ -1,3 +1,5 @@
+import { boxQuantity, myGlsBoxQuantities } from "@/lib/courier/label-quantity";
+import { MyGlsPrintLayoutError } from "@/lib/mygls/print-layout";
 import { NextResponse } from "next/server";
 import { requireAdminAction } from "@/lib/admin";
 import { db } from "@/lib/db";
@@ -19,6 +21,7 @@ export async function GET(
   const shipment = await db.shipment.findUnique({
     where: { id },
     include: {
+      pickupBatchLines: { select: { packedQuantity: true, packedItems: true, providerParcelNumber: true, providerClientReference: true } },
       order: {
         select: {
           number: true,
@@ -98,8 +101,17 @@ export async function GET(
     return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
   }
 
-  const pdf = await downloadMyGlsLabelPdf(shipment.labelObjectKey);
-  return new NextResponse(pdf, {
+  let pdf: Buffer;
+  try {
+    const quantities = shipment.pickupBatchLines?.length
+      ? shipment.pickupBatchLines.map(line => ({ quantity: boxQuantity(line), parcelNumber: line.providerParcelNumber, clientReference: line.providerClientReference }))
+      : myGlsBoxQuantities(shipment.rawCreateResponse);
+    pdf = await downloadMyGlsLabelPdf(shipment.labelObjectKey, quantities);
+  } catch (error) {
+    if (!(error instanceof MyGlsPrintLayoutError)) throw error;
+    return NextResponse.json({ ok: false, error: "mygls_label_invalid", message: error.message }, { status: 409 });
+  }
+  return new NextResponse(new Uint8Array(pdf), {
     headers: {
       "content-type": shipment.labelMimeType ?? "application/pdf",
       "content-disposition": `inline; filename="mygls-${shipment.trackingNo ?? id}.pdf"`,

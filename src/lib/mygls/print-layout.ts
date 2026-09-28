@@ -1,6 +1,8 @@
+import type { LabelBoxQuantity } from "@/lib/courier/label-quantity";
 import { degrees, PDFDocument, PDFName, PrintScaling, StandardFonts, type PDFFont } from "pdf-lib";
-import { readMyGlsPageText, removeMyGlsPageText } from "./label-redaction";
+import { readMyGlsPageText, readMyGlsPositionedPageText, removeMyGlsPageText } from "./label-redaction";
 
+const QUANTITY_MARKER = PDFName.of("SPCBoxQuantityV1");
 const ARTICLE_MARKER = PDFName.of("SPCReadableArticleV1");
 
 export class MyGlsPrintLayoutError extends Error {}
@@ -28,33 +30,70 @@ function labelSlots(document: PDFDocument, page: ReturnType<PDFDocument["getPage
 }
 
 /** GLS shrinks its whole Content string to one tiny line. Reflow only that field. */
-export async function enlargeMyGlsArticleText(source: Uint8Array) {
+export async function enlargeMyGlsArticleText(source: Uint8Array, quantities: readonly LabelBoxQuantity[] = []) {
   const document = await PDFDocument.load(source, { updateMetadata: false });
   const font = await document.embedFont(StandardFonts.HelveticaBold);
   const regular = await document.embedFont(StandardFonts.Helvetica);
+  const slotsByPage = quantities.length
+    ? document.getPages().map(page => labelSlots(document, page)) : [];
+  if (quantities.length && (slotsByPage.flat().length !== quantities.length ||
+      quantities.some(q => !Number.isSafeInteger(q.quantity) || q.quantity < 1))) {
+    throw new MyGlsPrintLayoutError("Broj kutija ili količina ne odgovara GLS adresnicama. Proverite picking nalog.");
+  }
+  const used = new Set<LabelBoxQuantity>();
   let changed = false;
   for (const page of document.getPages()) {
-    if (page.node.has(ARTICLE_MARKER)) continue;
+    if (page.node.has(quantities.length ? QUANTITY_MARKER : ARTICLE_MARKER)) continue;
     const blocks = readMyGlsPageText(document, page);
     const slots = labelSlots(document, page);
+    const positioned = quantities.length ? readMyGlsPositionedPageText(document, page) : [];
     const isSlotContent = (slot: { x: number; y: number }, b: { x: number; y: number }) =>
       Math.abs(b.x - slot.x) < 2 && b.y > slot.y + 5 && b.y < slot.y + 55;
     removeMyGlsPageText(document, page, (b) => slots.some((slot) => isSlotContent(slot, b)));
     for (const slot of slots) {
       const isContent = (b: { x: number; y: number }) => isSlotContent(slot, b);
       const content = blocks.filter(isContent).sort((a, b) => b.y - a.y).map((b) => b.text).join(" ").trim();
-      if (!content) continue;
+      let quantity: number | undefined;
+      if (quantities.length) {
+        const labelText = positioned.filter(b => b.x >= slot.x - 176 && b.x < slot.x + 222 &&
+          b.y >= slot.y - 64 && b.y < slot.y + 196).map(b => b.text);
+        const numbers = new Set(labelText.flatMap(text => text.replace(/\s/g, "").split(/\D+/)).filter(Boolean).map(n => n.replace(/^0+/, "")));
+        // GLS draws the 4-digit prefix, 7-digit parcel and check digit separately.
+        for (let i = 0; i < labelText.length - 1; i++) {
+          if (/^\d{4}$/.test(labelText[i]!) && /^\d{7}$/.test(labelText[i + 1]!)) {
+            const parcel = (labelText[i]! + labelText[i + 1]!).replace(/^0+/, "");
+            numbers.add(parcel);
+            if (/^\d$/.test(labelText[i + 2] ?? "")) numbers.add(parcel + labelText[i + 2]);
+          }
+        }
+        const matches = quantities.filter(q =>
+          (q.parcelNumber && numbers.has(q.parcelNumber.replace(/^0+/, ""))) ||
+          (q.clientReference && labelText.some(text => text.split(/\s+/).includes(q.clientReference!))),
+        );
+        if (matches.length === 1 && !used.has(matches[0]!)) {
+          quantity = matches[0]!.quantity;
+          used.add(matches[0]!);
+        } else if (new Set(quantities.map(q => q.quantity)).size === 1) {
+          // No positional guess: every label in this shipment has the same quantity.
+          quantity = quantities[0]!.quantity;
+        } else {
+          throw new MyGlsPrintLayoutError("Nije moguće povezati broj komada sa tačnom GLS adresnicom. Proverite identitet paketa.");
+        }
+      }
+      if (!content && quantity == null) continue;
       const [name, ...identifiers] = content.split(/\s*\/\s*(?=(?:Sifra|Šifra|EAN):)/);
       const title = latinText(name!);
       const details = latinText(identifiers.join(" / "));
       const detailSize = details ? Math.min(8.5, 210 / regular.widthOfTextAtSize(details, 1)) : 8.5;
       if (detailSize < 7) throw new MyGlsPrintLayoutError("Identifikatori artikla ne staju čitljivo na GLS adresnicu.");
-      const lines = wrapTitle(title, font, 11, 210, details ? 2 : 3);
-      lines.forEach((line, index) => page.drawText(line, { x: slot.x, y: slot.y + 34 - index * 12, font, size: 11 }));
+      const lines = wrapTitle(title, font, 11, 210, (details ? 2 : 3) - (quantity == null ? 0 : 1));
+      if (quantity != null) page.drawText(`U kutiji: ${quantity} kom`, { x: slot.x, y: slot.y + 34, font, size: 11 });
+      lines.forEach((line, index) => page.drawText(line, { x: slot.x, y: slot.y + (quantity == null ? 34 : 22) - index * 12, font, size: 11 }));
       if (details) page.drawText(details, { x: slot.x, y: slot.y + 10, font: regular, size: detailSize });
       changed = true;
     }
     page.node.set(ARTICLE_MARKER, document.context.obj(true));
+    if (quantities.length) page.node.set(QUANTITY_MARKER, document.context.obj(true));
   }
   return changed ? Buffer.from(await document.save()) : Buffer.from(source);
 }

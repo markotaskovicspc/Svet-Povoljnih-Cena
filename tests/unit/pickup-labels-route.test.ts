@@ -24,7 +24,7 @@ function line(orderId: string, packageNo = 1, deferredAt: Date | null = null) {
   return {
     orderId, orderItemId: `${orderId}-item`, reclamationId: null,
     purpose: "ORDER_DELIVERY" as const, lineGroupKey: `order:${orderId}`,
-    packageNo, deferredAt, orderItem: { name: orderId },
+    packageNo, packedQuantity: 1, providerParcelNumber: null as string | null, providerClientReference: null as string | null, deferredAt, orderItem: { name: orderId },
   };
 }
 function shipment(orderId: string, packageCount = 1) {
@@ -78,7 +78,7 @@ describe("pickup label downloads", () => {
     expect(mocks.download).not.toHaveBeenCalled();
     mocks.shipments.mockResolvedValue([{ ...shipment("order"), labelObjectKey: "new.pdf", rawCreateResponse: { assignment: { orderItemIds: ["order-item"], assignmentKey: "reshipment:r", codAmount: 0 } } }]);
     expect((await request()).status).toBe(200);
-    expect(mocks.download).toHaveBeenCalledWith("new.pdf");
+    expect(mocks.download).toHaveBeenCalledWith("new.pdf", [expect.objectContaining({ quantity: 1 })]);
   });
 
   it("preserves the historical batch's label when a replacement shipment exists", async () => {
@@ -88,7 +88,7 @@ describe("pickup label downloads", () => {
       shipment("order"),
     ]);
     expect((await request()).status).toBe(200);
-    expect(mocks.download.mock.calls).toEqual([["order.pdf"]]);
+    expect(mocks.download.mock.calls.map(call => call[0])).toEqual(["order.pdf"]);
   });
   it.each(["MYGLS", "X_EXPRESS"])("prints eight active packages without the deferred group (%s)", async (courier) => {
     provider = courier;
@@ -134,7 +134,7 @@ describe("pickup label downloads", () => {
     lines = [line("active"), line("deferred", 1, new Date())];
     mocks.shipments.mockResolvedValue([shipment("active"), shipment("deferred")]);
     expect((await request()).status).toBe(200);
-    expect(mocks.download.mock.calls).toEqual([["active.pdf"]]);
+    expect(mocks.download.mock.calls.map(call => call[0])).toEqual(["active.pdf"]);
   });
 
   it("returns a clear conflict when every package is deferred", async () => {
@@ -187,4 +187,21 @@ it("requires a shipment assignment to include every SKU in the combined parcel",
   mocks.shipments.mockResolvedValue([{ ...shipment("order"), rawCreateResponse: { assignment: { orderItemIds: ["order-item", "second-item"], codAmount: 400 } } }]);
   expect((await request()).status).toBe(200);
   expect(mocks.render.mock.calls[0][1]).toMatchObject({ packageContentsByShipmentId: { "shipment-order": ["POMPEA · 2 stavki · 4 kom"] }, packageOrderItemIdsByShipmentId: { "shipment-order": [null] } });
+});
+
+
+it.each(["MYGLS", "X_EXPRESS"])("uses the actual 2+1 split for three sold units (%s)", async courier => {
+  provider = courier;
+  lines = [{ ...line("order", 1), packedQuantity: 2, providerClientReference: "ORDER-P1" },
+    { ...line("order", 2), packedQuantity: 1, providerClientReference: "ORDER-P2" }];
+  mocks.shipments.mockResolvedValue([shipment("order", 2)]);
+  expect((await request()).status).toBe(200);
+  if (courier === "MYGLS") {
+    expect(mocks.download).toHaveBeenCalledWith("order.pdf", [
+      expect.objectContaining({ quantity: 2, clientReference: "ORDER-P1" }),
+      expect.objectContaining({ quantity: 1, clientReference: "ORDER-P2" }),
+    ]);
+  } else {
+    expect(mocks.render.mock.calls[0][1].packageQuantitiesByShipmentId).toEqual({ "shipment-order": [2, 1] });
+  }
 });
