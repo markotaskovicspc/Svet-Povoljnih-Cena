@@ -6,11 +6,12 @@ vi.mock('next/server',()=>({NextResponse:{json:(data:unknown,init?:ResponseInit)
 vi.mock('@/lib/api/checkout',async()=>({createOrder:mocks.create,createOrderSchema:(await import('../../src/lib/checkout/order-schema')).createOrderSchema}));
 vi.mock('@/lib/api/catalog',()=>({getProductBySku:mocks.product,listProducts:mocks.search}));
 vi.mock('@/lib/pricing',()=>({resolveProductPriceQuote:()=>({payable:{effective:1499}})}));
-vi.mock('@/lib/db',()=>({db:{checkoutSession:{findUnique:mocks.session},order:{findUnique:mocks.order}}}));
+vi.mock('@/lib/db',()=>({hasDatabaseConnection:()=>true,db:{checkoutSession:{findUnique:mocks.session},order:{findUnique:mocks.order}}}));
 vi.mock('@/lib/api/order-access',()=>({verifyOrderAccessToken:mocks.token}));
 vi.mock('@/lib/api/reclamations',()=>({createGuestReclamation:mocks.reclamation,createReclamationSchema:createOrderSchema}));
 vi.mock('@/lib/checkout/outbox',()=>({checkoutFollowUpKey:vi.fn()}));
 vi.mock('@/lib/orders/cancellation.server',()=>({cancelWebOrderByCustomer:mocks.cancel}));
+vi.mock('@/lib/checkout/config',()=>({resolveDeliveryQuote:vi.fn(async()=>({prices:{kurir:799,kamion:null},pricingIssue:null,truckAvailable:false}))}));
 import { signSocialQuote } from '../../src/lib/social/security';
 import { OrderCancellationError } from '../../src/lib/orders/cancellation';
 import { POST } from '../../src/app/api/integrations/social/route';
@@ -19,6 +20,14 @@ const input={guestEmail:'buyer@example.com',lines:[{sku:'210.025',qty:1}],shippi
 function request(data:unknown,signed=true){const body=JSON.stringify(data),ts=String(Date.now());return new Request('https://spc.test/api/integrations/social',{method:'POST',body,headers:{'x-spc-timestamp':ts,'x-spc-signature':signed?createHmac('sha256',secret).update(`${ts}.${body}`).digest('hex'):'invalid'}});}
 beforeEach(()=>{vi.clearAllMocks();process.env.SOCIAL_INTEGRATION_SECRET=secret;mocks.session.mockResolvedValue(null);mocks.create.mockResolvedValue({ok:true,data:{id:'',number:'',accessToken:'',total:2000,subtotal:1010,savings:0,shipping:990,assemblyTotal:0,paymentMethod:'POUZECE_GOTOVINA',shippingMethod:'KURIR',voucherDiscount:0,firstPurchaseDiscount:0,savedCardDiscount:0}});});
 describe('SPC social order bridge',()=>{
+  it('exposes authenticated read-only delivery without customer contacts or order preparation',async()=>{
+    const payload={action:'delivery_quote',channel:'facebook',conversationId:'fb:123:456',lines:[{sku:'CHAIR',qty:4}],city:'Beograd',shippingMethod:'KURIR'};
+    expect((await POST(request(payload,false))).status).toBe(401);expect(mocks.product).not.toHaveBeenCalled();
+    mocks.product.mockResolvedValue({sku:'CHAIR',name:'Chair'});
+    expect(await(await POST(request(payload))).json()).toMatchObject({ok:true,shipping:799,orderCreated:false});
+    expect((await POST(request({...payload,city:''}))).status).toBe(400);
+    expect(mocks.create).not.toHaveBeenCalled();expect(mocks.session).not.toHaveBeenCalled();
+  });
   it('reads public product details by exact SKU without invoking checkout',async()=>{
     expect((await POST(request({action:'product_details',sku:'FEN'},false))).status).toBe(401);
     expect(mocks.product).not.toHaveBeenCalled();

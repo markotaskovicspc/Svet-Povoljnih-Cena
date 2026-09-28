@@ -17,6 +17,7 @@ import { canCustomerCancelStatus, OrderCancellationError } from "@/lib/orders/ca
 import { handleSocialReclamation, socialReclamationActions } from "@/lib/social/reclamations";
 import {prepareChannelLoyalty,acceptChannelLoyalty,channelLoyalty,existingChannelLoyalty} from '@/lib/loyalty/channel.server';
 import {socialProductDetails} from '@/lib/social/product-details';
+import {socialDeliveryRequest,socialDeliveryQuote} from '@/lib/social/delivery';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +26,7 @@ const loyaltyContext=z.object({email:z.email(),consentVersion:z.string(),consent
 const quotePayload = identity.extend({ input: createOrderSchema, total: z.number().nonnegative(), expiresAt: z.number(),loyaltyProof:z.string().optional(),loyalty:loyaltyContext });
 const cancellationPayload = identity.extend({ purpose: z.literal("cancel_order"), number: z.string(), expiresAt: z.number() });
 const requestSchema = z.discriminatedUnion("action", [
+  socialDeliveryRequest,
   ...socialReclamationActions,
   identity.extend({ action: z.literal("support_handoff"), id: z.string().min(1).max(300), reason: z.string().max(200), transcript: z.string().max(10000), reclamationId: z.string().regex(/^[A-Za-z0-9_-]{1,100}$/).optional() }),
   z.object({ action: z.literal("search"), query: z.string().trim().min(1).max(100), quantity: z.number().int().positive().max(1000).default(1) }),
@@ -54,6 +56,7 @@ export async function POST(req: Request) {
   if (!parsed.success) return NextResponse.json({ error: "INVALID", issues: parsed.error.flatten() }, { status: 400 });
   const body = parsed.data;
   try {
+    if(body.action==='delivery_quote')return NextResponse.json(await socialDeliveryQuote(body,secret));
     if(body.action==='prepare_loyalty')return NextResponse.json(prepareChannelLoyalty(body,secret));
     if(body.action==='existing_loyalty')return NextResponse.json(await existingChannelLoyalty(body,secret));
     if(body.action==='product_details'){
