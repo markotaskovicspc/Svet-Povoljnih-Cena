@@ -20,12 +20,15 @@ import { GET as exportRows } from "@/app/api/admin/erp/[module]/export/route";
 const line = {
   lineGroupKey: "order:1", orderId: "order-1", orderItemId: "dc-item",
   purpose: "ORDER_DELIVERY", reclamationId: null, courierPickedUpAt: null,
+  deferredAt: null, order: { status: "SPREMNO_ZA_ISPORUKU", cancelledAt: null },
 };
 const batch = {
   id: "batch-1", number: "PRE-2026-0012", provider: "X_EXPRESS", status: "BOOKED",
   createdAt: new Date("2026-09-15T09:00:00Z"), _count: { lines: 2 }, lines: [line, line],
 };
 const shipment = {
+  id: "shipment-1", status: "CREATED", shippedAt: null, lastStatusEventAt: null,
+  createdAt: new Date("2026-09-15T09:00:00Z"), updatedAt: new Date("2026-09-15T09:00:00Z"),
   orderId: "order-1", provider: "X_EXPRESS", purpose: "ORDER_DELIVERY", reclamationId: null,
   providerOrderId: "26-0001106899", providerShipmentId: "XE-SHIP-12", trackingNo: "XE-TRACK-12",
   providerParcelNumbers: ["XE-PARCEL-12", "XE-TRACK-12"],
@@ -47,6 +50,52 @@ beforeEach(() => {
 });
 
 describe("pickup-batch courier search", () => {
+  it.each([
+    { status: "OTKAZANO", cancelledAt: null },
+    { status: "SPREMNO_ZA_ISPORUKU", cancelledAt: new Date("2026-09-29T06:47:00Z") },
+  ])("marks PRE-2026-0052 complete when 12 active packages were taken and 8 were cancelled: %j", async (order) => {
+    mocks.batches.mockResolvedValue([{
+      ...batch, number: "PRE-2026-0052", _count: { lines: 20 },
+      lines: [
+        ...Array.from({ length: 12 }, () => ({ ...line, courierPickedUpAt: new Date("2026-09-29T08:28:00Z") })),
+        ...Array.from({ length: 8 }, () => ({ ...line, lineGroupKey: "cancelled", order })),
+      ],
+    }]);
+    expect((await getOperationalErpRows("preuzimanja"))[0].values.status).toBe("Kompletno preuzeto");
+  });
+
+  it("excludes deferred packages from handover progress", async () => {
+    mocks.batches.mockResolvedValue([{ ...batch, lines: [
+      { ...line, courierPickedUpAt: new Date("2026-09-29T08:28:00Z") },
+      { ...line, lineGroupKey: "deferred", deferredAt: new Date("2026-09-29T07:00:00Z") },
+    ] }]);
+    expect((await getOperationalErpRows("preuzimanja"))[0].values.status).toBe("Kompletno preuzeto");
+  });
+
+  it("uses courier shipment handover when local package timestamps are missing", async () => {
+    mocks.shipments.mockResolvedValue([{ ...shipment, status: "DELIVERED", shippedAt: new Date("2026-09-29T08:28:00Z") }]);
+    expect((await getOperationalErpRows("preuzimanja"))[0].values.status).toBe("Kompletno preuzeto");
+  });
+
+  it("keeps active replacement packages in progress even when the original order was cancelled", async () => {
+    mocks.batches.mockResolvedValue([{ ...batch, lines: [
+      { ...line, courierPickedUpAt: new Date("2026-09-29T08:28:00Z") },
+      { ...line, lineGroupKey: "replacement", purpose: "RECLAMATION_REPLACEMENT", reclamationId: "claim-1", order: { status: "OTKAZANO", cancelledAt: null } },
+    ] }]);
+    expect((await getOperationalErpRows("preuzimanja"))[0].values.status).toBe("Delimično preuzeto");
+  });
+
+  it("uses the latest matching shipment instead of an older partial handover report", async () => {
+    mocks.shipments.mockResolvedValue([
+      { ...shipment, rawCreateResponse: { ...shipment.rawCreateResponse, packageHandover: {
+        version: 1, expectedPackages: 2, pickedUpPackages: 1,
+        recordedAt: "2026-09-15T09:00:00Z", source: "ADMIN", note: "Jedan paket",
+      } } },
+      { ...shipment, id: "shipment-2", updatedAt: new Date("2026-09-29T08:28:00Z"), status: "PICKED_UP", shippedAt: new Date("2026-09-29T08:28:00Z") },
+    ]);
+    expect((await getOperationalErpRows("preuzimanja"))[0].values.status).toBe("Kompletno preuzeto");
+  });
+
   it("does not load shipments for an empty picking list", async () => {
     mocks.batches.mockResolvedValue([]);
     expect(await getOperationalErpRows("preuzimanja")).toEqual([]);

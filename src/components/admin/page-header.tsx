@@ -9,7 +9,7 @@ export function PageHeader({
   actions,
 }: {
   title: string;
-  description?: string;
+  description?: React.ReactNode;
   crumbs?: Crumb[];
   actions?: React.ReactNode;
 }) {

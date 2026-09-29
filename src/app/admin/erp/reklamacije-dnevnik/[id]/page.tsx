@@ -348,7 +348,17 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
     <>
       <PageHeader
         title={`Reklamacija ${reclamation.number}`}
-        description={`${STATUS_LABELS[reclamation.status]} · ${reclamation.customerFirst} ${reclamation.customerLast} · ${reclamation.sku}`}
+        description={
+          <>
+            {`${STATUS_LABELS[reclamation.status]} · ${reclamation.customerFirst} ${reclamation.customerLast} · ${reclamation.sku}`}
+            <Link
+              href={`/admin/erp/prodajni-nalozi/${reclamation.orderId}`}
+              className="mt-1 block w-fit font-medium text-walnut underline underline-offset-4 hover:text-ink-900"
+            >
+              Porudžbina {reclamation.order.number}
+            </Link>
+          </>
+        }
         crumbs={[
           { href: "/admin", label: "Admin" },
           { href: "/admin/erp", label: "ERP" },

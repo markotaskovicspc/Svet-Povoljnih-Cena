@@ -23,7 +23,9 @@ import {
   PICKUP_BATCH_EXTERNAL_BLOCK_REASON,
   pickupBatchDisplayStatus,
   pickupBatchHandoverProgress,
+  pickupCourierSnapshot,
 } from "@/lib/admin/pickup-batch";
+import { isCancelledDelivery } from "@/lib/courier/cancelled-delivery";
 import {
   customerGenderLabel,
   inferCustomerGender,
@@ -2088,6 +2090,8 @@ async function pickupRows(take: number, skip = 0): Promise<ErpRow[]> {
         select: {
           lineGroupKey: true,
           courierPickedUpAt: true,
+          deferredAt: true,
+          order: { select: { status: true, cancelledAt: true } },
           orderId: true,
           orderItemId: true,
           purpose: true,
@@ -2102,9 +2106,11 @@ async function pickupRows(take: number, skip = 0): Promise<ErpRow[]> {
   // so the unused payload never travels to the app server.
   const shipments = orderIds.length ? await db.$queryRaw<Array<Pick<Shipment,
     "orderId" | "provider" | "purpose" | "reclamationId" | "providerOrderId" |
-    "providerShipmentId" | "trackingNo" | "providerParcelNumbers" | "rawCreateResponse"
+    "providerShipmentId" | "trackingNo" | "providerParcelNumbers" | "rawCreateResponse" |
+    "id" | "status" | "shippedAt" | "lastStatusEventAt" | "createdAt" | "updatedAt"
   >>>(Prisma.sql`
-    SELECT "orderId", "provider", "purpose", "reclamationId", "providerOrderId",
+    SELECT "id", "status", "shippedAt", "lastStatusEventAt", "createdAt", "updatedAt",
+      "orderId", "provider", "purpose", "reclamationId", "providerOrderId",
       "providerShipmentId", "trackingNo", "providerParcelNumbers",
       jsonb_build_object(
         'assignment', "rawCreateResponse" -> 'assignment',
@@ -2137,12 +2143,22 @@ async function pickupRows(take: number, skip = 0): Promise<ErpRow[]> {
       ...(Array.isArray(shipment.providerParcelNumbers) ? shipment.providerParcelNumbers : []),
     ]).filter((value): value is string => typeof value === "string" && Boolean(value.trim()))
       .map(value => value.trim()))].join(", ");
-    const handoverProgress = pickupBatchHandoverProgress(row.lines.map(line => {
-      const shipment = matchingShipments.find(item => item.orderId === line.orderId && item.purpose === line.purpose && item.reclamationId === line.reclamationId &&
-        incompletePackageHandover(item.rawCreateResponse) &&
-        (!line.orderItemId || readShipmentAssignment(item.rawCreateResponse)?.orderItemIds.includes(line.orderItemId)));
-      return { ...line, handoverReport: incompletePackageHandover(shipment?.rawCreateResponse) };
-    }));
+    // Match the detail page: only active outgoing packages count, and the
+    // latest matching courier shipment supplies historical handover evidence.
+    const handoverProgress = pickupBatchHandoverProgress(row.lines
+      .filter(line => !line.deferredAt && !isCancelledDelivery(line))
+      .map(line => {
+        const courier = pickupCourierSnapshot({
+          ...line,
+          provider: row.provider,
+          shipments: shipmentsByOrder.get(line.orderId) ?? [],
+        });
+        return {
+          ...line,
+          courierPickedUpAt: courier ? courier.pickedUpAt : line.courierPickedUpAt,
+          handoverReport: courier?.handoverReport,
+        };
+      }));
     return {
       id: row.id,
       values: {
