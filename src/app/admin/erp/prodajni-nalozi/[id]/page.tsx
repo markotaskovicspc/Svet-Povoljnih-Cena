@@ -1,3 +1,4 @@
+import { OrderPickupLinks } from "@/components/admin/order-pickup-links";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/admin/page-header";
@@ -73,6 +74,7 @@ export default async function SalesOrderDetailPage({
         }
       />
       <div className="px-4 py-6 md:px-8">
+        <OrderPickupLinks orderId={detail.id} />
         <SalesOrderForm
           options={options}
           detail={detail}

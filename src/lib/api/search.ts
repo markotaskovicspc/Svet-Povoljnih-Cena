@@ -125,17 +125,24 @@ export function searchTextMatchesTokens(query: string, values: string[]) {
   if (!queryTokens.length) return false;
   const words = values.flatMap(tokenizeSearchQuery);
 
-  return queryTokens.every((token) =>
+  return queryTokens.every((token, index) =>
     words.some(
       (word) =>
         word === token ||
-        (token.length >= 3 && word.startsWith(token)),
+        (allowsSearchPrefix(queryTokens, index) && word.startsWith(token)),
     ),
   );
 }
 
 export function isCodeLikeSearchQuery(value: string) {
   return /^[a-z0-9_-]{2,8}$/i.test(value.trim()) && !value.includes(" ");
+}
+
+// The final word may still be being typed ("flex se"). Keep short words
+// elsewhere exact so "TV sto" cannot match "Tvoj sto".
+function allowsSearchPrefix(tokens: string[], index: number) {
+  return tokens[index].length >= 3 ||
+    (tokens[index].length === 2 && index === tokens.length - 1 && tokens.length > 1);
 }
 
 const SQL_DIACRITICS = "čćžšđ";
@@ -154,9 +161,9 @@ function normalizedSqlPhrase(value: Prisma.Sql) {
 function wordMatchSql(
   value: Prisma.Sql,
   token: string,
-  options: { fuzzy?: boolean; prefix?: boolean } = {},
+  options: { fuzzy?: boolean; prefix?: boolean; shortPrefix?: boolean } = {},
 ) {
-  const allowPrefix = options.prefix !== false && token.length >= 3;
+  const allowPrefix = options.prefix !== false && (token.length >= 3 || Boolean(options.shortPrefix));
   const allowFuzzy = options.fuzzy !== false && token.length >= FUZZY_TOKEN_MIN_LENGTH;
 
   return Prisma.sql`
@@ -179,7 +186,7 @@ function identifierContainsSql(value: Prisma.Sql, token: string) {
   return Prisma.sql`${normalizedSqlText(value)} LIKE ${`%${token}%`}`;
 }
 
-function categoryTokenMatchSql(token: string, productAlias = "p") {
+function categoryTokenMatchSql(token: string, productAlias = "p", shortPrefix = false) {
   const categoryName = Prisma.raw("search_category.name");
   return Prisma.sql`
     EXISTS (
@@ -187,24 +194,24 @@ function categoryTokenMatchSql(token: string, productAlias = "p") {
         FROM "ProductCategory" search_pc
         JOIN "Category" search_category ON search_category.id = search_pc."categoryId"
        WHERE search_pc."productId" = ${Prisma.raw(`${productAlias}.id`)}
-         AND ${wordMatchSql(categoryName, token)}
+         AND ${wordMatchSql(categoryName, token, { shortPrefix })}
     )
   `;
 }
 
-function productTokenMatchSql(token: string) {
+function productTokenMatchSql(token: string, shortPrefix = false) {
   return Prisma.sql`(
-    ${wordMatchSql(Prisma.raw("p.name"), token)}
-    OR ${wordMatchSql(Prisma.raw('p."sizeLabel"'), token)}
+    ${wordMatchSql(Prisma.raw("p.name"), token, { shortPrefix })}
+    OR ${wordMatchSql(Prisma.raw('p."sizeLabel"'), token, { shortPrefix })}
     OR ${identifierContainsSql(Prisma.raw("p.sku"), token)}
     OR ${identifierContainsSql(Prisma.raw("p.barcode"), token)}
-    OR ${categoryTokenMatchSql(token)}
+    OR ${categoryTokenMatchSql(token, "p", shortPrefix)}
   )`;
 }
 
 function allTokenMatchesSql(
   tokens: string[],
-  matcher: (token: string) => Prisma.Sql,
+  matcher: (token: string, index: number) => Prisma.Sql,
 ) {
   return Prisma.join(tokens.map(matcher), " AND ");
 }
@@ -222,12 +229,14 @@ async function searchProductHits(
   const tokens = tokenizeSearchQuery(q);
   if (!tokens.length) return [];
   const normalizedPhrase = tokens.join(" ");
-  const productTokenMatches = allTokenMatchesSql(tokens, productTokenMatchSql);
+  const productTokenMatches = allTokenMatchesSql(tokens, (token, index) =>
+    productTokenMatchSql(token, allowsSearchPrefix(tokens, index)),
+  );
   const allExactNameTokens = allTokenMatchesSql(tokens, (token) =>
     wordMatchSql(Prisma.raw("p.name"), token, { fuzzy: false, prefix: false }),
   );
-  const allPrefixNameTokens = allTokenMatchesSql(tokens, (token) =>
-    wordMatchSql(Prisma.raw("p.name"), token, { fuzzy: false }),
+  const allPrefixNameTokens = allTokenMatchesSql(tokens, (token, index) =>
+    wordMatchSql(Prisma.raw("p.name"), token, { fuzzy: false, shortPrefix: allowsSearchPrefix(tokens, index) }),
   );
   const enforceAutoAvailability = isWebAutoAvailabilityEnforced();
   if (!hasDatabaseConnection()) {

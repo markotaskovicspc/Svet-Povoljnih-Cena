@@ -1,3 +1,5 @@
+import { SHIPMENT_STATUS_LABEL } from "@/lib/courier/status";
+import { isCancelledDelivery } from "@/lib/courier/cancelled-delivery";
 import { readPackedItems } from "@/lib/courier/parcel-contents";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -423,7 +425,7 @@ export default async function PickupBatchPage({
     include: {
       lines: {
         include: {
-          order: { select: { id: true, number: true } },
+          order: { select: { id: true, number: true, status: true, cancelledAt: true } },
           shipment: {
             select: { trackingNo: true, providerOrderId: true },
           },
@@ -499,7 +501,11 @@ export default async function PickupBatchPage({
   const canPost =
     isPickupBatchEditable(batch.status);
   const editing = query.mode === "edit" && editable;
+  const cancelledOrders = Array.from(new Map(batch.lines
+    .filter(isCancelledDelivery)
+    .map((line) => [line.orderId, line.order])).values());
   const rows = batch.lines
+    .filter((line) => !isCancelledDelivery(line))
     .map((line) =>
       pickupLineRow(
         line,
@@ -706,6 +712,23 @@ export default async function PickupBatchPage({
       />
 
       <div className="space-y-6 px-4 py-6 md:px-8">
+        {cancelledOrders.length ? (
+          <Card>
+            <CardTitle>Otkazane porudžbine — ne slati robu</CardTitle>
+            <p className="mb-3 text-sm text-danger">Ovi paketi su isključeni iz aktivnog pickinga i štampe. Otkazivanje porudžbine ne potvrđuje otkaz kod kurira. Za već najavljene X Express pošiljke tražite otkazivanje direktno od kurira i sačuvajte potvrdu.</p>
+            <ul className="space-y-3 text-sm">
+              {cancelledOrders.map((order) => (
+                <li key={order.id}>
+                  <Link href={`/admin/erp/prodajni-nalozi/${order.id}`} className="font-semibold text-walnut hover:underline">{order.number}</Link>
+                  <span> · {batch.lines.filter((line) => line.orderId === order.id && isCancelledDelivery(line)).length} paketa isključeno</span>
+                  {(courierShipmentsByOrder.get(order.id) ?? []).filter((shipment) => shipment.purpose === "ORDER_DELIVERY" && shipment.status !== "FAILED").map((shipment) => (
+                    <p key={shipment.id} className="mt-1">Kurirski nalog: <strong>{shipment.providerOrderId ?? shipment.trackingNo ?? "nije potvrđen"}</strong> · status: {SHIPMENT_STATUS_LABEL[shipment.status]}</p>
+                  ))}
+                </li>
+              ))}
+            </ul>
+          </Card>
+        ) : null}
         <Card>
           <CardTitle
             description={

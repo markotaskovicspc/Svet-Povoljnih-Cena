@@ -2,13 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   reclamation: vi.fn(), order: vi.fn(), warehouse: vi.fn(), towns: vi.fn(),
-  town: vi.fn(), create: vi.fn(), allocate: vi.fn(), checkAddress: vi.fn(), geocode: vi.fn(),
+  shipment: vi.fn(), town: vi.fn(), create: vi.fn(), allocate: vi.fn(), checkAddress: vi.fn(), geocode: vi.fn(),
 }));
 vi.mock("@/lib/db", () => ({ db: {
   reclamation: { findUnique: mocks.reclamation }, order: { findUnique: mocks.order },
   warehouse: { findFirst: mocks.warehouse },
   xExpressTown: { findFirst: mocks.town, findUnique: mocks.town, findMany: mocks.towns },
-  shipment: { create: mocks.create },
+  shipment: { create: mocks.create, findUnique: mocks.shipment },
   $transaction: async (fn: (tx: object) => unknown) => fn({}),
 } }));
 vi.mock("@/lib/x-express/code", () => ({ allocateXExpressTrackingCode: mocks.allocate }));
@@ -27,7 +27,7 @@ vi.mock("@/lib/x-express/config", async (original) => ({
   }),
 }));
 
-import { createXExpressShipmentForOrder } from "@/lib/x-express/shipments";
+import { createXExpressShipmentForOrder, announceXExpressShipment } from "@/lib/x-express/shipments";
 
 const options = {
   purpose: "RECLAMATION_RETURN" as const, reclamationId: "r1", packageCount: 2,
@@ -54,6 +54,17 @@ describe("X Express reclamation return preparation", () => {
     mocks.allocate.mockImplementation(async () => ({ trackingNo: `AAA085030000${++sequence}` }));
     mocks.checkAddress.mockImplementation(async ({ TownId }: { TownId: number }) => ({ valid: true, area: TownId === 200 ? "PA-01" : "BG-01", raw: { area: TownId === 200 ? "PA-01" : "BG-01" } }));
     mocks.create.mockImplementation(async ({ data }: { data: object }) => ({ ...data }));
+  });
+
+  it("blocks cancelled outgoing orders before preparing or announcing courier requests", async () => {
+    const order = { ...(await mocks.order()), status: "OTKAZANO" };
+    mocks.order.mockResolvedValue(order);
+    await expect(createXExpressShipmentForOrder("o1")).rejects.toThrow("Otkazana porudžbina");
+    mocks.shipment.mockResolvedValue({ id: "s1", provider: "X_EXPRESS", purpose: "ORDER_DELIVERY", order });
+    await expect(announceXExpressShipment("s1")).rejects.toThrow("Otkazana porudžbina");
+    expect(mocks.allocate).not.toHaveBeenCalled();
+    expect(mocks.checkAddress).not.toHaveBeenCalled();
+    expect(mocks.create).not.toHaveBeenCalled();
   });
 
   it("checks both addresses and saves the destination route, zero COD and exact pickup snapshot", async () => {
