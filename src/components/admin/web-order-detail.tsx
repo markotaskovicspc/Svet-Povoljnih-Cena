@@ -1,3 +1,4 @@
+import { isMyGlsReturn, myGlsReturnStatusLabel } from "@/lib/mygls/return-booking";
 import { OrderPickupLinks } from "@/components/admin/order-pickup-links";
 import { PickupReferenceNote } from "@/components/admin/pickup-reference-note";
 import { notFound } from "next/navigation";
@@ -2525,9 +2526,9 @@ export async function WebOrderDetail({ id }: { id: string }) {
                           <Row
                             k="Status"
                             v={
-                              partialHandover ? packageHandoverLabel(partialHandover) : effectiveShipmentStatus === shipment.status
+                              myGlsReturnStatusLabel(shipment) ?? (partialHandover ? packageHandoverLabel(partialHandover) : effectiveShipmentStatus === shipment.status
                                 ? shipment.status
-                                : `${effectiveShipmentStatus} · ispravljen GLS kod ${shipment.providerStatusCode}`
+                                : `${effectiveShipmentStatus} · ispravljen GLS kod ${shipment.providerStatusCode}`)
                             }
                           />
                           <Row
@@ -2633,7 +2634,7 @@ export async function WebOrderDetail({ id }: { id: string }) {
                           (shipment.purpose !== "ORDER_DELIVERY" ||
                             courierPaymentReadiness.ready) ? (
                             <Row
-                              k="Etiketa"
+                              k={isMyGlsReturn(shipment) ? "P&R dokument" : "Etiketa"}
                               v={
                                 <a
                                   href={shipment.labelUrl}

@@ -63,7 +63,7 @@ export async function uploadMyGlsLabelPdf(args: {
   };
 }
 
-export async function downloadMyGlsLabelPdf(objectKey: string, quantities: readonly LabelBoxQuantity[] = []) {
+export async function downloadMyGlsLabelPdf(objectKey: string, quantities: readonly LabelBoxQuantity[] = [], pickupConfirmation = false) {
   const cfg = getMyGlsConfig();
   const client = createAdminClient();
   const { data, error } = await client.storage.from(cfg.labelBucket).download(objectKey);
@@ -71,6 +71,8 @@ export async function downloadMyGlsLabelPdf(objectKey: string, quantities: reado
     throw new MyGlsConfigError(error?.message ?? "MyGLS etiketa nije pronađena.");
   }
   const label = await redactMyGlsSenderContactPdf(await data.arrayBuffer());
+  // P&R returns a booking confirmation, not a barcode label; the courier prints it.
+  if (pickupConfirmation) return label.bytes;
   let printable = label.bytes;
   try {
     printable = await enlargeMyGlsArticleText(printable, quantities);

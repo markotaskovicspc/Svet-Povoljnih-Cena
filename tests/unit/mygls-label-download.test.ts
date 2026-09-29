@@ -78,3 +78,13 @@ it("does not silently omit requested quantities on an unsupported layout", async
   storage.download.mockResolvedValue({ data: new Blob([new Uint8Array(await pdf(true))]), error: null });
   await expect(downloadMyGlsLabelPdf("existing.pdf", [{ quantity: 2 }, { quantity: 1 }])).rejects.toThrow();
 });
+
+it("serves a P&R pickup confirmation without trying to decorate it as a shipping label", async () => {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  doc.addPage().drawText("Pick&Return - pickup request accepted", { font, size: 12 });
+  const bytes = Buffer.from(await doc.save());
+  storage.download.mockResolvedValue({ data: new Blob([new Uint8Array(bytes)]), error: null });
+  const downloaded = await downloadMyGlsLabelPdf("confirmation.pdf", [{ quantity: 2 }], true);
+  expect(downloaded).toEqual((await redactMyGlsSenderContactPdf(bytes)).bytes);
+});

@@ -15,6 +15,7 @@ export class MyGlsProviderError extends Error {
     message: string,
     public readonly providerCode?: string,
     public readonly raw?: unknown,
+    public readonly definitiveRejection = false,
   ) {
     super(message);
   }

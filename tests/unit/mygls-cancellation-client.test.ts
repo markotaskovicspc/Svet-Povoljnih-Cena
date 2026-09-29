@@ -79,3 +79,10 @@ describe("MyGLS cancellation response validation", () => {
     ).rejects.toThrow("nije potvrdio izmenu otkupnine");
   });
 });
+
+it("never automatically resubmits a create request after an ambiguous HTTP 500", async () => {
+  const fetchImpl = vi.fn(async () => new Response("server unavailable", { status: 500 }));
+  const client = new MyGlsClient(config, fetchImpl as typeof fetch);
+  await expect(client.printLabels({ parcelList: [] })).rejects.toThrow();
+  expect(fetchImpl).toHaveBeenCalledTimes(1);
+});

@@ -151,3 +151,11 @@ describe("reclamation shipment transaction boundary", () => {
     expect(mocks.announce).toHaveBeenCalledExactlyOnceWith("prepared");
   });
 });
+
+it("does not mark a legacy ordinary MyGLS return label as a requested pickup", async () => {
+  vi.clearAllMocks();
+  mocks.findReclamation.mockResolvedValue({ id: "r1", shipments: [{ id: "legacy", purpose: "RECLAMATION_RETURN", provider: "MYGLS", status: "CREATED", providerParcelId: "123", trackingNo: "456", rawCreateResponse: {} }] });
+  await expect(createReclamationShipment({ reclamationId: "r1", purpose: "RECLAMATION_RETURN" })).rejects.toThrow(/Obična adresnica/);
+  expect(mocks.createShipmentForOrder).not.toHaveBeenCalled();
+  expect(mocks.updateReclamation).not.toHaveBeenCalled();
+});

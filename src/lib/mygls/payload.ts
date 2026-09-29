@@ -103,20 +103,21 @@ export function buildMyGlsParcelForOrder(
       "MyGLS kartično pouzeće nije ugovorno potvrđeno (MYGLS_COD_CARD_ENABLED=false).",
     );
   }
-  const services: MyGlsService[] = [];
+  const reverse = purpose === "RECLAMATION_RETURN";
+  const services: MyGlsService[] = reverse ? [{ Code: "PRS" }] : [];
 
-  if (cfg.contactServiceEnabled) {
+  if (!reverse && cfg.contactServiceEnabled) {
     services.push({
       Code: "CS1",
       CS1Parameter: { Value: normalizePhone(order.shipPhone) },
     });
   }
 
-  if (contactEmail && cfg.flexDeliveryServiceEnabled) {
+  if (!reverse && contactEmail && cfg.flexDeliveryServiceEnabled) {
     services.push({ Code: "FDS", FDSParameter: { Value: contactEmail } });
   }
 
-  if (order.glsDeliveryPointId) {
+  if (!reverse && order.glsDeliveryPointId) {
     services.push({
       Code: "PSD",
       PSDParameter: { StringValue: order.glsDeliveryPointId },
@@ -127,8 +128,13 @@ export function buildMyGlsParcelForOrder(
     cfg,
     Boolean(args.pickupContactOnLabel),
   );
-  const customerAddress = addressFromOrder(order, recipientName, contactEmail);
-  const reverse = purpose === "RECLAMATION_RETURN";
+  const customerAddress = addressFromOrder(reverse ? {
+    ...order, glsDeliveryPointAddress: null, glsDeliveryPointCity: null,
+    glsDeliveryPointPostalCode: null,
+  } : order, recipientName, contactEmail);
+  if (reverse && !/^\+?\d{8,15}$/.test(customerAddress.ContactPhone ?? "")) {
+    throw new MyGlsConfigError("Unesite ispravan telefon kupca za GLS P&R preuzimanje.");
+  }
   const referenceBase =
     purpose === "ORDER_DELIVERY"
       ? order.number

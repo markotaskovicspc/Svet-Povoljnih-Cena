@@ -1,3 +1,4 @@
+import { canReceiveReclamationShipment, myGlsReturnStatusLabel } from "@/lib/mygls/return-booking";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
@@ -168,7 +169,7 @@ export default async function ReturnsPage() {
       .map((movement) => [movement.idempotencyKey, movement]),
   );
   const readyForReceipt = reclamations.filter((reclamation) =>
-    ["DELIVERED", "RETURNED"].includes(reclamation.shipments[0]?.status ?? ""),
+    canReceiveReclamationShipment(reclamation.shipments[0]),
   );
   const posted = reclamations.filter((reclamation) => receiptByReclamation.has(reclamation.id));
 
@@ -363,7 +364,7 @@ export default async function ReturnsPage() {
                 {reclamations.map((reclamation) => {
                   const shipment = reclamation.shipments[0];
                   const receipt = receiptByReclamation.get(reclamation.id);
-                  const canReceive = ["DELIVERED", "RETURNED"].includes(shipment?.status ?? "") && !receipt;
+                  const canReceive = canReceiveReclamationShipment(shipment) && !receipt;
                   return (
                     <tr key={reclamation.id}>
                       <td className="px-3 py-3">
@@ -374,7 +375,7 @@ export default async function ReturnsPage() {
                       <td className="px-3 py-3">{reclamation.order.number}</td>
                       <td className="px-3 py-3"><span className="font-mono">{reclamation.sku}</span><br /><span className="text-xs text-ink-500">{reclamation.orderItem?.name ?? "—"}</span></td>
                       <td className="px-3 py-3 text-right font-semibold">{reclamation.quantity}</td>
-                      <td className="px-3 py-3">{shipment?.provider ?? "—"} · {shipment?.status ?? "—"}<br /><span className="text-xs text-ink-500">{shipment?.trackingNo ?? "bez broja za praćenje"}</span></td>
+                      <td className="px-3 py-3">{shipment?.provider ?? "—"} · {shipment ? (myGlsReturnStatusLabel(shipment) ?? shipment.status) : "—"}<br /><span className="text-xs text-ink-500">{shipment?.trackingNo ?? "bez broja za praćenje"}</span></td>
                       <td className="px-3 py-3">
                         {receipt ? (
                           <p className="text-success">Proknjiženo {formatDate(receipt.createdAt)}<br /><span className="text-xs">{receipt.warehouse.code} · {receipt.warehouse.name}</span></p>

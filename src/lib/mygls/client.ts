@@ -177,7 +177,7 @@ export class MyGlsClient {
       const rawText = await res.text();
       const json = rawText ? safeJson(rawText) : {};
       if (!res.ok) {
-        if (res.status >= 500 && attempt < 2) {
+        if (res.status >= 500 && attempt < 2 && !["PrintLabels", "PrepareLabelsV2"].includes(methodName)) {
           await delay(350 * (attempt + 1));
           return this.request(serviceName, methodName, body, attempt + 1);
         }
@@ -280,6 +280,7 @@ function throwOnErrors(value: unknown) {
       readErrorMessage(value) ?? "MyGLS odgovor sadrži grešku.",
       String(directErrorCode),
       redactMyGlsSecrets(value),
+      true,
     );
   }
   const errors = allErrorLists(value).filter((error) => {
@@ -292,6 +293,7 @@ function throwOnErrors(value: unknown) {
       readErrorMessage(value) ?? "MyGLS odgovor sadrži grešku.",
       readErrorCode(value),
       redactMyGlsSecrets(value),
+      true,
     );
   }
 }

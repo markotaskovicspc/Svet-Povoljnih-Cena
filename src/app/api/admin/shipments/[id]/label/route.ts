@@ -1,3 +1,4 @@
+import { isMyGlsReturn } from "@/lib/mygls/return-booking";
 import { isCancelledDelivery } from "@/lib/courier/cancelled-delivery";
 import { renderPrintHtmlPdf } from "@/lib/pdf/print-html";
 import { boxQuantity, myGlsBoxQuantities } from "@/lib/courier/label-quantity";
@@ -114,7 +115,7 @@ export async function GET(
     const quantities = shipment.pickupBatchLines?.length
       ? shipment.pickupBatchLines.map(line => ({ quantity: boxQuantity(line), parcelNumber: line.providerParcelNumber, clientReference: line.providerClientReference }))
       : myGlsBoxQuantities(shipment.rawCreateResponse);
-    pdf = await downloadMyGlsLabelPdf(shipment.labelObjectKey, quantities);
+    pdf = await downloadMyGlsLabelPdf(shipment.labelObjectKey, quantities, isMyGlsReturn(shipment));
   } catch (error) {
     if (!(error instanceof MyGlsPrintLayoutError)) throw error;
     return NextResponse.json({ ok: false, error: "mygls_label_invalid", message: error.message }, { status: 409 });

@@ -1,7 +1,8 @@
+import { assertMyGlsReturnAccepted, myGlsReturnBooking } from "./return-booking";
 import { boxQuantity } from "@/lib/courier/label-quantity";
 import "server-only";
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { Prisma, type ShipmentPurpose } from "@prisma/client";
 import { db } from "@/lib/db";
 import type { PhysicalPackage } from "@/lib/courier/packages";
@@ -63,7 +64,14 @@ export async function createMyGlsShipmentForOrder(
   options: MyGlsShipmentOptions = {},
 ) {
   const prepared = await prepareMyGlsShipmentForOrder(orderId, options);
-  if (prepared.completedShipment) return prepared.completedShipment;
+  if (prepared.completedShipment) {
+    return prepared.completedShipment.purpose === "RECLAMATION_RETURN"
+      ? ensureMyGlsReturnDocument(prepared.completedShipment)
+      : prepared.completedShipment;
+  }
+  if (prepared.purpose === "RECLAMATION_RETURN") {
+    return createMyGlsReturnShipment(prepared, options);
+  }
 
   const {
     cfg,
@@ -273,7 +281,7 @@ async function prepareMyGlsShipmentForOrder(
   const assignmentOrderItemIds = normalizeOrderItemIds(
     shipmentItems.map((item) => item.id),
   );
-  const codAmount =
+  const codAmount = purpose !== "ORDER_DELIVERY" ? 0 :
     Number.isFinite(options.codAmount) && Number(options.codAmount) >= 0
       ? Number(options.codAmount)
       : Number(order.total);
@@ -293,6 +301,11 @@ async function prepareMyGlsShipmentForOrder(
     paymentMethod: order.paymentMethod,
     paymentStatuses: order.payments.map((payment) => payment.status),
   });
+  if (existing && purpose === "RECLAMATION_RETURN" &&
+      existing.syncError !== "MyGLS etiketa obrisana." &&
+      myGlsReturnBooking(existing).state !== "REJECTED") {
+    assertMyGlsReturnAccepted(existing);
+  }
   if (
     existing &&
     existing.provider === MYGLS_PROVIDER &&
@@ -306,11 +319,13 @@ async function prepareMyGlsShipmentForOrder(
   const parcelList = buildMyGlsParcelsForOrder({
     cfg,
     order: { ...order, total: codAmount, items: shipmentItems },
-    pickupDate: options.pickupDate,
+    pickupDate: purpose === "RECLAMATION_RETURN" ? returnPickupDate(options.pickupDate) : options.pickupDate,
     packages: options.packages ?? [],
     purpose,
     pickupContactOnLabel: Boolean(options.supplierFulfillmentId),
-    clientReferenceSuffix: deferredReferenceSuffix(options.assignmentKey),
+    clientReferenceSuffix: purpose === "RECLAMATION_RETURN" && reclamation
+      ? `R${createHash("sha256").update(reclamation.id).digest("hex").slice(0, 12)}`
+      : deferredReferenceSuffix(options.assignmentKey),
   });
 
   return {
@@ -346,6 +361,9 @@ export async function deleteMyGlsLabelsForShipment(shipmentId: string) {
       providerParcelId: true,
       providerParcelIds: true,
       syncError: true,
+      purpose: true,
+      providerParcelNumbers: true,
+      trackingNo: true,
     },
   });
   if (!shipment || shipment.provider !== MYGLS_PROVIDER) {
@@ -357,7 +375,19 @@ export async function deleteMyGlsLabelsForShipment(shipmentId: string) {
   const parcelIds = parcelIdList(shipment);
   if (!parcelIds.length)
     throw new MyGlsConfigError("MyGLS parcel ID nije sačuvan.");
-  const response = await new MyGlsClient().deleteLabels(parcelIds);
+  const client = new MyGlsClient();
+  if (shipment.purpose === "RECLAMATION_RETURN") {
+    const numbers = parcelNumberList(shipment);
+    if (!numbers.length) throw new MyGlsConfigError("Proverite ishod P&R zahteva u MyGLS-u pre otkazivanja.");
+    for (const parcelNumber of numbers) {
+      const live = await client.getParcelStatuses({ parcelNumber });
+      if (live.ParcelNumber !== parcelNumber || !live.ParcelStatusList?.length ||
+          live.ParcelStatusList.some(event => !["51", "52"].includes(String(event.StatusCode).replace(/^0+/, "")))) {
+        throw new MyGlsConfigError("P&R pošiljka ima promenu statusa ili nepotpun odgovor. Proverite preuzimanje kod GLS-a pre otkazivanja.");
+      }
+    }
+  }
+  const response = await client.deleteLabels(parcelIds);
   await db.shipment.update({
     where: { id: shipment.id },
     data: {
@@ -569,4 +599,115 @@ export function readMyGlsPackageAssignments(
 
 function isNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
+}
+
+/** A calendar date in Serbia; weekends move to the next business day. */
+function returnPickupDate(requested?: Date) {
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Belgrade", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const date = requested ? new Date(requested) : new Date(`${today}T12:00:00Z`);
+  if (!requested) date.setUTCDate(date.getUTCDate() + 1);
+  if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) <= today) {
+    throw new MyGlsConfigError("GLS P&R preuzimanje zakažite najranije za naredni radni dan.");
+  }
+  while ([0, 6].includes(date.getUTCDay())) date.setUTCDate(date.getUTCDate() + 1);
+  return date;
+}
+
+type PreparedShipment = Extract<Awaited<ReturnType<typeof prepareMyGlsShipmentForOrder>>, { completedShipment: null }>;
+
+async function createMyGlsReturnShipment(prepared: PreparedShipment, options: MyGlsShipmentOptions) {
+  const { cfg, order, reclamation, existing, shipmentId, parcelList, assignmentOrderItemIds } = prepared;
+  const pickupMillis = Number(parcelList[0].PickupDate?.match(/\d+/)?.[0]);
+  const booking = {
+    state: "PENDING", service: "PRS", pickupDate: new Date(pickupMillis).toISOString().slice(0, 10),
+    references: parcelList.map(parcel => parcel.ClientReference),
+    requestedAt: new Date().toISOString(),
+  };
+  const pending = {
+    provider: MYGLS_PROVIDER, purpose: "RECLAMATION_RETURN" as const,
+    reclamationId: reclamation!.id, reclamationQty: reclamation!.quantity,
+    warehouseId: reclamation!.warehouseId, packageCount: parcelList.length,
+    status: "CREATED" as const, providerStatusCode: null,
+    providerOrderId: parcelList[0].ClientReference, providerShipmentId: null,
+    providerParcelId: null, providerParcelIds: [], providerParcelNumbers: [],
+    trackingNo: null, labelUrl: null, labelObjectKey: null, labelMimeType: null,
+    lastStatusSyncAt: null, lastStatusEventAt: null, shippedAt: null, deliveredAt: null,
+    codAmount: new Prisma.Decimal(0), syncError: "GLS P&R zahtev se šalje; ne šaljite ponovo.",
+    rawCreateResponse: { myGlsReturn: booking } as Prisma.InputJsonValue,
+  };
+  // Claim the unique reclamation/purpose row before external I/O. A second click
+  // cannot send another courier request, including across multiple app instances.
+  if (existing) {
+    const claimed = await db.shipment.updateMany({
+      where: { id: shipmentId, status: "FAILED", rawCreateResponse: { equals: existing.rawCreateResponse ?? Prisma.JsonNull } },
+      data: pending,
+    });
+    if (claimed.count !== 1) throw new MyGlsConfigError("P&R zahtev je već pokrenut. Osvežite reklamaciju.");
+  } else {
+    try {
+      await db.shipment.create({ data: { ...pending, id: shipmentId, orderId: order.id, service: "COURIER_SMALL" } });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw new MyGlsConfigError("P&R zahtev je već pokrenut. Osvežite reklamaciju.");
+      }
+      throw error;
+    }
+  }
+  let accepted = false;
+  let response: Awaited<ReturnType<MyGlsClient["printLabels"]>> | undefined;
+  try {
+    response = await new MyGlsClient(cfg).printLabels({ parcelList });
+    const info = response.PrintLabelsInfoList ?? response.PrintDataInfoList ?? [];
+    const expected = new Set(booking.references);
+    if (info.length !== parcelList.length || new Set(info.map(row => row.ClientReference)).size !== expected.size ||
+        info.some(row => !expected.has(row.ClientReference ?? "") || !row.ParcelId || !(row.ParcelNumber ?? row.ParcelNumberWithCheckdigit))) {
+      throw new MyGlsProviderError("GLS nije potvrdio sve P&R pakete. Proverite ishod pre ponovnog slanja.", undefined, response);
+    }
+    const raw = withShipmentAssignment({
+      ...response,
+      myGlsReturn: { ...booking, state: "ACCEPTED", acceptedAt: new Date().toISOString() },
+      myGlsPackageAssignments: buildPackageAssignments(parcelList, options.packages ?? [], info),
+    }, { orderItemIds: assignmentOrderItemIds, codAmount: 0 });
+    // Save provider identity and confirmation BEFORE storage. A storage failure
+    // can then be retried without calling PrintLabels / booking a second pickup.
+    const saved = await db.shipment.update({ where: { id: shipmentId }, data: {
+      providerShipmentId: String(info[0].ParcelId), providerParcelId: String(info[0].ParcelId),
+      providerParcelIds: info.map(row => row.ParcelId!),
+      providerParcelNumbers: info.map(row => row.ParcelNumber ?? row.ParcelNumberWithCheckdigit!),
+      trackingNo: String(info[0].ParcelNumber ?? info[0].ParcelNumberWithCheckdigit),
+      rawCreateResponse: raw as Prisma.InputJsonValue, syncError: null,
+      events: { create: { status: "CREATED", message: `GLS P&R zahtev prihvaćen za ${booking.pickupDate}; čeka preuzimanje kod kupca.`, raw: { references: booking.references, pickupDate: booking.pickupDate, service: "PRS" } } },
+    } });
+    accepted = true;
+    return await ensureMyGlsReturnDocument(saved);
+  } catch (error) {
+    if (!accepted) {
+      const raw = response ?? (error instanceof MyGlsProviderError ? error.raw : null);
+      const details = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+      const rejected = error instanceof MyGlsProviderError && error.definitiveRejection && parcelList.length === 1 && !response &&
+        Array.isArray(details.PrintLabelsErrorList) && details.PrintLabelsErrorList.length > 0 &&
+        !(Array.isArray(details.PrintLabelsInfoList) && details.PrintLabelsInfoList.length > 0) &&
+        !(Array.isArray(details.PrintDataInfoList) && details.PrintDataInfoList.length > 0);
+      await db.shipment.update({ where: { id: shipmentId }, data: {
+        status: rejected ? "FAILED" : "CREATED",
+        syncError: `${rejected ? "GLS je odbio P&R zahtev" : "Ishod GLS P&R zahteva nije potvrđen; ne šaljite ponovo"}: ${error instanceof Error ? error.message : "Greška provajdera"}`,
+        rawCreateResponse: { providerResponse: raw ?? null, myGlsReturn: { ...booking, state: rejected ? "REJECTED" : "UNKNOWN" } } as Prisma.InputJsonValue,
+      } });
+    }
+    throw error;
+  }
+}
+
+export async function ensureMyGlsReturnDocument(shipment: {
+  id: string; purpose: string; provider: string | null; status: string;
+  labelObjectKey: string | null; rawCreateResponse: unknown;
+  providerParcelId: string | null; trackingNo: string | null; syncError: string | null;
+}) {
+  assertMyGlsReturnAccepted(shipment);
+  // Always return a complete DB row, consistent with the general creation API.
+  if (shipment.labelObjectKey) return db.shipment.findUniqueOrThrow({ where: { id: shipment.id } });
+  const raw = shipment.rawCreateResponse as Record<string, unknown>;
+  const stored = await db.shipment.findUniqueOrThrow({ where: { id: shipment.id }, select: { order: { select: { number: true } } } });
+  const label = await uploadMyGlsLabelPdf({ shipmentId: shipment.id, orderNumber: stored.order.number, bytes: bytesFromMyGls(raw.Labels) });
+  return db.shipment.update({ where: { id: shipment.id }, data: { labelObjectKey: label.objectKey, labelUrl: label.labelUrl, labelMimeType: label.mimeType, syncError: null } });
 }
