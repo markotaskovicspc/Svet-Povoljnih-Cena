@@ -1,10 +1,10 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { Prisma } from "@prisma/client";
-const mocks = vi.hoisted(() => ({ print: vi.fn(), upload: vi.fn(), findOrder: vi.fn(), create: vi.fn(), update: vi.fn(), claim: vi.fn(), findShipment: vi.fn(), findReclamation: vi.fn(), statuses: vi.fn(), remove: vi.fn() }));
+const mocks = vi.hoisted(() => ({ print: vi.fn(), upload: vi.fn(), findOrder: vi.fn(), create: vi.fn(), update: vi.fn(), claim: vi.fn(), findShipment: vi.fn(), findReclamation: vi.fn(), statuses: vi.fn(), remove: vi.fn(), modify: vi.fn() }));
 vi.mock("@/lib/db", () => ({ db: { order: { findUnique: mocks.findOrder }, reclamation: { findUnique: mocks.findReclamation }, shipment: { create: mocks.create, update: mocks.update, updateMany: mocks.claim, findUnique: mocks.findShipment, findUniqueOrThrow: mocks.findShipment } } }));
 vi.mock("@/lib/mygls/labels", () => ({ uploadMyGlsLabelPdf: mocks.upload }));
-vi.mock("@/lib/mygls/client", async original => ({ ...await original<typeof import("@/lib/mygls/client")>(), MyGlsClient: class { printLabels = mocks.print; getParcelStatuses = mocks.statuses; deleteLabels = mocks.remove; } }));
-import { createMyGlsShipmentForOrder, deleteMyGlsLabelsForShipment } from "@/lib/mygls/shipments";
+vi.mock("@/lib/mygls/client", async original => ({ ...await original<typeof import("@/lib/mygls/client")>(), MyGlsClient: class { printLabels = mocks.print; getParcelStatuses = mocks.statuses; deleteLabels = mocks.remove; modifyCOD = mocks.modify; } }));
+import { createMyGlsShipmentForOrder, deleteMyGlsLabelsForShipment, modifyMyGlsCODForShipment } from "@/lib/mygls/shipments";
 import { MyGlsProviderError } from "@/lib/mygls/config";
 let stored: Record<string, unknown> | null;
 const options = { purpose: "RECLAMATION_RETURN" as const, reclamationId: "claim-1", packages: [{ packageNo: 1, orderItemId: "item-1", content: "Fotelja", weightKg: 20, widthCm: 60, heightCm: 80, depthCm: 70 }] };
@@ -99,4 +99,29 @@ it("keeps an HTTP failure ambiguous even when its body resembles a validation re
   mocks.print.mockRejectedValue(new MyGlsProviderError("HTTP 500", "1", { PrintLabelsErrorList: [{ ErrorCode: 1 }], PrintLabelsInfoList: [] }));
   await expect(createMyGlsShipmentForOrder("order-1", options)).rejects.toThrow("HTTP 500");
   expect(stored?.rawCreateResponse).toMatchObject({ myGlsReturn: { state: "UNKNOWN" } });
+});
+
+it("uses the full tracking number consistently for cancellation and package assignments", async () => {
+  mocks.print.mockImplementation(async ({ parcelList }) => ({ Labels: [...Buffer.from("%PDF-confirmation")], PrintLabelsInfoList: [{ ClientReference: parcelList[0].ClientReference, ParcelId: 100, ParcelNumber: 1234, ParcelNumberWithCheckdigit: 12345 }] }));
+  const result = await createMyGlsShipmentForOrder("order-1", options);
+  expect(result.trackingNo).toBe("12345");
+  expect(result.providerParcelNumbers).toEqual([12345]);
+  expect(result.rawCreateResponse).toMatchObject({ myGlsPackageAssignments: [{ parcelNumber: 12345 }] });
+});
+it("uses the requested Serbian calendar day even when midnight is the previous UTC date", async () => {
+  vi.setSystemTime(new Date("2026-09-29T10:00:00Z"));
+  const result = await createMyGlsShipmentForOrder("order-1", { ...options, pickupDate: new Date("2026-09-30T00:00:00+02:00") });
+  expect(result.rawCreateResponse).toMatchObject({ myGlsReturn: { pickupDate: "2026-09-30" } });
+});
+it.each([[], [{ StatusCode: "99" }], [{ StatusCode: "51" }, { StatusCode: "01" }]])("blocks cancellation with incomplete or progressed history %j", async (history) => {
+  await createMyGlsShipmentForOrder("order-1", options);
+  mocks.statuses.mockResolvedValue({ ParcelNumber: 900000, ParcelStatusList: history });
+  await expect(deleteMyGlsLabelsForShipment(String(stored?.id))).rejects.toThrow();
+  expect(mocks.remove).not.toHaveBeenCalled();
+});
+
+it.each(["RECLAMATION_RETURN", "RECLAMATION_REPLACEMENT"])("blocks COD modification for %s at the shared service boundary", async (purpose) => {
+  stored = { id: "claim-shipment", provider: "MYGLS", purpose, status: "CREATED", providerParcelId: "100", trackingNo: "900000" };
+  await expect(modifyMyGlsCODForShipment("claim-shipment", 1000)).rejects.toThrow(/bez otkupnine/);
+  expect(mocks.modify).not.toHaveBeenCalled();
 });

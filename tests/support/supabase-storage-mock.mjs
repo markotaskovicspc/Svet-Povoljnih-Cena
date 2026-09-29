@@ -6,12 +6,17 @@ const port = Number.isInteger(requestedPort) && requestedPort > 0
   ? requestedPort
   : 54321;
 const objects = new Map();
+let failUploads = false;
 
 const server = createServer(async (request, response) => {
   try {
     const url = new URL(request.url ?? "/", `http://${host}:${port}`);
     const pathname = decodeURIComponent(url.pathname);
 
+    if (request.method === "POST" && pathname === "/scenario") {
+      failUploads = (await readJson(request)).failUploads === true;
+      return json(response, 200, { ok: true });
+    }
     if (request.method === "GET" && pathname === "/health") {
       return json(response, 200, { ok: true, objects: objects.size });
     }
@@ -85,6 +90,7 @@ const server = createServer(async (request, response) => {
       bucketMatch[2] &&
       (request.method === "POST" || request.method === "PUT")
     ) {
+      if (failUploads) return json(response, 503, { message: "QA storage outage" });
       const bucket = bucketMatch[1];
       const key = cleanKey(bucketMatch[2]);
       const id = objectId(bucket, key);

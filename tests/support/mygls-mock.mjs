@@ -8,6 +8,7 @@ const port = Number.isInteger(requestedPort) && requestedPort > 0
   ? requestedPort
   : 54323;
 const requests = [];
+let scenario = {};
 let nextParcelId = 7_100_000;
 let nextParcelNumber = 1_100_000_000;
 
@@ -16,6 +17,10 @@ const server = createServer(async (request, response) => {
     const url = new URL(request.url ?? "/", `http://${host}:${port}`);
     if (request.method === "GET" && url.pathname === "/health") {
       return json(response, 200, { ok: true, requests: requests.length });
+    }
+    if (request.method === "POST" && url.pathname === "/scenario") {
+      scenario = await readJson(request);
+      return json(response, 200, { ok: true });
     }
     if (request.method === "GET" && url.pathname === "/requests") {
       return json(response, 200, { requests });
@@ -52,7 +57,18 @@ const server = createServer(async (request, response) => {
     };
     requests.push(entry);
 
+    if (method[2] === "GetParcelListStatuses") {
+      return json(response, 200, { ParcelList: (body.ParcelNumberList || []).map((ParcelNumber, index) => ({ ParcelNumber, ParcelStatusList: [{ StatusCode: scenario.statusCodes?.[index] || "51", StatusDate: `/Date(${Date.now()})/`, StatusDescription: "QA status" }] })) });
+    }
+    if (method[2] === "GetParcelStatuses") {
+      return json(response, 200, { ParcelNumber: body.ParcelNumber, ParcelStatusList: [{ StatusCode: scenario.statusCode || "51", StatusDate: `/Date(${Date.now()})/`, StatusDescription: "QA status" }] });
+    }
     if (method[2] === "PrintLabels") {
+      const failure = scenario.printFailure;
+      delete scenario.printFailure;
+      if (failure === "http500") return json(response, 500, { message: "QA ambiguous provider failure" });
+      if (failure === "reject") return providerError(response, "QA invalid pickup phone");
+      if (failure === "partial") return json(response, 200, { PrintLabelsInfoList: [], Labels: null });
       return printLabels(response, entry);
     }
     if (method[2] === "DeleteLabels") {
@@ -158,6 +174,12 @@ function providerError(response, description) {
 async function makeLabelPdf(parcels, printInfo) {
   const document = await PDFDocument.create();
   const font = await document.embedFont(StandardFonts.Helvetica);
+  if (parcels.every(parcel => parcel.ServiceList?.some(service => service.Code === "PRS"))) {
+    const page = document.addPage();
+    page.drawText("Pick & Return - pickup request accepted", { x: 30, y: 790, size: 14, font });
+    for (let i = 0; i < printInfo.length; i++) page.drawText(`${printInfo[i].ClientReference}: ${printInfo[i].ParcelNumberWithCheckdigit}`, { x: 30, y: 760 - i * 20, size: 10, font });
+    return Buffer.from(await document.save());
+  }
   let labelNo = 0;
   const printable = value => String(value).replace(/đ/g, "dj").replace(/Đ/g, "Dj")
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\x20-\x7e]/g, "?");

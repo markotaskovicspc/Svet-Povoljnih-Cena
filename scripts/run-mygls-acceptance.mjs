@@ -219,7 +219,7 @@ try {
     );
   }
   const specs = process.env.MYGLS_E2E_SPECS || "tests/e2e/mygls-flow.spec.ts";
-  if (process.env.MYGLS_E2E_RUNNER === "vitest") {
+  if (["vitest", "browser"].includes(process.env.MYGLS_E2E_RUNNER)) {
     const vitestArgs = [
       "exec",
       "vitest",
@@ -227,7 +227,7 @@ try {
       "run",
       "--config",
       "vitest.integration.config.ts",
-      specs,
+      ...specs.split(/\s+/).filter(Boolean),
     ];
     if (process.env.MYGLS_E2E_TEST_NAME_PATTERN) {
       vitestArgs.push("--testNamePattern", process.env.MYGLS_E2E_TEST_NAME_PATTERN);
@@ -245,12 +245,16 @@ try {
         "playwright",
         "--",
         "test",
-        specs,
+        ...specs.split(/\s+/).filter(Boolean),
         "--project=desktop",
         "--workers=1",
       ],
       childEnv,
     );
+  }
+  if (process.env.MYGLS_E2E_RUNNER === "browser") {
+    console.log(`P&R browser fixtures ready; local app: ${localBaseUrl}. Stop with Ctrl+C to remove the temporary schema.`);
+    await runBrowserServer();
   }
   exitCode = 0;
 } finally {
@@ -357,4 +361,25 @@ function runPrisma(args, env) {
     return;
   }
   run("npm", ["exec", "prisma", "--", ...args], env);
+}
+
+async function runBrowserServer() {
+  const stopPath = resolve(process.cwd(), "output/playwright/gls-prs-stop");
+  rmSync(stopPath, { force: true });
+  const child = spawn("npm", ["run", "dev", "--", "--hostname", "127.0.0.1", "--port", playwrightPort], { cwd: process.cwd(), env: childEnv, stdio: "inherit", detached: true });
+  const stop = () => { if (child.pid) { try { process.kill(-child.pid, "SIGTERM"); } catch { /* Already stopped. */ } } };
+  process.once("SIGINT", stop);
+  process.once("SIGTERM", stop);
+  const poll = setInterval(() => { if (existsSync(stopPath)) stop(); }, 500);
+  try {
+    await new Promise((resolve, reject) => {
+      child.once("error", reject);
+      child.once("exit", (code, signal) => code === 0 || signal === "SIGTERM" ? resolve() : reject(new Error(`Local browser server exited: ${code ?? signal}`)));
+    });
+  } finally {
+    clearInterval(poll);
+    process.removeListener("SIGINT", stop);
+    process.removeListener("SIGTERM", stop);
+    rmSync(stopPath, { force: true });
+  }
 }

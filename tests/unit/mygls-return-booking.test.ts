@@ -27,3 +27,16 @@ it("does not offer warehouse receipt for a P&R package returned to its sender/cu
   expect(canReceiveReclamationShipment({ ...shipment, status: "RETURNED" })).toBe(false);
   expect(canReceiveReclamationShipment({ ...shipment, status: "DELIVERED" })).toBe(true);
 });
+
+it("requires dated delivery proof for every parcel, not the last whole-shipment event", () => {
+  const multi = { ...shipment, status: "DELIVERED", packageCount: 2, providerParcelNumbers: [11, 22] };
+  expect(canReceiveReclamationShipment(multi)).toBe(false);
+  const proof = (status: string) => ({ ...multi, rawCreateResponse: { myGlsParcelHandover: { parcels: [
+    { parcelNumber: 11, latestStatus: status, latestStatusAt: "2026-09-30T12:00:00Z" },
+    { parcelNumber: 22, latestStatus: "DELIVERED", latestStatusAt: "2026-09-30T12:01:00Z" },
+  ] } } });
+  expect(canReceiveReclamationShipment(proof("PICKED_UP"))).toBe(false);
+  expect(myGlsReturnStatusLabel(proof("PICKED_UP"))).toContain("svih povratnih paketa");
+  expect(canReceiveReclamationShipment(proof("DELIVERED"))).toBe(true);
+  expect(canReceiveReclamationShipment({ ...proof("DELIVERED"), providerParcelNumbers: [11, 33] })).toBe(false);
+});

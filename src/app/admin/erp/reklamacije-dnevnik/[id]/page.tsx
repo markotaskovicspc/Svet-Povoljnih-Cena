@@ -254,14 +254,19 @@ async function createShipmentAction(_state: AdminActionState, formData: FormData
       if (!id || !["RECLAMATION_RETURN", "RECLAMATION_REPLACEMENT"].includes(purpose) || !Number.isInteger(packageCount) || packageCount < 1 || packageCount > 99) {
         return { ok: false as const, error: "Kurirski zahtev nije ispravan." };
       }
-      const shipment = await createReclamationShipment({ reclamationId: id, purpose, packageCount, actorId });
-      refresh(id);
-      return {
-        ok: true as const,
-        entityId: id,
-        message: myGlsReturnStatusLabel(shipment) ?? `${PURPOSE_LABELS[purpose]} — kurirski nalog je kreiran.`,
-        diff: { shipmentId: shipment.id, purpose, packageCount },
-      };
+      try {
+        const shipment = await createReclamationShipment({ reclamationId: id, purpose, packageCount, actorId });
+        return {
+          ok: true as const,
+          entityId: id,
+          message: myGlsReturnStatusLabel(shipment) ?? `${PURPOSE_LABELS[purpose]} — kurirski nalog je kreiran.`,
+          diff: { shipmentId: shipment.id, purpose, packageCount: shipment.packageCount },
+        };
+      } finally {
+        // Provider acceptance or an ambiguous result is persisted even when the
+        // action throws. Show that state immediately instead of a stale retry button.
+        refresh(id);
+      }
     },
   )(formData);
 }
@@ -496,7 +501,8 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
                         <p>Otkupnina: 0 RSD. Za GLS se šalje P&R zahtev za naredni radni dan; kurir donosi adresnicu.</p>
                       </div>
                       <p className="w-full text-xs text-ink-500">Za X Express lokacija preuzimanja se automatski pronalazi iz adrese kupca preko <span translate="no">Google Maps</span>. Ako adresa nije dovoljno precizna, nalog se neće poslati i dobićete poruku da proverite ulicu, broj i mesto.</p>
-                      <Field label="Broj paketa">
+                      <p className="w-full text-xs text-ink-500">Broj i mere GLS paketa preuzimaju se iz artikla i količine reklamacije.</p>
+                      <Field label="Broj paketa za X Express">
                         <input name="packageCount" type="number" min={1} max={99} defaultValue={1} className="h-9 w-24 rounded-lg border border-input bg-transparent px-2" />
                       </Field>
                       <SubmitButton size="sm" confirm="Poslati zahtev za preuzimanje kod kupca? Za GLS se šalje P&R nalog za naredni radni dan, bez otkupnine.">

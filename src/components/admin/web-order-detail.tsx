@@ -2714,7 +2714,7 @@ export async function WebOrderDetail({ id }: { id: string }) {
                           shipment.status !== "DELIVERED" &&
                           shipment.status !== "RETURNED" ? (
                             <>
-                              {isCashOnDeliveryPaymentMethod(order.paymentMethod) ? (
+                              {shipment.purpose === "ORDER_DELIVERY" && isCashOnDeliveryPaymentMethod(order.paymentMethod) ? (
                                 <AdminActionForm action={modifyMyGlsCOD} className="flex items-center gap-2">
                                   <input type="hidden" name="shipmentId" value={shipment.id} />
                                   <input type="hidden" name="orderId" value={order.id} />

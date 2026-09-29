@@ -9,6 +9,8 @@ type ReturnShipment = {
   trackingNo?: string | null;
   syncError?: string | null;
   rawCreateResponse?: unknown;
+  packageCount?: number;
+  providerParcelNumbers?: unknown;
 };
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -50,14 +52,28 @@ export function myGlsReturnStatusLabel(shipment: ReturnShipment) {
   if (state === "REJECTED") return "GLS je odbio P&R zahtev — ispravite podatke pre ponovnog slanja";
   if (state === "UNKNOWN") return "Ishod P&R zahteva se proverava — ne šaljite ponovo";
   if (shipment.status === "PICKED_UP") return "Preuzeto kod kupca";
-  if (shipment.status === "DELIVERED") return "Dostavljeno na povratnu adresu";
+  if (shipment.status === "DELIVERED") return allReturnParcelsDelivered(shipment)
+    ? "Dostavljeno na povratnu adresu" : "Čeka se potvrda isporuke svih povratnih paketa";
   if (shipment.status !== "CREATED") return SHIPMENT_STATUS_LABEL[shipment.status as ShipmentStatus] ?? shipment.status;
   return state === "ACCEPTED" ? "P&R zahtev prihvaćen — čeka preuzimanje kod kupca" :
     "Obična adresnica — P&R preuzimanje nije potvrđeno";
 }
 
 /** For a reverse shipment, RETURNED can mean sent back to the customer. */
-export function canReceiveReclamationShipment(shipment?: Pick<ReturnShipment, "provider" | "purpose" | "status"> | null) {
-  return Boolean(shipment && (shipment.status === "DELIVERED" ||
-    (!isMyGlsReturn(shipment) && shipment.status === "RETURNED")));
+export function canReceiveReclamationShipment(shipment?: ReturnShipment | null) {
+  return Boolean(shipment && (shipment.status === "DELIVERED"
+    ? !isMyGlsReturn(shipment) || allReturnParcelsDelivered(shipment)
+    : !isMyGlsReturn(shipment) && shipment.status === "RETURNED"));
+}
+
+function allReturnParcelsDelivered(shipment: ReturnShipment) {
+  const count = shipment.packageCount ?? 1;
+  if (count <= 1) return true;
+  const numbers = Array.isArray(shipment.providerParcelNumbers) ? shipment.providerParcelNumbers.map(Number) : [];
+  const snapshot = record(record(shipment.rawCreateResponse).myGlsParcelHandover);
+  const parcels = Array.isArray(snapshot.parcels) ? snapshot.parcels.map(record) : [];
+  return numbers.length === count && new Set(numbers).size === count && parcels.length === count &&
+    numbers.every(number => Number.isFinite(number) && parcels.some(parcel =>
+      parcel.parcelNumber === number && parcel.latestStatus === "DELIVERED" &&
+      typeof parcel.latestStatusAt === "string" && Number.isFinite(Date.parse(parcel.latestStatusAt))));
 }

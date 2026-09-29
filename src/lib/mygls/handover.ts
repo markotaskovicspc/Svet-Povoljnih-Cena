@@ -4,7 +4,7 @@ import type { MyGlsStatusEvent } from "./types";
 
 const PROOF = new Set(["PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED", "RETURNED"]);
 
-export function buildMyGlsHandover(numbers: number[], events: MyGlsStatusEvent[]) {
+export function buildMyGlsHandover(numbers: number[], events: MyGlsStatusEvent[], includeProgress = false) {
   const expected = [...new Set(numbers)];
   if (!expected.length || expected.length !== numbers.length) throw new Error("MyGLS brojevi paketa nisu jedinstveni.");
   const parcels = expected.map(parcelNumber => {
@@ -14,7 +14,10 @@ export function buildMyGlsHandover(numbers: number[], events: MyGlsStatusEvent[]
     }
     const proof = history.filter(event => PROOF.has(event.status))
       .sort((a, b) => a.occurredAt!.getTime() - b.occurredAt!.getTime())[0];
-    return { parcelNumber, pickedUpAt: proof?.occurredAt?.toISOString() ?? null };
+    const latest = [...history].sort((a, b) => b.occurredAt!.getTime() - a.occurredAt!.getTime())[0];
+    return { parcelNumber, pickedUpAt: proof?.occurredAt?.toISOString() ?? null,
+      ...(includeProgress ? { latestStatus: latest.status, latestStatusAt: latest.occurredAt!.toISOString() } : {}),
+    };
   });
   const recordedAt = new Date(Math.max(...events
     .filter(event => expected.includes(event.parcelNumber) && !isMyGlsNotification(event.providerStatusCode))

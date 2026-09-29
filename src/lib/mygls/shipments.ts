@@ -414,6 +414,7 @@ export async function modifyMyGlsCODForShipment(
     select: {
       id: true,
       provider: true,
+      purpose: true,
       providerParcelId: true,
       providerParcelIds: true,
       providerParcelNumbers: true,
@@ -423,6 +424,9 @@ export async function modifyMyGlsCODForShipment(
   });
   if (!shipment || shipment.provider !== MYGLS_PROVIDER) {
     throw new MyGlsConfigError("MyGLS pošiljka nije pronađena.");
+  }
+  if (shipment.purpose !== "ORDER_DELIVERY") {
+    throw new MyGlsConfigError("Povrat i zamena po reklamaciji moraju ostati bez otkupnine.");
   }
   const parcelId = parcelIdList(shipment)[0];
   const parcelNumber = parcelNumberList(shipment)[0];
@@ -603,8 +607,12 @@ function isNumber(value: unknown): value is number {
 
 /** A calendar date in Serbia; weekends move to the next business day. */
 function returnPickupDate(requested?: Date) {
-  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Belgrade", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
-  const date = requested ? new Date(requested) : new Date(`${today}T12:00:00Z`);
+  const calendar = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Belgrade", year: "numeric", month: "2-digit", day: "2-digit" });
+  const today = calendar.format(new Date());
+  if (requested && !Number.isFinite(requested.getTime())) {
+    throw new MyGlsConfigError("GLS P&R preuzimanje zahteva ispravan datum.");
+  }
+  const date = new Date(`${requested ? calendar.format(requested) : today}T12:00:00Z`);
   if (!requested) date.setUTCDate(date.getUTCDate() + 1);
   if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) <= today) {
     throw new MyGlsConfigError("GLS P&R preuzimanje zakažite najranije za naredni radni dan.");
@@ -660,7 +668,7 @@ async function createMyGlsReturnShipment(prepared: PreparedShipment, options: My
     const info = response.PrintLabelsInfoList ?? response.PrintDataInfoList ?? [];
     const expected = new Set(booking.references);
     if (info.length !== parcelList.length || new Set(info.map(row => row.ClientReference)).size !== expected.size ||
-        info.some(row => !expected.has(row.ClientReference ?? "") || !row.ParcelId || !(row.ParcelNumber ?? row.ParcelNumberWithCheckdigit))) {
+        info.some(row => !expected.has(row.ClientReference ?? "") || !row.ParcelId || !(row.ParcelNumberWithCheckdigit ?? row.ParcelNumber))) {
       throw new MyGlsProviderError("GLS nije potvrdio sve P&R pakete. Proverite ishod pre ponovnog slanja.", undefined, response);
     }
     const raw = withShipmentAssignment({
@@ -673,8 +681,8 @@ async function createMyGlsReturnShipment(prepared: PreparedShipment, options: My
     const saved = await db.shipment.update({ where: { id: shipmentId }, data: {
       providerShipmentId: String(info[0].ParcelId), providerParcelId: String(info[0].ParcelId),
       providerParcelIds: info.map(row => row.ParcelId!),
-      providerParcelNumbers: info.map(row => row.ParcelNumber ?? row.ParcelNumberWithCheckdigit!),
-      trackingNo: String(info[0].ParcelNumber ?? info[0].ParcelNumberWithCheckdigit),
+      providerParcelNumbers: info.map(row => row.ParcelNumberWithCheckdigit ?? row.ParcelNumber!),
+      trackingNo: String(info[0].ParcelNumberWithCheckdigit ?? info[0].ParcelNumber),
       rawCreateResponse: raw as Prisma.InputJsonValue, syncError: null,
       events: { create: { status: "CREATED", message: `GLS P&R zahtev prihvaćen za ${booking.pickupDate}; čeka preuzimanje kod kupca.`, raw: { references: booking.references, pickupDate: booking.pickupDate, service: "PRS" } } },
     } });
