@@ -59,18 +59,18 @@ agreedTotal je poslednji DOGOVORENI konačni iznos sa dostavom, samo ako je izri
   plan=extracted.parse(result.finalOutput);
  }
  onPlan?.(plan);
- if(!plan.input)return {ok:false,message:'Porudžbina nije kreirana. '+plan.reason+' Kada dopunite dogovor, prodavac može ponovo poslati /porudzbina.'};
+ if(!plan.input)return {ok:false,code:'STAFF_PLAN_INCOMPLETE',message:'Porudžbina nije kreirana. '+plan.reason+' Kada dopunite dogovor, prodavac može ponovo poslati /porudzbina.'};
  const input=plan.input;
  if(plan.priceConflict){
   const conflict=plan.priceConflict;
-  if(!verifiedPriceConflict(conflict,input,history))return {ok:false,message:'Porudžbina nije kreirana zbog greške provere cene u prepisci. Podaci kupca ostaju u razgovoru; ponovite /porudzbina.'};
+  if(!verifiedPriceConflict(conflict,input,history))return {ok:false,code:'STAFF_PRICE_EVIDENCE_INVALID',message:'Porudžbina nije kreirana zbog greške provere cene u prepisci. Podaci kupca ostaju u razgovoru; ponovite /porudzbina.'};
   const basis=conflict.basis==='unit'?'po komadu':'ukupno';
   const name=catalog.get(conflict.sku)?.name??'Artikal';
   return {ok:false,message:`${name} (${conflict.sku}): ranije je navedeno ${dinars(conflict.earlierPrice)} ${basis}, a kasnije ${dinars(conflict.latestPrice)} ${basis}. Koja cena važi? Ostale podatke ne morate ponavljati. Porudžbina još nije kreirana. Posle razjašnjenja prodavac može ponovo poslati /porudzbina.`};
  }
  const pricedHistory=history.some(m=>/\d[\d.,]*\s*(?:din|rsd)\b/i.test(m.content));
- if((pricedHistory&&!plan.unitPrices.length&&plan.agreedTotal==null)||plan.unitPrices.some(p=>!hasCitedAmount(p.evidence,p.price,history))||(plan.agreedTotal!=null&&!hasCitedAmount(plan.priceEvidence??'',plan.agreedTotal,history)))return {ok:false,message:'Porudžbina nije kreirana zbog greške provere cene u prepisci. Podaci kupca ostaju u razgovoru; ponovite /porudzbina.'};
- if(!suppliedContact(input,state.history,state.customer))return {ok:false,message:'Porudžbina nije kreirana: neki kontakt ili podatak za dostavu nije pronađen u prepisci. Dopunite podatke pa ponovite /porudzbina.'};
+ if((pricedHistory&&!plan.unitPrices.length&&plan.agreedTotal==null)||plan.unitPrices.some(p=>!hasCitedAmount(p.evidence,p.price,history))||(plan.agreedTotal!=null&&!hasCitedAmount(plan.priceEvidence??'',plan.agreedTotal,history)))return {ok:false,code:'STAFF_PRICE_EVIDENCE_INVALID',message:'Porudžbina nije kreirana zbog greške provere cene u prepisci. Podaci kupca ostaju u razgovoru; ponovite /porudzbina.'};
+ if(!suppliedContact(input,state.history,state.customer))return {ok:false,code:'STAFF_CONTACT_EVIDENCE_INVALID',message:'Porudžbina nije kreirana: neki kontakt ili podatak za dostavu nije pronađen u prepisci. Dopunite podatke pa ponovite /porudzbina.'};
  const products=[];
  for(const line of input.lines){
   const result=await spc({action:'search',query:line.sku,quantity:line.qty}),product=result.items?.find(p=>p.sku===line.sku);
@@ -78,7 +78,7 @@ agreedTotal je poslednji DOGOVORENI konačni iznos sa dostavom, samo ako je izri
   products.push({...product,qty:line.qty});
  }
  const selection=await cartCheckFn({state,event:{...event,text:''},items:products,model});
- if(!selection.ok)return {ok:false,message:selection.code==='CART_EVIDENCE_INVALID'||selection.code==='CART_CHECK_UNAVAILABLE'?'Porudžbina nije kreirana zbog greške provere prepiske. Ne morate ponavljati podatke kupca; ponovite /porudzbina.':'Porudžbina nije kreirana: potrebno je razjasniti izbor artikla, varijante ili količine u dogovoru. Dopunite samo nejasan podatak pa ponovite /porudzbina.'};
+ if(!selection.ok)return {ok:false,code:selection.code==='CART_EVIDENCE_INVALID'||selection.code==='CART_CHECK_UNAVAILABLE'?'STAFF_CART_CHECK_FAILED':undefined,message:selection.code==='CART_EVIDENCE_INVALID'||selection.code==='CART_CHECK_UNAVAILABLE'?'Porudžbina nije kreirana zbog greške provere prepiske. Ne morate ponavljati podatke kupca; ponovite /porudzbina.':'Porudžbina nije kreirana: potrebno je razjasniti izbor artikla, varijante ili količine u dogovoru. Dopunite samo nejasan podatak pa ponovite /porudzbina.'};
  let loyalty=input.guestEmail?activeLoyalty(state,input.guestEmail):null;
  const needsLoyalty=plan.unitPrices.some(a=>products.some(p=>p.sku===a.sku&&p.loyaltyPrice!=null&&Math.abs(p.loyaltyPrice-a.price)<0.01&&Math.abs(p.price-a.price)>0.01));
  if(!loyalty&&needsLoyalty){

@@ -71,6 +71,99 @@ test('staff command retries the persisted quote after an uncertain ERP write, wi
   const state=store.decode((await store.pool.query('SELECT state FROM spc_chat_conversations')).rows[0].state);assert.equal(state.staffOrder.status,'completed');assert.equal(state.orders.length,1);
  }finally{await store.close();}
 });
+
+test('staff preparation rejection emails exact conversation once and never sends or records a customer error',async()=>{
+ const {store,worker,event}=await setup();const notices=[];
+ const reason='Porudžbina nije kreirana: provera nije pouzdano izdvojila dogovorenu cenu iz prepiske.';
+ try{
+  await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
+  const link='https://business.facebook.com/latest/inbox/all/?selected_item_id=synthetic';
+  await store.withConversation(event.conversation,async(row,state,c)=>{state.inboxLink=link;await store.save(c,row.id,state);});
+  worker.staffPrepareFn=async()=>({ok:false,message:reason});
+  worker.spc=async p=>{assert.equal(p.action,'support_handoff');notices.push(p);return {ok:true};};
+  const command={...event,id:'facebook:staff-rejected',echo:true,botEcho:false,text:'/porudzbina'};
+  await store.accept(command);await worker.tick();await store.accept(command);await worker.tick();
+  assert.equal(notices.length,1);assert.equal(notices[0].conversationLink,link);assert.match(notices[0].transcript,/provera nije pouzdano/);
+  assert.equal((await store.pool.query('SELECT * FROM spc_chat_outbox')).rows.length,0);
+  const state=store.decode((await store.pool.query('SELECT state FROM spc_chat_conversations')).rows[0].state);
+  assert.equal(state.staffOrderAttention.reason,reason);assert(!state.history.some(m=>m.content===reason));assert.equal(state.orders.length,0);
+ }finally{await store.close();}
+});
+
+test('transient extraction failure retries full preparation then creates once without another customer confirmation',async()=>{
+ const {store,worker,event}=await setup();let prepares=0,writes=0;
+ try{
+  await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
+  worker.staffPrepareFn=async()=>++prepares===1?{ok:false,code:'STAFF_PRICE_EVIDENCE_INVALID',message:'Provera cene nije uspela.'}:{ok:true,quote:{quoteToken:'recovered'},items:[{sku:'IRON',qty:1}],fingerprint:'recovered'};
+  worker.spc=async p=>{assert.equal(p.action,'create_order');writes++;return {ok:true,data:{number:'RECOVERED-1',accessToken:'private',total:1000}};};
+  const command={...event,id:'facebook:staff-extraction-retry',echo:true,botEcho:false,text:'/porudzbina'};
+  await store.accept(command);await worker.tick();
+  assert.equal(writes,0);assert.equal((await store.pool.query('SELECT * FROM spc_chat_outbox')).rows.length,0);
+  await store.pool.query('UPDATE spc_chat_events SET next_at=now() WHERE id=$1',[command.id]);await worker.tick();
+  assert.equal(prepares,2);assert.equal(writes,1);assert.equal((await store.pool.query('SELECT * FROM spc_chat_support')).rows.length,0);
+  const out=(await store.pool.query('SELECT payload FROM spc_chat_outbox')).rows;assert.equal(out.length,1);assert.match(store.decode(out[0].payload).text,/RECOVERED-1.*uspešno kreirana/);
+ }finally{await store.close();}
+});
+
+test('exhausted preparation retries enqueue durable email; mail outage cannot leak a chat error or repeat preparation',async()=>{
+ const {store,worker,event}=await setup();let prepares=0,emails=0;const ids=[];
+ try{
+  await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
+  worker.staffPrepareFn=async()=>{prepares++;return {ok:false,code:'STAFF_CART_CHECK_FAILED',message:'Provera prepiske nije uspela.'};};
+  worker.spc=async p=>{assert.equal(p.action,'support_handoff');ids.push(p.id);return {ok:++emails>1};};
+  const command={...event,id:'facebook:staff-exhausted',echo:true,botEcho:false,text:'/porudzbina'};
+  await store.accept(command);
+  for(let i=0;i<3;i++){await store.pool.query('UPDATE spc_chat_events SET next_at=now() WHERE id=$1',[command.id]);await worker.tick();}
+  const pending=(await store.pool.query('SELECT status FROM spc_chat_support')).rows;assert.equal(pending.length,1);assert.equal(pending[0].status,'pending');
+  await store.pool.query('UPDATE spc_chat_support SET next_at=now()');await worker.tick();await store.accept(command);await worker.tick();
+  assert.equal(prepares,3);assert.equal(emails,2);assert.equal(ids[0],ids[1]);
+  assert.equal((await store.pool.query('SELECT status FROM spc_chat_support')).rows[0].status,'sent');
+  assert.equal((await store.pool.query('SELECT * FROM spc_chat_outbox')).rows.length,0);
+  assert.equal((await store.pool.query('SELECT status FROM spc_chat_events WHERE id=$1',[command.id])).rows[0].status,'failed');
+ }finally{await store.close();}
+});
+
+test('unknown ERP write outcome emails reconciliation request after bounded retries of the SAME quote',async()=>{
+ const {store,worker,event}=await setup();let prepares=0;const tokens=[],notices=[];
+ try{
+  await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
+  worker.staffPrepareFn=async()=>{prepares++;return {ok:true,quote:{quoteToken:'same-uncertain'},items:[{sku:'IRON',qty:1}],fingerprint:'uncertain'};};
+  worker.spc=async p=>{if(p.action==='support_handoff'){notices.push(p);return {ok:true};}assert.equal(p.action,'create_order');tokens.push(p.quoteToken);throw Error('lost response');};
+  const command={...event,id:'facebook:staff-unknown',echo:true,botEcho:false,text:'/porudzbina'};
+  await store.accept(command);for(let i=0;i<3;i++){await store.pool.query('UPDATE spc_chat_events SET next_at=now() WHERE id=$1',[command.id]);await worker.tick();}
+  assert.equal(prepares,1);assert.deepEqual(tokens,Array(3).fill('same-uncertain'));assert.equal(notices.length,1);assert.match(notices[0].transcript,/Ishod upisa porudžbine nije potvrđen/);assert.match(notices[0].transcript,/duplikat/);
+  assert.equal((await store.pool.query('SELECT * FROM spc_chat_outbox')).rows.length,0);
+  const state=store.decode((await store.pool.query('SELECT state FROM spc_chat_conversations')).rows[0].state);assert.equal(state.staffOrder.quote.quoteToken,'same-uncertain');assert.equal(state.staffOrder.status,'creating');
+ }finally{await store.close();}
+});
+
+test('definite ERP rejection emails seller, without false success or exposed customer failure',async()=>{
+ const {store,worker,event}=await setup();const calls=[];
+ try{
+  await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
+  worker.staffPrepareFn=async()=>({ok:true,quote:{quoteToken:'rejected'},items:[{sku:'IRON',qty:1}],fingerprint:'rejected'});
+  worker.spc=async p=>{calls.push(p);return p.action==='support_handoff'?{ok:true}:{ok:false,error:{code:'QUOTE_EXPIRED'}};};
+  const command={...event,id:'facebook:staff-erp-rejected',echo:true,botEcho:false,text:'/porudzbina'};
+  await store.accept(command);await worker.tick();
+  assert.deepEqual(calls.map(p=>p.action),['create_order','support_handoff']);assert.equal((await store.pool.query('SELECT * FROM spc_chat_outbox')).rows.length,0);
+  assert.equal(store.decode((await store.pool.query('SELECT state FROM spc_chat_conversations')).rows[0].state).orders.length,0);
+ }finally{await store.close();}
+});
+
+test('a later successful command suppresses a stale pending failure email for that conversation',async()=>{
+ const {store,worker,event}=await setup();let resolved=false,emails=0;
+ try{
+  await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
+  worker.staffPrepareFn=async()=>resolved?{ok:true,quote:{quoteToken:'resolved'},items:[{sku:'IRON',qty:1}],fingerprint:'resolved'}:{ok:false,message:'Razjasnite cenu.'};
+  worker.spc=async p=>{if(p.action==='support_handoff'){emails++;return {ok:false};}return {ok:true,data:{number:'RESOLVED-1',total:1000,accessToken:'private'}};};
+  const command={...event,id:'facebook:staff-price-first',echo:true,botEcho:false,text:'/porudzbina'};
+  await store.accept(command);await worker.tick();assert.equal(emails,1);
+  resolved=true;await store.accept({...command,id:'facebook:staff-price-resolved',timestamp:command.timestamp+1});await worker.tick();
+  await store.pool.query('UPDATE spc_chat_support SET next_at=now()');await worker.tick();
+  assert.equal(emails,1);assert.equal((await store.pool.query('SELECT status FROM spc_chat_support')).rows[0].status,'superseded');
+  assert.equal(store.decode((await store.pool.query('SELECT state FROM spc_chat_conversations')).rows[0].state).staffOrderAttention,undefined);
+ }finally{await store.close();}
+});
 test('human takeover prevents a queued confirmation from creating an order',async()=>{
   const {store,worker,calls,event}=await setup();
   try{await store.accept({...event,id:'facebook:human-echo',echo:true,botEcho:false,text:'Preuzimam'});await worker.tick();assert.equal(calls.length,0);assert.equal((await store.pool.query('SELECT paused FROM spc_chat_conversations')).rows[0].paused,true);}finally{await store.close();}

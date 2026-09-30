@@ -3,7 +3,7 @@ import { classifyOrderIntent } from './order-intent.mjs';
 import { randomUUID } from 'node:crypto';
 import { answer, quoteMessage } from './agent.mjs';
 import { inWindow, isConfirmation } from './security.mjs';
-import {HISTORY_LIMIT,repeatsCompletedOrder,customerFromQuote} from './conversation-context.mjs';
+import {HISTORY_LIMIT,repeatsCompletedOrder,customerFromQuote,isOrderReceipt} from './conversation-context.mjs';
 import {checkCart} from './cart-check.mjs';
 import {readMetaHistory} from './meta-history.mjs';
 import {classifyCancellation,cancellationMessage} from './cancellation.mjs';
@@ -44,7 +44,16 @@ export class Worker {
             try{await this.staffOrder({event,row,state,c,job});}
             catch{
               await c.query('ROLLBACK');
-              if(job.attempts>=2){await this.store.pause(row.id,'Proveriti ishod komande /porudzbina');await c.query("UPDATE spc_chat_events SET status='failed',attempts=attempts+1 WHERE id=$1",[job.id]);}
+              if(job.attempts>=2){
+                await this.store.pause(row.id,'Proveriti ishod komande /porudzbina');
+                await c.query('BEGIN');
+                const uncertain=state.staffOrder?.status==='creating'||Boolean(state.operatorOrder);
+                const reason=uncertain?'Ishod upisa porudžbine nije potvrđen. Proverite ERP pre ručnog kreiranja da ne nastane duplikat.':state.staffOrderCheckFailure??'Komanda /porudzbina nije završena ni posle tri pokušaja. Potrebna je provera prodavca.';
+                await this.staffOrderAttention({event,row,state,c,reason});
+                await this.store.save(c,row.id,state);
+                await c.query("UPDATE spc_chat_events SET status='failed',attempts=attempts+1 WHERE id=$1",[job.id]);
+                await c.query('COMMIT');
+              }
               else await c.query("UPDATE spc_chat_events SET attempts=attempts+1,next_at=now()+interval '10 seconds' WHERE id=$1",[job.id]);
               console.error('chat.staff_order_failed');
             }
@@ -318,17 +327,39 @@ export class Worker {
     message=await executeStaffOrder({event,state,spc:this.spc,save:()=>this.store.save(c,row.id,state),prepare:async()=>{
       if(state.staffHistoryIncomplete)return {ok:false,message:'Porudžbina nije kreirana jer nije preuzeta cela duga prepiska. Potrebna je provera istorije; ne ponavljajte podatke kupca.'};
       const prepared=await this.staffPrepareFn({event,state,spc:this.spc,model:this.model});
+      // A failed extraction/check is not missing customer data. Retry the read-only
+      // preparation before escalating; never retry an ERP write with a new quote.
+      if(!prepared.ok&&['STAFF_PLAN_INCOMPLETE','STAFF_PRICE_EVIDENCE_INVALID','STAFF_CONTACT_EVIDENCE_INVALID','STAFF_CART_CHECK_FAILED'].includes(prepared.code)){
+        state.staffOrderCheckFailure=prepared.message;
+        throw new Error('STAFF_ORDER_CHECK_RETRY');
+      }
       const newer=await c.query("SELECT payload FROM spc_chat_events WHERE conversation=$1 AND id<>$2 ORDER BY created_at DESC LIMIT 30",[row.id,event.id]);
       const changed=newer.rows.some(r=>{const e=this.store.decode(r.payload);return e.timestamp>event.timestamp&&!e.botEcho&&!isStaffOrderCommand(e);});
       return changed?{ok:false,message:'Porudžbina nije kreirana jer je dogovor dopunjen nakon komande. Kada završite izmene, ponovite /porudzbina.'}:prepared;
     }});
-    state.history.push({role:'assistant',content:event.text,timestamp:event.timestamp},{role:'assistant',content:message,timestamp:Date.now()});
+    const succeeded=isOrderReceipt({role:'assistant',content:message},state.orders);
+    state.history.push({role:'assistant',content:event.text,timestamp:event.timestamp});
+    if(succeeded)state.history.push({role:'assistant',content:message,timestamp:Date.now()});
+    delete state.staffOrderCheckFailure;
     state.history=state.history.slice(-HISTORY_LIMIT);
     await c.query('BEGIN');
+    if(succeeded){
+      delete state.staffOrderAttention;
+      await c.query("UPDATE spc_chat_support SET status='superseded' WHERE conversation=$1 AND status='pending' AND id LIKE 'staff-order:%'",[row.id]);
+    }
+    else await this.staffOrderAttention({event,row,state,c,reason:message});
     await this.store.save(c,row.id,state);
-    await this.store.enqueue(c,`reply:${job.id}`,row.id,{text:message,allowPaused:true,staffCommand:true});
+    if(succeeded)await this.store.enqueue(c,`reply:${job.id}`,row.id,{text:message,allowPaused:true,staffCommand:true});
     await c.query("UPDATE spc_chat_events SET status='done' WHERE id=$1",[job.id]);
     await c.query('COMMIT');
+  }
+  async staffOrderAttention({event,row,state,c,reason}){
+    state.staffOrderAttention={eventId:event.id,reason,createdAt:Date.now()};
+    const transcript=state.history.slice(-40).map(m=>`${m.role==='user'?'Kupac':'SPC'}: ${m.content}`).join('\n').slice(-8500);
+    const payload={action:'support_handoff',id:`staff-order:${event.id}`,channel:row.channel,conversationId:row.id,
+      reason:'Komanda /porudzbina: potrebna pažnja prodavca',
+      transcript:`RAZLOG: ${reason.slice(0,1000)}\nDetalji nisu poslati kupcu. Proverite dogovor i ERP, pa završite porudžbinu.\n\n${transcript}`};
+    await c.query('INSERT INTO spc_chat_support(id,conversation,payload) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[payload.id,row.id,this.store.encode(payload)]);
   }
   async flush() {
     const result=await this.store.pool.query(`SELECT DISTINCT conversation FROM spc_chat_outbox WHERE status IN ('pending','sending') LIMIT 8`);
