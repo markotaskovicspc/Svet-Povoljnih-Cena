@@ -32,6 +32,7 @@ export const SERBIAN_PLACES: SerbianPlace[] = [
   { name: "Bajina Bašta", postalCode: "31250", aliases: ["bajina basta"] },
   { name: "Banatski Karlovac", postalCode: "26320" },
   { name: "Batočina", postalCode: "34227", aliases: ["batocina"] },
+  { name: "Batajnica", postalCode: "11273", aliases: ["батајница", "zemun batajnica", "beograd batajnica"] },
   { name: "Bečej", postalCode: "21220", aliases: ["becej"] },
   { name: "Bela Crkva", postalCode: "26340" },
   { name: "Bela Palanka", postalCode: "18310" },

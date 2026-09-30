@@ -10,6 +10,7 @@ import {
 } from "@/lib/mygls";
 import { issueBuyerReceiptForOrder } from "@/lib/receipts";
 import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
+import { exactTownAlias } from "@/lib/x-express/town-aliases";
 import {
   normalizeWebOrderShippingAddress,
   normalizeWebOrderShippingPhone,
@@ -380,7 +381,7 @@ async function resolveXExpressAddressIds(args: {
     };
   }
 
-  const towns = await db.xExpressTown.findMany({
+  let towns = await db.xExpressTown.findMany({
     where: {
       active: true,
       postalCode: args.address.postalCode,
@@ -392,6 +393,13 @@ async function resolveXExpressAddressIds(args: {
     select: { id: true },
     take: 2,
   });
+  const alias = exactTownAlias(args.address.city, args.address.postalCode);
+  if (!towns.length && alias) {
+    towns = await db.xExpressTown.findMany({
+      where: {active: true, id: alias.townId, name: alias.townName},
+      select: {id: true}, take: 2,
+    });
+  }
   if (towns.length !== 1) {
     if (args.required) {
       throw new Error(

@@ -2,7 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   after: vi.fn(), log: vi.fn(), transaction: vi.fn(), product: vi.fn(),
-  session: vi.fn(), lookupJob: vi.fn(), repairJob: vi.fn(), customer: vi.fn(),
+  session: vi.fn(), lookupJob: vi.fn(), repairJob: vi.fn(), customer: vi.fn(), town: vi.fn(),
 }));
 vi.mock("next/server", async importOriginal => ({
   ...await importOriginal<typeof import("next/server")>(), after: mocks.after,
@@ -11,6 +11,7 @@ vi.mock("@/lib/db", () => ({ db: {
   $transaction: mocks.transaction, product: { findMany: mocks.product },
   checkoutSession: { findUnique: mocks.session },
   backgroundJob: { findUnique: mocks.lookupJob, upsert: mocks.repairJob },
+  xExpressTown: {findFirst: mocks.town},
 } }));
 vi.mock("@/lib/auth/session", () => ({ getCurrentUser: async () => null }));
 vi.mock("@/lib/security/rate-limit", () => ({
@@ -22,7 +23,7 @@ vi.mock("@/lib/background-jobs", () => { throw new Error("Missing PDF runtime as
 vi.mock("@/lib/customer-master-sync.server", () => ({ upsertWebCustomer: mocks.customer }));
 vi.mock("@/lib/checkout/config", () => ({
   isPaymentMethodEnabled: async () => true,
-  resolveDeliveryQuote: async () => ({ truckAvailable: true, prices: { kamion: 0 }, assemblyPricesBySku: {}, assemblyPrice: 0 }),
+  resolveDeliveryQuote: async () => ({ truckAvailable: true, prices: { kamion: 0, kurir: 299 }, assemblyPricesBySku: {}, assemblyPrice: 0 }),
 }));
 vi.mock("@/lib/checkout/first-purchase.server", () => ({ isFirstPurchaseDiscountEligible: async () => false }));
 vi.mock("@/lib/pricing/rules", () => ({
@@ -57,6 +58,7 @@ beforeEach(() => {
   committed = {}; failQueue = false;
   mocks.product.mockResolvedValue([product]);
   mocks.session.mockResolvedValue(null);
+  mocks.town.mockResolvedValue(null);
   mocks.lookupJob.mockResolvedValue({ id: "job1" });
   mocks.customer.mockResolvedValue({ id: "customer1" });
   mocks.transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
@@ -92,6 +94,14 @@ it("commits buyer, order and durable work, then returns 201 even when worker imp
   await expect(mocks.after.mock.calls[0][0]()).resolves.toBeUndefined();
   expect(mocks.log).toHaveBeenCalledWith("checkout.follow_up.immediate_failed", expect.any(Error), { orderId: "order1" });
   expect((await response.json()).ok).toBe(true);
+});
+
+it('stores Batajnica on the order while using the verified Zemun courier ID', async()=>{
+  mocks.town.mockResolvedValue({id:791059,name:'Beograd (Zemun)',postalCode:'11080'});
+  const {createOrder,createOrderSchema}=await import('@/lib/api/checkout');
+  const orderInput=createOrderSchema.parse({...input,shippingMethod:'KURIR',shipping:{...input.shipping,city:'Batajnica',postalCode:'11273',xExpressTownId:791059}});
+  expect(await createOrder(orderInput,null)).toMatchObject({ok:true});
+  expect(committed.order).toMatchObject({shipCity:'Batajnica',shipPostalCode:'11273',shipXExpressTownId:791059});
 });
 
 it("keeps success and durable cron work if the platform cannot schedule after()", async () => {

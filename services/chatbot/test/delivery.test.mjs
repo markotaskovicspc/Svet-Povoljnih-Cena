@@ -3,6 +3,12 @@ import assert from 'node:assert/strict';
 import {selectTown,orderErrorMessage} from '../src/delivery.mjs';
 import {createSpcClient} from '../src/spc.mjs';
 const town={townId:123,name:'Kruševac',postalCode:'37000'};
+test('Batajnica resolves through verified API alias without discarding customer postcode',()=>{
+ const b={townId:791059,name:'Batajnica',postalCode:'11273',aliases:['Zemun Batajnica','Beograd Batajnica']};
+ for(const city of ['Batajnica','Батајница','Zemun - Batajnica'])assert.equal(selectTown([b],{city,postalCode:'11273'}),b);
+ assert.equal(selectTown([b],{city:'Batajnica',postalCode:'11080'}),null);
+ assert.equal(selectTown([b,{...b,townId:999}],{city:'Batajnica',postalCode:'11273'}),null);
+});
 test('delivery requires unique matching city AND postcode, including Cyrillic/diacritics',()=>{
  for(const city of ['krusevac','Kruševac','Крушевац']) assert.equal(selectTown([town],{city,postalCode:'37000'}),town);
  assert.equal(selectTown([town],{city:'Boljevac',postalCode:'37000'}),null);

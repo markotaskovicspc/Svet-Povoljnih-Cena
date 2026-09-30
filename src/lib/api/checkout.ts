@@ -1,4 +1,5 @@
 import "server-only";
+import { customerTownLabel } from "@/lib/x-express/town-aliases";
 import {
   Prisma,
   type PaymentMethod,
@@ -734,13 +735,14 @@ export async function createOrder(
     return { ok: false, error: { code: "DELIVERY_POINT_INVALID" } };
   }
 
+  const deliveryTownLabel = customerTownLabel(ship, xExpressTown);
   const shippingBuyerAddress = {
     firstName: ship.firstName,
     lastName: ship.lastName,
     phone: ship.phone,
     street: shipStreet,
-    city: xExpressTown?.name ?? ship.city,
-    postalCode: xExpressTown?.postalCode ?? ship.postalCode,
+    city: deliveryTownLabel.city,
+    postalCode: deliveryTownLabel.postalCode,
     country: ship.country,
     companyName: shipIsBusiness ? (ship.companyName ?? null) : null,
     pib: shipIsBusiness ? (ship.pib ?? null) : null,
@@ -850,8 +852,8 @@ export async function createOrder(
           shipPhone: ship.phone,
           shipStreet,
           shipHouseNumber: ship.houseNumber,
-          shipCity: xExpressTown?.name ?? ship.city,
-          shipPostalCode: xExpressTown?.postalCode ?? ship.postalCode,
+          shipCity: deliveryTownLabel.city,
+          shipPostalCode: deliveryTownLabel.postalCode,
           shipXExpressTownId: xExpressTown?.id ?? null,
           shipXExpressStreetId: xExpressStreet?.id ?? null,
           shipCountry: ship.country,
@@ -911,8 +913,8 @@ export async function createOrder(
         phone: ship.phone,
         street: shipStreet,
         houseNumber: ship.houseNumber,
-        city: xExpressTown?.name ?? ship.city,
-        postalCode: xExpressTown?.postalCode ?? ship.postalCode,
+        city: deliveryTownLabel.city,
+        postalCode: deliveryTownLabel.postalCode,
         xExpressTownId: xExpressTown?.id ?? null,
         xExpressStreetId: xExpressStreet?.id ?? null,
         country: ship.country,

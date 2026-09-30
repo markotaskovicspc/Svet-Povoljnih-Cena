@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { xExpressTownSearchTerms } from "@/lib/x-express/location-search";
+import { searchTownAliases } from "@/lib/x-express/town-aliases";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -76,6 +77,22 @@ export async function GET(req: Request) {
       }),
     ]);
 
+  // Some postal localities are routed under a municipality in the courier
+  // dictionary. Prefer an actual exact record if the provider adds one later.
+  const aliases = searchTownAliases(q);
+  if (!exactNameItems.length && !exactPostalItems.length && aliases.length) {
+    const parents = await db.xExpressTown.findMany({
+      where: {active: true, OR: aliases.map(a => ({id: a.townId, name: a.townName}))},
+      select,
+    });
+    const aliasItems = aliases.flatMap(a => {
+      const parent = parents.find(p => p.id === a.townId && p.name === a.townName);
+      return parent ? [{code: String(parent.id), townId: parent.id, municipalityId: parent.municipalityId,
+        name: a.name, postalCode: a.postalCode, displayName: `${a.name} (Zemun) - ${a.postalCode}`,
+        aliases: a.aliases}] : [];
+    });
+    if (aliasItems.length) return NextResponse.json({items: aliasItems});
+  }
   const rankedItems = [...startsWithItems, ...containsItems];
   const items = rankedItems
     .filter(

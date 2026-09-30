@@ -17,6 +17,25 @@ describe("X Express location search", () => {
     findMany.mockReset();
   });
 
+  it.each(['Batajnica','11273','Батајница'])('resolves %s to active Zemun routing while preserving locality', async q => {
+    findMany.mockImplementation(async ({where}) => where.OR?.some((x: {id?:number}) => x.id===791059)
+      ? [{id:791059,name:'Beograd (Zemun)',postalCode:'11080',municipalityId:70157}] : []);
+    const result=await(await GET(new Request('http://localhost/api/x-express/locations?q='+encodeURIComponent(q)))).json();
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({townId:791059,name:'Batajnica',postalCode:'11273',displayName:'Batajnica (Zemun) - 11273'});
+    expect(findMany.mock.calls.at(-1)?.[0].where.active).toBe(true);
+  });
+  it('does not invent routing when the verified parent is missing', async()=>{
+    findMany.mockResolvedValue([]);
+    expect(await(await GET(new Request('http://localhost/api/x-express/locations?q=Batajnica'))).json()).toEqual({items:[]});
+  });
+  it('prefers a provider-specific Batajnica record if one is later added',async()=>{
+    findMany.mockResolvedValueOnce([{id:123,name:'Batajnica',postalCode:'11273',municipalityId:70157}]).mockResolvedValue([]);
+    const result=await(await GET(new Request('http://localhost/api/x-express/locations?q=Batajnica'))).json();
+    expect(result.items[0].townId).toBe(123);
+    expect(findMany).toHaveBeenCalledTimes(3);
+  });
+
   it("prioritizes Niš municipalities over towns that only contain 'niš'", async () => {
     findMany
       .mockResolvedValueOnce([])

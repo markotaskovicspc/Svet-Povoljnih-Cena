@@ -5,7 +5,8 @@ export function normalizePlace(value) {
 }
 export function selectTown(items,shipping) {
   const postalCode=String(shipping.postalCode??'').trim();
-  const matches=items.filter(t=>normalizePlace(t.name)===normalizePlace(shipping.city) && (!postalCode||t.postalCode===postalCode));
+  const placeKey=value=>normalizePlace(value).replace(/[^a-z0-9]+/g,' ').trim();
+  const matches=items.filter(t=>[t.name,...(t.aliases??[])].some(n=>placeKey(n)===placeKey(shipping.city)) && (!postalCode||t.postalCode===postalCode));
   const unique=[...new Map(matches.map(t=>[t.townId,t])).values()];
   return unique.length===1 && Number.isInteger(unique[0].townId) && unique[0].townId>0 ? unique[0] : null;
 }
