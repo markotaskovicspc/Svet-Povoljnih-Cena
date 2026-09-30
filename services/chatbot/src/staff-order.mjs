@@ -36,6 +36,19 @@ export function suppliedContact(input,history,customer){
  const {postalCode,...required}=input.shipping;
  return [...Object.values(required),...(input.guestEmail?[input.guestEmail]:[]),...(postalCode?[postalCode]:[])].every(value=>value!=null&&normalize(value).length>0&&source.includes(normalize(value)));
 }
+export function staffTotalCheck(plan,quote){
+ if(plan.agreedTotal==null||Math.abs(quote.totals.total-plan.agreedTotal)<0.01)return {ok:true};
+ // The existing ERP may award its first-purchase benefit on top of the agreed
+ // member unit prices. Accept only that verified reduction, never a price rise
+ // or an unexplained difference in merchandise/delivery totals.
+ const discount=quote.totals.firstPurchaseDiscount;
+ const allPriced=plan.input.lines.every(l=>plan.unitPrices.some(p=>p.sku===l.sku));
+ const subtotal=plan.input.lines.reduce((sum,l)=>sum+l.qty*(plan.unitPrices.find(p=>p.sku===l.sku)?.price??0),0);
+ if(quote.loyaltyApplied===true&&discount>0&&allPriced&&Math.abs(subtotal-quote.totals.subtotal)<0.01&&
+    quote.totals.total<plan.agreedTotal&&Math.abs(quote.totals.total+discount-plan.agreedTotal)<0.01)
+  return {ok:true,notice:`ERP je uključio dodatni loyalty popust za prvu kupovinu: ${discount} RSD.`};
+ return {ok:false};
+}
 export async function prepareStaffOrder({event,state,spc,model,extractFn,cartCheckFn=checkCart,onPlan}){
  const history=currentPurchaseHistory(state),catalog=new Map();
  const search=async({query})=>{const result=await searchStaffProducts(spc,query);for(const p of result.items??[])catalog.set(p.sku,p);return result;};
@@ -79,9 +92,10 @@ agreedTotal je poslednji DOGOVORENI konačni iznos sa dostavom, samo ako je izri
  }
  const quote=await spc({action:'quote',channel:event.channel,conversationId:event.conversation,loyaltyProof:loyalty?.proof,input:{...input,consent:true,billingSameAsShipping:true,shipping:{...input.shipping,country:'RS'}}});
  if(!quote.ok)return {ok:false,message:orderErrorMessage(quote.error?.code)};
- if(plan.agreedTotal!=null&&Math.abs(quote.totals.total-plan.agreedTotal)>0.01)return {ok:false,message:'Porudžbina nije kreirana: ERP ukupan iznos sa dostavom se razlikuje od dogovorenog. Proverite dogovor pre ponavljanja komande.'};
+ const totalCheck=staffTotalCheck(plan,quote);
+ if(!totalCheck.ok)return {ok:false,message:'Porudžbina nije kreirana: ERP ukupan iznos sa dostavom se razlikuje od dogovorenog. Proverite dogovor pre ponavljanja komande.'};
  const fingerprint=createHash('sha256').update(JSON.stringify({email:input.guestEmail?.toLowerCase()??'',shipping:input.shipping,lines:[...input.lines].sort((a,b)=>a.sku.localeCompare(b.sku)),payment:input.paymentMethod,shippingMethod:input.shippingMethod})).digest('hex');
- return {ok:true,quote,customer:customerFromQuote(input),items:products.map(p=>({sku:p.sku,name:p.name,qty:p.qty})),fingerprint};
+ return {ok:true,quote,customer:customerFromQuote(input),items:products.map(p=>({sku:p.sku,name:p.name,qty:p.qty})),fingerprint,priceNotice:totalCheck.notice};
 }
 
 export async function executeStaffOrder({event,state,spc,save,prepare}){
@@ -106,7 +120,7 @@ export async function executeStaffOrder({event,state,spc,save,prepare}){
  if(!result.ok){attempt.status='rejected';attempt.message=orderErrorMessage(result.error?.code);await save();return attempt.message;}
  if(!state.orders.some(o=>o.number===result.data.number))state.orders.push({number:result.data.number,accessToken:result.data.accessToken,items:attempt.items,createdAt:Date.now(),staffFingerprint:attempt.fingerprint,staffCommandId:event.id});
  state.customer=attempt.customer;delete state.visualContext;
- attempt.status='completed';attempt.message=`Porudžbina ${result.data.number} je uspešno kreirana. Ukupno sa dostavom: ${result.data.total} RSD. ${attempt.customer?.guestEmail?'Potvrda stiže i na mejl.':''}`;
+ attempt.status='completed';attempt.message=`Porudžbina ${result.data.number} je uspešno kreirana. Ukupno sa dostavom: ${result.data.total} RSD. ${attempt.priceNotice??''} ${attempt.customer?.guestEmail?'Potvrda stiže i na mejl.':''}`;
  // Keep only the result, not the redundant signed offer/contact details.
  state.staffOrder={eventId:event.id,status:'completed',message:attempt.message};await save();return attempt.message;
 }

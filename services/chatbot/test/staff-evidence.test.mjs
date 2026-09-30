@@ -2,6 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';
 import {validCartEvidence,matchesEvidence} from '../src/cart-check.mjs';
 import {mergeStaffHistory} from '../src/staff-history.mjs';
 import {readMetaHistory} from '../src/meta-history.mjs';
+import {staffTotalCheck} from '../src/staff-order.mjs';
 const customer='dobar dan,jel mogu da porucim ove od 1800 4 komada';
 const seller='ELEGANCE SEAT (110086), loyalty 1.799 din.';
 const items=[{sku:'110086',qty:4}];
@@ -27,4 +28,12 @@ test('long staff imports flag incomplete coverage rather than silently certifyin
  let coverage;const messages=Array.from({length:100},(_,i)=>({from:{id:'buyer'},to:{data:[{id:'page'}]},created_time:new Date(i*1000).toISOString(),message:'Earlier message'}));
  const history=await readMetaHistory({account:{channel:'facebook',id:'page',token:'test'},sender:'buyer',before:200000,graphVersion:'v26.0',maxMessages:100,onCoverage:c=>coverage=c,fetchFn:async()=>({ok:true,json:async()=>({data:[{messages:{data:messages,paging:{next:'https://graph.facebook.com/next'}}}]})})});
  assert.equal(history.length,100);assert.equal(coverage.complete,false);
+});
+test('only the verified ERP first-purchase reduction may lower the staff-agreed total',()=>{
+ const plan={input:{lines:[{sku:'110086',qty:4}]},unitPrices:[{sku:'110086',price:1799}],agreedTotal:7196};
+ const quote={loyaltyApplied:true,totals:{subtotal:7196,total:6117,firstPurchaseDiscount:1079}};
+ assert(staffTotalCheck(plan,quote).ok);assert.match(staffTotalCheck(plan,quote).notice,/1079/);
+ assert(!staffTotalCheck(plan,{...quote,loyaltyApplied:false}).ok);
+ for(const totals of [{...quote.totals,total:10280},{...quote.totals,total:6000},{...quote.totals,subtotal:7000},{...quote.totals,firstPurchaseDiscount:0}])assert(!staffTotalCheck(plan,{...quote,totals}).ok);
+ assert(!staffTotalCheck({...plan,unitPrices:[]},quote).ok);
 });
