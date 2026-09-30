@@ -5,6 +5,8 @@ describe('verified courier locality aliases',()=>{
  it('recognizes postal code, partial names and Cyrillic without guessing other localities',()=>{
   for(const q of ['11273','Bata','Батајница','Zemun - Batajnica']) expect(searchTownAliases(q)[0]?.townId).toBe(791059);
   expect(searchTownAliases('1127')).toEqual([]);
+  expect(searchTownAliases('Zemun')).toEqual([]);
+  expect(searchTownAliases('Beograd')).toEqual([]);
   expect(exactTownAlias('Batajnica','11080')).toBeUndefined();
   expect(exactTownAlias('Batajnica naselje','11273')).toBeUndefined();
  });

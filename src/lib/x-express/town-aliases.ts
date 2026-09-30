@@ -13,7 +13,9 @@ function key(value: string) {
 export function searchTownAliases(query: string) {
   const q = key(query);
   if (q.length < 3) return [];
-  return aliases.filter(a => a.postalCode === q || a.aliases.some(n => key(n).startsWith(q)));
+  return aliases.filter(a => a.postalCode === q
+    || a.aliases.slice(0,2).some(n => key(n).startsWith(q))
+    || a.aliases.some(n => key(n) === q));
 }
 export function exactTownAlias(city: string, postalCode?: string | null) {
   return aliases.find(a => (!postalCode || postalCode === a.postalCode) && a.aliases.some(n => key(n) === key(city)));
