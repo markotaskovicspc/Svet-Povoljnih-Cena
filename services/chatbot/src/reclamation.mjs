@@ -25,6 +25,7 @@ export async function beginReclamation({number,sku,event,state,spc}) {
   const open=(order.reclamations??[]).find(r=>r.sku===sku&&['PRIMLJENO','U_OBRADI'].includes(r.status));
   if(open){
     delete state.reclamation;delete state.reclamationContext;
+    delete state.pending;delete state.confirming;delete state.cancellation;
     state.supportRequest={reason:`Dopuna/provera postojeće reklamacije ${open.number} za ${number}`};
     return {ok:false,existingReclamation:open,error:`Za ovaj artikal već postoji otvorena reklamacija ${open.number} (${open.status}). Ne otvaraj novu. Reci kupcu broj postojeće prijave i da dopunu proverava podrška. Nove detalje sačuvaj u razgovoru; ne tvrdi da je otvoren novi tiket.`};
   }

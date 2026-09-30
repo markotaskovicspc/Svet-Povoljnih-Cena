@@ -17,9 +17,9 @@ test('inbox link uses Meta resolved inbox item, never PSID, and rejects foreign 
  assert.equal(await conversationLink({...params,fetchFn:async()=>({ok:true,json:async()=>({data:[{link:'https://evil.test/123/inbox/789/'}]})})}),null);
 });
 test('open reclamation returns existing case and forwards supplement without preparing a duplicate',async()=>{
- const state={orders:[{number:'SPC-TEST',accessToken:'test'}],history:[]};let calls=0;
+ const state={orders:[{number:'SPC-TEST',accessToken:'test'}],history:[],pending:{quoteToken:'old-purchase'}};let calls=0;
  const r=await beginReclamation({number:'SPC-TEST',sku:'CHAIR',event:{channel:'facebook',conversation:'test'},state,spc:async()=>{calls++;return {ok:true,order:{number:'SPC-TEST',status:'ISPORUCENO',items:[{sku:'CHAIR',qty:1}],reclamations:[{sku:'CHAIR',number:'R-1',status:'U_OBRADI'}]}};}});
- assert.equal(r.existingReclamation.number,'R-1');assert.equal(calls,1);assert(!state.reclamation);assert.match(state.supportRequest.reason,/R-1/);
+ assert.equal(r.existingReclamation.number,'R-1');assert.equal(calls,1);assert(!state.reclamation);assert(!state.pending);assert.match(state.supportRequest.reason,/R-1/);
 });
 test('visual selection is tied to the selected object and only catalog SKUs survive comparison',async()=>{
  const state={visualContext:{createdAt:Date.now(),images:[{imageNumber:1,objects:[{position:'gore levo',description:'pegla'},{position:'gore desno',description:'bela stolica',visibleName:'',visibleSku:''}]}]}};
