@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { equal, verifyMeta, parseEvents } from './security.mjs';
 import {parseComments} from './comments.mjs';
 import {completeOperatorQuote} from './operator-order.mjs';
+import {auditWindow,conversationAuditPage} from './conversation-audit.mjs';
 
 export async function createHttpServer({store,worker,emailWorker,commentWorker,accounts,adminToken,appSecret,verifyToken}) {
 const page=await readFile(new URL('../public/index.html',import.meta.url));
@@ -47,6 +48,10 @@ const server=http.createServer(async(req,res)=>{
     }
     if(req.method==='GET'&&url.pathname==='/admin/conversations'){
       const result=await store.pool.query('SELECT id,channel,paused,reason,last_customer,updated_at FROM spc_chat_conversations ORDER BY updated_at DESC LIMIT 100');return reply(200,result.rows);
+    }
+    if(req.method==='GET'&&url.pathname==='/admin/audit'){
+      let window;try{window=auditWindow(url.searchParams);}catch{return reply(400,{error:'Invalid audit window or cursor'});}
+      return reply(200,await conversationAuditPage(store,window));
     }
     if(req.method==='GET'&&url.pathname==='/admin/staff-commands'){
       const rows=await store.pool.query('SELECT id,conversation,payload,status,attempts,created_at FROM spc_chat_events ORDER BY created_at DESC LIMIT 2000');

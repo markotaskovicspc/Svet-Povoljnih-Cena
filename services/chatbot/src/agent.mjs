@@ -10,6 +10,7 @@ import {beginReclamation,prepareReclamation} from './reclamation.mjs';
 import {refreshCatalogContext} from './catalog-context.mjs';
 import {activeVisualContext,visualSelectionPresented} from './vision.mjs';
 import {activeLoyalty,prepareLoyalty} from './loyalty.mjs';
+import {guardLoyaltyPrice,loyaltyQuoteMatches} from './loyalty-price-guard.mjs';
 import {productDetailsTool,productDetailsInstructions} from './product-details.mjs';
 import {deliveryQuoteTool,deliveryQuoteInstructions} from './delivery-quote.mjs';
 import {visualCandidatesTool,resolveVisualSelection} from './visual-candidates.mjs';
@@ -23,6 +24,7 @@ export async function answer({event,state,spc,pause,model}) {
   const verifiedCatalog=await refreshCatalogContext({state,event,spc});
   let quoteCreated = false;
   let quoteRejected = false;
+  let priceNotice = null;
   const products = new Map();
   const presentations = new Map();
   const tools = [
@@ -68,6 +70,8 @@ export async function answer({event,state,spc,pause,model}) {
       if(!visualSelectionPresented(state,items))return {ok:false,error:'Artikal sa slike prvo prikaži po tačnom nazivu i šifri iz kataloga (show_product) i pitaj kupca da potvrdi da misli baš na njega. Slika ili položaj sami nisu dovoljni za izbor SKU. Tek posle njegovog odgovora pripremi ponudu.'};
       const selection=await checkCart({state,event,items,model});
       if(!selection.ok)return selection;
+      const priceGuard=await guardLoyaltyPrice({input,products:input.lines.map(l=>products.get(l.sku)),state,event,spc});
+      if(!priceGuard.ok){priceNotice=priceGuard.message;return priceGuard;}
       const rejected=input.lines.find(l=>state.quoteRejection?.sku===l.sku && Date.now()-state.quoteRejection.at<15*60_000);
       if(rejected) {
         quoteRejected=true;
@@ -76,6 +80,12 @@ export async function answer({event,state,spc,pause,model}) {
       }
       const result = await spc({action:'quote',channel:event.channel,conversationId:event.conversation,loyaltyProof:(input.guestEmail?activeLoyalty(state,input.guestEmail)?.proof:undefined),input:{...input,consent:true,billingSameAsShipping:true,shipping:{...input.shipping,country:'RS'}}});
       if(result.error?.code==='LOYALTY_CONSENT_REQUIRED')delete state.loyalty;
+      if(!loyaltyQuoteMatches(result,priceGuard.required)){
+        delete state.pending;delete state.confirming;
+        state.supportRequest={reason:'ERP ponuda nije primenila potvrđenu loyalty cenu'};
+        priceNotice='Ponuđena loyalty cena nije pravilno obračunata. Kolega proverava iznos; ne morate ponovo da šaljete podatke.';
+        return {ok:false,error:priceNotice};
+      }
       if(!result.ok && ['INACTIVE','OUT_OF_STOCK'].includes(result.error?.code)) {
         quoteRejected=true;
         state.customer=customerFromQuote(input);
@@ -111,7 +121,7 @@ export async function answer({event,state,spc,pause,model}) {
     tool({name:'request_reclamation',description:'Pripremi sažetak prijave za tačan artikal i porudžbinu. Problem: kvar, oštećenje, nedostajući ili pogrešan artikal. Pitaj željeni ishod, null ako kupac ne želi da bira. Ovo ništa ne upisuje niti odobrava zamenu/povraćaj.',parameters:z.object({number:z.string(),sku:z.string(),quantity:z.number().int().positive().max(999),description:z.string().min(5).max(250),category:z.enum(['KVAR','FIZICKO_OSTECENJE','NEDOSTAJE_ARTIKAL','POGRESAN_ARTIKAL']),request:z.enum(['POPRAVKA','ZAMENA','POVRACAJ_NOVCA','UMANJENJE_CENE']).nullable()}),execute:async input=>prepareReclamation({input,event,state,spc})}),
     tool({name:'handoff',description:'Obavesti SPC podršku za zahtev za kolegu ili nerešen problem sa kupovinom. Ne koristi za nepovezane teme ili zabranjene zahteve. Razgovor ostaje aktivan.',parameters:z.object({reason:z.string().max(200)}),execute:async({reason})=>{state.supportRequest={reason};delete state.pending;delete state.confirming;return {ok:true,message:'Upit je pripremljen za slanje podršci emailom. Nastavi da pomažeš oko drugih proizvoda; ne tvrdi da je kolega već preuzeo razgovor.'};}}),
   ];
-  const loyaltyInstructions=`\nLOYALTY: Katalog vraća price (cena bez članstva) i loyaltyPrice (ponuda uz saglasnost). Ako je loyaltyPrice niža, koristi prirodnu kratku ponudu: „Cena [proizvoda] je [price] din, a uz naš loyalty popust možete ga poručiti za samo [loyaltyPrice] din. 😊 Za loyalty cenu potreban je Vaš pristanak za članstvo — članstvo je besplatno i ne obavezuje na kupovinu. Da li želite da poručite po ceni od [loyaltyPrice] din?“ Zameni sve oznake stvarnim nazivom i ERP cenama; brojeve formatiraj srpski (2.580 din). Ponudi jednom, bez pritiska. Besplatnu dostavu navedi samo kada je trenutni ERP obračun potvrdio nulu. Odgovor na ovaj poziv pokazuje interesovanje; posebnu loyalty saglasnost evidentira server. Bez Markdown zvezdica za bold jer prikaz zavisi od klijenta. Ako pozoveš show_product, server već dodaje ovu ponudu — ne ponavljaj cene i ceo tekst u svom odgovoru. Ne računaj dodatnih 15% sam: samo ERP ponuda potvrđuje pravo i iznos. Za aktiviranje traži mejl i pozovi prepare_loyalty. Članstvo nikad ne aktivira model; server prihvata odvojeno DA. DA za članstvo NIJE DA za kupovinu. Ako kupac odbije, nastavi bez pogodnosti i ne nagovaraj ponovo. Ne prijavljuj na marketing. Trenutno aktivno članstvo: ${JSON.stringify(activeLoyalty(state)?{email:state.loyalty.email}:null)}. Odbijeno: ${Boolean(state.loyaltyDeclined)}. Posle aktivacije koristi aktuelne izabrane proizvode i podatke iz istorije za prepare_order, bez vraćanja na stare porudžbine.`;
+  const loyaltyInstructions=`\nLOYALTY: Katalog vraća price (cena bez članstva) i loyaltyPrice (ponuda uz saglasnost). Ako je loyaltyPrice niža, koristi prirodnu kratku ponudu: „Cena [proizvoda] je [price] din, a uz naš loyalty popust možete ga poručiti za samo [loyaltyPrice] din. 😊 Za loyalty cenu potreban je Vaš pristanak za članstvo — članstvo je besplatno i ne obavezuje na kupovinu. Da li želite da poručite po ceni od [loyaltyPrice] din?“ Zameni sve oznake stvarnim nazivom i ERP cenama; brojeve formatiraj srpski (2.580 din). Ponudi jednom, bez pritiska. Besplatnu dostavu navedi samo kada je trenutni ERP obračun potvrdio nulu. Odgovor na ovaj poziv pokazuje interesovanje; posebnu loyalty saglasnost evidentira server. Bez Markdown zvezdica za bold jer prikaz zavisi od klijenta. Ako pozoveš show_product, server već dodaje ovu ponudu — ne ponavljaj cene i ceo tekst u svom odgovoru. Ne računaj dodatnih 15% sam: samo ERP ponuda potvrđuje pravo i iznos. Ako je mejl već dostavljen, za ponuđenu loyalty cenu odmah pozovi prepare_loyalty pre prepare_order i sačekaj odvojenu saglasnost. Mejl nije obavezan za porudžbinu: ako ga nema, ne uslovljavaj kupovinu mejlom; pripremi proveru ponuđene loyalty cene kod kolege. Nikada ne prikaži redovnu skuplju ponudu kao da je loyalty ponuda. „4 po 1.799“ znači 7.196 din za artikle, a dostavu proverava ERP. Kada kupac ispravi ukupan iznos, proveri osnov cene, ne traži ponovo količinu/adresu. Članstvo nikad ne aktivira model; server prihvata odvojeno DA. DA za članstvo NIJE DA za kupovinu. Ako kupac odbije, nastavi bez pogodnosti i ne nagovaraj ponovo. Ne prijavljuj na marketing. Trenutno aktivno članstvo: ${JSON.stringify(activeLoyalty(state)?{email:state.loyalty.email}:null)}. Odbijeno: ${Boolean(state.loyaltyDeclined)}. Posle aktivacije koristi aktuelne izabrane proizvode i podatke iz istorije za prepare_order, bez vraćanja na stare porudžbine.`;
   const agent=new Agent({name:'SPC prodaja i podrška',model,instructions:salesInstructions+loyaltyInstructions+'\n'+productDetailsInstructions+'\n'+deliveryQuoteInstructions,tools,modelSettings:{parallelToolCalls:false}});
   const context = JSON.stringify({commentOrigin:state.commentOrigin??null,reclamationContext:state.reclamationContext??null,submittedReclamations:state.reclamations??[],verifiedClaimOrders:Object.entries(state.claimOrders??{}).map(([number,o])=>({number,items:o.items})),complaintVerificationPending:Boolean(state.claimVerification),customer:state.customer??null,pendingOrder:state.pending ? {input:state.pending.input,totals:state.pending.totals} : null,lastQuoteRejection:state.quoteRejection??null,completedOrders:state.orders.map(o=>({number:o.number,items:o.items,status:o.status})),currentPurchase:currentPurchaseHistory(state),note:'Prethodne završene porudžbine su istorija, nikad podrazumevana nova korpa. Aktuelni kupčev izbor ima prednost. Kontakt podatke smeš ponovo upotrebiti u sažetku za potvrdu.'});
   const history=state.history.slice(-HISTORY_LIMIT).map(m=>m.role==='assistant'?assistant(m.content):user(m.content));
@@ -122,6 +132,10 @@ export async function answer({event,state,spc,pause,model}) {
   const cards=[...presentations.values()];
   const captions=cards.map(p=>p.caption).join('\n\n');
   let reply=String(result.finalOutput ?? 'Koji artikal te zanima?');
+  // The verified card owns prices, URLs and the offer. Suppress model paragraphs
+  // that repeat them, while retaining the answer about quality/colour/etc.
+  if(cards.length)reply=reply.split(/\n\s*\n/).filter(p=>!/(?:\d[\d., ]*\s*(?:din\b|RSD\b)|https:\/\/www\.svetpovoljnihcena\.rs\/p\/|loyalty|članstvo)/i.test(p)).join('\n\n');
+  if(priceNotice&&!quoteCreated)return {text:priceNotice,quoteCreated:false,images:[]};
   if(reply.length>650) reply=reply.slice(0,620).replace(/\s+\S*$/,'')+'…';
   const text=(greeting+reply).slice(0,Math.max(0,1750-captions.length));
   if(quoteRejected && !quoteCreated) return {text:'Izvini zbog zabune: sistem trenutno ne prihvata ponudu za izabrani artikal i količinu. Zahtev sa podacima koje si već poslao prosleđujem podršci na proveru. Ne moraš ponovo da ih unosiš.',quoteCreated:false,images:[]};

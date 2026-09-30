@@ -7,7 +7,7 @@ export async function refreshCatalogContext({state,event,spc}) {
   for(const sku of skus){
     const result=await spc({action:'search',query:sku});
     const item=result.items?.find(p=>p.sku===sku);
-    items.push(item?{sku:item.sku,name:item.name,price:item.price,available:item.available,checkedQuantity:item.checkedQuantity,url:item.slug?`https://www.svetpovoljnihcena.rs/p/${encodeURIComponent(item.slug)}`:null}:{sku,notFound:true});
+    items.push(item?{sku:item.sku,name:item.name,price:item.price,loyaltyPrice:item.loyaltyPrice??null,available:item.available,checkedQuantity:item.checkedQuantity,url:item.slug?`https://www.svetpovoljnihcena.rs/p/${encodeURIComponent(item.slug)}`:null}:{sku,notFound:true});
   }
   return items;
 }
