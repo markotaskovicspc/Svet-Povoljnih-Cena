@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest";
-const m = vi.hoisted(() => ({ order: vi.fn(), existing: vi.fn(), lockedExisting: vi.fn(), raw: vi.fn(), create: vi.fn(), verify: vi.fn(), enqueue: vi.fn(), tx: vi.fn() }));
+const m = vi.hoisted(() => ({ order: vi.fn(), existing: vi.fn(), lockedExisting: vi.fn(), open: vi.fn(), raw: vi.fn(), create: vi.fn(), verify: vi.fn(), enqueue: vi.fn(), tx: vi.fn() }));
 vi.mock("@/lib/db", () => ({ db: { order: { findUnique: m.order }, reclamation: { findUnique: m.existing }, $transaction: m.tx } }));
 vi.mock("@/lib/api/uploads", () => ({ isAllowedReclamationPhotoUrl: () => true, verifyReclamationUploads: m.verify }));
 vi.mock("@/lib/background-jobs", () => ({ enqueueBackgroundJob: m.enqueue }));
@@ -9,10 +9,10 @@ const order = { id: "o1", number: "SPC-TEST", status: "ISPORUCENO", userId: null
 const input = { orderNumberOrFiscal: order.number, sku: "IRON", quantity: 1, description: "Pegla ne greje", photos: [] };
 const context = { orderId: order.id, id: "social-case", note: "facebook transcript", request: "ZAMENA" as const, type: "KVAR" as const };
 beforeEach(() => {
-  vi.resetAllMocks(); m.order.mockResolvedValue(order); m.existing.mockResolvedValue(null); m.lockedExisting.mockResolvedValue(null);
+  vi.resetAllMocks(); m.order.mockResolvedValue(order); m.existing.mockResolvedValue(null); m.lockedExisting.mockResolvedValue(null); m.open.mockResolvedValue(null);
   m.raw.mockImplementation(async (sql: TemplateStringsArray) => sql.join("").includes('FROM "Order"') ? [{ status: order.status, number: order.number }] : [{ reclamationCount: 1, productId: null, qty: 1 }]);
   m.create.mockResolvedValue({ id: context.id, number: "R-1-SPC-TEST" });
-  m.tx.mockImplementation(async fn => fn({ $queryRaw: m.raw, reclamation: { findUnique: m.lockedExisting, findMany: async () => [], create: m.create } }));
+  m.tx.mockImplementation(async fn => fn({ $queryRaw: m.raw, reclamation: { findUnique: m.lockedExisting, findFirst: m.open, findMany: async () => [], create: m.create } }));
 });
 it("writes linked metadata, photos and requested outcome in the existing ERP record", async () => {
   expect(await createSocialReclamation(input, context)).toMatchObject({ ok: true, number: "R-1-SPC-TEST" });
@@ -34,3 +34,5 @@ it("recovers an existing case even after order state changed, but rejects anothe
   expect(await createSocialReclamation(input, context)).toMatchObject({ ok: true }); expect(m.tx).not.toHaveBeenCalled();
   expect(await createSocialReclamation(input, { ...context, orderId: "other" })).toMatchObject({ ok: false, reason: "UNAUTHORIZED" });
 });
+
+it("reuses an open case under the order lock even with a different request id, without counters or repeat receipts",async()=>{m.open.mockResolvedValue({id:'existing-case',number:'R-1-SPC-TEST'});expect(await createSocialReclamation(input,{...context,id:'another-id'})).toMatchObject({ok:true,number:'R-1-SPC-TEST',alreadyExists:true});expect(m.raw).toHaveBeenCalledTimes(1);expect(m.create).not.toHaveBeenCalled();expect(m.enqueue).not.toHaveBeenCalled();});

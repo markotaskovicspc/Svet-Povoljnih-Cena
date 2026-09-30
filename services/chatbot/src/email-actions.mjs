@@ -22,8 +22,8 @@ export function sentSummaryMatches(sent,message,operation){
 export async function callEmailAction(payload,env){
  if(payload.action==='prepare_purchase'){
   const input=payload.input;
-  if(input.shippingMethod==='KURIR'){
-   const url=new URL('/api/x-express/locations',env.SPC_BASE_URL);url.searchParams.set('q',input.shipping.postalCode);url.searchParams.set('limit','20');
+  if(input.shippingMethod==='KURIR'||!input.shipping.postalCode){
+   const url=new URL('/api/x-express/locations',env.SPC_BASE_URL);url.searchParams.set('q',input.shipping.postalCode?.trim()||input.shipping.city);url.searchParams.set('limit','20');
    const response=await fetch(url,{signal:AbortSignal.timeout(15000),redirect:'error'});if(!response.ok)throw Error('EMAIL_LOCATION_LOOKUP_FAILED');
    const town=selectTown((await response.json()).items??[],input.shipping);
    if(!town)return {ok:false,error:{code:'DELIVERY_ADDRESS_INVALID'}};

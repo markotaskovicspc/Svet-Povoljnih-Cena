@@ -28,7 +28,7 @@ const cancellationPayload = identity.extend({ purpose: z.literal("cancel_order")
 const requestSchema = z.discriminatedUnion("action", [
   socialDeliveryRequest,
   ...socialReclamationActions,
-  identity.extend({ action: z.literal("support_handoff"), id: z.string().min(1).max(300), reason: z.string().max(200), transcript: z.string().max(10000), reclamationId: z.string().regex(/^[A-Za-z0-9_-]{1,100}$/).optional() }),
+  identity.extend({ action: z.literal("support_handoff"), id: z.string().min(1).max(300), reason: z.string().max(200), transcript: z.string().max(10000), reclamationId: z.string().regex(/^[A-Za-z0-9_-]{1,100}$/).optional(), conversationLink: z.url().max(1000).refine(value=>{const u=new URL(value);return u.origin==='https://business.facebook.com'&&u.pathname==='/latest/inbox/all/'&&!u.username&&!u.password;}).optional() }),
   z.object({ action: z.literal("search"), query: z.string().trim().min(1).max(100), quantity: z.number().int().positive().max(1000).default(1) }),
   z.object({ action: z.literal("product_details"), sku:z.string().trim().min(1).max(100) }),
   identity.extend({ action: z.literal("prepare_loyalty"), email:z.email() }),
@@ -69,10 +69,12 @@ export async function POST(req: Request) {
     }
     if (body.action === "support_handoff") {
       if (getEmailConfig().provider === "none") return NextResponse.json({ ok: false, error: "EMAIL_NOT_CONFIGURED" }, { status: 503 });
+      const panelLink = `https://spc-chatbot-production.up.railway.app/?conversation=${encodeURIComponent(body.conversationId)}`;
       const caseLink = body.reclamationId ? `\nReklamacija u ERP-u: https://www.svetpovoljnihcena.rs/admin/erp/reklamacije-dnevnik/${encodeURIComponent(body.reclamationId)}` : "";
-      const text = `Potreban je odgovor SPC podrške.\nKanal: ${body.channel}\nRazgovor: ${body.conversationId}\nRazlog: ${body.reason}${caseLink}\n\nPoslednje poruke:\n${body.transcript}\n\nOtvorite Meta Business Suite inbox i pronađite razgovor. Bot nastavlja da pomaže oko novih pitanja dok zaposleni ne preuzme razgovor.`;
+      const text = `Potreban je odgovor SPC podrške.\nKanal: ${body.channel}\nRazgovor: ${body.conversationId}\nRazlog: ${body.reason}${caseLink}${body.conversationLink?`
+Otvorite tačnu prepisku: ${body.conversationLink}`:""}\nPrepiska u SPC panelu (prijava operatera): ${panelLink}\n\nPoslednje poruke:\n${body.transcript}\n\nOtvorite Meta Business Suite inbox i pronađite razgovor. Bot nastavlja da pomaže oko novih pitanja dok zaposleni ne preuzme razgovor.`;
       const escaped = text.replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[c]!);
-      const result = await trackedDispatch({ kind: "social_support_handoff", to: "podrska@svetpovoljnihcena.rs", subject: `SPC ${body.channel} — upit za podršku`, text, html: `<pre style="white-space:pre-wrap">${escaped}</pre>`, idempotencyKey: `social-support:${createHash('sha256').update(body.conversationId+':'+body.id).digest('hex')}` });
+      const result = await trackedDispatch({ kind: "social_support_handoff", to: "podrska@svetpovoljnihcena.rs", subject: `SPC ${body.channel} — upit za podršku`, text, html: `${body.conversationLink?`<p><a href="${body.conversationLink.replaceAll("&","&amp;").replaceAll('"',"&quot;").replaceAll("<","&lt;").replaceAll(">","&gt;")}">Otvori prepisku u Business Suite</a></p>`:""}<p><a href="${panelLink}">Otvori tačnu prepisku u SPC panelu</a></p><pre style="white-space:pre-wrap">${escaped}</pre>`, idempotencyKey: `social-support:${createHash('sha256').update(body.conversationId+':'+body.id).digest('hex')}` });
       return NextResponse.json({ ok: result.ok && result.provider !== "none" });
     }
     if (body.action === "search") {
@@ -99,7 +101,7 @@ export async function POST(req: Request) {
       if (!["POUZECE_GOTOVINA", "UPLATA_NA_RACUN"].includes(input.paymentMethod)) {
         return NextResponse.json({ ok: false, error: { code: "CHAT_PAYMENT_UNSUPPORTED" } });
       }
-      const preview = await createOrder(input, null, loyalty, { previewOnly: true });
+      const preview = await createOrder(input, null, loyalty, { previewOnly: true, allowGuestWithoutEmail: true });
       if (!preview.ok) return NextResponse.json(preview);
       input.checkoutSessionId = `social_${randomUUID().replaceAll("-", "")}`;
       const expiresAt = Date.now() + 15 * 60_000;
@@ -115,7 +117,7 @@ export async function POST(req: Request) {
       if (quote.expiresAt < Date.now() && !existing?.orderId) return NextResponse.json({ ok: false, error: { code: "QUOTE_EXPIRED" } });
       const loyalty=existing?.orderId&&quote.loyalty?{...quote.loyalty,consentAt:new Date(quote.loyalty.consentAt)}:await channelLoyalty(quote.loyaltyProof,{...body,email:quote.input.guestEmail??''},secret);
       if(quote.input.guestLoyalty&&!loyalty)return NextResponse.json({ok:false,error:{code:'LOYALTY_CONSENT_REQUIRED'}});
-      const result = await createOrder(quote.input, null, loyalty, { expectedTotal: quote.total });
+      const result = await createOrder(quote.input, null, loyalty, { expectedTotal: quote.total, allowGuestWithoutEmail: true, customerReplyDraftOnly: !quote.input.guestEmail });
       if (result.ok) {
         after(async () => {
           try {

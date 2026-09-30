@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';import {answer} from '../src/agent.mjs';import {prepareStaffOrder} from '../src/staff-order.mjs';
+const model=process.env.OPENAI_MODEL??'gpt-5.4-mini';
+const history=[{role:'assistant',content:'Trpezarijska stolica URBAN SEAT (110087), cena 1.499 din.',timestamp:Date.now()-2000},{role:'user',content:'Hoću jednu Urban seat. Test Kupac, Test ulica 29, Borča, 0600000000. Pouzećem. Nemam mejl, ne znam poštanski broj.',timestamp:Date.now()-1000}];
+const event={id:'synthetic-training',channel:'facebook',conversation:'synthetic:training',text:history[1].content,attachments:[]};
+let quotes=0;const actions=[];
+const spc=async p=>{actions.push(p.action);if(p.action==='search')return {ok:true,items:[{sku:'110087',name:'Trpezarijska stolica URBAN SEAT',price:1499,available:true}]};assert.equal(p.action,'quote','No writes permitted');assert(!p.input.guestEmail);assert(!p.input.shipping.postalCode);quotes++;return {ok:true,input:{...p.input,shipping:{...p.input.shipping,postalCode:'11211'}},totals:{shipping:299,total:1798},quoteToken:'synthetic',expiresAt:Date.now()+900000};};
+const state={history:structuredClone(history),orders:[]};const sales=await answer({event,state,spc,model});console.log(JSON.stringify({case:'no-email-or-postcode-sales',quoteCreated:sales.quoteCreated,text:sales.text,actions}));assert(sales.quoteCreated);assert.equal(quotes,1);
+const staff=await prepareStaffOrder({event:{...event,text:'/porudzbina'},state:{history,orders:[]},spc,model});console.log(JSON.stringify({case:'no-email-or-postcode-staff',ok:staff.ok,message:staff.message}));assert(staff.ok);assert.equal(quotes,2);
+const visualState={history:[],orders:[],visualContext:{createdAt:Date.now(),images:[{imageNumber:1,objects:[{position:'gore levo',description:'crna stolica',visibleName:'',visibleSku:''},{position:'gore desno',description:'bela stolica',visibleName:'',visibleSku:''}]}]}};
+const ambiguous=await answer({event:{...event,text:'Ovu stolicu želim'},state:visualState,model,spc:async p=>{assert.notEqual(p.action,'quote');return {ok:true,items:[]};}});console.log(JSON.stringify({case:'ambiguous-image',text:ambiguous.text}));assert(!ambiguous.quoteCreated);assert.match(ambiguous.text,/koju|levo|desno|belu|crnu/i);
+console.log(JSON.stringify({ok:true,synthetic:true,erpWrites:0}));

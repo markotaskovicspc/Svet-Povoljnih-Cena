@@ -8,6 +8,7 @@ import {checkCart} from './cart-check.mjs';
 import {readMetaHistory} from './meta-history.mjs';
 import {classifyCancellation,cancellationMessage} from './cancellation.mjs';
 import {classifyReclamation,reclamationMessage,receiveClaimPhotos,prepareReclamation} from './reclamation.mjs';
+import {conversationLink} from './inbox-link.mjs';
 import {receiveProductImages,activeVisualContext} from './vision.mjs';
 import {receiveLoyalty} from './loyalty.mjs';
 import {isOrderCommandText,isStaffOrderCommand,prepareStaffOrder,executeStaffOrder} from './staff-order.mjs';
@@ -152,8 +153,8 @@ export class Worker {
               const result=await this.spc({action:'submit_reclamation',channel:event.channel,conversationId:row.id,reclamationToken:pending.reclamationToken});
               if(result.ok) {
                 state.reclamations??=[];if(!state.reclamations.some(r=>r.number===result.number))state.reclamations.push({number:result.number,orderNumber:pending.number,sku:pending.input.sku});
-                message='Reklamacija '+result.number+' je zabeležena. Kolege će pregledati prijavu i javiti se o daljim koracima.';
-                state.supportRequest={reason:'Nova reklamacija '+result.number,reclamationId:result.id};
+                message=result.alreadyExists?'Za ovaj artikal već postoji reklamacija '+result.number+'. Dopunu prosleđujem kolegama uz postojeću prijavu.':'Reklamacija '+result.number+' je zabeležena. Kolege će pregledati prijavu i javiti se o daljim koracima.';
+                state.supportRequest={reason:(result.alreadyExists?'Dopuna postojeće reklamacije ':'Nova reklamacija ')+result.number,reclamationId:result.id};
                 delete state.reclamationContext;
               } else {
                 message='Reklamacija još nije upisana. Prikupljeni zahtev šaljem podršci da proveri porudžbinu i prijavu.';
@@ -213,7 +214,7 @@ export class Worker {
             if(result.ok) {
               state.customer=customerFromQuote(state.pending.input)??state.customer;
               state.orders.push({number:result.data.number,accessToken:result.data.accessToken,items:state.pending.input?.lines?.map(l=>({...l,name:state.pending.productNames?.[l.sku]})),createdAt:Date.now()});
-              message=`Porudžbina ${result.data.number} je uspešno kreirana. Ukupno: ${result.data.total} RSD, sa dostavom. Potvrda stiže i na mejl.`;
+              message=`Porudžbina ${result.data.number} je uspešno kreirana. Ukupno: ${result.data.total} RSD, sa dostavom. ${state.customer?.guestEmail?'Potvrda stiže i na mejl.':''}`;
               delete state.pending;delete state.confirming;
               delete state.visualContext;
             } else {
@@ -284,11 +285,16 @@ export class Worker {
   }
   async flushSupport() {
     const pending=await this.store.pool.query("SELECT DISTINCT conversation FROM spc_chat_support WHERE status='pending' AND next_at<=now() LIMIT 8");
-    for(const item of pending.rows) await this.store.withConversation(item.conversation,async(_row,_state,c)=>{
+    for(const item of pending.rows) await this.store.withConversation(item.conversation,async(row,state,c)=>{
       const result=await c.query("SELECT * FROM spc_chat_support WHERE conversation=$1 AND status='pending' AND next_at<=now() ORDER BY created_at LIMIT 1",[item.conversation]);
       const job=result.rows[0];if(!job)return;
       try {
-        const sent=await this.spc(this.store.decode(job.payload));
+        const payload=this.store.decode(job.payload);
+        if(!state.inboxLink){
+          const account=this.accounts.find(a=>a.channel===row.channel&&a.id===row.account);
+          try{state.inboxLink=await conversationLink({account,sender:row.sender,graphVersion:this.graphVersion});if(state.inboxLink)await this.store.save(c,row.id,state);}catch{console.error('chat.inbox_link_unavailable');}
+        }
+        const sent=await this.spc({...payload,conversationLink:state.inboxLink||undefined});
         if(!sent.ok)throw Error('SUPPORT_EMAIL_FAILED');
         await c.query("UPDATE spc_chat_support SET status='sent' WHERE id=$1",[job.id]);
       } catch {

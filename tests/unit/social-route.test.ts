@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHmac } from 'node:crypto';
 import { createOrderSchema } from '../../src/lib/checkout/order-schema';
-const mocks=vi.hoisted(()=>({create:vi.fn(),session:vi.fn(),search:vi.fn(),reclamation:vi.fn(),order:vi.fn(),token:vi.fn(),cancel:vi.fn(),product:vi.fn()}));
+const mocks=vi.hoisted(()=>({create:vi.fn(),session:vi.fn(),search:vi.fn(),reclamation:vi.fn(),order:vi.fn(),token:vi.fn(),cancel:vi.fn(),product:vi.fn(),mail:vi.fn()}));
 vi.mock('next/server',()=>({NextResponse:{json:(data:unknown,init?:ResponseInit)=>Response.json(data,init)},after:vi.fn()}));
 vi.mock('@/lib/api/checkout',async()=>({createOrder:mocks.create,createOrderSchema:(await import('../../src/lib/checkout/order-schema')).createOrderSchema}));
 vi.mock('@/lib/api/catalog',()=>({getProductBySku:mocks.product,listProducts:mocks.search}));
@@ -12,6 +12,8 @@ vi.mock('@/lib/api/reclamations',()=>({createGuestReclamation:mocks.reclamation,
 vi.mock('@/lib/checkout/outbox',()=>({checkoutFollowUpKey:vi.fn()}));
 vi.mock('@/lib/orders/cancellation.server',()=>({cancelWebOrderByCustomer:mocks.cancel}));
 vi.mock('@/lib/checkout/config',()=>({resolveDeliveryQuote:vi.fn(async()=>({prices:{kurir:799,kamion:null},pricingIssue:null,truckAvailable:false}))}));
+vi.mock('@/lib/email/config',()=>({getEmailConfig:()=>({provider:'test'})}));
+vi.mock('@/lib/email/tracking',()=>({trackedDispatch:mocks.mail}));
 import { signSocialQuote } from '../../src/lib/social/security';
 import { OrderCancellationError } from '../../src/lib/orders/cancellation';
 import { POST } from '../../src/app/api/integrations/social/route';
@@ -39,12 +41,12 @@ describe('SPC social order bridge',()=>{
   it('rejects unsigned requests before invoking any business operation',async()=>{expect((await POST(request({action:'search',query:'komoda'},false))).status).toBe(401);expect(mocks.create).not.toHaveBeenCalled();});
   it('quotes through checkout in preview mode and removes caller-controlled loyalty',async()=>{
     const r=await POST(request({action:'quote',channel:'facebook',conversationId:'fb:123:456',input:{...input,guestLoyalty:true,voucherCode:'UNTRUSTED'}}));const body=await r.json();
-    expect(body.ok).toBe(true);expect(body.quoteToken).toBeTruthy();expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({guestLoyalty:false,voucherCode:undefined,checkoutSessionId:expect.any(String)}),null,null,{previewOnly:true});
+    expect(body.ok).toBe(true);expect(body.quoteToken).toBeTruthy();expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({guestLoyalty:false,voucherCode:undefined,checkoutSessionId:expect.any(String)}),null,null,{previewOnly:true,allowGuestWithoutEmail:true});
   });
   it('binds order write to signed buyer, conversation and expected total',async()=>{
     const quote=await (await POST(request({action:'quote',channel:'facebook',conversationId:'fb:123:456',input}))).json();mocks.create.mockClear();
     const r=await POST(request({action:'create_order',channel:'instagram',conversationId:'ig:wrong',quoteToken:quote.quoteToken}));expect(r.status).toBe(403);expect(mocks.create).not.toHaveBeenCalled();
-    await POST(request({action:'create_order',channel:'facebook',conversationId:'fb:123:456',quoteToken:quote.quoteToken}));expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({guestEmail:'buyer@example.com'}),null,null,{expectedTotal:2000});
+    await POST(request({action:'create_order',channel:'facebook',conversationId:'fb:123:456',quoteToken:quote.quoteToken}));expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({guestEmail:'buyer@example.com'}),null,null,{expectedTotal:2000,allowGuestWithoutEmail:true,customerReplyDraftOnly:false});
   });
 });
 
@@ -88,3 +90,7 @@ describe('social cancellation and current availability',()=>{
     expect(r.items).toHaveLength(1);expect(r.items[0]).toMatchObject({sku:'CURRENT',available:false,checkedQuantity:6});
   });
 });
+
+it('signed social checkout accepts no email and suppresses nonexistent buyer email, while missing address is rejected',async()=>{const noEmail={...input,guestEmail:undefined};const identity={channel:'facebook',conversationId:'fb:test:noemail'};const q=await(await POST(request({action:'quote',...identity,input:noEmail}))).json();expect(q.ok).toBe(true);mocks.create.mockClear();await POST(request({action:'create_order',...identity,quoteToken:q.quoteToken}));expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({shipping:expect.objectContaining(noEmail.shipping)}),null,null,{expectedTotal:2000,allowGuestWithoutEmail:true,customerReplyDraftOnly:true});expect((await POST(request({action:'quote',...identity,input:{...noEmail,shipping:{...input.shipping,phone:''}}}))).status).toBe(400);});
+
+it('support notification has a clickable verified conversation link and rejects foreign destinations',async()=>{mocks.mail.mockResolvedValue({ok:true,provider:'test'});const payload={action:'support_handoff',channel:'facebook',conversationId:'facebook:123:456',id:'event',reason:'Test',transcript:'Sintetička poruka',conversationLink:'https://business.facebook.com/latest/inbox/all/?asset_id=123&selected_item_id=789'};expect((await(await POST(request(payload))).json()).ok).toBe(true);expect(mocks.mail.mock.calls.at(-1)[0].html).toContain('selected_item_id=789');expect(mocks.mail.mock.calls.at(-1)[0].html).toContain('Otvori tačnu prepisku u SPC panelu');expect((await POST(request({...payload,conversationLink:'https://evil.test/latest/inbox/all/'}))).status).toBe(400);});

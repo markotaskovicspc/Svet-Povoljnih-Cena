@@ -12,16 +12,21 @@ import {activeVisualContext,visualSelectionPresented} from './vision.mjs';
 import {activeLoyalty,prepareLoyalty} from './loyalty.mjs';
 import {productDetailsTool,productDetailsInstructions} from './product-details.mjs';
 import {deliveryQuoteTool,deliveryQuoteInstructions} from './delivery-quote.mjs';
+import {visualCandidatesTool,resolveVisualSelection} from './visual-candidates.mjs';
 setTracingDisabled(true);
-const address = z.object({firstName:z.string(),lastName:z.string(),phone:z.string(),street:z.string(),houseNumber:z.string(),city:z.string(),postalCode:z.string()});
-const purchase = z.object({guestEmail:z.email(),shipping:address,lines:z.array(z.object({sku:z.string(),qty:z.number().int().positive()})),paymentMethod:z.enum(['POUZECE_GOTOVINA','UPLATA_NA_RACUN']),shippingMethod:z.enum(['KURIR','KAMION'])});
+const address = z.object({firstName:z.string(),lastName:z.string(),phone:z.string(),street:z.string(),houseNumber:z.string(),city:z.string(),postalCode:z.string().nullable()});
+const purchase = z.object({guestEmail:z.email().nullable(),shipping:address,lines:z.array(z.object({sku:z.string(),qty:z.number().int().positive()})),paymentMethod:z.enum(['POUZECE_GOTOVINA','UPLATA_NA_RACUN']),shippingMethod:z.enum(['KURIR','KAMION'])});
 export async function answer({event,state,spc,pause,model}) {
+  // Resolve an ambiguous collage before catalog search can anchor on an arbitrary item.
+  const visualQuestion=await resolveVisualSelection({state,event,model});
+  if(visualQuestion)return {text:visualQuestion,quoteCreated:false,images:[]};
   const verifiedCatalog=await refreshCatalogContext({state,event,spc});
   let quoteCreated = false;
   let quoteRejected = false;
   const products = new Map();
   const presentations = new Map();
   const tools = [
+    visualCandidatesTool({state,spc,model}),
     productDetailsTool(spc),
     deliveryQuoteTool({spc,event,state}),
     tool({name:'prepare_loyalty',description:'Prikaži posebnu loyalty saglasnost za mejl koji je kupac dostavio. Ne aktivira članstvo i ne kreira porudžbinu. Sačekaj kupčevo sledeće DA.',parameters:z.object({email:z.email()}),execute:input=>prepareLoyalty({...input,event,state,spc})}),
@@ -52,7 +57,7 @@ export async function answer({event,state,spc,pause,model}) {
       const customerText=[...state.history.filter(m=>m.role==='user').map(m=>m.content),event.text].join('\n');
       const providedEmails=customerText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)??[];
       if(state.customer?.guestEmail)providedEmails.push(state.customer.guestEmail);
-      if(!providedEmails.some(email=>email.toLowerCase()===input.guestEmail.toLowerCase())) return {ok:false,error:'Kupac nije dostavio ovaj mejl. Pitaj ga za mejl, ne pretpostavljaj i ne koristi primer.'};
+      if(input.guestEmail&&!providedEmails.some(email=>email.toLowerCase()===input.guestEmail.toLowerCase())) return {ok:false,error:'Kupac nije dostavio ovaj mejl. Mejl je opcion: koristi null ako ga kupac nije dao. Ne izmišljaj adresu.'};
       const items=[];
       for(const line of input.lines){
         const found=await spc({action:'search',query:line.sku});
@@ -69,7 +74,7 @@ export async function answer({event,state,spc,pause,model}) {
         state.supportRequest={reason:`Ponovljeni problem pri pripremi artikla ${rejected.sku}`};
         return {ok:false,error:'Ova ponuda je već odbijena. Ne nudi isti artikal kao zamenu i ne traži ponovo iste podatke. Upit je pripremljen za podršku; ponudi drugi artikal samo ako ga kupac želi.'};
       }
-      const result = await spc({action:'quote',channel:event.channel,conversationId:event.conversation,loyaltyProof:activeLoyalty(state,input.guestEmail)?.proof,input:{...input,consent:true,billingSameAsShipping:true,shipping:{...input.shipping,country:'RS'}}});
+      const result = await spc({action:'quote',channel:event.channel,conversationId:event.conversation,loyaltyProof:(input.guestEmail?activeLoyalty(state,input.guestEmail)?.proof:undefined),input:{...input,consent:true,billingSameAsShipping:true,shipping:{...input.shipping,country:'RS'}}});
       if(result.error?.code==='LOYALTY_CONSENT_REQUIRED')delete state.loyalty;
       if(!result.ok && ['INACTIVE','OUT_OF_STOCK'].includes(result.error?.code)) {
         quoteRejected=true;
@@ -126,5 +131,6 @@ export async function answer({event,state,spc,pause,model}) {
 export function quoteMessage(pending) {
   const i=pending.input, s=i.shipping;
   const benefit=pending.loyaltyApplied?`Loyalty pogodnosti uključene u obračun.${pending.totals.firstPurchaseDiscount>0?` Popust za prvu kupovinu: ${pending.totals.firstPurchaseDiscount} RSD.`:''}\n`:'';
-  return `${benefit}Proverite porudžbinu:\n${i.lines.map(l=>`${pending.productNames?.[l.sku] ? pending.productNames[l.sku]+' ('+l.sku+')' : l.sku} × ${l.qty}`).join('\n')}\n${s.firstName} ${s.lastName}, ${s.phone}\n${s.street} ${s.houseNumber}, ${s.postalCode} ${s.city}\nMejl: ${i.guestEmail}\nPlaćanje: ${i.paymentMethod==='POUZECE_GOTOVINA'?'pouzećem, gotovina':'uplata na račun'}\nDostava (${i.shippingMethod==='KAMION'?'kamion':'kurir'}): ${pending.totals.shipping} RSD\nUKUPNO: ${pending.totals.total} RSD\n\nUslovi kupovine: https://www.svetpovoljnihcena.rs/uslovi-kupovine\nZa potvrdu porudžbine i prihvatanje uslova napišite: DA\nPonuda važi 15 minuta. Za ispravku napišite šta menjate.`;
+  return `${benefit}Proverite porudžbinu:\n${i.lines.map(l=>`${pending.productNames?.[l.sku] ? pending.productNames[l.sku]+' ('+l.sku+')' : l.sku} × ${l.qty}`).join('\n')}\n${s.firstName} ${s.lastName}, ${s.phone}\n${s.street} ${s.houseNumber}, ${s.postalCode} ${s.city}${i.guestEmail?`
+Mejl: ${i.guestEmail}`:``}\nPlaćanje: ${i.paymentMethod==='POUZECE_GOTOVINA'?'pouzećem, gotovina':'uplata na račun'}\nDostava (${i.shippingMethod==='KAMION'?'kamion':'kurir'}): ${pending.totals.shipping} RSD\nUKUPNO: ${pending.totals.total} RSD\n\nUslovi kupovine: https://www.svetpovoljnihcena.rs/uslovi-kupovine\nZa potvrdu porudžbine i prihvatanje uslova napišite: DA\nPonuda važi 15 minuta. Za ispravku napišite šta menjate.`;
 }

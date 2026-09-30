@@ -315,7 +315,7 @@ export async function createOrder(
   input: CreateOrderInput,
   userId: string | null,
   guestLoyalty: { email: string; consentVersion: string; consentAt: Date } | null = null,
-  options: { previewOnly?: boolean; expectedTotal?: number; customerReplyDraftOnly?: boolean } = {},
+  options: { previewOnly?: boolean; expectedTotal?: number; customerReplyDraftOnly?: boolean; allowGuestWithoutEmail?: boolean } = {},
 ): Promise<
   { ok: true; data: CreateOrderResult } | { ok: false; error: CreateOrderError }
 > {
@@ -324,7 +324,7 @@ export async function createOrder(
       (guestLoyalty && (userId || guestLoyalty.email !== input.guestEmail?.trim().toLowerCase()))) {
     return { ok: false, error: { code: "LOYALTY_CONSENT_REQUIRED" } };
   }
-  if (!userId && !input.guestEmail) {
+  if (!userId && !input.guestEmail && !options.allowGuestWithoutEmail) {
     return { ok: false, error: { code: "GUEST_REQUIRES_EMAIL" } };
   }
   if (!input.lines.length) return { ok: false, error: { code: "EMPTY_CART" } };

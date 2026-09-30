@@ -398,11 +398,12 @@ test('claim decline, question, changed item and expired confirmation do not writ
 test('claim photos are bound to selected item and force a fresh summary, never auto-submit',async()=>{
  const {store,worker,event}=await setupReclamation();const calls=[];
  worker.spc=async p=>{calls.push(p);if(p.action==='reclamation_photo')return {ok:true,photo:{url:'reclamation/SPC-TEST-1/IRON/date/photo.jpg',bytes:200}};
+  if(p.action==='reclamation_details')return {ok:true,order:{number:p.number,status:'ISPORUCENO',items:[{sku:'IRON',name:'Pegla',qty:1}],reclamations:[]}};
   if(p.action==='prepare_reclamation')return {ok:true,number:p.number,name:'Pegla',input:p.input,reclamationToken:'new-signed-claim',expiresAt:Date.now()+900000};throw Error('no writes');};
  try {
   await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
   await store.accept({...event,id:'fb:photo',text:'da',attachments:[{type:'image',url:'https://scontent.fbcdn.net/test.jpg'}]});await worker.tick();
-  assert.deepEqual(calls.map(c=>c.action),['reclamation_photo','prepare_reclamation']);assert.equal(calls[0].sku,'IRON');
+  assert.deepEqual(calls.map(c=>c.action),['reclamation_photo','reclamation_details','prepare_reclamation']);assert.equal(calls[0].sku,'IRON');
   const state=store.decode((await store.pool.query('SELECT state FROM spc_chat_conversations')).rows[0].state);
   assert.equal(state.reclamation.input.photos.length,1);assert.match(state.history.at(-1).content,/Fotografije: 1/);
  }finally{await store.close();}

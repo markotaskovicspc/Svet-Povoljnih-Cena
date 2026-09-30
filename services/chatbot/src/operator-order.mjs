@@ -10,7 +10,7 @@ export async function completeOperatorQuote({id,quoteToken,secret,store,spc}){
  const quote=JSON.parse(Buffer.from(data,'base64url').toString());
  if(quote.conversationId!==id||!['facebook','instagram'].includes(quote.channel)||!quote.input?.checkoutSessionId||!Array.isArray(quote.input.lines)||!quote.input.lines.length)throw Error('INVALID_QUOTE');
  const input=quote.input,digest=createHash('sha256').update(quoteToken).digest('hex');
- const fingerprint=createHash('sha256').update(JSON.stringify({email:input.guestEmail.toLowerCase(),shipping:input.shipping,lines:[...input.lines].sort((a,b)=>a.sku.localeCompare(b.sku)),payment:input.paymentMethod,shippingMethod:input.shippingMethod})).digest('hex');
+ const fingerprint=createHash('sha256').update(JSON.stringify({email:input.guestEmail?.toLowerCase()??'',shipping:input.shipping,lines:[...input.lines].sort((a,b)=>a.sku.localeCompare(b.sku)),payment:input.paymentMethod,shippingMethod:input.shippingMethod})).digest('hex');
  let result;
  await store.withConversation(id,async(row,state,c)=>{
   if(!row||row.channel!==quote.channel)throw Error('INVALID_CONVERSATION');

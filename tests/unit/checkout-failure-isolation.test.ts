@@ -128,3 +128,5 @@ it("returns the existing order on replay even if queue repair fails", async () =
   expect((await response.json()).data.id).toBe("order1");
   expect(mocks.transaction).toHaveBeenCalledOnce();
 });
+
+it("trusted social checkout creates a real null email record, while public guest checkout still rejects absent email",async()=>{const {createOrder,createOrderSchema}=await import('@/lib/api/checkout');const noEmail=createOrderSchema.parse({...input,guestEmail:undefined});expect(await createOrder(noEmail,null)).toMatchObject({ok:false,error:{code:'GUEST_REQUIRES_EMAIL'}});expect((await createOrder(noEmail,null,null,{allowGuestWithoutEmail:true,customerReplyDraftOnly:true})).ok).toBe(true);expect(committed.order?.guestEmail).toBeNull();expect(committed.job).toMatchObject({payload:{customerReplyDraftOnly:true}});});

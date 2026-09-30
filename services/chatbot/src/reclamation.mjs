@@ -22,6 +22,12 @@ export async function beginReclamation({number,sku,event,state,spc}) {
   if(!sku)return {ok:true,order,message:'Utvrdi tačnu stavku iz ove porudžbine, ne iz današnjeg kataloga. Pozovi begin_reclamation ponovo sa izabranom šifrom pre traženja fotografije.'};
   const item=order.items.find(i=>i.sku===sku);
   if(!item)return {ok:false,error:'Izabrani artikal ne pripada ovoj porudžbini.',order};
+  const open=(order.reclamations??[]).find(r=>r.sku===sku&&['PRIMLJENO','U_OBRADI'].includes(r.status));
+  if(open){
+    delete state.reclamation;delete state.reclamationContext;
+    state.supportRequest={reason:`Dopuna/provera postojeće reklamacije ${open.number} za ${number}`};
+    return {ok:false,existingReclamation:open,error:`Za ovaj artikal već postoji otvorena reklamacija ${open.number} (${open.status}). Ne otvaraj novu. Reci kupcu broj postojeće prijave i da dopunu proverava podrška. Nove detalje sačuvaj u razgovoru; ne tvrdi da je otvoren novi tiket.`};
+  }
   const previous=state.reclamationContext;
   state.reclamationContext={number:order.number,sku,name:item.name,purchasedQty:item.qty,photos:previous?.number===number&&previous?.sku===sku?previous.photos:[],createdAt:Date.now()};
   delete state.pending;delete state.confirming;delete state.cancellation;delete state.reclamation;
@@ -43,7 +49,7 @@ export async function receiveClaimPhotos({event,state,spc}) {
   return {added:photos.length,failed:event.attachments.length-photos.length};
 }
 export async function prepareReclamation({input,event,state,spc}) {
-  if(!state.reclamationContext||state.reclamationContext.number!==input.number||state.reclamationContext.sku!==input.sku) {
+  {
     const started=await beginReclamation({number:input.number,sku:input.sku,event,state,spc});
     if(!started.ok)return started;
   }

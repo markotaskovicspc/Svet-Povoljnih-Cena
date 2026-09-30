@@ -52,7 +52,7 @@ export const createReclamationSchema = z.object({
 export type CreateReclamationInput = z.infer<typeof createReclamationSchema>;
 
 export type CreateReclamationResult =
-  | { ok: true; number: string; id: string }
+  | { ok: true; number: string; id: string; alreadyExists?: boolean }
   | {
       ok: false;
       reason:
@@ -222,7 +222,7 @@ async function createReclamationRecord(
     return { ok: false, reason: "INVALID_PHOTO" };
   }
 
-  let result: { id: string; number: string };
+  let result: { id: string; number: string; alreadyExists?: boolean };
   try {
     result = await db.$transaction(async (tx) => {
       // Serialize every creation for this order, including different SKUs and
@@ -237,6 +237,13 @@ async function createReclamationRecord(
       if (options.social) {
         const existing = await tx.reclamation.findUnique({ where: { id: options.social.id }, select: { id: true, number: true } });
         if (existing) return existing;
+        // A new confirmation or paraphrase has a different request id. Serialize
+        // against all open reports for this purchased item, including manual ones.
+        const open = await tx.reclamation.findFirst({
+          where: { orderId: order.id, sku: input.sku, status: { in: ["PRIMLJENO", "U_OBRADI"] } },
+          select: { id: true, number: true }, orderBy: { createdAt: "desc" },
+        });
+        if (open) return { ...open, alreadyExists: true };
       }
       if (
         options.allowedOrderStatuses &&
@@ -290,7 +297,7 @@ async function createReclamationRecord(
           // Registered customers follow the case in their account. Guests do
           // not have a portal, so their receipt and every status change must go
           // to the e-mail address captured on the order.
-          notifyVia: order.userId ? "PHONE" : "EMAIL",
+          notifyVia: order.userId || !order.guestEmail ? "PHONE" : "EMAIL",
           purchaseDate: options.actorId ? order.createdAt : undefined,
           type: options.type ?? undefined,
           request: options.request ?? undefined,
@@ -321,7 +328,7 @@ async function createReclamationRecord(
       });
       if (options.social) {
         // A lost HTTP response can recover the case without losing its receipt.
-        if (!options.customerReplyDraftOnly) await enqueueBackgroundJob({ kind: "RECLAMATION_RECEIPT", payload: { reclamationId: created.id }, idempotencyKey: `reclamation-receipt:${created.id}` }, tx);
+        if (!options.customerReplyDraftOnly && (account?.email || order.guestEmail)) await enqueueBackgroundJob({ kind: "RECLAMATION_RECEIPT", payload: { reclamationId: created.id }, idempotencyKey: `reclamation-receipt:${created.id}` }, tx);
         if (item.supplierExternalSku) await enqueueBackgroundJob({ kind: "SUPPLIER_RECLAMATION_EMAIL", payload: { reclamationId: created.id }, idempotencyKey: `supplier-reclamation:${created.id}` }, tx);
       }
       return created;
@@ -336,8 +343,9 @@ async function createReclamationRecord(
     throw error;
   }
 
+  if (result.alreadyExists) return { ok: true, ...result };
   try {
-    if (!options.customerReplyDraftOnly) await enqueueBackgroundJob({
+    if (!options.customerReplyDraftOnly && (account?.email || order.guestEmail)) await enqueueBackgroundJob({
       kind: "RECLAMATION_RECEIPT",
       payload: { reclamationId: result.id },
       idempotencyKey: `reclamation-receipt:${result.id}`,
@@ -365,7 +373,7 @@ async function createReclamationRecord(
     }
   }
 
-  return { ok: true, id: result.id, number: result.number };
+  return { ok: true, id: result.id, number: result.number, ...(result.alreadyExists ? { alreadyExists: true } : {}) };
 }
 
 export async function getGuestOrderForReclamation(
