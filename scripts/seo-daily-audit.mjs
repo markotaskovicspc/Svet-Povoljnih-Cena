@@ -24,6 +24,7 @@ async function request(url, options = {}) {
 
 await fs.mkdir(dir, { recursive: true });
 const previous = await readJson(path.join(dir, "latest-complete.json"), null);
+const lastAttempt = await readJson(path.join(dir, "latest.json"), null);
 const worklist = await readJson(path.join(root, "docs/seo/catalog-worklist-2026-09-30.json"), []);
 const result = { checkedAt, complete:false, errors:[], summary:{}, pages:[], products:[], newFindings:[], changedProducts:[] };
 try {
@@ -37,9 +38,12 @@ try {
   }));
   if (!entries.length || entries.length > 5000 || entries.some(e => !e.url || new URL(e.url).origin !== base)) throw new Error("Unexpected sitemap size or URL");
   const productUrls = new Set(entries.filter(e => new URL(e.url).pathname.startsWith("/p/")).map(e => e.url));
+  if (previous?.summary?.publicProductUrls > 0 && productUrls.size === 0) throw new Error("Product sitemap became empty; keep the previous baseline and inspect availability");
   const known = new Map(worklist.map(p => [p.url, p.sku]));
-  for (const p of previous?.products ?? []) known.set(p.url, p.sku);
-  const priorPages = new Map((previous?.pages ?? []).map(p => [p.url, p]));
+  // Preserve successful discovery from incomplete runs, otherwise more than 20
+  // new products would keep the rotating sample stuck on the same first batch.
+  for (const p of [...previous?.products ?? [], ...lastAttempt?.products ?? []]) known.set(p.url, p.sku);
+  const priorPages = new Map([...previous?.pages ?? [], ...lastAttempt?.pages ?? []].map(p => [p.url, p]));
   // All public product text is checked through the lookup API; rendered pages
   // rotate (20/day), with unknown products first. Report this coverage explicitly.
   const pageQueue = [...entries].sort((a,b) => {

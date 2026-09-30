@@ -745,8 +745,10 @@
       "PLACEHOLDER",
       "BODY_VERY_SHORT_REVIEW"
     ],
-    "status": "NEEDS_FACTS",
-    "pilot": true
+    "status": "READY_FOR_REVIEW",
+    "pilot": true,
+    "descriptionPublished": true,
+    "descriptionPublishedAt": "2026-09-30"
   },
   {
     "sku": "110122",
@@ -876,8 +878,10 @@
       "PLACEHOLDER",
       "BODY_VERY_SHORT_REVIEW"
     ],
-    "status": "NEEDS_FACTS",
-    "pilot": true
+    "status": "READY_FOR_REVIEW",
+    "pilot": true,
+    "descriptionPublished": true,
+    "descriptionPublishedAt": "2026-09-30"
   },
   {
     "sku": "110176",

@@ -6,7 +6,7 @@
     "sourceRetrievedAt": "2026-09-30T18:43:48.293Z",
     "sourceHash": "4d8907b6982c925513b8ab9cdb6ae6e0175702797e3e4f9dea381576df249a3f",
     "familyId": null,
-    "status": "NEEDS_FACTS",
+    "status": "READY_FOR_REVIEW",
     "before": {
       "description": "<p>Dopuniti opis za sajt.</p>",
       "meta": "Četkasti čistač za čaše sa dvostrukim glavama"
@@ -14,7 +14,7 @@
     "after": {
       "title": "Četkasti čistač za čaše sa dvostrukim glavama GLASS MATE X",
       "metaDescription": "GLASS MATE X, sivi četkasti čistač za čaše sa dve glave. Dimenzije 14 × 10 × 17,5 cm. Pogledajte fotografije i podatke o proizvodu.",
-      "description": "GLASS MATE X je sivi četkasti čistač za čaše sa dve glave. Evidentirane dimenzije proizvoda su 14 × 10 × 17,5 cm."
+      "description": "GLASS MATE X je četkasti čistač za čaše sa dve glave, u sivoj boji. Širok je 14 cm, dubok 10 cm i visok 17,5 cm."
     },
     "factLedger": [
       {
@@ -41,10 +41,13 @@
       }
     ],
     "notes": [
-      "Ovo je samo kratka osnova. Za pun opis potvrditi materijal, način pričvršćivanja, odgovarajuće čaše i sadržaj pakovanja."
+      "Kratak opis koristi potvrđene osnovne podatke. Dodatne detalje o materijalu, načinu pričvršćivanja i pakovanju uneti samo uz dokumentaciju."
     ],
     "skill": "spc-humanize",
-    "published": false
+    "styleApprovedAt": "2026-09-30",
+    "published": false,
+    "descriptionPublished": true,
+    "publicationNote": "Opis sačuvan kroz ERP 30.09.2026. Meta opis ostaje urednički predlog."
   },
   {
     "sku": "110068",
@@ -53,7 +56,7 @@
     "sourceRetrievedAt": "2026-09-30T18:43:48.293Z",
     "sourceHash": "0c6ca1750c601c2a6ab8b8551269b8cb636ad580869752e0a135d1e3719657ec",
     "familyId": null,
-    "status": "NEEDS_FACTS",
+    "status": "READY_FOR_REVIEW",
     "before": {
       "description": "<p>Dopuniti opis za sajt.</p>",
       "meta": "Brisač stakla"
@@ -61,7 +64,7 @@
     "after": {
       "title": "Brisač stakla PURE STEAM PRO",
       "metaDescription": "Brisač stakla PURE STEAM PRO u beloj boji, dimenzija 21 × 23 × 3 cm. Pogledajte fotografije i podatke o proizvodu.",
-      "description": "PURE STEAM PRO je brisač stakla u beloj boji. Dimenzije evidentirane u katalogu su 21 × 23 × 3 cm."
+      "description": "PURE STEAM PRO je brisač stakla u beloj boji. Dimenzije proizvoda su 21 × 23 × 3 cm."
     },
     "factLedger": [
       {
@@ -91,7 +94,10 @@
       "Naziv STEAM nije dokaz da proizvod stvara paru. Potvrditi mehanizam, materijal radnog dela, namenu i sadržaj pakovanja."
     ],
     "skill": "spc-humanize",
-    "published": false
+    "styleApprovedAt": "2026-09-30",
+    "published": false,
+    "descriptionPublished": true,
+    "publicationNote": "Opis sačuvan kroz ERP 30.09.2026. Meta opis ostaje urednički predlog."
   },
   {
     "sku": "110082",
@@ -166,7 +172,10 @@
       "Izbačeni su obećanje o smanjenju napetosti, sprečavanju znojenja, ugao 145° i neproverene mere sedišta. Mere 59 × 61 cm na SPC i 50 × 47 cm na Ananasu treba usaglasiti zasebno."
     ],
     "skill": "spc-humanize",
-    "published": false
+    "styleApprovedAt": "2026-09-30",
+    "published": false,
+    "descriptionPublished": false,
+    "publicationNote": null
   },
   {
     "sku": "110112",
@@ -227,7 +236,10 @@
       "Uklonjene tvrdnje o upotrebi kod dece, odsustvu povreda, profesionalnom rezultatu i Child Lock funkciji bez dokumentacije. USB, nastavci i brzine ne prenose se samo iz starog marketinškog opisa."
     ],
     "skill": "spc-humanize",
-    "published": false
+    "styleApprovedAt": "2026-09-30",
+    "published": false,
+    "descriptionPublished": false,
+    "publicationNote": null
   },
   {
     "sku": "210029",
@@ -286,7 +298,10 @@
       "Mere su jasno označene umesto neodređenog niza 145 × 50 × 30. Nosivost i način pričvršćivanja ne navode se bez dokumentacije."
     ],
     "skill": "spc-humanize",
-    "published": false
+    "styleApprovedAt": "2026-09-30",
+    "published": false,
+    "descriptionPublished": false,
+    "publicationNote": null
   },
   {
     "sku": "210015",
@@ -339,7 +354,10 @@
       "Zaštitu od rada bez vode i automatsko isključivanje proveriti u uputstvu pre vraćanja u opis."
     ],
     "skill": "spc-humanize",
-    "published": false
+    "styleApprovedAt": "2026-09-30",
+    "published": false,
+    "descriptionPublished": false,
+    "publicationNote": null
   },
   {
     "sku": "210002",
@@ -392,7 +410,10 @@
       "Turbo funkcija, dve vrste nastavaka i hromirani završni sloj iz starog opisa nisu potvrđeni strukturiranim podacima i deklaracijom; izostavljeni su."
     ],
     "skill": "spc-humanize",
-    "published": false
+    "styleApprovedAt": "2026-09-30",
+    "published": false,
+    "descriptionPublished": false,
+    "publicationNote": null
   },
   {
     "sku": "210009",
@@ -446,7 +467,10 @@
       "Nisu prenete neproverene tvrdnje o 12.000 obrtaja u minuti i drobljenju leda."
     ],
     "skill": "spc-humanize",
-    "published": false
+    "styleApprovedAt": "2026-09-30",
+    "published": false,
+    "descriptionPublished": false,
+    "publicationNote": null
   },
   {
     "sku": "100040",
@@ -891,7 +915,10 @@
       "Zadržani su podaci konkretne varijante. Mere 1 × 1 × 1 iz ERP-a nisu stvarne mere odeće i nisu prenete. Sastav je izostavljen jer deklaracija navodi elastin; proveriti da li originalna etiketa navodi elastan."
     ],
     "skill": "spc-humanize",
-    "published": false
+    "styleApprovedAt": "2026-09-30",
+    "published": false,
+    "descriptionPublished": false,
+    "publicationNote": null
   },
   {
     "sku": "100038",
@@ -1336,6 +1363,9 @@
       "Ista potvrđena porodica kao SKU 100040. Zajednički podaci namerno ostaju isti; menja se stvarna boja, bez sinonimizacije. Proveriti elastin/elastan na etiketi."
     ],
     "skill": "spc-humanize",
-    "published": false
+    "styleApprovedAt": "2026-09-30",
+    "published": false,
+    "descriptionPublished": false,
+    "publicationNote": null
   }
 ]
