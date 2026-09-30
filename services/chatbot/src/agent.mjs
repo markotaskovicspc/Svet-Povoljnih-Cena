@@ -145,7 +145,13 @@ export async function answer({event,state,spc,pause,model}) {
 
 export function quoteMessage(pending) {
   const i=pending.input, s=i.shipping;
-  const benefit=pending.loyaltyApplied?`Loyalty pogodnosti uključene u obračun.${pending.totals.firstPurchaseDiscount>0?` Popust za prvu kupovinu: ${pending.totals.firstPurchaseDiscount} RSD.`:''}\n`:'';
-  return `${benefit}Proverite porudžbinu:\n${i.lines.map(l=>`${pending.productNames?.[l.sku] ? pending.productNames[l.sku]+' ('+l.sku+')' : l.sku} × ${l.qty}`).join('\n')}\n${s.firstName} ${s.lastName}, ${s.phone}\n${s.street} ${s.houseNumber}, ${s.postalCode} ${s.city}${i.guestEmail?`
-Mejl: ${i.guestEmail}`:``}\nPlaćanje: ${i.paymentMethod==='POUZECE_GOTOVINA'?'pouzećem, gotovina':'uplata na račun'}\nDostava (${i.shippingMethod==='KAMION'?'kamion':'kurir'}): ${pending.totals.shipping} RSD\nUKUPNO: ${pending.totals.total} RSD\n\nUslovi kupovine: https://www.svetpovoljnihcena.rs/uslovi-kupovine\nZa potvrdu porudžbine i prihvatanje uslova napišite: DA\nPonuda važi 15 minuta. Za ispravku napišite šta menjate.`;
+  const money=value=>`${new Intl.NumberFormat('sr-RS',{maximumFractionDigits:2}).format(value)} din`;
+  const benefit=pending.loyaltyApplied?(pending.totals.firstPurchaseDiscount>0?'Loyalty i popust za prvu kupovinu uračunati.':'Loyalty popust uračunat.'):'';
+  const address=[[s.street,s.houseNumber].filter(Boolean).join(' '),[s.postalCode,s.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  return [
+    'Za potvrdu porudžbine odgovorite: DA\nPorudžbina još nije kreirana.',
+    [i.lines.map(l=>`${pending.productNames?.[l.sku]||l.sku} × ${l.qty}`).join('\n'),`Ukupno: ${money(pending.totals.total)}`,`Dostava: ${pending.totals.shipping===0?'besplatna':money(pending.totals.shipping)} · Plaćanje ${i.paymentMethod==='POUZECE_GOTOVINA'?'pouzećem':'uplatom na račun'}`,benefit].filter(Boolean).join('\n'),
+    [[s.firstName,s.lastName].filter(Boolean).join(' '),address,s.phone,i.guestEmail].filter(Boolean).join('\n'),
+    'Ponuda važi 15 minuta. Ako nešto nije tačno, napišite ispravku.'
+  ].join('\n\n');
 }

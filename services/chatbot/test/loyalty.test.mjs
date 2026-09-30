@@ -20,7 +20,7 @@ test('invented email cannot prepare consent',async()=>{
  const result=await prepareLoyalty({email:'other@example.com',event,state:{history:[]},spc:()=>{throw Error('must not call');}});
  assert.equal(result.ok,false);
 });
-test('quote shows only the ERP first purchase amount with a separate order DA',()=>{
+test('quote keeps the ERP total and makes the pending order confirmation the first line',()=>{
  const text=quoteMessage({loyaltyApplied:true,totals:{shipping:500,total:1690,firstPurchaseDiscount:210},input:{lines:[{sku:'TEST',qty:1}],shipping:{},guestEmail:'buyer@example.com'}});
- assert.match(text,/210 RSD/);assert.match(text,/1690 RSD/);assert.match(text,/potvrdu porudžbine.*DA/);
+ assert.match(text,/^Za potvrdu porudžbine odgovorite: DA\nPorudžbina još nije kreirana\./);assert.match(text,/Ukupno: 1\.690 din/);assert.match(text,/Dostava: 500 din/);assert.match(text,/Loyalty i popust za prvu kupovinu uračunati/);assert(!/210 RSD|uslovi-kupovine/.test(text));
 });

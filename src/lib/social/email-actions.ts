@@ -77,9 +77,16 @@ export async function handleEmailAction(body:z.infer<typeof emailActionSchema>,s
   if(products.some(p=>!p))return failure('PRODUCT_NOT_FOUND');
   input.guestLoyalty=Boolean(loyalty);
   const result=await createOrder(input,null,loyalty,{previewOnly:true});if(!result.ok)return result;
-  const summary=`Potvrdite porudžbinu:\n${input.lines.map((l,n)=>`${products[n]!.name} (${l.sku}) × ${l.qty}`).join('\n')}\n${input.shipping.firstName} ${input.shipping.lastName}, ${input.shipping.phone}\n${input.shipping.street} ${input.shipping.houseNumber}, ${input.shipping.postalCode} ${input.shipping.city}\nPlaćanje: ${input.paymentMethod==='UPLATA_NA_RACUN'?'uplata na račun':'pouzećem, gotovina'}\nDostava: ${result.data.shipping} RSD\nUkupno: ${result.data.total} RSD\nUslovi: https://www.svetpovoljnihcena.rs/uslovi-kupovine\nOdgovorite na ovaj mejl sa „DA“ da naručite i prihvatite uslove. Ponuda važi 24 sata, uz ponovnu proveru cene i dostupnosti pre upisa.`;
-  const benefit=loyalty?`Loyalty pogodnosti su uključene u obračun.${result.data.firstPurchaseDiscount>0?` Popust za prvu kupovinu: ${result.data.firstPurchaseDiscount} RSD.`:''}\n`:'';
-  return {ok:true,kind:'purchase',summary:benefit+summary,expiresAt,token:signSocialQuote({...common,kind:'purchase',input,total:result.data.total,loyaltyProof:body.loyaltyProof,loyalty},secret)};
+  const money=(value:number)=>`${new Intl.NumberFormat('sr-RS',{maximumFractionDigits:2}).format(value)} din`;
+  const benefit=loyalty?(result.data.firstPurchaseDiscount>0?'Loyalty i popust za prvu kupovinu uračunati.':'Loyalty popust uračunat.'):'';
+  const s=input.shipping;
+  const summary=[
+   'Za potvrdu porudžbine odgovorite: DA\nPorudžbina još nije kreirana.',
+   [input.lines.map((l,n)=>`${products[n]!.name} × ${l.qty}`).join('\n'),`Ukupno: ${money(result.data.total)}`,`Dostava: ${result.data.shipping===0?'besplatna':money(result.data.shipping)} · Plaćanje ${input.paymentMethod==='UPLATA_NA_RACUN'?'uplatom na račun':'pouzećem'}`,benefit].filter(Boolean).join('\n'),
+   [`${s.firstName} ${s.lastName}`,`${s.street} ${s.houseNumber}, ${[s.postalCode,s.city].filter(Boolean).join(' ')}`,s.phone,input.guestEmail].filter(Boolean).join('\n'),
+   'Ponuda važi 24 sata, uz proveru cene i dostupnosti. Ako nešto nije tačno, napišite ispravku.'
+  ].join('\n\n');
+  return {ok:true,kind:'purchase',summary,expiresAt,token:signSocialQuote({...common,kind:'purchase',input,total:result.data.total,loyaltyProof:body.loyaltyProof,loyalty},secret)};
  }
  const number=body.action==='prepare_cancel'?body.number:body.input.orderNumberOrFiscal;
  const order=await db.order.findFirst({where:{number,...owner(body.sender)},select:{id:true,number:true,status:true,channel:true,items:{select:{sku:true,name:true,qty:true}},fiscal:{select:{id:true}},fiscalDocuments:{where:{kind:'SALE'},select:{id:true}},reshipments:{select:{id:true}}}});
