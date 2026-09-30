@@ -8,7 +8,7 @@ import {checkCart} from './cart-check.mjs';
 import {readMetaHistory} from './meta-history.mjs';
 import {classifyCancellation,cancellationMessage} from './cancellation.mjs';
 import {classifyReclamation,reclamationMessage,receiveClaimPhotos,prepareReclamation} from './reclamation.mjs';
-import {conversationLink} from './inbox-link.mjs';
+import {supportInboxContext,verifiedConversationLink} from './inbox-link.mjs';
 import {receiveProductImages,activeVisualContext} from './vision.mjs';
 import {receiveLoyalty} from './loyalty.mjs';
 import {isOrderCommandText,isStaffOrderCommand,prepareStaffOrder,executeStaffOrder} from './staff-order.mjs';
@@ -300,11 +300,12 @@ export class Worker {
       const job=result.rows[0];if(!job)return;
       try {
         const payload=this.store.decode(job.payload);
-        if(!state.inboxLink){
-          const account=this.accounts.find(a=>a.channel===row.channel&&a.id===row.account);
-          try{state.inboxLink=await conversationLink({account,sender:row.sender,graphVersion:this.graphVersion});if(state.inboxLink)await this.store.save(c,row.id,state);}catch{console.error('chat.inbox_link_unavailable');}
-        }
-        const sent=await this.spc({...payload,conversationLink:state.inboxLink||undefined});
+        // Ignore and remove every legacy Graph-derived cache entry.
+        delete state.inboxLink;
+        const account=this.accounts.find(a=>a.channel===row.channel&&a.id===row.account);
+        const context=await supportInboxContext({account,sender:row.sender,graphVersion:this.graphVersion});
+        await this.store.save(c,row.id,state);
+        const sent=await this.spc({...payload,...context,conversationLink:verifiedConversationLink(state.verifiedInboxLink,row.account)||undefined});
         if(!sent.ok)throw Error('SUPPORT_EMAIL_FAILED');
         await c.query("UPDATE spc_chat_support SET status='sent' WHERE id=$1",[job.id]);
       } catch {

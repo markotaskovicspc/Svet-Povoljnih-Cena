@@ -83,10 +83,10 @@ test('staff preparation rejection emails exact conversation once and never sends
   worker.spc=async p=>{assert.equal(p.action,'support_handoff');notices.push(p);return {ok:true};};
   const command={...event,id:'facebook:staff-rejected',echo:true,botEcho:false,text:'/porudzbina'};
   await store.accept(command);await worker.tick();await store.accept(command);await worker.tick();
-  assert.equal(notices.length,1);assert.equal(notices[0].conversationLink,link);assert.match(notices[0].transcript,/provera nije pouzdano/);
+  assert.equal(notices.length,1);assert.equal(notices[0].conversationLink,undefined);assert.match(notices[0].transcript,/provera nije pouzdano/);
   assert.equal((await store.pool.query('SELECT * FROM spc_chat_outbox')).rows.length,0);
   const state=store.decode((await store.pool.query('SELECT state FROM spc_chat_conversations')).rows[0].state);
-  assert.equal(state.staffOrderAttention.reason,reason);assert(!state.history.some(m=>m.content===reason));assert.equal(state.orders.length,0);
+  assert.equal(state.inboxLink,undefined);assert.equal(state.staffOrderAttention.reason,reason);assert(!state.history.some(m=>m.content===reason));assert.equal(state.orders.length,0);
  }finally{await store.close();}
 });
 

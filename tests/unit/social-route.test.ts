@@ -102,3 +102,14 @@ describe('social cancellation and current availability',()=>{
 it('signed social checkout accepts no email and suppresses nonexistent buyer email, while missing address is rejected',async()=>{const noEmail={...input,guestEmail:undefined};const identity={channel:'facebook',conversationId:'fb:test:noemail'};const q=await(await POST(request({action:'quote',...identity,input:noEmail}))).json();expect(q.ok).toBe(true);mocks.create.mockClear();await POST(request({action:'create_order',...identity,quoteToken:q.quoteToken}));expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({shipping:expect.objectContaining(noEmail.shipping)}),null,null,{expectedTotal:2000,allowGuestWithoutEmail:true,customerReplyDraftOnly:true});expect((await POST(request({action:'quote',...identity,input:{...noEmail,shipping:{...input.shipping,phone:''}}}))).status).toBe(400);});
 
 it('support notification has a clickable verified conversation link and rejects foreign destinations',async()=>{mocks.mail.mockResolvedValue({ok:true,provider:'test'});const payload={action:'support_handoff',channel:'facebook',conversationId:'facebook:123:456',id:'event',reason:'Test',transcript:'Sintetička poruka',conversationLink:'https://business.facebook.com/latest/inbox/all/?asset_id=123&selected_item_id=789'};expect((await(await POST(request(payload))).json()).ok).toBe(true);expect(mocks.mail.mock.calls.at(-1)[0].html).toContain('selected_item_id=789');expect(mocks.mail.mock.calls.at(-1)[0].html).toContain('Otvori tačnu prepisku u SPC panelu');expect((await POST(request({...payload,conversationLink:'https://evil.test/latest/inbox/all/'}))).status).toBe(400);});
+
+it('support fallback identifies the buyer and exact protected panel without inventing a Meta thread',async()=>{
+ mocks.mail.mockResolvedValue({ok:true,provider:'test'});
+ const payload={action:'support_handoff',channel:'facebook',conversationId:'facebook:123:456',id:'fallback',reason:'Test',transcript:'Poruka',customerName:'Buyer <script>',inboxUrl:'https://business.facebook.com/latest/inbox/all/?asset_id=123&mailbox_id=123'};
+ expect((await POST(request(payload))).status).toBe(200);
+ const mail=mocks.mail.mock.calls.at(-1)[0];
+ expect(mail.html).toContain('?conversation=facebook%3A123%3A456');expect(mail.text).toContain('U pretrazi inboxa unesite: Buyer <script>');
+ expect(mail.html).toContain('Buyer &lt;script&gt;');expect(mail.html).not.toContain('<script>');expect(mail.html).not.toContain('selected_item_id');expect(mail.html).toContain('pristupni ključ operatera');
+ expect((await POST(request({...payload,inboxUrl:payload.inboxUrl+'&selected_item_id=456'}))).status).toBe(400);
+ expect((await POST(request({...payload,inboxUrl:'https://evil.test/'}))).status).toBe(400);
+});

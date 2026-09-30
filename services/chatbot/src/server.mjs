@@ -4,6 +4,7 @@ import { equal, verifyMeta, parseEvents } from './security.mjs';
 import {parseComments} from './comments.mjs';
 import {completeOperatorQuote} from './operator-order.mjs';
 import {auditWindow,conversationAuditPage} from './conversation-audit.mjs';
+import {verifiedConversationLink} from './inbox-link.mjs';
 
 export async function createHttpServer({store,worker,emailWorker,commentWorker,accounts,adminToken,appSecret,verifyToken}) {
 const page=await readFile(new URL('../public/index.html',import.meta.url));
@@ -67,6 +68,16 @@ const server=http.createServer(async(req,res)=>{
     }
     if(req.method==='POST'&&url.pathname==='/admin/action'){
       const body=JSON.parse(raw);if(typeof body.id!=='string'||body.id.length>200)return reply(400,{error:'Invalid conversation'});
+      if(body.action==='set_inbox_link'){
+        let saved=false;
+        await store.withConversation(body.id,async(row,state,c)=>{
+          if(!row||row.channel!=='facebook')return;
+          const link=verifiedConversationLink(body.link,row.account);if(!link)return;
+          delete state.inboxLink;state.verifiedInboxLink=link;
+          await store.save(c,row.id,state);saved=true;
+        });
+        return reply(saved?200:400,{ok:saved});
+      }
       if(body.action==='complete_quote')return reply(200,await completeOperatorQuote({id:body.id,quoteToken:body.quoteToken,secret:process.env.SOCIAL_INTEGRATION_SECRET,store,spc:worker.spc}));
       if(body.action==='pause')await store.pause(body.id,'Ručna pauza');
       else if(body.action==='resume')await store.withConversation(body.id,async(_row,state,c)=>{

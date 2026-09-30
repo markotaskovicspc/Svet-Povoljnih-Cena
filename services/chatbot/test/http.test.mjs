@@ -2,6 +2,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import {createHttpServer} from '../src/server.mjs';
+test('only an authenticated operator can save a verified link for the matching Facebook page',async()=>{
+ const state={inboxLink:'legacy'};let saves=0;
+ const store={withConversation:async(id,fn)=>fn(id==='facebook:123:456'?{id,channel:'facebook',account:'123'}:null,state,{}),save:async()=>{saves++;}};
+ const server=await createHttpServer({store,worker:{},accounts:[],adminToken:'operator'});
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));const base=`http://127.0.0.1:${server.address().port}`;
+ const link='https://business.facebook.com/latest/inbox/all/?asset_id=123&mailbox_id=123&selected_item_id=789&thread_type=FB_MESSAGE';
+ const post=(value,token='operator',id='facebook:123:456')=>fetch(base+'/admin/action',{method:'POST',headers:{authorization:`Bearer ${token}`},body:JSON.stringify({id,action:'set_inbox_link',link:value})});
+ try{
+  assert.equal((await post(link,'wrong')).status,401);
+  assert.equal((await post(link.replace('asset_id=123','asset_id=999'))).status,400);
+  assert.equal((await post(link,'operator','missing')).status,400);assert.equal(saves,0);
+  assert.equal((await post(link)).status,200);assert.equal(saves,1);assert.equal(state.verifiedInboxLink,link);assert.equal(state.inboxLink,undefined);
+ }finally{await new Promise(r=>server.close(r));}
+});
 test('unconfigured Meta connection rejects verification and events while health remains available',async()=>{
   const server=await createHttpServer({store:{pool:{query:async()=>({rows:[]})}},worker:{enabled:false},accounts:[],adminToken:'operator',verifyToken:'verify'});
   await new Promise(r=>server.listen(0,'127.0.0.1',r));const base=`http://127.0.0.1:${server.address().port}`;
