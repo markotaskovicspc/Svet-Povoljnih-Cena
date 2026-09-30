@@ -28,3 +28,13 @@ test('resolving just the price reuses earlier contacts and selection, checks car
  }});
  assert(result.ok,result.message);assert.equal(quotes,1);assert.equal(checks,1);assert.deepEqual(result.customer.shipping,input.shipping);
 });
+test('only supplied delivery notes reach quote, never invented entrance or apartment',async()=>{
+ const correction='Jedan LOFT po 1999 din. Ulaz C stan br 8.';let quotes=0;
+ for(const notes of ['Ulaz C stan br 8','Ulaz D stan br 9']){
+  const result=await prepareStaffOrder({event,state:{history:[...history,{role:'user',content:correction}],orders:[]},model:'test',extractFn:async()=>({...plan,priceConflict:null,deliveryNotes:notes,unitPrices:[{sku:'210026',price:1999,evidence:correction}]}),cartCheckFn:async()=>({ok:true}),spc:async p=>{
+   if(p.action==='search')return {ok:true,items:[{sku:'210026',name:'LOFT',price:1999,available:true}]};assert.equal(p.action,'quote');assert.equal(p.input.notes,'Ulaz C stan br 8');assert.equal(p.input.shipping.houseNumber,'83');quotes++;return {ok:true,totals:{total:2298}};
+  }});
+  assert.equal(result.ok,notes==='Ulaz C stan br 8');
+ }
+ assert.equal(quotes,1);
+});

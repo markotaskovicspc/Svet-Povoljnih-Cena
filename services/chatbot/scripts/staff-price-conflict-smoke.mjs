@@ -10,10 +10,11 @@ for(const resolved of [false,true]){
  const result=await prepareStaffOrder({event,state,model,onPlan:plan=>{
   assert(plan.input,'Known choice and contacts must survive price ambiguity');assert.deepEqual(plan.input.lines,[{sku:'210026',qty:1}]);assert.equal(plan.input.guestEmail,'test@example.com');assert.equal(plan.input.shipping.city,'Batajnica');
   assert.equal(Boolean(plan.priceConflict),!resolved);
+  assert.equal(plan.input.shipping.street,'Test ulica');assert.equal(plan.input.shipping.houseNumber,'83');assert.match(plan.deliveryNotes??'',/ulaz C.*stan br 8/);
   console.log(JSON.stringify({case:resolved?'resolved':'conflict',input:plan.input,priceConflict:plan.priceConflict,unitPrices:plan.unitPrices}));
  },spc:async p=>{
   if(p.action==='search')return {ok:true,items:[{sku:'210026',name:'Kompjuter sto LOFT – 80x40',price:1999,available:true}]};
-  assert(resolved,'Must not quote unresolved price');assert.equal(p.action,'quote','No writes');quotes++;return {ok:true,quoteToken:'synthetic',totals:{total:2298},input:p.input};
+  assert(resolved,'Must not quote unresolved price');assert.equal(p.action,'quote','No writes');assert.match(p.input.notes,/ulaz C.*stan br 8/);quotes++;return {ok:true,quoteToken:'synthetic',totals:{total:2298},input:p.input};
  }});
  assert.equal(result.ok,resolved,result.message);assert.equal(quotes,resolved?1:0);
  if(!resolved){assert.match(result.message,/1\.999 din/);assert.match(result.message,/1\.990 din/);}

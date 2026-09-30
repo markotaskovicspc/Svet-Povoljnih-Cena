@@ -48,6 +48,14 @@ describe('SPC social order bridge',()=>{
     const r=await POST(request({action:'create_order',channel:'instagram',conversationId:'ig:wrong',quoteToken:quote.quoteToken}));expect(r.status).toBe(403);expect(mocks.create).not.toHaveBeenCalled();
     await POST(request({action:'create_order',channel:'facebook',conversationId:'fb:123:456',quoteToken:quote.quoteToken}));expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({guestEmail:'buyer@example.com'}),null,null,{expectedTotal:2000,allowGuestWithoutEmail:true,customerReplyDraftOnly:false});
   });
+  it('keeps delivery instructions separate from street/house number through signed quote and creation',async()=>{
+    const identity={channel:'facebook',conversationId:'fb:notes'};
+    const q=await(await POST(request({action:'quote',...identity,input:{...input,notes:'ulaz C stan br 8'}}))).json();
+    expect(q.ok).toBe(true);expect(q.input.shipping).toMatchObject({street:'Test ulica',houseNumber:'12'});
+    expect(q.input.notes).toBe('[FACEBOOK] fb:notes\nNapomena kupca: ulaz C stan br 8');
+    mocks.create.mockClear();await POST(request({action:'create_order',...identity,quoteToken:q.quoteToken}));
+    expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({notes:q.input.notes}),null,null,expect.objectContaining({expectedTotal:2000}));
+  });
 });
 
 describe('social cancellation and current availability',()=>{

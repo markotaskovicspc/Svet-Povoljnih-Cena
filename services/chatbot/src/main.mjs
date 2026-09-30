@@ -1,3 +1,4 @@
+import {DEFAULT_MODEL} from './model-settings.mjs';
 import { Store } from './store.mjs';
 import { Worker } from './worker.mjs';
 import { createSpcClient } from './spc.mjs';
@@ -17,12 +18,12 @@ if(process.env.BOT_ENABLED==='true'&&!accounts.length)throw new Error('Meta acco
 const store=new Store(process.env.DATABASE_URL,process.env.CHAT_DATA_KEY);
 await store.init();
 accounts=accounts.map(a=>({...a,appId:process.env.META_APP_ID??a.appId}));
-const commentWorker=new CommentWorker({store,spc:createSpcClient(process.env.SPC_BASE_URL,process.env.SOCIAL_INTEGRATION_SECRET),accounts,model:process.env.OPENAI_MODEL??'gpt-5.4-mini',graphVersion:process.env.META_GRAPH_VERSION,enabled:process.env.COMMENTS_ENABLED==='true'&&process.env.BOT_ENABLED==='true'});
+const commentWorker=new CommentWorker({store,spc:createSpcClient(process.env.SPC_BASE_URL,process.env.SOCIAL_INTEGRATION_SECRET),accounts,model:process.env.OPENAI_MODEL??DEFAULT_MODEL,graphVersion:process.env.META_GRAPH_VERSION,enabled:process.env.COMMENTS_ENABLED==='true'&&process.env.BOT_ENABLED==='true'});
 await commentWorker.init();
-const worker=new Worker({store,spc:createSpcClient(process.env.SPC_BASE_URL,process.env.SOCIAL_INTEGRATION_SECRET),accounts,model:process.env.OPENAI_MODEL??'gpt-5.4-mini',graphVersion:process.env.META_GRAPH_VERSION,enabled:process.env.BOT_ENABLED==='true',testSenders:(process.env.TEST_SENDER_IDS??'').split(',').filter(Boolean)});
+const worker=new Worker({store,spc:createSpcClient(process.env.SPC_BASE_URL,process.env.SOCIAL_INTEGRATION_SECRET),accounts,model:process.env.OPENAI_MODEL??DEFAULT_MODEL,graphVersion:process.env.META_GRAPH_VERSION,enabled:process.env.BOT_ENABLED==='true',testSenders:(process.env.TEST_SENDER_IDS??'').split(',').filter(Boolean)});
 await worker.start();
 await commentWorker.start();
-const emailWorker=new EmailDraftWorker({store,spc:createSpcClient(process.env.SPC_BASE_URL,process.env.SOCIAL_INTEGRATION_SECRET),model:process.env.OPENAI_MODEL??'gpt-5.4-mini'});
+const emailWorker=new EmailDraftWorker({store,spc:createSpcClient(process.env.SPC_BASE_URL,process.env.SOCIAL_INTEGRATION_SECRET),model:process.env.OPENAI_MODEL??DEFAULT_MODEL});
 await emailWorker.start().catch(()=>{emailWorker.status='startup_error';console.error('email.startup_failed');});
 const server=await createHttpServer({store,worker,emailWorker,commentWorker,accounts,adminToken:process.env.CHAT_ADMIN_TOKEN,appSecret:process.env.META_APP_SECRET,verifyToken:process.env.META_VERIFY_TOKEN});
 server.listen(Number(process.env.PORT??8080),'0.0.0.0',()=>console.log('SPC chatbot listening'));

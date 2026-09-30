@@ -96,7 +96,7 @@ Otvorite tačnu prepisku: ${body.conversationLink}`:""}\nPrepiska u SPC panelu (
       // Auth identity and discounts cannot be supplied by the model.
       const input = createOrderSchema.parse({ ...body.input, checkoutSessionId: undefined, guestLoyalty: Boolean(loyalty), useSavedCard: false,
         analytics: undefined, voucherCode: undefined,
-        notes: `[${body.channel.toUpperCase()}] ${body.conversationId}`,
+        notes: `[${body.channel.toUpperCase()}] ${body.conversationId}${body.input.notes?.trim() ? `\nNapomena kupca: ${body.input.notes.trim().slice(0,250)}` : ""}`,
       });
       if (!["POUZECE_GOTOVINA", "UPLATA_NA_RACUN"].includes(input.paymentMethod)) {
         return NextResponse.json({ ok: false, error: { code: "CHAT_PAYMENT_UNSUPPORTED" } });

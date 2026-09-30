@@ -1,3 +1,4 @@
+import {modelSettings} from './model-settings.mjs';
 import {Agent,run} from '@openai/agents';
 import {z} from 'zod';
 
@@ -7,7 +8,7 @@ export async function classifyCancellation({text,history=[],pending,model}) {
   // A bare "yes" to a later photo/product question must never revive an old
   // cancellation. Only the server's last cancellation prompt can be confirmed.
   if(!lastReply.startsWith(`Da li potvrđujete otkazivanje cele porudžbine ${pending.number}?`))return 'other';
-  const agent=new Agent({name:'Potvrda otkazivanja',model,outputType:decision,instructions:`Razvrstaj najnoviju poruku kupca posle predloga za OTKAZIVANJE postojeće porudžbine. Ovo nije potvrda kupovine.
+  const agent=new Agent({name:'Potvrda otkazivanja',model,modelSettings:modelSettings(model),outputType:decision,instructions:`Razvrstaj najnoviju poruku kupca posle predloga za OTKAZIVANJE postojeće porudžbine. Ovo nije potvrda kupovine.
 confirm: jasan bezuslovan pristanak da se otkaže baš prikazana cela porudžbina. Razumi prirodan jezik, latinicu, ćirilicu, žargon, tipografske greške. Kratko da/može/👍 važi samo kao odgovor na poslednje pitanje koje traži potvrdu otkazivanja.
 decline: ne otkazuj, ipak zadrži, odustajem od otkazivanja, pošaljite mi ipak porudžbinu.
 other: pitanje, druga kupovina, drugi broj porudžbine, otkazivanje samo dela, promena, uslov ili traženje kolege. Npr da ali samo krevet; otkaži ako još nije krenulo; a peglu; može slika. To nikad nije confirm.

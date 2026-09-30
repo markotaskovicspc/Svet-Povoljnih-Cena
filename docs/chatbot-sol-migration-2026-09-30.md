@@ -1,0 +1,13 @@
+# SPC model upgrade
+
+User requested a cost-conscious upgrade from GPT-5.4 Mini, suggested Terra/Sol, and explicitly instructed deployment after the change, including the prepared staff-failure email behavior (`a505bc85`). Additional first-purchase discount change `ae580475` remains excluded.
+
+Selected `gpt-6.1-sol`, verified in the existing project's `/v1/models` list and by real Responses/Agents SDK calls with synthetic fixtures. Official model pages: https://developers.openai.com/api/docs/models/gpt-6.1-sol and https://developers.openai.com/api/docs/models/gpt-5.6-terra . Standard short-context rates on inspection: Sol input $2/M, cached input $0.10/M, output $10/M; Terra input $2/M, output $12/M. This is not cheaper than GPT-5.4 Mini ($0.75/M input, $4.50/M output); total cost also depends on reasoning/tool turns.
+
+Shared runtime model now defaults to Sol for sales, comments, email drafts and their classification/vision helpers. Explicit `low` reasoning avoids the new model's slower default `medium`; initial default-effort tests hit existing deadlines. Endpoints remain Responses, structured outputs and sequential tool calls. Existing API credentials and message/order permissions are unchanged. A rollback to the prior model retains its old staff effort.
+
+The model migration fixture exposed a real address-contract defect: entrance/apartment details were put into street/house number. Staff extraction now keeps those as a separate, verbatim `deliveryNotes` citation, validated against the transcript and passed as signed ERP order notes. The ERP preserves the server channel marker and appends bounded customer notes. House number validation is unchanged. This fixes staff-command delivery notes, not every other channel's address extraction.
+
+Validation: 131 chatbot tests, 13 ERP social bridge tests, 12 checkout isolation checks passed. Real-model synthetic tests cover price conflict/resolution with retained address notes, no email/postcode, ambiguous product selection, four loyalty chairs with recorded membership, and a generated collage whose top product must be confirmed before quote. No real customer transcript, message or order was used. Local full build reaches the known Windows/POSIX production script incompatibility; the production Linux build must be checked at deployment.
+
+Deployment order: publish main; deploy ERP notes support on Vercel; set Railway `OPENAI_MODEL=gpt-6.1-sol` without triggering an intermediate deployment; upload matching chatbot runtime including staff email alerts. Verify deployment success and health. Do not replay customer commands or unpause staff-owned conversations during deployment.
