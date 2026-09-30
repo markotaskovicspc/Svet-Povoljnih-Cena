@@ -104,6 +104,18 @@ describe("reclamation shipment transaction boundary", () => {
     );
   });
 
+  it("requires explicit picking collection before a ready replacement can be shipped", async () => {
+    const reclamation = await mocks.findReclamation();
+    mocks.findReclamation.mockResolvedValue({ ...reclamation, pickupBatchLines: [] });
+    await expect(createReclamationShipment({
+      reclamationId: "reclamation-1", purpose: "RECLAMATION_REPLACEMENT",
+    })).rejects.toThrow("učitana u picking nalog");
+    await expect(createReclamationShipment({
+      reclamationId: "reclamation-1", purpose: "RECLAMATION_REPLACEMENT", fromPickupBatch: true,
+    })).rejects.toThrow("više nije povezana");
+    expect(mocks.createShipmentForOrder).not.toHaveBeenCalled();
+  });
+
   it("creates only a zero-COD pickup for a refund without requiring a replacement or issuing stock", async () => {
     const reclamation = await mocks.findReclamation();
     mocks.findReclamation.mockResolvedValue({

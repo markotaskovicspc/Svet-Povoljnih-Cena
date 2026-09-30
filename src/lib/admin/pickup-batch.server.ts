@@ -65,6 +65,8 @@ import {
 } from "@/lib/payments/fulfillment-readiness";
 import { loadOrderForEmail, sendPartialDelivery } from "@/lib/email";
 
+import { readReclamationPackages } from "@/lib/admin/reclamation-packages";
+
 type Transaction = Prisma.TransactionClient;
 
 const TRANSACTION_OPTIONS = {
@@ -394,6 +396,7 @@ export async function loadEligibleOrders(
   batchId: string,
   actorId: string,
   onlyOrderIds?: readonly string[],
+  options: { includeReplacements?: boolean } = {},
 ) {
   return db.$transaction(async (tx) => {
     if (!onlyOrderIds) await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('pickup-work-collection'))::text`;
@@ -413,9 +416,13 @@ export async function loadEligibleOrders(
     const provider = normalizeProvider(batch.provider) ??
       (await getSelectedSmallParcelProvider());
 
-    // Previously queued replacements/reships may live in their own old draft.
-    // Move only unsent special work; existing ordinary picking stays untouched.
+    // Previously queued reships may live in their own old draft.
+    // Replacements already on a picking list stay in that batch.
     if (!onlyOrderIds) await collectPendingPickupWork(tx, batch.id, provider);
+
+    const replacements = onlyOrderIds || options.includeReplacements === false
+      ? { replacementCount: 0, replacementLineCount: 0 }
+      : await loadReadyReclamationReplacements(tx, batch, provider, actorId);
 
     const dc = await findDcWarehouse(tx);
     if (!dc) {
@@ -509,6 +516,7 @@ export async function loadEligibleOrders(
     const candidateOrderIds = candidates.map((row) => row.id);
     if (!candidateOrderIds.length) {
       return {
+        ...replacements,
         orderCount: 0,
         lineCount: 0,
         candidateCount: 0,
@@ -550,6 +558,7 @@ export async function loadEligibleOrders(
     );
     if (!orderIds.length) {
       return {
+        ...replacements,
         orderCount: 0,
         lineCount: 0,
         candidateCount: candidateOrderIds.length,
@@ -663,6 +672,7 @@ export async function loadEligibleOrders(
     }
     if (!loadedOrderIds.length) {
       return {
+        ...replacements,
         orderCount: 0,
         lineCount: 0,
         candidateCount: candidateOrderIds.length,
@@ -704,6 +714,7 @@ export async function loadEligibleOrders(
       })),
     });
     return {
+      ...replacements,
       orderCount: loadedOrderIds.length,
       lineCount: packages.length,
       candidateCount: candidateOrderIds.length,
@@ -720,8 +731,8 @@ export async function loadEligibleOrders(
 /** Collect old, unsent special work into the warehouse's selected batch. */
 async function collectPendingPickupWork(tx: Transaction, batchId: string, provider: SmallParcelProvider) {
   const specialWork = {
+    purpose: "ORDER_DELIVERY" as const,
     OR: [
-      { purpose: "RECLAMATION_REPLACEMENT" as const },
       { lineGroupKey: { startsWith: "reshipment:" } },
       { deferredFromLineId: { not: null } },
     ],
@@ -744,228 +755,66 @@ async function collectPendingPickupWork(tx: Transaction, batchId: string, provid
   }
 }
 
-export async function queueReclamationReplacement(
-  reclamationId: string,
+/** Only called by the warehouse's explicit “Učitaj porudžbine” action. */
+async function loadReadyReclamationReplacements(
+  tx: Transaction,
+  batch: { id: string; number: string },
+  provider: SmallParcelProvider,
   actorId: string,
 ) {
-  const reclamation = await db.reclamation.findUnique({
-    where: { id: reclamationId },
-    select: {
-      id: true,
-      number: true,
-      orderId: true,
-      orderItemId: true,
-      quantity: true,
-      replacementQty: true,
-      decision: true,
-      resolution: true,
-      resolutionNote: true,
-      warehouseId: true,
-      warehouseStatus: true,
-      orderItem: {
-        select: {
-          id: true,
-          sku: true,
-          name: true,
-          qty: true,
-          withAssembly: true,
-          product: {
-            select: {
-              name: true,
-              supplier: { select: { name: true } },
-              collection: { select: { name: true } },
-              barcode: true,
-              colorPrimary: true,
-              colorSecondary: true,
-              courierUnitsPerBox: true,
-              packQty: true,
-              packWidthCm: true,
-              packDepthCm: true,
-              packHeightCm: true,
-              packGrossWeightKg: true,
-              unitPackWidthCm: true,
-              unitPackDepthCm: true,
-              unitPackHeightCm: true,
-              widthCm: true,
-              depthCm: true,
-              heightCm: true,
-              grossWeightKg: true,
-              weightKg: true,
-            },
-          },
-        },
-      },
-      shipments: {
-        where: {
-          purpose: "RECLAMATION_REPLACEMENT",
-          status: { not: "FAILED" },
-        },
-        select: { id: true },
-        take: 1,
-      },
-      pickupBatchLines: {
-        where: { purpose: "RECLAMATION_REPLACEMENT" },
-        select: { batchId: true },
-        take: 1,
-      },
-    },
-  });
-  if (!reclamation) throw new Error("Reklamacija nije pronađena.");
-  if (
-    reclamation.decision !== "PRIHVACENA" ||
-    !["ZAMENA_ARTIKLA", "ZAMENA_DELA"].includes(reclamation.resolution ?? "") ||
-    !reclamation.warehouseId
-  ) {
-    return { queued: false as const, reason: "Čeka prihvaćenu odluku, zamenu i izabrani magacin." };
-  }
-  if (reclamation.shipments.length) {
-    return { queued: false as const, reason: "Kurirski nalog za zamenu već postoji." };
-  }
-  if (reclamation.pickupBatchLines[0]) {
-    return {
-      queued: true as const,
-      alreadyQueued: true as const,
-      batchId: reclamation.pickupBatchLines[0].batchId,
-      provider: null,
-    };
-  }
-  if (!reclamation.orderItem) {
-    return { queued: false as const, reason: "Reklamacija nema vezanu stavku porudžbine." };
-  }
-
-  const isPartReplacement = reclamation.resolution === "ZAMENA_DELA";
-  const replacementQty =
-    reclamation.replacementQty ??
-    (isPartReplacement ? 0 : reclamation.quantity);
-  if (isPartReplacement && !reclamation.resolutionNote?.trim()) {
-    return {
-      queued: false as const,
-      reason: "Upišite tačan naziv dela koji magacin treba da pošalje.",
-    };
-  }
-  if (!isPartReplacement && replacementQty < 1) {
-    return {
-      queued: false as const,
-      reason: "Za zamenu artikla unesite najmanje 1 ceo artikal.",
-    };
-  }
-
-  const sourceItem = {
-    id: reclamation.orderItem.id,
-    sku: reclamation.orderItem.sku,
-    unitPriceSale: 0,
-    name: isPartReplacement
-      ? reclamation.resolutionNote!.trim()
-      : reclamation.orderItem.name,
-    qty: replacementQty,
-    withAssembly: reclamation.orderItem.withAssembly,
-    product: reclamation.orderItem.product,
-  };
-  const routing = resolveCourierProvider({
-    shippingMethod: "KURIR",
-    items: derivePhysicalPackages([sourceItem], { consolidatePompea: !isPartReplacement }).map(physicalPackageRouteItem),
-  });
-  if (routing.kind !== "single") {
-    return {
-      queued: false as const,
-      reason: "Zamena nema kompletne dimenzije paketa za automatski izbor kurira.",
-    };
-  }
-  const provider = routing.provider;
-  const packages = derivePhysicalPackages([sourceItem], { consolidatePompea: !isPartReplacement }).map((pkg) =>
-    isPartReplacement
-      ? {
-          ...pkg,
-          // A spare part must use its own measured parcel, never the dimensions
-          // of the complete catalogue article that originated the claim.
-          weightKg: null,
-          widthCm: null,
-          depthCm: null,
-          heightCm: null,
-        }
-      : pkg,
-  );
-  if (
-    provider === "MYGLS" &&
-    packages.some((pkg) => hasKnownMyGlsHardLimitViolation(pkg))
-  ) {
-    return {
-      queued: false as const,
-      reason: "Paket zamene prelazi MyGLS ograničenja i zahteva ručnu obradu.",
-    };
-  }
-
-  const existingDraftBatch = await db.pickupBatch.findFirst({
+  const candidates = await tx.reclamation.findMany({
     where: {
-      provider,
-      status: "DRAFT",
-      labelsCreationStartedAt: null,
-      labelsCreatedAt: null,
+      decision: "PRIHVACENA",
+      resolution: { in: ["ZAMENA_ARTIKLA", "ZAMENA_DELA"] },
+      warehouseStatus: "READY",
+      replacementReadyAt: { not: null },
+      warehouse: { active: true },
+      pickupBatchLines: { none: { purpose: "RECLAMATION_REPLACEMENT" } },
+      shipments: { none: { purpose: "RECLAMATION_REPLACEMENT", status: { not: "FAILED" } } },
     },
-    orderBy: { createdAt: "desc" },
-    select: { id: true, number: true },
+    orderBy: { id: "asc" },
   });
-  const batch = existingDraftBatch ?? (await createPickupBatch(provider));
-  const lineGroupKey = `reclamation:${reclamation.id}`;
-  const result = await db.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`reclamation-picking:${reclamation.id}`}))::text AS "lock"`;
-    await lockBatch(tx, batch.id);
-    assertEditableBatch(await tx.pickupBatch.findUnique({ where: { id: batch.id } }));
-    const existing = await tx.pickupBatchLine.findFirst({
-      where: { reclamationId: reclamation.id, purpose: "RECLAMATION_REPLACEMENT" },
-      select: { batchId: true },
-    });
-    if (existing) return { batchId: existing.batchId, lineCount: 0 };
+  let replacementCount = 0;
+  let replacementLineCount = 0;
+  for (const reclamation of candidates) {
+    // Coordinate with warehouse edits; Serializable isolation rejects stale changes.
+    await tx.$queryRaw`SELECT "id" FROM "Reclamation" WHERE "id" = ${reclamation.id} FOR UPDATE`;
+    if (!reclamation.orderItemId) continue;
+    const isPart = reclamation.resolution === "ZAMENA_DELA";
+    const quantity = reclamation.replacementQty ?? (isPart ? 0 : reclamation.quantity);
+    if ((isPart && (!reclamation.resolutionNote?.trim() || quantity !== 0)) || (!isPart && quantity < 1)) continue;
+    const packages = readReclamationPackages(reclamation.replacementPackages).map((pkg, i) => ({
+      ...pkg, packageNo: i + 1, orderItemId: reclamation.orderItemId,
+    }));
+    if (!packages.length) continue;
+    const routing = resolveCourierProvider({ shippingMethod: "KURIR", items: packages.map(physicalPackageRouteItem) });
+    if (routing.kind !== "single" || routing.provider !== provider) continue;
     await tx.pickupBatchLine.createMany({
       data: packages.map((pkg) => ({
+        ...pkg,
         batchId: batch.id,
         orderId: reclamation.orderId,
-        orderItemId: pkg.orderItemId,
         reclamationId: reclamation.id,
         purpose: "RECLAMATION_REPLACEMENT",
-        lineGroupKey,
-        quantity: replacementQty,
-        packedQuantity: pkg.packedQuantity ?? 1,
-        packedItems: pkg.packedItems,
-        packageNo: pkg.packageNo,
-        weightKg: pkg.weightKg,
-        widthCm: pkg.widthCm,
-        depthCm: pkg.depthCm,
-        heightCm: pkg.heightCm,
+        lineGroupKey: `reclamation:${reclamation.id}`,
+        quantity,
+        warehouseReadyAt: reclamation.replacementReadyAt,
+        warehouseReadyById: reclamation.replacementReadyById,
       })),
-    });
-    await tx.reclamation.update({
-      where: { id: reclamation.id },
-      data: {
-        warehouseStatus:
-          reclamation.warehouseStatus === "READY"
-            ? "READY"
-            : "REQUESTED",
-        warehouseRequestedAt: new Date(),
-      },
     });
     await tx.reclamationStatusEvent.create({
       data: {
-        reclamationId: reclamation.id,
-        status: "U_OBRADI",
-        actorId,
-        note: isPartReplacement
+        reclamationId: reclamation.id, status: "U_OBRADI", actorId,
+        note: isPart
           ? `Deo „${reclamation.resolutionNote!.trim()}” dodat je u ${providerLabel(provider)} picking nalog ${batch.number}.`
           : `Zamena je dodata u ${providerLabel(provider)} picking nalog ${batch.number}.`,
       },
     });
-    await tx.reclamation.updateMany({
-      where: { id: reclamation.id, status: "PRIMLJENO" },
-      data: { status: "U_OBRADI" },
-    });
-    return { batchId: batch.id, lineCount: packages.length };
-  }, TRANSACTION_OPTIONS);
-  return {
-    queued: true as const,
-    alreadyQueued: result.lineCount === 0,
-    batchId: result.batchId,
-    provider,
-  };
+    await tx.reclamation.updateMany({ where: { id: reclamation.id, status: "PRIMLJENO" }, data: { status: "U_OBRADI" } });
+    replacementCount += 1;
+    replacementLineCount += packages.length;
+  }
+  return { replacementCount, replacementLineCount };
 }
 
 export async function removeOrderFromPickupBatch(
@@ -1071,6 +920,10 @@ export async function removePickupGroupFromBatch(
       await restoreOrderIfNoLongerLoaded(tx, orderId, actorId, batch.number);
     }
     for (const reclamation of reclamations) {
+      await tx.reclamation.update({
+        where: { id: reclamation.id },
+        data: { warehouseStatus: "PREPARING", replacementReadyAt: null, replacementReadyById: null },
+      });
       await tx.reclamationStatusEvent.create({
         data: {
           reclamationId: reclamation.id,

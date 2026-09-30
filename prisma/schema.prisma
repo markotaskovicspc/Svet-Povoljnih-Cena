@@ -3284,6 +3284,10 @@ model Reclamation {
   warehouseRequestedAt      DateTime?
   warehouseId               String?
   warehouseStatus           ReclamationWarehouseStatus @default(NOT_REQUESTED)
+  /// Measured replacement parcels, saved before explicit picking collection.
+  replacementPackages       Json?
+  replacementReadyAt        DateTime?
+  replacementReadyById      String?
   supplierNotifiedAt        DateTime?
   supplierNotificationError String?                    @db.Text
   userId                    String?
