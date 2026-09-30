@@ -7,6 +7,8 @@ import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import type { Banner } from "@/types";
 import { cn } from "@/lib/utils";
+import { useCommerceTerms } from "@/components/pricing/commerce-terms-provider";
+import { isSeptemberDeliveryImage } from "@/lib/commerce-terms";
 
 interface EditorialBannerProps {
   banner: Banner;
@@ -17,6 +19,8 @@ export function EditorialBanner({
   banner,
   compact = false,
 }: EditorialBannerProps) {
+  const terms = useCommerceTerms();
+  if (terms.id === "2026-10" && isSeptemberDeliveryImage(banner.imageDesktop.url)) return null;
   return (
     <section
       className={cn(

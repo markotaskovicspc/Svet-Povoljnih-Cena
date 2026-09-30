@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import type { ContentPageTemplate, Prisma } from "@prisma/client";
 import { db, hasDatabaseConnection } from "@/lib/db";
+import { scheduledDeliveryTermsMarkdown } from "@/lib/commerce-terms";
 import { defaultContactPageWidgetData } from "./contact-page";
 import {
   getSystemContentPage,
@@ -113,6 +114,9 @@ export const getPublishedContentPage = cache(async (slug: string) => {
         template: page.template,
         updatedAt: createdAt,
         ...publishedRevision,
+        bodyMarkdown: slug === "uslovi-isporuke"
+          ? scheduledDeliveryTermsMarkdown(publishedRevision.bodyMarkdown)
+          : publishedRevision.bodyMarkdown,
       } satisfies CmsPageSnapshot;
     }
     if (page) return null;

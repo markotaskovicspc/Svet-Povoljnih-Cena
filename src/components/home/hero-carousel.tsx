@@ -17,6 +17,9 @@ import {
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Banner } from "@/types";
 import { cn } from "@/lib/utils";
+import { useCommerceTerms } from "@/components/pricing/commerce-terms-provider";
+import { isLegacyFirstPurchaseImage } from "@/lib/commerce-terms";
+import { FirstPurchaseBanner } from "./first-purchase-banner";
 
 const AUTOPLAY_MS = 6000;
 const SWIPE_THRESHOLD = 48;
@@ -27,6 +30,7 @@ interface HeroCarouselProps {
 }
 
 export function HeroCarousel({ banners }: HeroCarouselProps) {
+  const terms = useCommerceTerms();
   const reduce = useReducedMotion();
   const [index, setIndex] = useState(0);
   const [direction, setDirection] = useState<1 | -1>(1);
@@ -61,6 +65,7 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
 
   if (!count) return null;
   const slide = banners[index];
+  const scheduledFirstPurchase = terms.id === "2026-10" && isLegacyFirstPurchaseImage(slide.imageDesktop.url);
 
   return (
     <section
@@ -88,7 +93,7 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
             dragMomentum={false}
             onDragEnd={onDragEnd}
           >
-            <Image
+            {scheduledFirstPurchase ? <FirstPurchaseBanner percent={terms.firstPurchasePct} /> : <><Image
               src={(slide.imageMobile ?? slide.imageDesktop).url}
               alt={(slide.imageMobile ?? slide.imageDesktop).alt ?? slide.title}
               fill
@@ -120,6 +125,7 @@ export function HeroCarousel({ banners }: HeroCarouselProps) {
                 transition={{ duration: 7, ease: "linear" }}
               />
             ) : null}
+            </>}
           </motion.div>
         </AnimatePresence>
 

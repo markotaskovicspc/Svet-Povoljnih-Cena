@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { commerceTermsAt, OCTOBER_TERMS_AT_MS, scheduledDeliveryPromoText } from "@/lib/commerce-terms";
+import { commerceTermsAt, OCTOBER_TERMS_AT_MS, scheduledDeliveryPromoText, scheduledDeliveryTermsMarkdown } from "@/lib/commerce-terms";
 import { calculatePublishedDeliveryTariff, freeCategoryOneThresholdRsd } from "@/lib/delivery-tariff";
 import { computeOrderPricing } from "@/lib/pricing/engine";
 import { calculateEditedWebOrderTotals } from "@/lib/admin/web-order-edit";
 import { computeTotals } from "@/components/checkout/order-summary";
 import { CommerceTermsProvider, useCommerceTerms } from "@/components/pricing/commerce-terms-provider";
+import { HeroCarousel } from "@/components/home/hero-carousel";
+import { EditorialBanner } from "@/components/home/editorial-banner";
 
 const before = new Date("2026-09-30T21:59:59.999Z");
 const after = new Date("2026-09-30T22:00:00.000Z");
@@ -67,5 +69,30 @@ describe("October terms at midnight in Serbia", () => {
     expect(scheduledDeliveryPromoText(oldPromo, before)).toBe(oldPromo);
     expect(scheduledDeliveryPromoText(oldPromo, after)).toBe("Besplatna dostava od 20.000 RSD za standardne pakete (I kategorija).");
     expect(scheduledDeliveryPromoText("Akcija na stolice", after)).toBe("Akcija na stolice");
+  });
+
+  it("replaces the old image advertising 15% and hides the September delivery image at the same boundary", () => {
+    const banner = { id: "old-first-purchase", title: " ", imageDesktop: { url: "/1787933740542-7b9a9155566c9637-desktop.webp" }, order: 1 };
+    const hero = (at: Date) => renderToStaticMarkup(<CommerceTermsProvider initialAt={at.getTime()}><HeroCarousel banners={[banner]} /></CommerceTermsProvider>);
+    expect(hero(before)).toContain(banner.imageDesktop.url.slice(1));
+    expect(hero(after)).not.toContain(banner.imageDesktop.url.slice(1));
+    expect(hero(after)).toContain("10");
+    expect(hero(after)).toContain("Popusta za nove kupce");
+    const delivery = { ...banner, id: "old-delivery", imageDesktop: { url: "/1788249570385-84e358deb7361629-desktop.webp" } };
+    const editorial = (at: Date) => renderToStaticMarkup(<CommerceTermsProvider initialAt={at.getTime()}><EditorialBanner banner={delivery} /></CommerceTermsProvider>);
+    expect(editorial(before)).toContain(delivery.imageDesktop.url.slice(1));
+    expect(editorial(after)).toBe("");
+  });
+
+  it("updates only the obsolete published delivery paragraph, retaining the rest of the CMS page", () => {
+    const prefix = "## Cena isporuke\n**";
+    const suffix = "**\n## Pri prijemu\nSačuvan sadržaj.";
+    const original = prefix + "Od 1. septembra 2026., dostava artikala I kategorije je besplatna kada njihov zbir iznosi 4.000 RSD ili više." + suffix;
+    const updated = scheduledDeliveryTermsMarkdown(original);
+    expect(updated).toContain("Od 1. oktobra 2026. u 00:00, po vremenu u Srbiji");
+    expect(updated.startsWith(prefix)).toBe(true);
+    expect(updated.endsWith(suffix)).toBe(true);
+    expect(scheduledDeliveryTermsMarkdown(updated)).toBe(updated);
+    expect(scheduledDeliveryTermsMarkdown("Budući tekst administratora.")).toBe("Budući tekst administratora.");
   });
 });
