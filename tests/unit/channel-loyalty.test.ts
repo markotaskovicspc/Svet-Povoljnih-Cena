@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 type Token = { token: string; identifier: string; expires: Date };
 type Membership = { email: string; consentVersion: string; consentAt: Date };
@@ -29,6 +29,15 @@ import {prepareChannelLoyalty,acceptChannelLoyalty,channelLoyalty,existingChanne
 import {LOYALTY_CONSENT_VERSION} from '@/lib/loyalty/shared';
 const secret='synthetic-loyalty-secret'.repeat(3),scope={channel:'facebook' as const,conversationId:'conversation-test',email:'buyer@example.com'};
 beforeEach(()=>{m.records.clear();m.members.clear();vi.useRealTimers();});
+afterEach(()=>vi.useRealTimers());
+it.each(['facebook','instagram','email'] as const)('stops promising a first-purchase discount for %s at the October boundary',channel=>{
+ vi.useFakeTimers();vi.setSystemTime(new Date('2026-09-30T21:59:59.999Z'));
+ expect(prepareChannelLoyalty({...scope,channel},secret).summary).toContain('dodatnih 15%');
+ vi.setSystemTime(new Date('2026-09-30T22:00:00Z'));
+ const summary=prepareChannelLoyalty({...scope,channel},secret).summary;
+ expect(summary).toContain('30%');
+ expect(summary).not.toMatch(/10%|15%|prvu kupovinu/);
+});
 it('reuses existing consent without enrolling, and rejects wrong scope, revocation and expiry',async()=>{
  expect(await existingChannelLoyalty(scope,secret)).toEqual({ok:true,active:false});expect(m.members.size).toBe(0);
  m.members.set(scope.email,{email:scope.email,consentVersion:LOYALTY_CONSENT_VERSION,consentAt:new Date()});

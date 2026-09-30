@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db } from "@/lib/db";
+import { commerceTermsAt } from "@/lib/commerce-terms";
 
 /**
  * The first-purchase benefit is consumed only after an issued SALE receipt.
@@ -10,6 +11,9 @@ export async function isFirstPurchaseDiscountEligible(
   userId: string | null | undefined,
   verifiedEmail?: string | null,
 ) {
+  // From October, only an authenticated customer account can earn this offer.
+  // A guest/channel loyalty email (even one matching an account) is not a login.
+  if (!userId && !commerceTermsAt().guestFirstPurchaseAllowed) return false;
   if (!userId && !verifiedEmail) return false;
 
   // Use one identity across guest and account purchases. This does not sign

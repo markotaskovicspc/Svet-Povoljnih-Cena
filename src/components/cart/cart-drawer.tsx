@@ -24,7 +24,7 @@ import { useCommerceTerms } from "@/components/pricing/commerce-terms-provider";
  * Mini-cart drawer (1F.2). Mounted globally; opens via `useCartUi`.
  */
 export function CartDrawer() {
-  const { firstPurchasePct } = useCommerceTerms();
+  const { firstPurchasePct, guestFirstPurchaseAllowed } = useCommerceTerms();
   const open = useCartUi((s) => s.drawerOpen);
   const setOpen = useCartUi((s) => s.setDrawer);
   const close = useCartUi((s) => s.closeDrawer);
@@ -34,7 +34,7 @@ export function CartDrawer() {
   const subtotal = lines.reduce((n, l) => n + l.unitPriceSale * l.qty, 0);
   const guestLoyalty = useGuestLoyalty();
   const loggedIn = useLoyaltyEligibility();
-  const firstPurchaseDiscount = !loggedIn && guestLoyalty.active && guestLoyalty.firstPurchase
+  const firstPurchaseDiscount = guestFirstPurchaseAllowed && !loggedIn && guestLoyalty.active && guestLoyalty.firstPurchase
     ? Math.round(subtotal * firstPurchasePct / 100) : 0;
   const savings = lines.reduce(
     (n, l) => n + (l.unitPriceFull - l.unitPriceSale) * l.qty,
