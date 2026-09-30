@@ -12,6 +12,7 @@ import {conversationLink} from './inbox-link.mjs';
 import {receiveProductImages,activeVisualContext} from './vision.mjs';
 import {receiveLoyalty} from './loyalty.mjs';
 import {isOrderCommandText,isStaffOrderCommand,prepareStaffOrder,executeStaffOrder} from './staff-order.mjs';
+import {mergeStaffHistory,STAFF_HISTORY_LIMIT} from './staff-history.mjs';
 
 export class Worker {
   constructor({store,spc,accounts,model,graphVersion,enabled=false,testSenders=[],answerFn=answer,intentFn=classifyOrderIntent,cartCheckFn=checkCart,cancellationIntentFn=classifyCancellation,reclamationIntentFn=classifyReclamation,visionFn=receiveProductImages,staffPrepareFn=prepareStaffOrder,historyFn=readMetaHistory}) {
@@ -310,11 +311,12 @@ export class Worker {
     if(state.staffOrder?.eventId!==event.id){
       const local=await this.store.history(c,row.id,event);
       const account=this.accounts.find(a=>a.channel===row.channel&&a.id===row.account);
-      const remote=account?await this.historyFn({account,sender:row.sender,before:event.timestamp,graphVersion:this.graphVersion,maxMessages:500}):[];
-      const seen=new Set();
-      state.history=[...(state.history??[]),...remote,...local].filter(m=>!m.timestamp||m.timestamp<=event.timestamp).sort((a,b)=>(a.timestamp??0)-(b.timestamp??0)).filter(m=>{const key=m.role+':'+m.content+':'+Math.floor((m.timestamp??0)/1000);if(seen.has(key))return false;seen.add(key);return true;}).slice(-500);
+      state.staffHistoryIncomplete=false;
+      const remote=account?await this.historyFn({account,sender:row.sender,before:event.timestamp,graphVersion:this.graphVersion,maxMessages:STAFF_HISTORY_LIMIT,onCoverage:coverage=>{state.staffHistoryIncomplete=!coverage.complete;}}):[];
+      state.history=mergeStaffHistory({saved:state.history,remote,local,before:event.timestamp});
     }
     message=await executeStaffOrder({event,state,spc:this.spc,save:()=>this.store.save(c,row.id,state),prepare:async()=>{
+      if(state.staffHistoryIncomplete)return {ok:false,message:'Porudžbina nije kreirana jer nije preuzeta cela duga prepiska. Potrebna je provera istorije; ne ponavljajte podatke kupca.'};
       const prepared=await this.staffPrepareFn({event,state,spc:this.spc,model:this.model});
       const newer=await c.query("SELECT payload FROM spc_chat_events WHERE conversation=$1 AND id<>$2 ORDER BY created_at DESC LIMIT 30",[row.id,event.id]);
       const changed=newer.rows.some(r=>{const e=this.store.decode(r.payload);return e.timestamp>event.timestamp&&!e.botEcho&&!isStaffOrderCommand(e);});
