@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { useCart } from "@/lib/hooks/use-cart";
 import { useCartUi } from "@/lib/hooks/use-cart-ui";
 import { GuestLoyaltyOffer } from "./guest-loyalty-offer";
+import { CartQuantityControl } from "./cart-quantity-control";
 import { appliedLoyaltySavings } from "@/lib/loyalty/shared";
 import { formatRsd } from "@/lib/format";
 
@@ -17,7 +18,7 @@ export function AddToCartConfirmation() {
   const lines = useCart((state) => state.lines);
   const loyaltyDiscount = appliedLoyaltySavings(lines);
   const heading = useRef<HTMLDivElement>(null);
-  const line = lines.find((item) => item.sku === added?.line.sku) ?? added?.line;
+  const line = lines.find((item) => item.sku === added?.line.sku);
   const count = lines.reduce((sum, item) => sum + item.qty, 0);
   const subtotal = lines.reduce((sum, item) => sum + item.unitPriceSale * item.qty, 0);
 
@@ -37,8 +38,11 @@ export function AddToCartConfirmation() {
           <div className="min-w-0">
             <p className="text-base font-semibold leading-snug text-ink-900 sm:text-lg">{line.name}</p>
             {line.variant && <p className="mt-1 text-sm text-ink-500">{line.variant}</p>}
-            <p className="mt-2 text-sm text-ink-500">{added.addedQty > 0 ? `Dodato: ${added.addedQty} kom.` : `U korpi: ${line.qty} kom.`}</p>
-            <p className="mt-1 text-lg font-semibold text-ink-900">{formatRsd(line.unitPriceSale)} <span className="text-xs font-normal text-ink-500">/ kom.</span></p>
+            <p className="mt-2 text-lg font-semibold text-ink-900">{formatRsd(line.unitPriceSale)} <span className="text-xs font-normal text-ink-500">/ kom.</span></p>
+            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+              <span className="text-xs text-ink-500">Količina u korpi</span>
+              <CartQuantityControl sku={line.sku} quantity={line.qty} size="lg" minQuantity={1} />
+            </div>
           </div>
         </div>
         <div className="mt-5"><GuestLoyaltyOffer /></div>
