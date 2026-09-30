@@ -18,7 +18,7 @@ The public audit found 124 main-store product SKUs, not 3,281 public product pag
 
 ## Validation and release
 
-29 tests passed across SEO routes/helpers, sitemap, rich text and checkout isolation. Next production compilation and its TypeScript check passed. Email PDF assets were verified in checkout/background bundles. Pilot HTML was checked at 1,400 px and 390 px without overflow.
+31 tests passed across SEO routes/helpers, sitemap, rich text and checkout isolation. Next production compilation and its TypeScript check passed. Email PDF assets were verified in checkout/background bundles. Pilot HTML was checked at 1,400 px and 390 px without overflow.
 
 The normal `npm run build` includes `db:deploy:production`. Automatic approval review rejected using it for a local SEO check because it can run production migrations. Validation instead invoked Next directly; no migrations ran. A production release must not silently trigger that rejected operation. Preview validation can use a build command consisting of checkout-isolation tests, Next compilation and the email-assets check, with no migration command.
 

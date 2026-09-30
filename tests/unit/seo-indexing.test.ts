@@ -36,6 +36,15 @@ it("keeps empty categories usable but out of the index", async () => {
   expect(metadata.robots).toEqual({ index: false, follow: true });
 });
 
+it("repairs display-name links even when the current category slug is different", async () => {
+  const category = {name:'Radna soba',slug:'kancelarija-i-gejming',path:'/namestaj/kancelarija-i-gejming'};
+  mocks.path.mockImplementation(async path => path===category.path ? category : null);
+  mocks.slug.mockResolvedValue(null);
+  mocks.catalog.mockResolvedValue({categories:[category], products:[]});
+  await expect(CategoryPage({params:Promise.resolve({slug:['radna-soba']})}))
+    .rejects.toThrow('REDIRECT:/k/namestaj/kancelarija-i-gejming');
+});
+
 it("does not misclassify a database failure as an empty category", async () => {
   mocks.catalog.mockRejectedValue(new Error("database offline"));
   await expect(generateMetadata({ params: Promise.resolve({ slug: ["radna-soba"] }) }))

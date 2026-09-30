@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { isPlaceholderDescription, populatedCategoryPaths, productCategoryTrail, productSeoDescription, seoPlainText } from "@/lib/seo/catalog";
+import { isPlaceholderDescription, legacyCategoryPath, populatedCategoryPaths, productCategoryTrail, productSeoDescription, seoPlainText } from "@/lib/seo/catalog";
 
 describe("catalog SEO", () => {
+  it("maps old display-name URLs only when their category is unambiguous", () => {
+    const category = {name: 'Radna soba', slug: 'kancelarija-i-gejming', path: '/namestaj/kancelarija-i-gejming'};
+    expect(legacyCategoryPath('radna-soba', [category])).toBe(category.path);
+    expect(legacyCategoryPath('radna-soba', [category, {...category, path:'/drugo'}])).toBeNull();
+    expect(legacyCategoryPath('unknown', [category])).toBeNull();
+  });
   it("decodes visible entity artifacts without interpreting text as HTML", () => {
     expect(seoPlainText('<p>Širina&nbsp;59&#160;cm</p><p>360&#xB0; &amp; &quot;crna&quot;</p>'))
       .toBe('Širina 59 cm 360° & "crna"');

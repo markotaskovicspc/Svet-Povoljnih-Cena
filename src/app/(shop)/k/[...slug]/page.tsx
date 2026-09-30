@@ -6,7 +6,7 @@ import { LISTING_PAGE_SIZE } from "@/lib/listing/filters";
 import type { Crumb } from "@/components/layout/breadcrumbs";
 import { getTabTitleIcon } from "@/lib/storefront/content";
 import { getSeoCatalog } from "@/lib/seo/catalog.server";
-import { populatedCategoryPaths, productCategoryTrail, seoPlainText } from "@/lib/seo/catalog";
+import { legacyCategoryPath, populatedCategoryPaths, productCategoryTrail, seoPlainText } from "@/lib/seo/catalog";
 
 /**
  * Catch-all category listing.
@@ -28,10 +28,14 @@ async function resolveTrailAndTitle(slugSegments: string[]): Promise<{
   index?: boolean;
 } | null> {
   const path = `/${slugSegments.map((s) => decodeURIComponent(s).toLowerCase()).join("/")}`;
-  const category = await getCategoryByPath(path)
+  let category = await getCategoryByPath(path)
     ?? (slugSegments.length === 1 ? await getCategoryBySlug(path.slice(1)) : null);
-  if (!category) return null;
   const catalog = await getSeoCatalog();
+  if (!category && slugSegments.length === 1) {
+    const legacyPath = legacyCategoryPath(path.slice(1), catalog?.categories ?? []);
+    if (legacyPath) category = await getCategoryByPath(legacyPath);
+  }
+  if (!category) return null;
   const trail: Crumb[] = productCategoryTrail([category.path], catalog?.categories ?? []);
   if (trail.length) trail[trail.length - 1].href = undefined;
   return {

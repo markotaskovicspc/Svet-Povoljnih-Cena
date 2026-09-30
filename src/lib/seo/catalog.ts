@@ -39,6 +39,18 @@ export function productSeoDescription(product: Pick<Product,
 
 export type SeoCategory = { path: string; name: string; slug: string };
 
+/** Earlier PDP links slugified display labels rather than using stored paths. */
+export function legacyCategoryPath(labelSlug: string, categories: SeoCategory[]) {
+  const matches = categories.filter(category => {
+    const label = category.name.split(/\s*\/\s*/).at(-1) ?? "";
+    const oldSlug = label.toLowerCase().normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    return oldSlug === labelSlug;
+  });
+  // Never guess between different categories with the same display name.
+  return matches.length === 1 ? matches[0].path : null;
+}
+
 export function productCategoryTrail(paths: string[] | undefined, categories: SeoCategory[]) {
   const assigned = new Set(paths ?? []);
   const leaf = categories.filter(c => assigned.has(c.path))
