@@ -1,0 +1,71 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
+import { commerceTermsAt, OCTOBER_TERMS_AT_MS, scheduledDeliveryPromoText } from "@/lib/commerce-terms";
+import { calculatePublishedDeliveryTariff, freeCategoryOneThresholdRsd } from "@/lib/delivery-tariff";
+import { computeOrderPricing } from "@/lib/pricing/engine";
+import { calculateEditedWebOrderTotals } from "@/lib/admin/web-order-edit";
+import { computeTotals } from "@/components/checkout/order-summary";
+import { CommerceTermsProvider, useCommerceTerms } from "@/components/pricing/commerce-terms-provider";
+
+const before = new Date("2026-09-30T21:59:59.999Z");
+const after = new Date("2026-09-30T22:00:00.000Z");
+const parcel = { qty: 1, unitPrice: 4_000, unitPackWidthCm: 50, unitPackDepthCm: 40, unitPackHeightCm: 30, grossWeightKg: 2 };
+const lines = [{ sku: "TEST", qty: 1, product: { fullPrice: 10_000, loyaltyDiscountPct: 30, loyaltyEligible: true } }];
+afterEach(() => vi.useRealTimers());
+
+describe("October terms at midnight in Serbia", () => {
+  it("switches at midnight local time, not UTC midnight or deployment time", () => {
+    expect(OCTOBER_TERMS_AT_MS).toBe(after.getTime());
+    expect(commerceTermsAt(before)).toMatchObject({ firstPurchasePct: 15, freeCategoryOneThresholdRsd: 4_000 });
+    expect(commerceTermsAt(after)).toMatchObject({ firstPurchasePct: 10, freeCategoryOneThresholdRsd: 20_000 });
+    expect(freeCategoryOneThresholdRsd(before)).toBe(4_000);
+    expect(freeCategoryOneThresholdRsd(after)).toBe(20_000);
+  });
+
+  it.each([false, true])("changes delivery for guest/member=%s and keeps category II payable", (loggedIn) => {
+    const options = { loggedIn, at: after };
+    expect(calculatePublishedDeliveryTariff([parcel], { loggedIn, at: before })?.total).toBe(0);
+    expect(calculatePublishedDeliveryTariff([parcel], options)?.total).toBe(299);
+    expect(calculatePublishedDeliveryTariff([{ ...parcel, unitPrice: 19_999.99 }], options)?.total).toBe(299);
+    expect(calculatePublishedDeliveryTariff([{ ...parcel, unitPrice: 20_000 }], options)?.total).toBe(0);
+    const mixed = calculatePublishedDeliveryTariff([
+      { ...parcel, unitPrice: 20_000 },
+      { ...parcel, unitPrice: 50_000, unitPackWidthCm: 170 },
+    ], options);
+    expect(mixed?.categories[1].price).toBe(0);
+    expect(mixed?.categories[2].price).toBe(699);
+    expect(mixed?.total).toBe(699);
+  });
+
+  it("switches server and client totals without restarting while retaining the 30% loyalty price", () => {
+    vi.useFakeTimers();
+    for (const [at, discount, total] of [[before, 1050, 6450], [after, 700, 6800]] as const) {
+      vi.setSystemTime(at);
+      const server = computeOrderPricing({ lines, eligibility: { firstPurchase: true } });
+      expect(server.subtotal).toBe(7_000);
+      expect(server.firstPurchaseDiscount).toBe(discount);
+      const client = computeTotals({ itemsFull: 10_000, itemsSale: 7_000, shippingMethod: "kurir",
+        assemblyTotal: 0, voucherDiscountRsd: 0, firstPurchaseEligible: true, shippingPrices: { kurir: 500, kamion: null } });
+      expect(client.firstPurchaseDiscount).toBe(discount);
+      expect(client.total).toBe(total);
+      expect(computeOrderPricing({ lines, eligibility: { firstPurchase: false } }).firstPurchaseDiscount).toBe(0);
+    }
+  });
+
+  it("preserves the original order's discount when an admin edits it after the change", () => {
+    vi.useFakeTimers(); vi.setSystemTime(after);
+    const input = { lines: [{ qty: 2, unitPriceFull: 5_000, unitPriceSale: 3_500 }], shipping: 500, keepFirstPurchaseDiscount: true };
+    expect(calculateEditedWebOrderTotals({ ...input, orderCreatedAt: before }).firstPurchaseDiscount).toBe(1050);
+    expect(calculateEditedWebOrderTotals({ ...input, orderCreatedAt: after }).firstPurchaseDiscount).toBe(700);
+  });
+
+  it("uses the serialized terms for consistent SSR and updates only the September delivery campaign", () => {
+    function Label() { return <span>{useCommerceTerms().firstPurchasePct}%</span>; }
+    expect(renderToStaticMarkup(<CommerceTermsProvider initialAt={before.getTime()}><Label /></CommerceTermsProvider>)).toBe("<span>15%</span>");
+    expect(renderToStaticMarkup(<CommerceTermsProvider initialAt={after.getTime()}><Label /></CommerceTermsProvider>)).toBe("<span>10%</span>");
+    const oldPromo = "OVOG SEPTEMBRA DOSTAVU PLAĆAMO MI! Besplatna isporuka preko 4.000 RSD za standardne pakete!*";
+    expect(scheduledDeliveryPromoText(oldPromo, before)).toBe(oldPromo);
+    expect(scheduledDeliveryPromoText(oldPromo, after)).toBe("Besplatna dostava od 20.000 RSD za standardne pakete (I kategorija).");
+    expect(scheduledDeliveryPromoText("Akcija na stolice", after)).toBe("Akcija na stolice");
+  });
+});

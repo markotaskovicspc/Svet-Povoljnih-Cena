@@ -164,10 +164,12 @@ export async function resolveDeliveryQuote({
   city,
   lines = [],
   loggedIn = false,
+  tariffAt,
 }: {
   city?: string | null;
   lines?: QuoteLineInput[];
   loggedIn?: boolean;
+  tariffAt?: Date;
 }): Promise<CheckoutDeliveryQuote> {
   if (!hasDatabaseConnection()) {
     return {
@@ -391,7 +393,7 @@ export async function resolveDeliveryQuote({
       ? calculatePublishedDeliveryTariffQuote(publishedTariffLines, {
           loggedIn,
           rates: deliveryTariffRatesFromSettings(deliveryTariffSettings),
-          at: now,
+          at: tariffAt ?? now,
         })
       : null;
   const resolvedDelivery = resolveDeliveryMethodQuote({

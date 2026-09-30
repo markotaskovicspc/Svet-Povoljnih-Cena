@@ -1,4 +1,9 @@
-export const LOYALTY_CONSENT_VERSION = "spc-loyalty-2026-09-24-v3";
+export const LOYALTY_CONSENT_VERSION = "spc-loyalty-2026-09-30-v4";
+
+// A commercial rate change does not revoke an existing customer's membership.
+export function isSupportedLoyaltyConsentVersion(version: unknown) {
+  return version === LOYALTY_CONSENT_VERSION || version === "spc-loyalty-2026-09-24-v3";
+}
 export const LOYALTY_CONSENT_SECTIONS = [
   {
     title: "Pristupanje programu",
@@ -14,7 +19,7 @@ export const LOYALTY_CONSENT_SECTIONS = [
   },
   {
     title: "Loyalty pogodnosti",
-    body: "Nakon prihvatanja saglasnosti ostvarujem 30% loyalty popusta na artikle koji nisu na aktivnoj akciji. Ako ispunjavam uslov za prvu kupovinu, ostvarujem i dodatnih 15% na već obračunatu vrednost artikala, bez dostave. Pravo na pogodnost za prvu kupovinu proverava se po unosu mejl adrese pri poručivanju, prema istoriji porudžbina povezanih sa mojom mejl adresom: pogodnost je iskorišćena kada postoji izdat fiskalni račun za prodaju. Konačne cene i popusti prikazuju se pre potvrde porudžbine.",
+    body: "Nakon prihvatanja saglasnosti ostvarujem 30% loyalty popusta na artikle koji nisu na aktivnoj akciji. Ako ispunjavam uslov za prvu kupovinu, ostvarujem i dodatni popust na već obračunatu vrednost artikala, bez dostave: 15% za porudžbine do 30. septembra 2026, odnosno 10% za porudžbine od 1. oktobra 2026. u 00:00, po vremenu u Srbiji. Pravo na pogodnost za prvu kupovinu proverava se po unosu mejl adrese pri poručivanju, prema istoriji porudžbina povezanih sa mojom mejl adresom: pogodnost je iskorišćena kada postoji izdat fiskalni račun za prodaju. Konačne cene i popusti prikazuju se pre potvrde porudžbine.",
   },
   {
     title: "Pristup podacima i čuvanje",

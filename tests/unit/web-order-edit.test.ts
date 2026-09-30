@@ -24,6 +24,7 @@ describe("WEB order item editing", () => {
         shipping: 299,
         requestedVoucherDiscount: 210,
         keepFirstPurchaseDiscount: true,
+        orderCreatedAt: new Date("2026-09-24T12:00:00+02:00"),
         keepSavedCardDiscount: true,
       }),
     ).toEqual({

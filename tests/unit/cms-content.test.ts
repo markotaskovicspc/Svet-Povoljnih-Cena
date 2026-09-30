@@ -67,13 +67,13 @@ describe("CMS Markdown safety", () => {
     );
   });
 
-  it("publishes the scheduled 4,000 RSD free-delivery threshold", () => {
+  it("publishes the October 20,000 RSD threshold with its effective date", () => {
     const deliveryPage = SYSTEM_CONTENT_PAGES.find(
       (page) => page.slug === "uslovi-isporuke",
     );
 
     expect(deliveryPage?.bodyMarkdown).toContain(
-      "Od 1. septembra 2026. u 00:01, dostava artikala I kategorije je besplatna kada njihov zbir iznosi najmanje 4.000 RSD.",
+      "Od 1. oktobra 2026. u 00:00, po vremenu u Srbiji, prag za besplatnu dostavu tih artikala je 20.000 RSD.",
     );
     expect(deliveryPage?.bodyMarkdown).not.toContain(
       "najmanje 1.999 RSD",

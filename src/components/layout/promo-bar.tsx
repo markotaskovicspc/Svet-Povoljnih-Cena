@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { useCommerceTerms } from "@/components/pricing/commerce-terms-provider";
+import { scheduledDeliveryPromoText, OCTOBER_TERMS_AT_MS } from "@/lib/commerce-terms";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { Sparkles, X, Clock3 } from "lucide-react";
@@ -44,6 +46,8 @@ interface PromoBarProps {
 }
 
 export function PromoBar({ bar }: PromoBarProps) {
+  const terms = useCommerceTerms();
+  const promoText = scheduledDeliveryPromoText(bar.text, terms.id === "2026-10" ? OCTOBER_TERMS_AT_MS : OCTOBER_TERMS_AT_MS - 1);
   const storageKey = `${STORAGE_KEY_PREFIX}:${bar.id}`;
   const dismissed = useSyncExternalStore(
     subscribeDismissed,
@@ -76,7 +80,7 @@ export function PromoBar({ bar }: PromoBarProps) {
   const Inner = (
     <span className="inline-flex items-center gap-2">
       <Sparkles className="size-3.5 opacity-80" aria-hidden />
-      <span>{bar.text}</span>
+      <span>{promoText}</span>
       {showCountdown && endsAt !== null && now !== null ? (
         <span
           className="ml-1 inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-mono text-white"

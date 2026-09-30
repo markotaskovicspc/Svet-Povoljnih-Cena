@@ -5,7 +5,7 @@
  *   1. Effective unit price = active sale price (if action period is valid)
  *      else fullPrice. Period validation lives here so listings, PDP, cart,
  *      and order creation all see the same answer.
- *   2. Order-level discount stack: voucher + first-purchase 15% + saved-card 5%,
+ *   2. Order-level discount stack: voucher + scheduled first-purchase discount + saved-card 5%,
  *      with only a natural 100% subtotal floor.
  *
  * All money values are RSD (number, integer dinari). The engine is pure and
@@ -15,7 +15,7 @@
 
 import {
   EXCLUDE_SALE_FROM_STACK,
-  FIRST_PURCHASE_PCT,
+  firstPurchaseDiscountPct,
   MAX_STACK_PCT,
   SAVED_CARD_PCT,
 } from "./config";
@@ -423,7 +423,7 @@ export interface OrderPricing {
   /** Voucher discount actually applied (after clamping). */
   voucherDiscount: number;
   voucherCode: string | null;
-  /** First-purchase 15% applied (after clamping). */
+  /** First-purchase discount applied (after clamping). */
   firstPurchaseDiscount: number;
   /** Saved-card 5% applied (after clamping). */
   savedCardDiscount: number;
@@ -512,7 +512,7 @@ export function computeOrderPricing({
   const requested = {
     voucher: voucher?.discountRsd ?? 0,
     first: eligibility?.firstPurchase
-      ? Math.round((eligibleForStack * FIRST_PURCHASE_PCT) / 100)
+      ? Math.round((eligibleForStack * firstPurchaseDiscountPct(now)) / 100)
       : 0,
     card: eligibility?.savedCard
       ? Math.round((eligibleForStack * SAVED_CARD_PCT) / 100)

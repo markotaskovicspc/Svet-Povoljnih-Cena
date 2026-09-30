@@ -103,6 +103,14 @@ describe("email-only loyalty", () => {
 
 describe("immediate guest loyalty consent", () => {
   beforeEach(() => vi.resetAllMocks());
+  it("retains membership and the actual accepted version for an existing September session", async () => {
+    const version = "spc-loyalty-2026-09-24-v3";
+    const raw = await acceptLoyaltyConsent(version);
+    const record = tx.verificationToken.create.mock.calls[0][0].data;
+    expect(record.identifier).toBe(`loyalty-consent:${version}`);
+    tx.verificationToken.findUnique.mockResolvedValue(record);
+    expect(await loyaltyMemberForSession(raw)).toMatchObject({ email: null, consentVersion: version });
+  });
   it("activates an anonymous session without email, account, or verified membership", async () => {
     const before = Date.now();
     const raw = await acceptLoyaltyConsent();

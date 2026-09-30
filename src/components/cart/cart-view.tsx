@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useCommerceTerms } from "@/components/pricing/commerce-terms-provider";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ArrowRight, Loader2, ShoppingBag, Tag, Truck } from "lucide-react";
@@ -161,7 +162,9 @@ function CartSummary({
   const shipping = shippingMethod ? quote?.prices[shippingMethod] ?? null : null;
   const guestLoyalty = useGuestLoyalty();
   const loggedIn = useLoyaltyEligibility();
+  const { firstPurchasePct } = useCommerceTerms();
   const { voucherDiscount, firstPurchaseDiscount, total } = computeTotals({
+    firstPurchasePct,
     itemsFull: fullTotal, itemsSale: subtotal, assemblyTotal: 0,
     shippingMethod: shippingMethod ?? "kurir",
     shippingPrices: quote?.prices ?? { kurir: null, kamion: null },
@@ -307,7 +310,7 @@ function CartSummary({
           </div>
         ) : null}
 
-        {firstPurchaseDiscount > 0 ? <div className="text-action flex justify-between text-sm"><span>Prva kupovina −15%</span><strong>−{formatRsd(firstPurchaseDiscount)}</strong></div> : null}
+        {firstPurchaseDiscount > 0 ? <div className="text-action flex justify-between text-sm"><span>Prva kupovina −{firstPurchasePct}%</span><strong>−{formatRsd(firstPurchaseDiscount)}</strong></div> : null}
         <div className="border-border/60 flex items-baseline justify-between border-t pt-3">
           <span className="text-sm font-medium text-ink-900">Ukupno za plaćanje</span>
           <span className="font-display text-2xl text-ink-900">
@@ -330,6 +333,7 @@ function CartSummary({
 }
 
 export function CartLoginOfferCopy() {
+  const { firstPurchasePct } = useCommerceTerms();
   return (
     <div className="min-w-0 flex-1">
       <p className="text-base font-extrabold sm:text-lg">
@@ -342,7 +346,7 @@ export function CartLoginOfferCopy() {
       </p>
       <p className="mt-1 text-sm font-extrabold sm:text-base">
         <span className="text-action uppercase">
-          15% POPUSTA ZA PRVU KUPOVINU SE OBRAČUNAVA NAKON POTVRDE PORUDŽBINE
+          {firstPurchasePct}% POPUSTA ZA PRVU KUPOVINU SE OBRAČUNAVA NAKON POTVRDE PORUDŽBINE
         </span>{" "}
         <span className="text-ink-900">(Važi za ulogovane korisnike)</span>
       </p>

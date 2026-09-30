@@ -1,18 +1,19 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import { db } from "@/lib/db";
-import { LOYALTY_CONSENT_VERSION, normalizeLoyaltyEmail } from "./shared";
+import { LOYALTY_CONSENT_VERSION, isSupportedLoyaltyConsentVersion, normalizeLoyaltyEmail } from "./shared";
 
 export const LOYALTY_COOKIE = "spc_guest_loyalty";
 export const LOYALTY_SESSION_SECONDS = 30 * 24 * 60 * 60;
 const digest = (token: string) => createHash("sha256").update(token).digest("hex");
 const validToken = (token: string) => /^[a-f0-9]{64}$/.test(token);
 
-export async function acceptLoyaltyConsent() {
+export async function acceptLoyaltyConsent(consentVersion = LOYALTY_CONSENT_VERSION) {
+  if (!isSupportedLoyaltyConsentVersion(consentVersion)) throw new Error("Unsupported loyalty consent");
   const token = randomBytes(32).toString("hex");
   const consentAt = new Date();
   await db.verificationToken.create({ data: {
-    identifier: `loyalty-consent:${LOYALTY_CONSENT_VERSION}`,
+    identifier: `loyalty-consent:${consentVersion}`,
     token: digest(token),
     expires: new Date(consentAt.getTime() + LOYALTY_SESSION_SECONDS * 1000),
   } });
@@ -72,10 +73,12 @@ export async function loyaltyMemberForSession(token?: string) {
   if (!token || !validToken(token)) return null;
   const record = await db.verificationToken.findUnique({ where: { token: digest(token) } });
   if (!record || record.expires <= new Date()) return null;
-  if (record.identifier === `loyalty-consent:${LOYALTY_CONSENT_VERSION}`) {
+  const consentVersion = record.identifier.startsWith("loyalty-consent:")
+    ? record.identifier.slice("loyalty-consent:".length) : null;
+  if (isSupportedLoyaltyConsentVersion(consentVersion)) {
     return {
       email: null,
-      consentVersion: LOYALTY_CONSENT_VERSION,
+      consentVersion: consentVersion!,
       consentAt: new Date(record.expires.getTime() - LOYALTY_SESSION_SECONDS * 1000),
       verifiedAt: null,
     };

@@ -1,14 +1,11 @@
 /**
  * Pricing engine configuration (Phase 3D — item 2).
  *
- * Single source of truth for stackable discounts. These are intentionally
- * exported as plain constants so they can later be hydrated from an
- * `AdminSetting` table without touching call-sites — admin UI in Phase 5
- * will write into this shape.
+ * Shared stacking rules and the time-dependent first-purchase rate.
  */
 
-/** First-purchase discount, consumed when the first sale receipt is fiscalized. */
-export const FIRST_PURCHASE_PCT = 15;
+/** Evaluate at checkout time, never freeze the scheduled rate at module load. */
+export { firstPurchaseDiscountPct } from "@/lib/commerce-terms";
 
 /** Discount when paying with a tokenized saved card. */
 export const SAVED_CARD_PCT = 5;

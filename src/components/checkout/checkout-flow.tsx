@@ -1,5 +1,8 @@
 "use client";
 
+import { useCommerceTerms } from "@/components/pricing/commerce-terms-provider";
+
+
 import {
   useCallback,
   useEffect,
@@ -374,7 +377,8 @@ export function CheckoutFlow({
     [lines],
   );
 
-  const deliveryQuoteKey = `${shippingCity.trim().toLocaleLowerCase("sr-Latn-RS")}|${quoteLineKey}|${guestLoyalty.active}`;
+  const { id: commerceTermsId, firstPurchasePct } = useCommerceTerms();
+  const deliveryQuoteKey = `${shippingCity.trim().toLocaleLowerCase("sr-Latn-RS")}|${quoteLineKey}|${guestLoyalty.active}|${commerceTermsId}`;
   const deliveryQuote = resolvedDeliveryQuote.quote;
   const deliveryQuoteIsCurrent =
     hydrated &&
@@ -882,7 +886,7 @@ export function CheckoutFlow({
                   ) : null}
                   {step === "shipping" ? (
                     <div className="flex flex-col gap-4 sm:gap-5">
-                      {useGuestBenefits && <p role="status" className="rounded-lg bg-muted-bg p-3 text-sm text-ink-700">Loyalty popust je aktivan. Mejl je obavezan za evidenciju članstva.{loyaltyCheck?.email === loyaltyEmail ? (loyaltyCheck.eligible ? " Primenjeno je i dodatnih 15% za prvu kupovinu." : " Pogodnost za prvu kupovinu je već iskorišćena.") : " Po unosu mejla proveravamo i dodatnih 15% za prvu kupovinu."}</p>}
+                      {useGuestBenefits && <p role="status" className="rounded-lg bg-muted-bg p-3 text-sm text-ink-700">Loyalty popust je aktivan. Mejl je obavezan za evidenciju članstva.{loyaltyCheck?.email === loyaltyEmail ? (loyaltyCheck.eligible ? ` Primenjeno je i dodatnih ${firstPurchasePct}% za prvu kupovinu.` : " Pogodnost za prvu kupovinu je već iskorišćena.") : ` Po unosu mejla proveravamo i dodatnih ${firstPurchasePct}% za prvu kupovinu.`}</p>}
                       <ShippingForm
                         xExpressAddressEnabled={xExpressAddressEnabled}
                       />

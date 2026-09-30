@@ -57,7 +57,7 @@ describe("guest loyalty checkout trust boundary", () => {
   it("applies 15% after the loyalty price and excludes shipping from this discount", () => {
     const totals = computeTotals({ itemsFull: 10_000, itemsSale: 7_000,
       shippingMethod: "kurir", shippingPrices: { kurir: 500, kamion: null },
-      assemblyTotal: 0, voucherDiscountRsd: 0, firstPurchaseEligible: true });
+      assemblyTotal: 0, voucherDiscountRsd: 0, firstPurchaseEligible: true, firstPurchasePct: 15 });
     expect(totals.firstPurchaseDiscount).toBe(1050);
     expect(totals.total).toBe(6450);
   });

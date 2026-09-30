@@ -23,7 +23,7 @@ const voucherCapacityReservationWhere = {
  * Voucher validation (Phase 3C — item 3 of checkout flow / item 7 of plan).
  *
  * Returns the discount amount in RSD (always positive). Stacking & first-buyer
- * 15% / saved-card 5% interactions live in the pricing engine (Phase 3D); this
+ * First-purchase / saved-card 5% interactions live in the pricing engine (Phase 3D); this
  * function is concerned only with whether the code itself is valid for this
  * `(userId, subtotal, now)` triple.
  */

@@ -1,5 +1,6 @@
 "use client";
 
+import { useCommerceTerms } from "@/components/pricing/commerce-terms-provider";
 import Image from "next/image";
 import { Loader2, ShieldCheck, Truck, Wrench } from "lucide-react";
 import { useCart } from "@/lib/hooks/use-cart";
@@ -19,7 +20,7 @@ import type { PaymentMethod, ShippingMethod, SKU } from "@/types";
 import { DeliveryCategoryBreakdown } from "@/components/cart/delivery-category-breakdown";
 import { capDiscountComponents } from "@/lib/pricing/engine";
 import {
-  FIRST_PURCHASE_PCT,
+  firstPurchaseDiscountPct,
   MAX_STACK_PCT,
 } from "@/lib/pricing/config";
 
@@ -49,6 +50,7 @@ export function computeTotals({
   voucherDiscountRsd,
   firstPurchaseEligible = false,
   shippingPrices = SHIPPING_PRICES,
+  firstPurchasePct = firstPurchaseDiscountPct(),
 }: {
   itemsFull: number;
   itemsSale: number;
@@ -57,13 +59,14 @@ export function computeTotals({
   voucherDiscountRsd: number;
   firstPurchaseEligible?: boolean;
   shippingPrices?: Record<ShippingMethod, number | null>;
+  firstPurchasePct?: number;
 }): SummaryTotals {
   const shipping = shippingPrices[shippingMethod];
   const eligibleSubtotal = Math.max(0, itemsSale);
   const requestedDiscounts = {
     voucher: Math.max(0, voucherDiscountRsd),
     first: firstPurchaseEligible
-      ? Math.round((eligibleSubtotal * FIRST_PURCHASE_PCT) / 100)
+      ? Math.round((eligibleSubtotal * firstPurchasePct) / 100)
       : 0,
     card: 0,
   };
@@ -128,6 +131,7 @@ export function OrderSummary({
   compact = false,
   readOnlyLines = false,
 }: OrderSummaryProps) {
+  const { firstPurchasePct } = useCommerceTerms();
   const hydrated = useCart((s) => s.hydrated);
   const lines = useCart((s) => s.lines);
   const voucher = useCheckout((s) => s.voucher);
@@ -155,6 +159,7 @@ export function OrderSummary({
     assemblyTotal,
     voucherDiscountRsd: voucherDiscountForSubtotal(voucher, itemsSale),
     firstPurchaseEligible,
+    firstPurchasePct,
     shippingPrices: deliveryQuoteReady
       ? deliveryQuote.prices
       : UNRESOLVED_SHIPPING_PRICES,
@@ -281,7 +286,7 @@ export function OrderSummary({
           ) : null}
           {totals.firstPurchaseDiscount > 0 ? (
             <Row
-              label={`Popust za prvu kupovinu (${FIRST_PURCHASE_PCT}%)`}
+              label={`Popust za prvu kupovinu (${firstPurchasePct}%)`}
               value={`−${formatRsd(totals.firstPurchaseDiscount)}`}
               tone="action"
             />

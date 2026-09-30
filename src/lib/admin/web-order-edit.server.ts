@@ -331,6 +331,7 @@ export async function updateWebOrderItemQuantity(input: {
     select: {
       id: true,
       updatedAt: true,
+      createdAt: true,
       userId: true,
       guestLoyaltyEmail: true,
       shipCity: true,
@@ -361,6 +362,7 @@ export async function updateWebOrderItemQuantity(input: {
     city: preview.shipCity,
     lines: previewLines,
     loggedIn: Boolean(preview.userId || preview.guestLoyaltyEmail),
+    tariffAt: preview.createdAt,
   });
   const quotedShipping =
     (preview.shippingMethod === "KURIR"
@@ -569,6 +571,7 @@ export async function updateWebOrderItemQuantity(input: {
         lines: nextLines,
         shipping: quotedShipping,
         keepFirstPurchaseDiscount: num(order.firstPurchaseDiscount) > 0,
+        orderCreatedAt: order.createdAt,
         keepSavedCardDiscount: num(order.savedCardDiscount) > 0,
       });
       const requestedVoucherDiscount = await lockedVoucherDiscount(
@@ -581,6 +584,7 @@ export async function updateWebOrderItemQuantity(input: {
         shipping: quotedShipping,
         requestedVoucherDiscount,
         keepFirstPurchaseDiscount: num(order.firstPurchaseDiscount) > 0,
+        orderCreatedAt: order.createdAt,
         keepSavedCardDiscount: num(order.savedCardDiscount) > 0,
       });
 
@@ -800,6 +804,7 @@ export async function addWebOrderItem(input: {
     select: {
       id: true,
       updatedAt: true,
+      createdAt: true,
       userId: true,
       guestLoyaltyEmail: true,
       shipCity: true,
@@ -831,6 +836,7 @@ export async function addWebOrderItem(input: {
     city: preview.shipCity,
     lines: previewLines,
     loggedIn: Boolean(preview.userId || preview.guestLoyaltyEmail),
+    tariffAt: preview.createdAt,
   });
   const quotedShipping =
     preview.shippingMethod === "KURIR"
@@ -1379,6 +1385,7 @@ export async function addWebOrderItem(input: {
         lines: nextLines,
         shipping: quotedShipping,
         keepFirstPurchaseDiscount: num(order.firstPurchaseDiscount) > 0,
+        orderCreatedAt: order.createdAt,
         keepSavedCardDiscount: num(order.savedCardDiscount) > 0,
       });
       const requestedVoucherDiscount = await lockedVoucherDiscount(
@@ -1391,6 +1398,7 @@ export async function addWebOrderItem(input: {
         shipping: quotedShipping,
         requestedVoucherDiscount,
         keepFirstPurchaseDiscount: num(order.firstPurchaseDiscount) > 0,
+        orderCreatedAt: order.createdAt,
         keepSavedCardDiscount: num(order.savedCardDiscount) > 0,
       });
 

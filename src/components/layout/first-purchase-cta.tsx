@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useCommerceTerms } from "@/components/pricing/commerce-terms-provider";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronUp, Gift, X } from "lucide-react";
@@ -12,6 +13,7 @@ const CLOSE_MS = 7 * 24 * 60 * 60 * 1000;
 const SHOW_DELAY_MS = 8000;
 
 export function FirstPurchaseCta() {
+  const { firstPurchasePct } = useCommerceTerms();
   const pathname = usePathname();
   const isCustomerLoggedIn = useLoyaltyEligibility();
   const [visible, setVisible] = useState(false);
@@ -78,7 +80,7 @@ export function FirstPurchaseCta() {
             Prva kupovina
           </p>
           <h2 className="font-display mt-1 text-xl text-ink-900">
-            15% popusta za prvu kupovinu
+            {firstPurchasePct}% popusta za prvu kupovinu
           </h2>
           <p className="mt-1 text-sm leading-relaxed text-ink-600">
             Registrujte se i popust se automatski aktivira na prvu porudžbinu
@@ -105,7 +107,7 @@ export function FirstPurchaseCta() {
         </div>
       </div>
       <Link
-        href="/nalog/registracija?offer=first-purchase-15"
+        href={`/nalog/registracija?offer=first-purchase-${firstPurchasePct}`}
         className="mt-4 inline-flex h-10 w-full items-center justify-center rounded-lg bg-ink-900 px-4 text-sm font-medium text-canvas transition hover:bg-walnut focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none"
       >
         Registruj se

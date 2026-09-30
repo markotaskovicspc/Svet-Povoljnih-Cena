@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IdentityStep } from "@/components/checkout/identity-step";
 import { getCheckoutPaymentTrustMessage } from "@/components/checkout/notes-consent";
 import { NewsletterBand } from "@/components/layout/newsletter-band";
@@ -10,6 +10,8 @@ import {
 import { missingXExpressStreetDeactivation } from "@/lib/x-express/sync";
 
 describe("pre-launch UI regressions", () => {
+  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date("2026-09-30T12:00:00Z")); });
+  afterEach(() => vi.useRealTimers());
   it("keeps every checkout login method inside the identity step", () => {
     const authAction = async () => undefined;
     const html = renderToStaticMarkup(

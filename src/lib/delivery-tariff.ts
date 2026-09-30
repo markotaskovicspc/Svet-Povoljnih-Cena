@@ -1,3 +1,6 @@
+import { commerceTermsAt } from "@/lib/commerce-terms";
+
+/** Historical September threshold. Use freeCategoryOneThresholdRsd for new quotes. */
 export const FREE_CATEGORY_ONE_THRESHOLD_RSD = 4_000;
 export const PREVIOUS_FREE_CATEGORY_ONE_THRESHOLD_RSD = 1_999;
 /** 1 September 2026 at 00:01 in Europe/Belgrade (CEST, UTC+02:00). */
@@ -114,7 +117,7 @@ export function deliveryRate(
 
 export function freeCategoryOneThresholdRsd(at: Date = new Date()) {
   return at.getTime() >= FREE_CATEGORY_ONE_THRESHOLD_CHANGE_AT_MS
-    ? FREE_CATEGORY_ONE_THRESHOLD_RSD
+    ? commerceTermsAt(at).freeCategoryOneThresholdRsd
     : PREVIOUS_FREE_CATEGORY_ONE_THRESHOLD_RSD;
 }
 

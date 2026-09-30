@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({ activate: vi.fn(), refresh: vi.fn(), member: {
 vi.mock("react", async (original) => ({ ...await original<typeof import("react")>(), useId: () => "loyalty-test", useRef: () => ({ current: null }), useState: (value: unknown) => [value, vi.fn()] }));
 vi.mock("next-auth/react", () => ({ useSession: () => ({ status: "unauthenticated", data: null }) }));
 vi.mock("@/components/pricing/pricing-eligibility", () => ({ useLoyaltyEligibility: () => false }));
+vi.mock("@/components/pricing/commerce-terms-provider", () => ({ useCommerceTerms: () => ({ id: "2026-10", firstPurchasePct: 10, freeCategoryOneThresholdRsd: 20000 }) }));
 vi.mock("@/lib/loyalty/use-guest-loyalty", () => ({ useGuestLoyalty: () => mocks.member, activateGuestLoyalty: mocks.activate, refreshGuestLoyalty: mocks.refresh }));
 vi.mock("@/lib/hooks/use-cart", async (original) => {
   const actual = await original<typeof import("@/lib/hooks/use-cart")>();

@@ -18,12 +18,13 @@ import { useCartDeliveryQuote } from "@/lib/hooks/use-cart-delivery-quote";
 import { DeliveryCategoryBreakdown } from "./delivery-category-breakdown";
 import { useGuestLoyalty } from "@/lib/loyalty/use-guest-loyalty";
 import { useLoyaltyEligibility } from "@/components/pricing/pricing-eligibility";
-import { FIRST_PURCHASE_PCT } from "@/lib/pricing/config";
+import { useCommerceTerms } from "@/components/pricing/commerce-terms-provider";
 
 /**
  * Mini-cart drawer (1F.2). Mounted globally; opens via `useCartUi`.
  */
 export function CartDrawer() {
+  const { firstPurchasePct } = useCommerceTerms();
   const open = useCartUi((s) => s.drawerOpen);
   const setOpen = useCartUi((s) => s.setDrawer);
   const close = useCartUi((s) => s.closeDrawer);
@@ -34,7 +35,7 @@ export function CartDrawer() {
   const guestLoyalty = useGuestLoyalty();
   const loggedIn = useLoyaltyEligibility();
   const firstPurchaseDiscount = !loggedIn && guestLoyalty.active && guestLoyalty.firstPurchase
-    ? Math.round(subtotal * FIRST_PURCHASE_PCT / 100) : 0;
+    ? Math.round(subtotal * firstPurchasePct / 100) : 0;
   const savings = lines.reduce(
     (n, l) => n + (l.unitPriceFull - l.unitPriceSale) * l.qty,
     0,
@@ -142,7 +143,7 @@ export function CartDrawer() {
                 Za ovu korpu dostava ne može automatski da se obračuna.
               </p>
             ) : null}
-            {firstPurchaseDiscount > 0 ? <div className="flex justify-between text-sm text-action"><span>Prva kupovina −15%</span><strong>−{formatRsd(firstPurchaseDiscount)}</strong></div> : null}
+            {firstPurchaseDiscount > 0 ? <div className="flex justify-between text-sm text-action"><span>Prva kupovina −{firstPurchasePct}%</span><strong>−{formatRsd(firstPurchaseDiscount)}</strong></div> : null}
             {shipping != null ? (
               <div className="flex items-baseline justify-between border-t border-border/60 pt-3 text-sm">
                 <span className="font-medium text-ink-900">Ukupno</span>

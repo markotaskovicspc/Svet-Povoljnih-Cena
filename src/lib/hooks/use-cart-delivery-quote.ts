@@ -1,5 +1,6 @@
 "use client";
 
+import { useCommerceTerms } from "@/components/pricing/commerce-terms-provider";
 import { useEffect, useState } from "react";
 import type { CartLine } from "@/lib/hooks/use-cart";
 import type { CheckoutDeliveryQuote } from "@/lib/checkout/config-shared";
@@ -10,8 +11,10 @@ export function useCartDeliveryQuote(
   enabled = true,
 ) {
   const member = useGuestLoyalty();
+  const { id: commerceTermsId } = useCommerceTerms();
   const requestKey = JSON.stringify({
     loyaltyActive: member.active,
+    commerceTermsId,
     city: null,
     lines: lines
       .map((line) => ({ sku: line.sku, qty: line.qty }))

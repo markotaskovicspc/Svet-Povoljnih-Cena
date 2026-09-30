@@ -30,6 +30,7 @@ describe("checkout totals", () => {
         assemblyTotal: 0,
         voucherDiscountRsd: 100,
         firstPurchaseEligible: true,
+        firstPurchasePct: 15,
         shippingPrices: { kurir: 300, kamion: null },
       }),
     ).toMatchObject({

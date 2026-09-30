@@ -4,6 +4,7 @@ import "./globals.css";
 import { Providers } from "@/components/providers";
 import { BRAND } from "@/lib/brand";
 import { HOME_SEO_DESCRIPTION, HOME_SEO_TITLE } from "@/lib/seo";
+import { CommerceTermsProvider } from "@/components/pricing/commerce-terms-provider";
 
 const fontSans = Inter({
   variable: "--font-inter",
@@ -40,6 +41,9 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // This is a server component; serialize its render time to keep hydration stable.
+  // eslint-disable-next-line react-hooks/purity
+  const renderedAt = Date.now();
   return (
     <html
       lang="sr-Latn"
@@ -50,7 +54,9 @@ export default function RootLayout({
         suppressHydrationWarning
         className="bg-surface text-ink-900 min-h-full flex flex-col font-sans"
       >
-        <Providers>{children}</Providers>
+        <CommerceTermsProvider initialAt={renderedAt}>
+          <Providers>{children}</Providers>
+        </CommerceTermsProvider>
       </body>
     </html>
   );

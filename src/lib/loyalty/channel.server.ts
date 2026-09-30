@@ -1,9 +1,10 @@
 import "server-only";
+import { firstPurchaseDiscountPct } from "@/lib/commerce-terms";
 import {createHash, randomUUID} from "node:crypto";
 import {z} from "zod";
 import {db} from "@/lib/db";
 import {signSocialQuote,readSocialQuote} from "@/lib/social/security";
-import {LOYALTY_CONSENT_VERSION} from "./shared";
+import {LOYALTY_CONSENT_VERSION, isSupportedLoyaltyConsentVersion} from "./shared";
 
 const scopeSchema=z.object({channel:z.enum(['facebook','instagram','email']),conversationId:z.string().min(3).max(200),email:z.email()});
 type Scope=z.infer<typeof scopeSchema>;
@@ -11,7 +12,7 @@ const tokenSchema=scopeSchema.extend({purpose:z.enum(['loyalty_invitation','loya
 const digest=(value:string)=>createHash('sha256').update(value).digest('hex');
 const normalized=(scope:Scope)=>({...scope,email:scope.email.trim().toLowerCase()});
 const duration=30*24*60*60*1000;
-export const loyaltySummary=(email:string)=>`Loyalty pogodnosti za ${email}: 30% popusta na artikle koji nisu na aktivnoj akciji. Za prvu kupovinu dodatnih 15% na artikle, ako ERP potvrdi pravo; dostava se ne umanjuje. Konačan iznos dobijate u ponudi.\nPristup je dobrovoljan. Čuvamo mejl, vreme i verziju saglasnosti radi članstva i obračuna pogodnosti. Ovo nije prijava za reklamne poruke.\nIzjava i prava: https://www.svetpovoljnihcena.rs/loyalty/uslovi\nOdgovorite DA ako prihvatate izjavu i želite loyalty pogodnosti. Ovim ne potvrđujete porudžbinu. Za kupovinu bez članstva odgovorite NE.`;
+export const loyaltySummary=(email:string)=>`Loyalty pogodnosti za ${email}: 30% popusta na artikle koji nisu na aktivnoj akciji. Za prvu kupovinu dodatnih ${firstPurchaseDiscountPct()}% na artikle, ako ERP potvrdi pravo; dostava se ne umanjuje. Konačan iznos dobijate u ponudi.\nPristup je dobrovoljan. Čuvamo mejl, vreme i verziju saglasnosti radi članstva i obračuna pogodnosti. Ovo nije prijava za reklamne poruke.\nIzjava i prava: https://www.svetpovoljnihcena.rs/loyalty/uslovi\nOdgovorite DA ako prihvatate izjavu i želite loyalty pogodnosti. Ovim ne potvrđujete porudžbinu. Za kupovinu bez članstva odgovorite NE.`;
 export function prepareChannelLoyalty(raw:Scope,secret:string){
  const scope=normalized(scopeSchema.parse(raw)),expiresAt=Date.now()+24*60*60*1000;
  return {ok:true as const,email:scope.email,summary:loyaltySummary(scope.email),expiresAt,challenge:signSocialQuote({...scope,purpose:'loyalty_invitation',version:LOYALTY_CONSENT_VERSION,nonce:randomUUID(),expiresAt},secret)};
@@ -19,7 +20,7 @@ export function prepareChannelLoyalty(raw:Scope,secret:string){
 function read(token:string,raw:Scope,secret:string,purpose:string){
  try{
   const data=tokenSchema.parse(readSocialQuote(token,secret)),scope=normalized(raw);
-  if(data.purpose!==purpose||data.version!==LOYALTY_CONSENT_VERSION||data.channel!==scope.channel||data.conversationId!==scope.conversationId||data.email!==scope.email)return null;
+  if(data.purpose!==purpose||!isSupportedLoyaltyConsentVersion(data.version)||data.channel!==scope.channel||data.conversationId!==scope.conversationId||data.email!==scope.email)return null;
   return data;
  }catch{return null;}
 }
@@ -63,7 +64,7 @@ export async function channelLoyalty(proof:string|undefined,scope:Scope,secret:s
 export async function existingChannelLoyalty(raw:Scope,secret:string){
  const scope=normalized(scopeSchema.parse(raw));
  const member=await db.guestLoyaltyMembership.findUnique({where:{email:scope.email}});
- if(!member||member.consentVersion!==LOYALTY_CONSENT_VERSION)return {ok:true as const,active:false as const};
+ if(!member||!isSupportedLoyaltyConsentVersion(member.consentVersion))return {ok:true as const,active:false as const};
  const expiresAt=Date.now()+15*60*1000;
  return {ok:true as const,active:true as const,email:scope.email,expiresAt,proof:signSocialQuote({...scope,purpose:'loyalty_existing',version:member.consentVersion,consentAt:member.consentAt.toISOString(),nonce:randomUUID(),expiresAt},secret)};
 }

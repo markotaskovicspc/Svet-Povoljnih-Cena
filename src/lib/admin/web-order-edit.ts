@@ -1,6 +1,6 @@
 import {
   EXCLUDE_SALE_FROM_STACK,
-  FIRST_PURCHASE_PCT,
+  firstPurchaseDiscountPct,
   MAX_STACK_PCT,
   SAVED_CARD_PCT,
 } from "@/lib/pricing/config";
@@ -40,6 +40,8 @@ export function calculateEditedWebOrderTotals(input: {
   requestedVoucherDiscount?: number;
   keepFirstPurchaseDiscount?: boolean;
   keepSavedCardDiscount?: boolean;
+  /** Preserve the rate accepted when the original order was placed. */
+  orderCreatedAt?: Date;
 }): WebOrderEditTotals {
   const subtotal = money(
     input.lines.reduce(
@@ -70,7 +72,7 @@ export function calculateEditedWebOrderTotals(input: {
   const requested = {
     voucher: Math.max(0, input.requestedVoucherDiscount ?? 0),
     first: input.keepFirstPurchaseDiscount
-      ? Math.round((eligibleForStack * FIRST_PURCHASE_PCT) / 100)
+      ? Math.round((eligibleForStack * firstPurchaseDiscountPct(input.orderCreatedAt)) / 100)
       : 0,
     card: input.keepSavedCardDiscount
       ? Math.round((eligibleForStack * SAVED_CARD_PCT) / 100)

@@ -1,5 +1,6 @@
 "use client";
 
+import { useCommerceTerms } from "@/components/pricing/commerce-terms-provider";
 import { useState } from "react";
 import { motion } from "framer-motion";
 import {
@@ -51,6 +52,7 @@ export function IdentityStep({
   loginError?: LoginErrorCode;
   registrationError?: RegistrationErrorCode;
 }) {
+  const { firstPurchasePct } = useCommerceTerms();
   const [showAuth, setShowAuth] = useState<"login" | "register" | null>(
     authenticatedCustomer
       ? null
@@ -75,8 +77,8 @@ export function IdentityStep({
       id: "register",
       icon: UserPlus,
       title: "Registruj se",
-      desc: "Ostvari 15% popusta na prvu kupovinu. Kod nije potreban.",
-      accent: "Novo: 15% na prvu kupovinu",
+      desc: `Ostvari ${firstPurchasePct}% popusta na prvu kupovinu. Kod nije potreban.`,
+      accent: `Novo: ${firstPurchasePct}% na prvu kupovinu`,
     },
     {
       id: "guest",
@@ -131,7 +133,7 @@ export function IdentityStep({
           />
           <div>
             <p className="text-sm font-semibold text-ink-900">
-              15% popusta za prvu kupovinu
+              {firstPurchasePct}% popusta za prvu kupovinu
             </p>
             <p className="mt-0.5 text-xs leading-relaxed text-ink-600 sm:text-sm">
               Ako vam je ovo prva kupovina, popust se obračunava automatski

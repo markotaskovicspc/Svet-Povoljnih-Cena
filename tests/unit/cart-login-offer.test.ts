@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
@@ -7,6 +7,8 @@ import {
 } from "@/components/cart/cart-view";
 
 describe("cart login offer", () => {
+  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date("2026-09-30T12:00:00Z")); });
+  afterEach(() => vi.useRealTimers());
   it("shows red uppercase offers followed by black eligibility notes", () => {
     const markup = renderToStaticMarkup(createElement(CartLoginOfferCopy));
 

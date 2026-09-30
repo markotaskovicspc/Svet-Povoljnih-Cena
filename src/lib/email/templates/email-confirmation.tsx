@@ -5,6 +5,7 @@ import {
   EmailLayout,
   EmailParagraph,
 } from "./_layout";
+import { firstPurchaseDiscountPct } from "@/lib/commerce-terms";
 import { BRAND } from "@/lib/brand";
 
 export interface EmailConfirmationProps {
@@ -31,7 +32,7 @@ export function EmailConfirmation({
       {includeFirstPurchaseOffer ? (
         <>
           <EmailDivider />
-          <EmailHeading>15% popusta za prvu kupovinu je aktivan</EmailHeading>
+          <EmailHeading>{firstPurchaseDiscountPct()}% popusta za prvu kupovinu je aktivan</EmailHeading>
           <EmailParagraph>
             Nije potreban kod. Popust se automatski obračunava na prvu
             porudžbinu dok ste prijavljeni na nalog.
