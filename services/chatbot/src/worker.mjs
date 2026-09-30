@@ -13,12 +13,14 @@ import {receiveProductImages,activeVisualContext} from './vision.mjs';
 import {receiveLoyalty} from './loyalty.mjs';
 import {isOrderCommandText,isStaffOrderCommand,prepareStaffOrder,executeStaffOrder} from './staff-order.mjs';
 import {mergeStaffHistory,STAFF_HISTORY_LIMIT} from './staff-history.mjs';
+import {unverifiedOrderReply} from './order-reply-guard.mjs';
 
 export class Worker {
-  constructor({store,spc,accounts,model,graphVersion,enabled=false,testSenders=[],answerFn=answer,intentFn=classifyOrderIntent,cartCheckFn=checkCart,cancellationIntentFn=classifyCancellation,reclamationIntentFn=classifyReclamation,visionFn=receiveProductImages,staffPrepareFn=prepareStaffOrder,historyFn=readMetaHistory}) {
+  constructor({store,spc,accounts,model,graphVersion,enabled=false,testSenders=[],answerFn=answer,intentFn=classifyOrderIntent,cartCheckFn=checkCart,cancellationIntentFn=classifyCancellation,reclamationIntentFn=classifyReclamation,visionFn=receiveProductImages,staffPrepareFn=prepareStaffOrder,historyFn=readMetaHistory,orderReplyCheckFn=unverifiedOrderReply}) {
     Object.assign(this,{store,spc,accounts,model,graphVersion,enabled,testSenders,answerFn,intentFn,cartCheckFn,cancellationIntentFn,reclamationIntentFn}); this.busy=false;
     this.visionFn=visionFn;
     this.staffPrepareFn=staffPrepareFn;this.historyFn=historyFn;
+    this.orderReplyCheckFn=orderReplyCheckFn;
   }
   async start() {
     // LISTEN starts work immediately; timer only recovers missed notifications/retries.
@@ -240,7 +242,7 @@ export class Worker {
             delete state.claimStatusNotice;
             const result=await this.answerFn({event,state,spc:this.spc,model:this.model,pause:reason=>this.store.pause(row.id,reason)});
             const normalizedReply=String(result.text??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'dj');
-            const unverifiedSuccess=!result.quoteCreated && !state.orders.some(o=>String(result.text).includes(o.number)) && /potvrdjeno|porudzbin[^.!?\n]{0,70}(?:kreiran|potvrdjen|evidentiran|primljen|uspesn)/i.test(normalizedReply);
+            const unverifiedSuccess=!result.quoteCreated && await this.orderReplyCheckFn({text:result.text,event,state,model:this.model});
             if(unverifiedSuccess) {
               result.text=state.orders.length
                 ? 'Nije kreirana nova porudžbina. Prethodne porudžbine su sačuvane. Napišite broj porudžbine koju želite da proverim.'

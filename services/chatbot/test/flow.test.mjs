@@ -6,6 +6,7 @@ import { Store } from '../src/store.mjs';
 import { isOrderConfirmation } from '../src/security.mjs';
 import { Worker } from '../src/worker.mjs';
 import {currentPurchaseHistory} from '../src/conversation-context.mjs';
+import {unverifiedOrderReply} from '../src/order-reply-guard.mjs';
 
 // Real embedded PostgreSQL for persistence and transaction tests. Advisory locks
 // are represented by a single test executor (cross-process locks need staging).
@@ -262,6 +263,23 @@ test('definite image rejection does not pause the conversation',async()=>{
   assert.equal((await store.pool.query('SELECT paused FROM spc_chat_conversations')).rows[0].paused,false);
   assert.equal((await store.pool.query('SELECT status FROM spc_chat_outbox')).rows[0].status,'failed');
  }finally{globalThis.fetch=originalFetch;await store.close();}
+});
+
+test('delivery follow-ups retain natural AI replies about the ten chairs without any new ERP write',async()=>{
+ const {store,worker,calls,event}=await setup();
+ try{
+  await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
+  await store.withConversation(event.conversation,async(row,state,c)=>{delete state.pending;state.historyVersion=2;state.orders=[{number:'EXISTING-10',items:[{sku:'CHAIR',name:'ELEGANCE SEAT',qty:10}]}];state.history=[{role:'assistant',content:'Porudžbina EXISTING-10 je uspešno kreirana.'}];await store.save(c,row.id,state);});
+  worker.orderReplyCheckFn=input=>unverifiedOrderReply({...input,classify:async()=>({kind:'existing_order',orderNumber:'EXISTING-10'})});
+  worker.answerFn=async()=>({text:'Vaša porudžbina je evidentirana. Dostava je obično za 2–3 dana.',quoteCreated:false});
+  for(const [n,text] of ['Kad možemo da očekujemo dostavu?','Za ovih 10 stolica što smo naručili'].entries()){
+   await store.accept({...event,id:`facebook:delivery-${n}`,text});await worker.tick();
+  }
+  const state=store.decode((await store.pool.query('SELECT state FROM spc_chat_conversations')).rows[0].state);
+  assert.equal(state.orders.length,1);assert.equal(calls.length,0);assert(!state.pending);
+  assert.equal(state.history.filter(m=>m.content.includes('Dostava je obično')).length,2);
+  assert(!state.history.some(m=>m.content.includes('Napišite broj porudžbine')));
+ }finally{await store.close();}
 });
 
 test('model cannot claim an uncreated order is confirmed; pending offer remains available',async()=>{
