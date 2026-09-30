@@ -1,3 +1,5 @@
+import { isCancelledDelivery } from "@/lib/courier/cancelled-delivery";
+import { renderPrintHtmlPdf } from "@/lib/pdf/print-html";
 import { boxQuantity } from "@/lib/courier/label-quantity";
 import { packedItemsLabel, parcelOrderItemIds } from "@/lib/courier/parcel-contents";
 import { NextResponse } from "next/server";
@@ -18,6 +20,7 @@ import { fulfillmentPaymentReadiness } from "@/lib/payments/fulfillment-readines
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 export async function GET(
   _request: Request,
@@ -49,6 +52,7 @@ export async function GET(
           providerClientReference: true,
           packageNo: true,
           orderItem: { select: { name: true } },
+          order: { select: { status: true, cancelledAt: true } },
         },
       },
     },
@@ -56,6 +60,7 @@ export async function GET(
   if (!batch) {
     return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
   }
+  batch.lines = batch.lines.filter((line) => !isCancelledDelivery(line));
   if (!batch.lines.length) {
     return labelConflict("Nalog nema aktivne pakete za štampu.", batch.id);
   }
@@ -245,7 +250,7 @@ export async function GET(
   try {
     html = renderXExpressBatchLabelsHtml(shipments, {
       title: batch.number,
-      autoPrint: true,
+      autoPrint: false,
       packageContentsByShipmentId,
       packageOrderItemIdsByShipmentId,
       packageQuantitiesByShipmentId: Object.fromEntries(shipments.map(shipment => [shipment.id, batch.lines
@@ -260,10 +265,10 @@ export async function GET(
       batch.id,
     );
   }
-  return new NextResponse(html, {
+  return new NextResponse(new Uint8Array(await renderPrintHtmlPdf(html)), {
     headers: {
-      "content-type": "text/html; charset=utf-8",
-      "content-disposition": `inline; filename="${batch.number}-kurirske-etikete.html"`,
+      "content-type": "application/pdf",
+      "content-disposition": `inline; filename="${batch.number}-kurirske-etikete.pdf"`,
       "cache-control": "private, no-store",
       "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:; script-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
       "x-content-type-options": "nosniff",

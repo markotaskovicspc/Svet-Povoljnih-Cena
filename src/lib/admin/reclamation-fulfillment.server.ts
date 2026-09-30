@@ -1,3 +1,4 @@
+import { assertMyGlsReturnAccepted, canReceiveReclamationShipment } from "@/lib/mygls/return-booking";
 import "server-only";
 import type { XExpressPickupCoordinates } from "@/lib/x-express/return";
 import { announceXExpressShipment } from "@/lib/x-express/shipments";
@@ -16,7 +17,7 @@ import {
   preflightShipmentForOrder,
 } from "@/lib/courier/registry";
 import type { PhysicalPackage } from "@/lib/courier/packages";
-import { deleteMyGlsLabelsForShipment } from "@/lib/mygls/shipments";
+import { deleteMyGlsLabelsForShipment, ensureMyGlsReturnDocument } from "@/lib/mygls/shipments";
 import {
   MYGLS_PROVIDER,
   type SmallParcelProvider,
@@ -82,13 +83,14 @@ export async function preflightReclamationShipment(
       shipments: {
         where: { purpose: args.purpose },
         orderBy: { createdAt: "desc" },
-        select: { status: true },
+        select: { status: true, provider: true, purpose: true, providerParcelId: true, trackingNo: true, syncError: true, rawCreateResponse: true },
         take: 1,
       },
     },
   });
   if (!reclamation) throw new Error("Reklamacija nije pronađena.");
   if (reclamation.shipments[0]?.status !== "FAILED" && reclamation.shipments[0]) {
+    assertMyGlsReturnAccepted(reclamation.shipments[0]);
     return;
   }
   assertReclamationShipmentReady(reclamation, args);
@@ -156,6 +158,11 @@ export async function createReclamationShipment(args: ReclamationShipmentOptions
           returnPickupCoordinates: args.returnPickupCoordinates,
           codAmount: 0,
         });
+
+  if (args.purpose === "RECLAMATION_RETURN" && shipment.provider === MYGLS_PROVIDER) {
+    assertMyGlsReturnAccepted(shipment);
+    if (!shipment.labelObjectKey) shipment = await ensureMyGlsReturnDocument(shipment);
+  }
 
   if (args.purpose === "RECLAMATION_RETURN" && shipment.provider === "X_EXPRESS" && !shipment.providerShipmentId) {
     if (shipment.providerStatusCode === "LOCAL_PREPARED") {
@@ -357,7 +364,7 @@ export async function receiveReclamationReturn(args: {
     });
     if (!reclamation) throw new Error("Reklamacija nije pronađena.");
     const shipment = reclamation.shipments[0];
-    if (!shipment || !["DELIVERED", "RETURNED"].includes(shipment.status)) {
+    if (!shipment || !canReceiveReclamationShipment(shipment)) {
       throw new Error("Povrat može da se primi tek kada kurir potvrdi isporuku u magacin.");
     }
     if (!reclamation.productId) {

@@ -1,3 +1,4 @@
+import { isMyGlsReturn, myGlsReturnBooking, myGlsReturnStatusLabel } from "@/lib/mygls/return-booking";
 import { formatStreetAddress } from "@/lib/address/house-number";
 import Image from "next/image";
 import Link from "next/link";
@@ -253,14 +254,19 @@ async function createShipmentAction(_state: AdminActionState, formData: FormData
       if (!id || !["RECLAMATION_RETURN", "RECLAMATION_REPLACEMENT"].includes(purpose) || !Number.isInteger(packageCount) || packageCount < 1 || packageCount > 99) {
         return { ok: false as const, error: "Kurirski zahtev nije ispravan." };
       }
-      const shipment = await createReclamationShipment({ reclamationId: id, purpose, packageCount, actorId });
-      refresh(id);
-      return {
-        ok: true as const,
-        entityId: id,
-        message: `${PURPOSE_LABELS[purpose]} — kurirski nalog je kreiran.`,
-        diff: { shipmentId: shipment.id, purpose, packageCount },
-      };
+      try {
+        const shipment = await createReclamationShipment({ reclamationId: id, purpose, packageCount, actorId });
+        return {
+          ok: true as const,
+          entityId: id,
+          message: myGlsReturnStatusLabel(shipment) ?? `${PURPOSE_LABELS[purpose]} — kurirski nalog je kreiran.`,
+          diff: { shipmentId: shipment.id, purpose, packageCount: shipment.packageCount },
+        };
+      } finally {
+        // Provider acceptance or an ambiguous result is persisted even when the
+        // action throws. Show that state immediately instead of a stale retry button.
+        refresh(id);
+      }
     },
   )(formData);
 }
@@ -342,7 +348,17 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
     <>
       <PageHeader
         title={`Reklamacija ${reclamation.number}`}
-        description={`${STATUS_LABELS[reclamation.status]} · ${reclamation.customerFirst} ${reclamation.customerLast} · ${reclamation.sku}`}
+        description={
+          <>
+            {`${STATUS_LABELS[reclamation.status]} · ${reclamation.customerFirst} ${reclamation.customerLast} · ${reclamation.sku}`}
+            <Link
+              href={`/admin/erp/prodajni-nalozi/${reclamation.orderId}`}
+              className="mt-1 block w-fit font-medium text-walnut underline underline-offset-4 hover:text-ink-900"
+            >
+              Porudžbina {reclamation.order.number}
+            </Link>
+          </>
+        }
         crumbs={[
           { href: "/admin", label: "Admin" },
           { href: "/admin/erp", label: "ERP" },
@@ -426,16 +442,21 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
               purpose === "RECLAMATION_RETURN" || reclamation.resolution !== "POVRAT_NOVCA" ||
               reclamation.shipments.some((shipment) => shipment.purpose === purpose && shipment.status !== "FAILED")
             ).map((purpose) => {
-              const shipment = reclamation.shipments.find((row) => row.purpose === purpose && row.status !== "FAILED");
+              const shipment = reclamation.shipments.find((row) => row.purpose === purpose &&
+                (row.status !== "FAILED" || (isMyGlsReturn(row) && !["CANCELLED", "REJECTED"].includes(myGlsReturnBooking(row).state))));
+              const previous = reclamation.shipments.find(row => row.purpose === purpose);
+              const returnBooking = shipment && isMyGlsReturn(shipment) ? myGlsReturnBooking(shipment) : null;
               return (
                 <div key={purpose} className="rounded-lg border border-border p-4">
                   <h3 className="font-semibold">{PURPOSE_LABELS[purpose]}</h3>
                   {shipment ? (
                     <div className="mt-2 text-sm">
                       <p>
-                        {shipment.provider ?? "Kurir"} · <strong>{shipment.provider === "X_EXPRESS" && !shipment.providerShipmentId ? "Pripremljeno — kurir nije potvrdio nalog" : SHIPMENT_STATUS_LABEL[shipment.status]}</strong>
+                        {shipment.provider ?? "Kurir"} · <strong>{shipment.provider === "X_EXPRESS" && !shipment.providerShipmentId ? "Pripremljeno — kurir nije potvrdio nalog" : (myGlsReturnStatusLabel(shipment) ?? SHIPMENT_STATUS_LABEL[shipment.status])}</strong>
                         {shipment.trackingNo ? ` · ${shipment.trackingNo}` : ""}
                       </p>
+                      {returnBooking?.state === "UNKNOWN" ? <p className="mt-2">Referenca za proveru u MyGLS-u: <strong>{shipment.providerOrderId}</strong></p> : null}
+                      {returnBooking?.state === "ACCEPTED" ? <p className="mt-2">Traženi datum preuzimanja: {returnBooking.pickupDate ?? "Proverite GLS potvrdu"}. Kurir donosi adresnicu; tačan sat dolaska nije potvrđen.</p> : null}
                       {shipment.syncError ? <p className="mt-2 text-destructive">{shipment.syncError}</p> : null}
                       <div className="mt-3 flex flex-wrap gap-2">
                         {purpose === "RECLAMATION_RETURN" && shipment.provider === "X_EXPRESS" && !shipment.providerShipmentId && shipment.providerStatusCode === "LOCAL_PREPARED" ? (
@@ -446,10 +467,10 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
                             <SubmitButton size="xs" confirm="Poslati postojeći pripremljen nalog za preuzimanje X Express-u?">Pošalji pripremljen nalog</SubmitButton>
                           </AdminActionForm>
                         ) : null}
-                        <a href={`/api/admin/shipments/${shipment.id}/label`} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center rounded-lg border border-border px-3 text-xs font-medium">
-                          Otvori / ponovo štampaj adresnicu
-                        </a>
-                        {!["DELIVERED", "RETURNED"].includes(shipment.status) ? (
+                        {shipment.labelObjectKey || shipment.provider === "X_EXPRESS" ? <a href={`/api/admin/shipments/${shipment.id}/label`} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center rounded-lg border border-border px-3 text-xs font-medium">
+                          {returnBooking?.state === "ACCEPTED" ? "Otvori P&R potvrdu preuzimanja" : "Otvori / ponovo štampaj adresnicu"}
+                        </a> : returnBooking?.state === "ACCEPTED" ? <AdminActionForm action={createShipmentAction}><input type="hidden" name="id" value={reclamation.id} /><input type="hidden" name="purpose" value={purpose} /><SubmitButton size="xs">Preuzmi postojeću P&R potvrdu</SubmitButton></AdminActionForm> : null}
+                        {!["DELIVERED", "RETURNED"].includes(shipment.status) && (!returnBooking || (returnBooking.state !== "UNKNOWN" && shipment.providerParcelId)) ? (
                           <AdminActionForm action={cancelShipmentAction}>
                             <input type="hidden" name="shipmentId" value={shipment.id} />
                             <input type="hidden" name="reclamationId" value={reclamation.id} />
@@ -483,17 +504,19 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
                     <AdminActionForm action={createShipmentAction} className="mt-3 flex flex-wrap items-end gap-2">
                       <input type="hidden" name="id" value={reclamation.id} />
                       <input type="hidden" name="purpose" value={purpose} />
+                      {previous?.syncError ? <p className="w-full text-destructive">{previous.syncError}</p> : null}
                       <div className="w-full space-y-1 text-sm">
                         <p>Preuzimanje: {formatStreetAddress(reclamation.order.shipStreet, reclamation.order.shipHouseNumber ?? "")}, {reclamation.order.shipPostalCode} {reclamation.order.shipCity}</p>
                         <p>Odredište: {reclamation.warehouse ? `${reclamation.warehouse.name} · ${reclamation.warehouse.address ?? "Adresa nije uneta"}, ${reclamation.warehouse.city ?? ""}` : "Izaberite magacin"}</p>
-                        <p>Otkupnina: 0 RSD. X Express prevoz plaćamo mi po ugovoru.</p>
+                        <p>Otkupnina: 0 RSD. Za GLS se šalje P&R zahtev za naredni radni dan; kurir donosi adresnicu.</p>
                       </div>
                       <p className="w-full text-xs text-ink-500">Za X Express lokacija preuzimanja se automatski pronalazi iz adrese kupca preko <span translate="no">Google Maps</span>. Ako adresa nije dovoljno precizna, nalog se neće poslati i dobićete poruku da proverite ulicu, broj i mesto.</p>
-                      <Field label="Broj paketa">
+                      <p className="w-full text-xs text-ink-500">Broj i mere GLS paketa preuzimaju se iz artikla i količine reklamacije.</p>
+                      <Field label="Broj paketa za X Express">
                         <input name="packageCount" type="number" min={1} max={99} defaultValue={1} className="h-9 w-24 rounded-lg border border-input bg-transparent px-2" />
                       </Field>
-                      <SubmitButton size="sm" confirm={`Kreirati kurirski nalog: ${PURPOSE_LABELS[purpose]}?`}>
-                        Kreiraj nalog
+                      <SubmitButton size="sm" confirm="Poslati zahtev za preuzimanje kod kupca? Za GLS se šalje P&R nalog za naredni radni dan, bez otkupnine.">
+                        Zatraži preuzimanje kod kupca
                       </SubmitButton>
                     </AdminActionForm>
                   )}

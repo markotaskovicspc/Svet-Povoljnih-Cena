@@ -2499,6 +2499,8 @@ async function assertPickupGroupsPaymentReady(
     select: {
       id: true,
       number: true,
+      status: true,
+      cancelledAt: true,
       paymentMethod: true,
       payments: {
         select: { status: true },
@@ -2510,6 +2512,9 @@ async function assertPickupGroupsPaymentReady(
     throw new Error("Jedna od porudžbina iz naloga više ne postoji.");
   }
   for (const order of orders) {
+    if (order.status === "OTKAZANO" || order.cancelledAt) {
+      throw new Error(`Porudžbina ${order.number} je otkazana i ne može biti poslata kuriru.`);
+    }
     assertFulfillmentPaymentReady({
       orderNumber: order.number,
       purpose: "ORDER_DELIVERY",

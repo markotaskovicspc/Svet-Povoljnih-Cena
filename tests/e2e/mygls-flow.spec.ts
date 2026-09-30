@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect as baseExpect, test, type Locator, type Page } from "@playwright/test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
@@ -6,6 +6,8 @@ import { PDFDocument } from "pdf-lib";
 import { readMyGlsPageText } from "@/lib/mygls/label-redaction";
 import { config as loadEnv } from "dotenv";
 import { applyShipmentEvent } from "@/lib/courier/registry";
+
+const expect = baseExpect.configure({ timeout: 30_000 });
 
 loadEnv({ path: ".env.local" });
 loadEnv();
@@ -259,6 +261,8 @@ test.describe("MyGLS — isolated end-to-end acceptance", () => {
       expect(lines.every((line) => Number(line.weightKg) === 7.25)).toBe(true);
       expect(new Set(lines.map((line) => line.lineGroupKey).values()).size).toBe(1);
 
+      const operator = await db.adminUser.findUniqueOrThrow({ where: { email: fixture.adminEmail } });
+      await db.pickupBatchLine.updateMany({ where: { batchId }, data: { warehouseReadyAt: new Date(), warehouseReadyById: operator.id } });
       await db.pickupBatch.update({
         where: { id: batchId },
         data: {

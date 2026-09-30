@@ -1,3 +1,5 @@
+import { assertMyGlsReturnAccepted, isMyGlsReturn } from "@/lib/mygls/return-booking";
+import { ensureMyGlsReturnDocument } from "@/lib/mygls/shipments";
 import { parcelOrderItemIds } from "@/lib/courier/parcel-contents";
 import "server-only";
 import { requireReturnPickupCoordinates, type XExpressPickupCoordinates } from "@/lib/x-express/return";
@@ -246,7 +248,11 @@ async function processShipmentForOrder(
   const existing = requestedOrderItemIds.length
     ? null
     : order.shipments.find((shipment) => shipment.status !== "FAILED") ?? null;
-  if (existing) return existing;
+  if (existing) {
+    assertMyGlsReturnAccepted(existing);
+    if (mode === "create" && isMyGlsReturn(existing)) return ensureMyGlsReturnDocument(existing);
+    return existing;
+  }
   let shipmentItems = reclamation
     ? order.items
         .filter((item) => item.id === reclamation.orderItemId)

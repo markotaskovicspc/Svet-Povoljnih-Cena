@@ -260,10 +260,14 @@ export async function syncMyGlsShipmentById(shipmentId: string, options: { notif
       syncError: true,
       labelObjectKey: true,
       packageCount: true,
+      purpose: true,
     },
   });
   if (!shipment?.trackingNo || shipment.provider !== MYGLS_PROVIDER) {
     throw new Error("MyGLS pošiljka nije pronađena.");
+  }
+  if (shipment.purpose === "RECLAMATION_RETURN" && shipment.syncError === "MyGLS etiketa obrisana.") {
+    throw new Error("GLS P&R nalog je otkazan. Osvežavanje starog broja ne može ponovo zakazati preuzimanje.");
   }
 
   const numbers = parcelNumberList(shipment);
@@ -277,7 +281,7 @@ export async function syncMyGlsShipmentById(shipmentId: string, options: { notif
   const events = normalizeMyGlsStatusResponses(raw, numbers);
   if (numbers.length !== shipment.packageCount) throw new Error("MyGLS nema sačuvane brojeve svih paketa.");
   const handover = numbers.length > 1
-    ? await persistMyGlsHandover(shipment.id, buildMyGlsHandover(numbers, events))
+    ? await persistMyGlsHandover(shipment.id, buildMyGlsHandover(numbers, events, shipment.purpose === "RECLAMATION_RETURN"))
     : null;
   const results = [];
 

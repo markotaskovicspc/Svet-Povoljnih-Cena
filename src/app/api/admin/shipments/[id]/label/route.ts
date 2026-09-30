@@ -1,3 +1,6 @@
+import { isMyGlsReturn } from "@/lib/mygls/return-booking";
+import { isCancelledDelivery } from "@/lib/courier/cancelled-delivery";
+import { renderPrintHtmlPdf } from "@/lib/pdf/print-html";
 import { boxQuantity, myGlsBoxQuantities } from "@/lib/courier/label-quantity";
 import { MyGlsPrintLayoutError } from "@/lib/mygls/print-layout";
 import { NextResponse } from "next/server";
@@ -11,6 +14,7 @@ import { fulfillmentPaymentReadiness } from "@/lib/payments/fulfillment-readines
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 export async function GET(
   _req: Request,
@@ -25,6 +29,8 @@ export async function GET(
       order: {
         select: {
           number: true,
+          status: true,
+          cancelledAt: true,
           total: true,
           paymentMethod: true,
           payments: { select: { status: true } },
@@ -43,6 +49,9 @@ export async function GET(
   });
   if (!shipment) {
     return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
+  }
+  if (isCancelledDelivery(shipment)) {
+    return NextResponse.json({ ok: false, error: "order_cancelled", message: "Porudžbina je otkazana. Adresnice nisu dostupne za slanje robe; postojeću pošiljku proverite i otkažite kod kurira." }, { status: 409 });
   }
   const paymentReadiness = fulfillmentPaymentReadiness({
     purpose: shipment.purpose,
@@ -86,10 +95,10 @@ export async function GET(
         { status: 409 },
       );
     }
-    return new NextResponse(html, {
+    return new NextResponse(new Uint8Array(await renderPrintHtmlPdf(html)), {
       headers: {
-        "content-type": "text/html; charset=utf-8",
-        "content-disposition": `inline; filename="x-express-adresnica-${shipment.trackingNo}.html"`,
+        "content-type": "application/pdf",
+        "content-disposition": `inline; filename="x-express-adresnica-${shipment.trackingNo}.pdf"`,
         "cache-control": "private, no-store",
         "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; frame-ancestors 'none'",
         "x-content-type-options": "nosniff",
@@ -106,7 +115,7 @@ export async function GET(
     const quantities = shipment.pickupBatchLines?.length
       ? shipment.pickupBatchLines.map(line => ({ quantity: boxQuantity(line), parcelNumber: line.providerParcelNumber, clientReference: line.providerClientReference }))
       : myGlsBoxQuantities(shipment.rawCreateResponse);
-    pdf = await downloadMyGlsLabelPdf(shipment.labelObjectKey, quantities);
+    pdf = await downloadMyGlsLabelPdf(shipment.labelObjectKey, quantities, isMyGlsReturn(shipment));
   } catch (error) {
     if (!(error instanceof MyGlsPrintLayoutError)) throw error;
     return NextResponse.json({ ok: false, error: "mygls_label_invalid", message: error.message }, { status: 409 });

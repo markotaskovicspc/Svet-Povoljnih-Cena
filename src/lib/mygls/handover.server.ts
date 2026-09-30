@@ -25,8 +25,12 @@ export async function persistMyGlsHandover(shipmentId: string, snapshot: MyGlsHa
     if (previousSnapshot?.version === 1 && Array.isArray(previousSnapshot.parcels)) {
       snapshot = { ...snapshot, parcels: snapshot.parcels.map(parcel => {
         const previous = previousSnapshot.parcels.find(p => p.parcelNumber === parcel.parcelNumber);
-        return !parcel.pickedUpAt && previous?.pickedUpAt && Number.isFinite(Date.parse(previous.pickedUpAt))
-          ? { ...parcel, pickedUpAt: previous.pickedUpAt } : parcel;
+        return {
+          ...parcel,
+          ...(!parcel.pickedUpAt && previous?.pickedUpAt && Number.isFinite(Date.parse(previous.pickedUpAt)) ? { pickedUpAt: previous.pickedUpAt } : {}),
+          ...(previous?.latestStatusAt && (!parcel.latestStatusAt || previous.latestStatusAt > parcel.latestStatusAt)
+            ? { latestStatus: previous.latestStatus, latestStatusAt: previous.latestStatusAt } : {}),
+        };
       }), recordedAt: previousSnapshot.recordedAt > snapshot.recordedAt ? previousSnapshot.recordedAt : snapshot.recordedAt };
     }
     const previousReport = readPackageHandoverReport(raw);

@@ -19,6 +19,7 @@ it("renders dated, category-sorted picking with colors, unit totals and separate
       ...[2, 1].map((packedQuantity, i) => ({ id: `parcel-${i}`, lineGroupKey: "order:1", quantity: 3, packedQuantity, orderItem: item })),
       { id: "lamp", lineGroupKey: "order:2", quantity: 1, packedQuantity: 1,
         orderItem: { ...item, id: "lamp", sku: "999999", name: "Stona lampa ZETA", qty: 1, categoryName: "Lampe", product: { barcode: "8609999999999" }, color1: "Bela" } },
+      { id: "cancelled", purpose: "ORDER_DELIVERY", order: { status: "OTKAZANO" }, lineGroupKey: "order:cancel", packedQuantity: 16, orderItem: { ...item, sku: "CANCELLED-CHAIRS" } },
       { id: "deferred", lineGroupKey: "order:3", quantity: 1, packedQuantity: 1, deferredAt: new Date(), orderItem: { ...item, sku: "DEFERRED" } },
     ],
   });
@@ -31,6 +32,7 @@ it("renders dated, category-sorted picking with colors, unit totals and separate
   expect(html).toContain("1 × 3 kom");
   expect(html).toContain("8601234567890");
   expect(html).not.toContain("DEFERRED");
+  expect(html).not.toContain("CANCELLED-CHAIRS");
   expect(html.indexOf("Stona lampa ZETA")).toBeLessThan(html.indexOf("Trpezarijska stolica ALFA"));
   if (process.env.PICKING_PRINT_PREVIEW) {
     const cssDir = ".next/static/chunks";

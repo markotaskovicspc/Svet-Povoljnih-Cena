@@ -1,3 +1,6 @@
+import { isMyGlsReturn, myGlsReturnStatusLabel } from "@/lib/mygls/return-booking";
+import { OrderPickupLinks } from "@/components/admin/order-pickup-links";
+import { PickupReferenceNote } from "@/components/admin/pickup-reference-note";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
@@ -1497,6 +1500,15 @@ export async function WebOrderDetail({ id }: { id: string }) {
           ? Boolean(shipment.providerShipmentId && shipment.labelObjectKey)
           : Boolean(shipment.trackingNo),
     );
+  const mentionedPickupNumbers = Array.from(new Set(order.events.flatMap((event) =>
+    event.note?.match(/\bPRE-\d{4}-\d+\b/g) ?? [],
+  )));
+  const mentionedPickupBatches = mentionedPickupNumbers.length
+    ? await db.pickupBatch.findMany({
+        where: { number: { in: mentionedPickupNumbers } },
+        select: { id: true, number: true },
+      })
+    : [];
   const latestIpsPayment =
     order.payments.find((payment) => payment.provider === "IPS") ?? null;
   const reservedRefundTotal = order.paymentRefunds
@@ -2173,7 +2185,7 @@ export async function WebOrderDetail({ id }: { id: string }) {
                     {e.createdAt.toLocaleString("sr-Latn-RS")}
                   </span>
                   <span className="font-medium">{e.status}</span>
-                  {e.note ? <span className="text-ink-500">— {e.note}</span> : null}
+                  {e.note ? <span className="text-ink-500">— <PickupReferenceNote note={e.note} batches={mentionedPickupBatches} /></span> : null}
                 </li>
               ))}
               {order.events.length === 0 ? (
@@ -2184,6 +2196,7 @@ export async function WebOrderDetail({ id }: { id: string }) {
         </div>
 
         <div className="space-y-4">
+          <OrderPickupLinks orderId={order.id} />
           <Card>
             <CardTitle>Iznos</CardTitle>
             <dl className="space-y-1 text-sm">
@@ -2513,9 +2526,9 @@ export async function WebOrderDetail({ id }: { id: string }) {
                           <Row
                             k="Status"
                             v={
-                              partialHandover ? packageHandoverLabel(partialHandover) : effectiveShipmentStatus === shipment.status
+                              myGlsReturnStatusLabel(shipment) ?? (partialHandover ? packageHandoverLabel(partialHandover) : effectiveShipmentStatus === shipment.status
                                 ? shipment.status
-                                : `${effectiveShipmentStatus} · ispravljen GLS kod ${shipment.providerStatusCode}`
+                                : `${effectiveShipmentStatus} · ispravljen GLS kod ${shipment.providerStatusCode}`)
                             }
                           />
                           <Row
@@ -2621,7 +2634,7 @@ export async function WebOrderDetail({ id }: { id: string }) {
                           (shipment.purpose !== "ORDER_DELIVERY" ||
                             courierPaymentReadiness.ready) ? (
                             <Row
-                              k="Etiketa"
+                              k={isMyGlsReturn(shipment) ? "P&R dokument" : "Etiketa"}
                               v={
                                 <a
                                   href={shipment.labelUrl}
@@ -2701,7 +2714,7 @@ export async function WebOrderDetail({ id }: { id: string }) {
                           shipment.status !== "DELIVERED" &&
                           shipment.status !== "RETURNED" ? (
                             <>
-                              {isCashOnDeliveryPaymentMethod(order.paymentMethod) ? (
+                              {shipment.purpose === "ORDER_DELIVERY" && isCashOnDeliveryPaymentMethod(order.paymentMethod) ? (
                                 <AdminActionForm action={modifyMyGlsCOD} className="flex items-center gap-2">
                                   <input type="hidden" name="shipmentId" value={shipment.id} />
                                   <input type="hidden" name="orderId" value={order.id} />

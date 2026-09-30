@@ -29,6 +29,11 @@ describe("tokenizovana delimična pretraga proizvoda", () => {
     ).toBe(false);
   });
 
+  it("pronalazi FLEX SEAT dok korisnik još kuca poslednju reč", () => {
+    expect(searchTextMatchesTokens("flex se", ["Kancelarijska stolica FLEX SEAT"])).toBe(true);
+    expect(searchTextMatchesTokens("flex xx", ["Kancelarijska stolica FLEX SEAT"])).toBe(false);
+  });
+
   it("dvoslovna reč mora biti cela, dok tri znaka mogu biti prefiks", () => {
     expect(searchTextMatchesTokens("TV sto", ["TV komoda", "Stolovi"])).toBe(true);
     expect(searchTextMatchesTokens("TV sto", ["Tvoj sto"])).toBe(false);

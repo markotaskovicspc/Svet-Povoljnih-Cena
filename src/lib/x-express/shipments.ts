@@ -1,3 +1,4 @@
+import { isCancelledDelivery } from "@/lib/courier/cancelled-delivery";
 import "server-only";
 import { courierAddressParts } from "@/lib/address/house-number";
 import { geocodePickupAddress } from "@/lib/address/google-geocoding";
@@ -117,6 +118,7 @@ export async function createXExpressShipmentForOrder(
     },
   });
   if (!order) throw new Error(`Order ${orderId} ne postoji.`);
+  if (isCancelledDelivery({ purpose, order })) throw new Error("Otkazana porudžbina ne može biti poslata kuriru.");
   if (order.shippingMethod !== "KURIR") {
     throw new XExpressConfigError("X Express se koristi samo za kurirsku isporuku.");
   }
@@ -394,6 +396,8 @@ export async function announceXExpressShipment(shipmentId: string) {
       order: {
         select: {
           number: true,
+          status: true,
+          cancelledAt: true,
           createdAt: true,
           paymentMethod: true,
           payments: { select: { status: true } },
@@ -404,6 +408,7 @@ export async function announceXExpressShipment(shipmentId: string) {
   if (!existing || existing.provider !== X_EXPRESS_PROVIDER) {
     throw new XExpressConfigError("Pripremljena X Express pošiljka nije pronađena.");
   }
+  if (isCancelledDelivery(existing)) throw new Error("Otkazana porudžbina ne može biti poslata kuriru.");
   if (existing.providerShipmentId && existing.status !== "FAILED") {
     return existing;
   }

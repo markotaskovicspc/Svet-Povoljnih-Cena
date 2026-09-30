@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   batch: vi.fn(), orders: vi.fn(), shipments: vi.fn(), admin: vi.fn(),
-  download: vi.fn(), merge: vi.fn(), render: vi.fn(),
+  pdf: vi.fn(), download: vi.fn(), merge: vi.fn(), render: vi.fn(),
 }));
 vi.mock("@/lib/db", () => ({ db: {
   pickupBatch: { findUnique: mocks.batch },
@@ -16,6 +16,8 @@ vi.mock("@/lib/mygls/print-layout", async (importOriginal) => ({
   packMyGlsLabels: mocks.merge,
 }));
 vi.mock("@/lib/x-express/labels", () => ({ renderXExpressBatchLabelsHtml: mocks.render }));
+
+vi.mock("@/lib/pdf/print-html", () => ({ renderPrintHtmlPdf: mocks.pdf }));
 
 import { GET } from "@/app/api/admin/erp/preuzimanja/[id]/labels/route";
 import { MyGlsPrintLayoutError } from "@/lib/mygls/print-layout";
@@ -67,6 +69,7 @@ beforeEach(() => {
   ]);
   mocks.download.mockImplementation(async (key: string) => Buffer.from(key));
   mocks.merge.mockResolvedValue(Buffer.from("%PDF-1.7\n"));
+  mocks.pdf.mockResolvedValue(Buffer.from("%PDF-1.7\n"));
   mocks.render.mockReturnValue("<html>active labels</html>");
 });
 
@@ -105,6 +108,10 @@ describe("pickup label downloads", () => {
         ...Array.from({ length: 4 }, (_, i) => ({ bytes: Buffer.from(`order-${i}.pdf`), packageCount: 1, groupKey: `order-${i}:ORDER_DELIVERY:` })),
       ]);
     } else {
+      expect(response.headers.get("content-type")).toBe("application/pdf");
+      expect(response.headers.get("content-disposition")).toContain(".pdf");
+      expect(await response.text()).toMatch(/^%PDF-/);
+      expect(mocks.pdf).toHaveBeenCalledWith("<html>active labels</html>");
       expect(mocks.render.mock.calls[0][0]).toHaveLength(5);
       expect(mocks.render.mock.calls[0][1].packageContentsByShipmentId["shipment-large-order"]).toHaveLength(4);
     }
@@ -204,4 +211,17 @@ it.each(["MYGLS", "X_EXPRESS"])("uses the actual 2+1 split for three sold units 
   } else {
     expect(mocks.render.mock.calls[0][1].packageQuantitiesByShipmentId).toEqual({ "shipment-order": [2, 1] });
   }
+});
+
+
+it.each(["MYGLS", "X_EXPRESS"])("excludes cancelled order labels without erasing history (%s)", async (courier) => {
+  provider = courier;
+  lines = [line("active"), { ...line("cancelled"), order: { status: "OTKAZANO" } } as ReturnType<typeof line>];
+  mocks.shipments.mockResolvedValue([shipment("active"), shipment("cancelled")]);
+  const response = await request();
+  expect(response.status).toBe(200);
+  expect(response.headers.get("x-courier-label-count")).toBe("1");
+  expect(mocks.orders.mock.calls[0][0].where.id.in).toEqual(["active"]);
+  if (courier === "X_EXPRESS") expect(mocks.render.mock.calls[0][0].map((s: { id: string }) => s.id)).toEqual(["shipment-active"]);
+  else expect(mocks.download.mock.calls.map(call => call[0])).toEqual(["active.pdf"]);
 });

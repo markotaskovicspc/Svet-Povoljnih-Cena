@@ -389,3 +389,28 @@ it("sends one consolidated Pompea parcel with the whole COD and all article cont
   expect(parcels).toHaveLength(1);
   expect(parcels[0]).toMatchObject({ Count: 1, CODAmount: 12000, Content: "2 × POMPEA 0; 3 × POMPEA 1" });
 });
+
+describe("GLS customer pickup service", () => {
+  it("requests PRS on every physical return parcel, with customer home pickup and no outbound services or COD", () => {
+    const parcels = buildMyGlsParcelsForOrder({
+      cfg: { ...config, contactServiceEnabled: true, flexDeliveryServiceEnabled: true },
+      order: { ...order, glsDeliveryPointId: "shop-1", glsDeliveryPointAddress: "Prodavnica 99", glsDeliveryPointCity: "Beograd", glsDeliveryPointPostalCode: "11000" },
+      packages, purpose: "RECLAMATION_RETURN",
+    });
+    expect(parcels).toHaveLength(2);
+    for (const parcel of parcels) {
+      expect(parcel.ServiceList).toEqual([{ Code: "PRS" }]);
+      expect(parcel.PickupAddress).toMatchObject({ Street: "Bulevar oslobođenja", HouseNumber: "10", City: "Novi Sad", ContactPhone: "+381642223344" });
+      expect(parcel.CODAmount).toBe(0);
+      expect(parcel.FinalDeliveryAddress).toBeUndefined();
+    }
+  });
+  it("blocks a pickup with a missing customer telephone", () => {
+    expect(() => buildMyGlsParcelForOrder({ cfg: config, order: { ...order, shipPhone: "" }, packages, purpose: "RECLAMATION_RETURN" })).toThrow(/telefon kupca/);
+  });
+  it("does not add PRS to normal deliveries or outbound replacements", () => {
+    for (const purpose of ["ORDER_DELIVERY", "RECLAMATION_REPLACEMENT"] as const) {
+      expect(buildMyGlsParcelForOrder({ cfg: config, order, packages, purpose }).ServiceList).toBeUndefined();
+    }
+  });
+});

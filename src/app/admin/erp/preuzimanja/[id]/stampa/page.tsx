@@ -1,3 +1,4 @@
+import { isCancelledDelivery } from "@/lib/courier/cancelled-delivery";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireAdminAction } from "@/lib/admin";
@@ -31,6 +32,7 @@ export default async function PickupBatchPrintPage({
       lines: {
         orderBy: [{ orderId: "asc" }, { packageNo: "asc" }],
         include: {
+          order: { select: { status: true, cancelledAt: true } },
           reclamation: {
             select: {
               resolution: true,
@@ -62,7 +64,7 @@ export default async function PickupBatchPrintPage({
   });
   if (!batch) notFound();
 
-  const activeLines = batch.lines.filter((line) => !line.deferredAt);
+  const activeLines = batch.lines.filter((line) => !line.deferredAt && !isCancelledDelivery(line));
   const picking = buildPickupPrintRows(activeLines);
   const printedAt = new Intl.DateTimeFormat("sr-Latn-RS", {
     timeZone: "Europe/Belgrade", dateStyle: "short", timeStyle: "short",
