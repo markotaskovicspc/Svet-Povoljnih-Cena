@@ -864,7 +864,7 @@ export default async function PickupBatchPage({
 
         <Card>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <CardTitle description={`Učitavaju se sve neučitane, nefiskalizovane DC porudžbine koje po stvarnoj težini i dimenzijama pripadaju kuriru ${myGls ? "MyGLS (preko 30 kg ili bar jedna stranica preko 60 cm)" : "X Express (paketi do 60 cm po svakoj strani, sa težinom do 30 kg ili bez upisane težine)"}. Težina 0 ili prazno polje ne blokira ulazak u picking; stvarnu težinu unesite pre potvrde spremnosti i kreiranja adresnice. Poznato prekoračenje granice šalje celu porudžbinu u MyGLS. Cela porudžbina ostaje u jednom nalogu. Zamene ulaze u isti picking tok. MyGLS volumetrijska dimenzija preko 300 cm može imati doplatu, ali ne blokira adresnicu.`}>
+            <CardTitle description={`Učitavaju se sve neučitane, nefiskalizovane DC porudžbine koje po stvarnoj težini i dimenzijama pripadaju kuriru ${myGls ? "MyGLS (preko 30 kg ili bar jedna stranica preko 60 cm)" : "X Express (paketi do 60 cm po svakoj strani, sa težinom do 30 kg ili bez upisane težine)"}. Težina 0 ili prazno polje ne blokira ulazak u picking; stvarnu težinu unesite pre potvrde spremnosti i kreiranja adresnice. Poznato prekoračenje granice šalje celu porudžbinu u MyGLS. Cela porudžbina ostaje u jednom nalogu. Zamene sa potvrđenom spremnošću i unetim merama ulaze samo na klik „Učitaj porudžbine“. MyGLS volumetrijska dimenzija preko 300 cm može imati doplatu, ali ne blokira adresnicu.`}>
               Zajednička picking lista
             </CardTitle>
             {editable ? (
@@ -1590,6 +1590,7 @@ function pickupLoadMessage(
     : null;
   return [
     loaded,
+    result.replacementCount ? `Učitano spremnih zamena: ${result.replacementCount} (${result.replacementLineCount} paketa).` : null,
     skipped.length ? `Preskočeno: ${skipped.join(", ")}.` : null,
     correction,
     surcharge,
@@ -1602,4 +1603,5 @@ function revalidatePickupPaths(batchId: string) {
   revalidatePath(`/admin/erp/preuzimanja/${batchId}`);
   revalidatePath("/admin/erp/preuzimanja");
   revalidatePath("/admin/erp/prodajni-nalozi");
+  revalidatePath("/admin/erp/reklamacije-dnevnik", "layout");
 }

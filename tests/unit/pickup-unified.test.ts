@@ -5,6 +5,7 @@ const { tx, availability } = vi.hoisted(() => ({ availability: vi.fn(), tx: {
   pickupBatch: { findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), deleteMany: vi.fn() },
   pickupBatchLine: { findFirst: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
   orderReshipment: { updateMany: vi.fn() },
+  reclamation: { findMany: vi.fn() },
   warehouse: { findFirst: vi.fn() },
   orderStatusEvent: { create: vi.fn() },
 } }));
@@ -18,6 +19,7 @@ beforeEach(() => {
   tx.pickupBatch.findUnique.mockResolvedValue(batch);
   tx.pickupBatch.findMany.mockResolvedValue([]);
   tx.warehouse.findFirst.mockResolvedValue({ id: "dc" });
+  tx.reclamation.findMany.mockResolvedValue([]);
   availability.mockResolvedValue({ provider: "X_EXPRESS", reason: null });
 });
 
@@ -31,12 +33,12 @@ describe("shared picking work", () => {
     } }));
   });
 
-  it("collects existing unsent replacements and reshipments even when there are no new orders", async () => {
+  it("collects unsent reshipments without moving replacements already on a picking list", async () => {
     tx.pickupBatch.findMany.mockResolvedValue([{ ...batch, id: "old-special" }]);
     await loadEligibleOrders("shared", "admin");
     expect(tx.pickupBatchLine.updateMany).toHaveBeenCalledWith({
-      where: { batchId: "old-special", OR: [
-        { purpose: "RECLAMATION_REPLACEMENT" }, { lineGroupKey: { startsWith: "reshipment:" } }, { deferredFromLineId: { not: null } },
+      where: { batchId: "old-special", purpose: "ORDER_DELIVERY", OR: [
+        { lineGroupKey: { startsWith: "reshipment:" } }, { deferredFromLineId: { not: null } },
       ] }, data: { batchId: "shared" },
     });
     expect(tx.orderReshipment.updateMany).toHaveBeenCalledWith({ where: { batchId: "old-special" }, data: { batchId: "shared" } });
@@ -44,6 +46,11 @@ describe("shared picking work", () => {
       provider: "X_EXPRESS", status: "DRAFT", labelsCreationStartedAt: null, labelsCreatedAt: null,
       lines: { none: { shipmentId: { not: null } } },
     });
+  });
+
+  it("opening a draft does not collect newly prepared replacements", async () => {
+    await loadEligibleOrders("shared", "admin", undefined, { includeReplacements: false });
+    expect(tx.reclamation.findMany).not.toHaveBeenCalled();
   });
 
   it("does not collect unrelated work during an explicitly scoped recovery", async () => {

@@ -8,9 +8,11 @@ import {
   getGuestOrderForReclamation,
   listOrdersForReclamation,
 } from "@/lib/api/reclamations";
+import { saveReclamationWarehouse } from "@/lib/admin/reclamation-fulfillment.server";
 import { applyShipmentEvent } from "@/lib/courier/registry";
 import {
-  queueReclamationReplacement,
+  createPickupBatch,
+  loadEligibleOrders,
   removeReclamationReplacementFromPicking,
 } from "@/lib/admin/pickup-batch.server";
 
@@ -34,7 +36,7 @@ beforeAll(async () => {
   });
   userId = user.id;
   const warehouse = await db.warehouse.create({
-    data: { code: `${tag}-DC`.slice(0, 40), name: `${tag} magacin` },
+    data: { code: `${tag}-DC`.slice(0, 40), name: `${tag} magacin`, isDefault: true },
   });
   warehouseId = warehouse.id;
   const product = await db.product.create({
@@ -109,9 +111,13 @@ describe("quantity-aware reclamation fulfillment", () => {
         warehouseId, warehouseStatus: "READY",
       },
     });
-    const queued = await queueReclamationReplacement(claim.id, userId);
-    if (!queued.queued) throw new Error(queued.reason);
-    const batchId = queued.batchId;
+    const batch = await createPickupBatch("X_EXPRESS");
+    const batchId = batch.id;
+    const measured = { weightKg: 2, widthCm: 30, depthCm: 20, heightCm: 10 };
+    await saveReclamationWarehouse({ reclamationId: claim.id, warehouseId, status: "READY", actorId: userId, packages: [measured, measured] });
+    expect(await db.pickupBatchLine.count({ where: { reclamationId: claim.id } })).toBe(0);
+    expect(await loadEligibleOrders(batchId, userId)).toMatchObject({ replacementCount: 1, replacementLineCount: 2 });
+    expect(await loadEligibleOrders(batchId, userId)).toMatchObject({ replacementCount: 0 });
     let shipmentId: string | undefined;
     try {
       const otherLine = await db.pickupBatchLine.create({
@@ -130,7 +136,9 @@ describe("quantity-aware reclamation fulfillment", () => {
         where: { id: claim.id },
         data: { resolution: "ZAMENA_DELA", replacementQty: 0, resolutionNote: "Naslon" },
       });
-      expect((await queueReclamationReplacement(claim.id, userId)).queued).toBe(true);
+      expect(await loadEligibleOrders(batchId, userId)).toMatchObject({ replacementCount: 0 });
+      await saveReclamationWarehouse({ reclamationId: claim.id, warehouseId, status: "READY", actorId: userId, packages: [measured] });
+      expect(await loadEligibleOrders(batchId, userId)).toMatchObject({ replacementCount: 1 });
       expect(await db.pickupBatchLine.findMany({ where: { reclamationId: claim.id } })).toMatchObject([{ quantity: 0 }]);
 
       await db.pickupBatch.update({ where: { id: batchId }, data: { labelsCreationStartedAt: new Date() } });

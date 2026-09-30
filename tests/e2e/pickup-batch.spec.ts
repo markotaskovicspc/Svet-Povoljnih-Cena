@@ -897,11 +897,10 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       await page.goto(`/admin/erp/reklamacije-dnevnik/${reclamation.id}`, {
         waitUntil: "domcontentloaded",
       });
-      await acceptConfirmation(
-        page,
-        page.getByRole("button", { name: "Dodaj u picking listu", exact: true }),
-      );
-      await expect(page.getByText(/Zamena je u MyGLS picking nalogu/)).toBeVisible();
+      await saveReplacementMeasurements(page, 65);
+      await page.goto(`/admin/erp/preuzimanja/${myGlsBatchId}`);
+      await page.getByRole("button", { name: "Učitaj porudžbine", exact: true }).click();
+      await expect(page.getByRole("status").filter({ hasText: "Učitano spremnih zamena: 1" })).toBeVisible();
       const replacementLine = await db.pickupBatchLine.findFirstOrThrow({
         where: {
           reclamationId: reclamation.id,
@@ -950,13 +949,14 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       const replacementQty = page.getByRole("spinbutton", { name: "Celih artikala za slanje" });
       await expect(replacementQty).toHaveAttribute("min", "0");
       await expect(replacementQty).toHaveValue("0");
-      await acceptConfirmation(
-        page,
-        page.getByRole("button", { name: "Dodaj u picking listu", exact: true }),
-      );
-      await expect(
-        page.getByText(/Zamena je u X Express picking nalogu/),
-      ).toBeVisible();
+      await saveReplacementMeasurements(page, 10);
+      const partBatch = await db.pickupBatch.create({ data: {
+        number: `QA-PART-${runId}`, provider: "X_EXPRESS", courier: "COURIER_SMALL", status: "DRAFT",
+      } });
+      batchIds.push(partBatch.id);
+      await page.goto(`/admin/erp/preuzimanja/${partBatch.id}`);
+      await page.getByRole("button", { name: "Učitaj porudžbine", exact: true }).click();
+      await expect(page.getByRole("status").filter({ hasText: "Učitano spremnih zamena: 1" })).toBeVisible();
       const partLine = await db.pickupBatchLine.findFirstOrThrow({
         where: {
           reclamationId: partReclamation.id,
@@ -964,13 +964,12 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         },
       });
       if (!batchIds.includes(partLine.batchId)) batchIds.push(partLine.batchId);
-      expect(partLine).toMatchObject({
-        quantity: 0,
-        weightKg: null,
-        widthCm: null,
-        depthCm: null,
-        heightCm: null,
-      });
+      expect(partLine.quantity).toBe(0);
+      expect(Number(partLine.weightKg)).toBe(2);
+      expect(Number(partLine.widthCm)).toBe(10);
+      expect(Number(partLine.depthCm)).toBe(10);
+      expect(Number(partLine.heightCm)).toBe(10);
+      expect(partLine.warehouseReadyAt).not.toBeNull();
 
       await page.goto(`/admin/erp/preuzimanja/${partLine.batchId}`, {
         waitUntil: "domcontentloaded",
@@ -1373,4 +1372,13 @@ function databaseUrl() {
 
 function pickupBatchIdFromUrl(value: string) {
   return new URL(value).pathname.split("/").at(-1) ?? "";
+}
+
+async function saveReplacementMeasurements(page: Page, width: number) {
+  for (const [label, value] of [["Težina (kg)", 2], ["Širina (cm)", width], ["Dužina (cm)", 10], ["Visina (cm)", 10]] as const) {
+    await page.getByRole("spinbutton", { name: `Paket 1 · ${label}`, exact: true }).fill(String(value));
+  }
+  await page.getByRole("combobox", { name: "Status pripreme", exact: true }).selectOption("READY");
+  await page.getByRole("button", { name: "Sačuvaj magacinski zadatak", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Spremnost je sačuvana" })).toBeVisible();
 }

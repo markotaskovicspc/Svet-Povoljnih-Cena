@@ -7,7 +7,7 @@ import type {
   ReclamationWarehouseStatus,
   ShipmentPurpose,
 } from "@prisma/client";
-import { StockMovementKind } from "@prisma/client";
+import { Prisma, StockMovementKind } from "@prisma/client";
 import { db } from "@/lib/db";
 import { adjustInventory, ensureDefaultWarehouse } from "@/lib/inventory";
 import { lockOrderReturn } from "@/lib/fiscal/return-lock";
@@ -22,6 +22,8 @@ import {
   MYGLS_PROVIDER,
   type SmallParcelProvider,
 } from "@/lib/mygls/config";
+
+import { parseReclamationPackages } from "@/lib/admin/reclamation-packages";
 
 const RECLAMATION_PURPOSES: ShipmentPurpose[] = [
   "RECLAMATION_RETURN",
@@ -44,22 +46,48 @@ export async function saveReclamationWarehouse(args: {
   reclamationId: string;
   warehouseId: string;
   status: ReclamationWarehouseStatus;
+  packages?: unknown;
+  actorId?: string;
 }) {
-  const warehouse = await db.warehouse.findFirst({
-    where: { id: args.warehouseId, active: true },
-    select: { id: true },
-  });
-  if (!warehouse) throw new Error("Izabrani magacin nije aktivan.");
-
-  return db.reclamation.update({
-    where: { id: args.reclamationId },
-    data: {
-      warehouseId: warehouse.id,
-      warehouseStatus: args.status,
-      warehouseRequestedAt:
-        args.status === "NOT_REQUESTED" ? null : new Date(),
-    },
-  });
+  return db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "Reclamation" WHERE "id" = ${args.reclamationId} FOR UPDATE`;
+    const reclamation = await tx.reclamation.findUniqueOrThrow({
+      where: { id: args.reclamationId },
+      include: {
+        pickupBatchLines: { where: { purpose: "RECLAMATION_REPLACEMENT" }, take: 1 },
+        shipments: { where: { purpose: "RECLAMATION_REPLACEMENT", status: { not: "FAILED" } }, take: 1 },
+      },
+    });
+    if (reclamation.pickupBatchLines.length || reclamation.shipments.length) {
+      throw new Error("Zamena je već u picking nalogu ili kod kurira. Uklonite je iz otključanog picking naloga pre izmene pripreme.");
+    }
+    const warehouse = await tx.warehouse.findFirst({
+      where: { id: args.warehouseId, active: true }, select: { id: true },
+    });
+    if (!warehouse) throw new Error("Izabrani magacin nije aktivan.");
+    const isReplacement = ["ZAMENA_ARTIKLA", "ZAMENA_DELA"].includes(reclamation.resolution ?? "");
+    const ready = isReplacement && args.status === "READY";
+    if (ready && reclamation.decision !== "PRIHVACENA") {
+      throw new Error("Pre potvrde spremnosti sačuvajte prihvaćenu odluku o zameni.");
+    }
+    if (ready && reclamation.resolution === "ZAMENA_DELA" && !reclamation.resolutionNote?.trim()) {
+      throw new Error("Upišite tačan naziv dela koji magacin treba da pošalje.");
+    }
+    const packages = isReplacement && (ready || args.packages != null)
+      ? parseReclamationPackages(args.packages ?? reclamation.replacementPackages)
+      : undefined;
+    return tx.reclamation.update({
+      where: { id: args.reclamationId },
+      data: {
+        warehouseId: warehouse.id,
+        warehouseStatus: args.status,
+        warehouseRequestedAt: args.status === "NOT_REQUESTED" ? null : new Date(),
+        replacementPackages: packages,
+        replacementReadyAt: ready ? new Date() : null,
+        replacementReadyById: ready ? args.actorId ?? null : null,
+      },
+    });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 10_000, timeout: 30_000 });
 }
 
 export async function preflightReclamationShipment(
@@ -258,9 +286,9 @@ function assertReclamationShipmentReady(
   }
   if (args.purpose === "RECLAMATION_REPLACEMENT") {
     const queued = Boolean(reclamation.pickupBatchLines[0]);
-    if (queued && !args.fromPickupBatch) {
+    if (!args.fromPickupBatch) {
       throw new Error(
-        "Zamena je u picking nalogu i mora se poslati knjiženjem tog naloga.",
+        "Zamena mora biti učitana u picking nalog i poslata knjiženjem tog naloga.",
       );
     }
     if (!queued && args.fromPickupBatch) {

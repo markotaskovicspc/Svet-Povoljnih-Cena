@@ -5,6 +5,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import {
+  Prisma,
   ReclamationDecision,
   ReclamationResolution,
   ReclamationStatus,
@@ -17,7 +18,7 @@ import {
   createReclamationShipment,
   saveReclamationWarehouse,
 } from "@/lib/admin/reclamation-fulfillment.server";
-import { queueReclamationReplacement, removeReclamationReplacementFromPicking } from "@/lib/admin/pickup-batch.server";
+import { removeReclamationReplacementFromPicking } from "@/lib/admin/pickup-batch.server";
 import { signReclamationPhotoUrls } from "@/lib/api/uploads";
 import { updateReclamationStatus } from "@/lib/api/reclamation-status";
 import { db } from "@/lib/db";
@@ -27,6 +28,8 @@ import { Card, CardTitle } from "@/components/admin/card";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { Field } from "@/components/admin/field";
 import { SubmitButton } from "@/components/admin/submit-button";
+import { ReclamationPackages } from "@/components/admin/reclamation-packages";
+import { readReclamationPackages } from "@/lib/admin/reclamation-packages";
 import { Textarea } from "@/components/ui/textarea";
 
 export const dynamic = "force-dynamic";
@@ -79,7 +82,7 @@ async function saveDetailsAction(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
     { allowed: ["OPS"], action: "reclamation.detailsUpdate", entity: "Reclamation" },
-    async (_actorId, formData: FormData) => {
+    async (_actorId, formData: FormData) => db.$transaction(async (tx) => {
       const id = String(formData.get("id") ?? "");
       const decision = String(formData.get("decision") ?? "") as ReclamationDecision;
       const resolutionRaw = String(formData.get("resolution") ?? "");
@@ -97,12 +100,16 @@ async function saveDetailsAction(_state: AdminActionState, formData: FormData) {
       }
       const adminNote = String(formData.get("adminNote") ?? "").trim() || null;
       const resolutionNote = String(formData.get("resolutionNote") ?? "").trim() || null;
-      const reclamation = await db.reclamation.findUnique({
+      await tx.$queryRaw`SELECT "id" FROM "Reclamation" WHERE "id" = ${id} FOR UPDATE`;
+      const reclamation = await tx.reclamation.findUnique({
         where: { id },
         select: {
           quantity: true,
           replacementQty: true,
           resolution: true,
+          decision: true,
+          resolutionNote: true,
+          warehouseStatus: true,
           pickupBatchLines: {
             where: { purpose: "RECLAMATION_REPLACEMENT" },
             select: { id: true, batch: { select: { number: true } } },
@@ -147,18 +154,17 @@ async function saveDetailsAction(_state: AdminActionState, formData: FormData) {
           error: "Upišite tačan naziv dela koji magacin treba da pošalje.",
         };
       }
-      if (
-        reclamation.pickupBatchLines.length &&
-        (reclamation.resolution !== resolution ||
-          reclamation.replacementQty !== replacementQty)
-      ) {
+      const preparationChanged = reclamation.resolution !== resolution ||
+        reclamation.replacementQty !== replacementQty || reclamation.decision !== decision ||
+        reclamation.resolutionNote !== resolutionNote;
+      if (reclamation.pickupBatchLines.length && preparationChanged) {
         return {
           ok: false as const,
           error:
             `Zamena je u picking nalogu ${reclamation.pickupBatchLines[0].batch.number}. Kliknite „Ukloni zamenu iz picking naloga“ iznad odluke, pa promenite vrstu ili količinu zamene.`,
         };
       }
-      await db.reclamation.update({
+      await tx.reclamation.update({
         where: { id },
         data: {
           decision,
@@ -167,6 +173,12 @@ async function saveDetailsAction(_state: AdminActionState, formData: FormData) {
           respondedAt,
           adminNote,
           resolutionNote,
+          ...(preparationChanged ? {
+            replacementReadyAt: null,
+            replacementReadyById: null,
+            replacementPackages: Prisma.DbNull,
+            warehouseStatus: reclamation.warehouseStatus === "READY" ? "PREPARING" : reclamation.warehouseStatus,
+          } : {}),
         },
       });
       refresh(id);
@@ -175,7 +187,7 @@ async function saveDetailsAction(_state: AdminActionState, formData: FormData) {
         entityId: id,
         message: "Odluka i način rešavanja su sačuvani. Dodavanje u picking je zaseban korak.",
       };
-    },
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 10_000, timeout: 30_000 }),
   )(formData);
 }
 
@@ -203,41 +215,26 @@ async function saveWarehouseAction(_state: AdminActionState, formData: FormData)
   "use server";
   return withAdminState(
     { allowed: ["OPS"], action: "reclamation.warehouseUpdate", entity: "Reclamation" },
-    async (_actorId, formData: FormData) => {
+    async (actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
       const warehouseId = String(formData.get("warehouseId") ?? "");
       const status = String(formData.get("warehouseStatus") ?? "") as ReclamationWarehouseStatus;
       if (!id || !warehouseId || !Object.values(ReclamationWarehouseStatus).includes(status)) {
         return { ok: false as const, error: "Izaberite magacin i status pripreme." };
       }
-      await saveReclamationWarehouse({ reclamationId: id, warehouseId, status });
+      const rows = String(formData.get("replacementPackageRows") ?? "").split(",").filter(Boolean);
+      const entered = rows.map((row) => Object.fromEntries(
+        ["weightKg", "widthCm", "depthCm", "heightCm"].map((key) => [key, Number(formData.get(`replacementPackage.${row}.${key}`))]),
+      ));
+      const packages = entered.length && (status === "READY" || entered.some((pkg) => Object.values(pkg).some((value) => value !== 0))) ? entered : undefined;
+      const saved = await saveReclamationWarehouse({ reclamationId: id, warehouseId, status, packages, actorId });
       refresh(id);
       return {
         ok: true as const,
         entityId: id,
-        message: "Magacinski zadatak je sačuvan. Dodavanje u picking je zaseban korak.",
-      };
-    },
-  )(formData);
-}
-
-async function queueReplacementAction(_state: AdminActionState, formData: FormData) {
-  "use server";
-  return withAdminState(
-    { allowed: ["OPS"], action: "reclamation.replacementQueue", entity: "Reclamation" },
-    async (actorId, formData: FormData) => {
-      const id = String(formData.get("id") ?? "");
-      if (!id) return { ok: false as const, error: "Reklamacija nije izabrana." };
-      const result = await queueReclamationReplacement(id, actorId);
-      if (!result.queued) return { ok: false as const, error: result.reason };
-      refresh(id);
-      return {
-        ok: true as const,
-        entityId: id,
-        message: result.alreadyQueued
-          ? "Zamena je već u picking nalogu."
-          : "Zamena je dodata u odgovarajući picking nalog.",
-        diff: { batchId: result.batchId, alreadyQueued: result.alreadyQueued },
+        message: saved.replacementReadyAt
+          ? "Spremnost je sačuvana. Zamena će ući u picking tek na klik „Učitaj porudžbine“ u nalogu odgovarajućeg kurira."
+          : "Magacinski zadatak je sačuvan.",
       };
     },
   )(formData);
@@ -402,13 +399,13 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
                     <SubmitButton size="sm" variant="outline" pendingLabel="Uklanjam…" confirm={`Ukloniti samo zamenu za ${reclamation.number} iz naloga ${replacementPicking.number}?`}>
                       Ukloni zamenu iz picking naloga
                     </SubmitButton>
-                    <p className="mt-2 text-xs text-ink-500">Posle uklanjanja sačuvajte izmene, pa kliknite „Dodaj u picking listu“ kada je zamena spremna za pripremu.</p>
+                    <p className="mt-2 text-xs text-ink-500">Posle uklanjanja sačuvajte izmene i ponovo potvrdite spremnost sa stvarnim merama. Zatim u picking nalogu kliknite „Učitaj porudžbine“.</p>
                   </AdminActionForm>
                 ) : null}
               </div>
             ) : (
               <p className="mb-4 rounded-lg bg-muted-bg p-3 text-sm" data-testid="reclamation-picking-state">
-                Zamena nije u picking nalogu. Sačuvajte odluku i magacinski zadatak, pa kliknite „Dodaj u picking listu“.
+                Zamena nije u picking nalogu. Unesite mere paketa i potvrdite „Spremno“ u delu „Magacin i priprema“. Zatim u picking nalogu kliknite „Učitaj porudžbine“.
               </p>
             )}
             <AdminActionForm action={saveDetailsAction} preserveValues className="space-y-4">
@@ -425,12 +422,16 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
           </Card>
 
           <Card>
-            <CardTitle description="Za zamenu iz magacina status mora biti „Spremno“. Povrat kupčevog artikla i isporuka zamene su dva odvojena kurirska naloga.">Magacin i priprema</CardTitle>
-            <AdminActionForm action={saveWarehouseAction} preserveValues className="grid gap-3 sm:grid-cols-2">
+            <CardTitle description="Unesite težinu i dimenzije zapakovane zamene i potvrdite „Spremno“. Zamena se učitava tek kada magacioner u picking nalogu klikne „Učitaj porudžbine“.">Magacin i priprema</CardTitle>
+            <AdminActionForm action={saveWarehouseAction} preserveValues className="space-y-3">
+              <fieldset disabled={Boolean(replacementPicking || replacementShipment)} className="grid gap-3 sm:grid-cols-2 disabled:opacity-70">
               <input type="hidden" name="id" value={reclamation.id} />
               <Field label="Magacin"><select name="warehouseId" required defaultValue={reclamation.warehouseId ?? ""} className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm"><option value="" disabled>Izaberite</option>{warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.code} · {warehouse.name}</option>)}</select></Field>
               <Field label="Status pripreme"><select name="warehouseStatus" defaultValue={reclamation.warehouseStatus} className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm">{Object.values(ReclamationWarehouseStatus).map((value) => <option key={value} value={value}>{WAREHOUSE_STATUS_LABELS[value]}</option>)}</select></Field>
+              {["ZAMENA_ARTIKLA", "ZAMENA_DELA"].includes(reclamation.resolution ?? "") ? <ReclamationPackages key={JSON.stringify(reclamation.replacementPackages)} initialPackages={readReclamationPackages(reclamation.replacementPackages)} /> : null}
               <div className="sm:col-span-2"><SubmitButton variant="outline" pendingLabel="Čuvam…">Sačuvaj magacinski zadatak</SubmitButton></div>
+              </fieldset>
+              {replacementPicking || replacementShipment ? <p className="text-xs text-ink-500">Priprema je zaključana dok je zamena u picking nalogu ili kod kurira.</p> : null}
             </AdminActionForm>
           </Card>
         </div>
@@ -493,12 +494,11 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
                         </p>
                       </div>
                     ) : (
-                      <AdminActionForm action={queueReplacementAction} className="mt-3">
-                        <input type="hidden" name="id" value={reclamation.id} />
-                        <SubmitButton size="sm" confirm="Dodati zamenu u zajednički picking nalog odgovarajućeg kurira?">
-                          Dodaj u picking listu
-                        </SubmitButton>
-                      </AdminActionForm>
+                      <p className="mt-3 text-sm text-ink-600">
+                        {reclamation.warehouseStatus === "READY" && reclamation.replacementReadyAt
+                          ? "Zamena je spremna i čeka da magacioner klikne „Učitaj porudžbine“ u picking nalogu odgovarajućeg kurira."
+                          : "Prvo unesite mere paketa i potvrdite „Spremno“ u delu „Magacin i priprema“."}
+                      </p>
                     )
                   ) : (
                     <AdminActionForm action={createShipmentAction} className="mt-3 flex flex-wrap items-end gap-2">

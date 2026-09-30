@@ -78,7 +78,7 @@ const schemas = {
     orderId: z.string().min(1),
     itemName: z.string().min(1).max(300),
     sku: z.string().min(1).max(100),
-    previousQty: z.number().int().positive(),
+    previousQty: z.number().int().nonnegative(),
     newQty: z.number().int().nonnegative(),
     operationKey: z.string().min(1).max(100),
   }),
