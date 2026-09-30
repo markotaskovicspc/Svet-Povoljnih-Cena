@@ -11,7 +11,8 @@ interface CartQuantityControlProps {
   onAdd?: () => void;
   addLabel?: string;
   className?: string;
-  size?: "sm" | "md";
+  size?: "sm" | "md" | "lg";
+  minQuantity?: 0 | 1;
   tone?: "light" | "dark";
   addTone?: "light" | "dark";
   fullWidth?: boolean;
@@ -25,6 +26,7 @@ export function CartQuantityControl({
   addLabel = "Dodaj u korpu",
   className,
   size = "sm",
+  minQuantity = 0,
   tone = "light",
   addTone = tone,
   fullWidth = false,
@@ -36,10 +38,10 @@ export function CartQuantityControl({
     MAX_CART_QTY,
     Math.max(0, Number.isFinite(quantity) ? Math.floor(quantity) : 0),
   );
-  const decrementRemoves = qty <= 1;
-  const buttonSize = size === "md" ? "size-9" : "size-7";
-  const iconSize = size === "md" ? "size-4" : "size-3.5";
-  const stepperText = size === "md" ? "text-sm min-w-7" : "text-xs min-w-6";
+  const decrementRemoves = minQuantity === 0 && qty <= 1;
+  const buttonSize = size === "lg" ? "size-11" : size === "md" ? "size-9" : "size-7";
+  const iconSize = size === "sm" ? "size-3.5" : "size-4";
+  const stepperText = size === "sm" ? "text-xs min-w-6" : "text-sm min-w-7";
 
   if (qty <= 0) {
     if (!onAdd) return null;
@@ -51,7 +53,7 @@ export function CartQuantityControl({
         disabled={addDisabled || !cartHydrated}
         className={cn(
           "focus-visible:ring-walnut/40 inline-flex items-center justify-center gap-1.5 rounded-full font-medium transition focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-45",
-          size === "md" ? "h-10 px-4 text-sm" : "h-9 px-3 text-xs",
+          size === "lg" ? "h-11 px-4 text-sm" : size === "md" ? "h-10 px-4 text-sm" : "h-9 px-3 text-xs",
           fullWidth && "w-full",
           addTone === "dark"
             ? "bg-ink-900 text-canvas hover:bg-walnut"
@@ -71,7 +73,7 @@ export function CartQuantityControl({
       aria-label="Količina u korpi"
       className={cn(
         "inline-flex items-center justify-between overflow-hidden rounded-full",
-        size === "md" ? "h-10" : "h-9",
+        size === "lg" ? "h-11" : size === "md" ? "h-10" : "h-9",
         fullWidth && "w-full",
         tone === "dark"
           ? "bg-ink-900 text-canvas"
@@ -81,12 +83,12 @@ export function CartQuantityControl({
     >
       <button
         type="button"
-        onClick={() => setQty(sku, qty - 1)}
-        disabled={!cartHydrated}
+        onClick={() => setQty(sku, Math.max(minQuantity, qty - 1))}
+        disabled={!cartHydrated || qty <= minQuantity}
         aria-label={decrementRemoves ? "Ukloni iz korpe" : "Smanji količinu"}
         title={decrementRemoves ? "Ukloni iz korpe" : "Smanji količinu"}
         className={cn(
-          "focus-visible:ring-walnut/40 inline-flex items-center justify-center transition focus-visible:ring-2 focus-visible:outline-none",
+          "focus-visible:ring-walnut/40 inline-flex items-center justify-center transition focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40",
           buttonSize,
           tone === "dark"
             ? "hover:bg-walnut text-canvas"
