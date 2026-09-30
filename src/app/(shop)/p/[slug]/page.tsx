@@ -16,12 +16,11 @@ import { RecentlyViewedProducts } from "@/components/product/recently-viewed-pro
 import { SectionRail } from "@/components/home/section-rail";
 import { Reveal } from "@/components/motion/reveal";
 import { getProductBySlug, listProductRail } from "@/lib/api/catalog";
-import { formatDimensions, formatRsd } from "@/lib/format";
+import { formatDimensions } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
   deriveImageBadges,
   effectiveUnitPrice,
-  lowestPublicDisplayedUnitPrice,
   type Badge,
 } from "@/lib/pricing";
 import { herojiMesecaIcon, protectedPricesIcon } from "@/data/campaign-icons";
@@ -32,6 +31,8 @@ import { resolveProductPdpLayout } from "@/lib/product-pdp-layout";
 import { deliveryCategory } from "@/lib/delivery-tariff";
 import { getProductAvailability } from "@/lib/product-availability";
 import { BRAND } from "@/lib/brand";
+import { getSeoCatalog } from "@/lib/seo/catalog.server";
+import { isPlaceholderDescription, productCategoryTrail, productSeoDescription, seoPlainText } from "@/lib/seo/catalog";
 
 /**
  * Product Detail Page — Phase 1E (12 rows from spec).
@@ -41,14 +42,6 @@ import { BRAND } from "@/lib/brand";
  * through getProductBySlug() as null. Stock changes should not turn an existing
  * active PDP into an accidental 404; the buy controls handle out-of-stock UI.
  */
-
-const slugify = (s: string) =>
-  s
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
 
 interface RouteProps {
   params: Promise<{ slug: string }>;
@@ -69,12 +62,10 @@ export async function generateMetadata({
   const { slug } = await params;
   const product = await getProductBySlug(slug);
   if (!product) return { title: "Proizvod nije pronađen" };
-  const price = lowestPublicDisplayedUnitPrice(product);
-  const description =
-    product.shortDescription ?? stripHtml(product.description).slice(0, 160);
+  const description = productSeoDescription(product);
   const canonical = `/p/${product.slug}`;
   return {
-    title: `${product.name} — ${formatRsd(price.effective)}`,
+    title: product.name,
     description,
     alternates: { canonical },
     openGraph: {
@@ -96,9 +87,10 @@ export async function generateMetadata({
 
 export default async function ProductPage({ params }: RouteProps) {
   const { slug } = await params;
-  const [catalogProduct, publishedDeliveryTerms] = await Promise.all([
+  const [catalogProduct, publishedDeliveryTerms, seoCatalog] = await Promise.all([
     getProductBySlug(slug),
     getPublishedContentPage(DELIVERY_TERMS_SLUG),
+    getSeoCatalog(),
   ]);
   if (!catalogProduct) notFound();
   const product: Product = catalogProduct;
@@ -108,8 +100,7 @@ export default async function ProductPage({ params }: RouteProps) {
     "@context": "https://schema.org",
     "@type": "Product",
     name: product.name,
-    description:
-      product.shortDescription ?? stripHtml(product.description).slice(0, 500),
+    description: productSeoDescription(product),
     sku: product.sku,
     ...(product.media.images.length
       ? {
@@ -139,17 +130,9 @@ export default async function ProductPage({ params }: RouteProps) {
     getSystemContentPage(DELIVERY_TERMS_SLUG)?.bodyMarkdown;
 
   // Row I — Breadcrumbs
+  const categoryTrail = productCategoryTrail(product.pricingCategoryPaths, seoCatalog?.categories ?? []);
   const trail: Crumb[] = [
-    ...product.categoryPath.map((label, i, arr) => ({
-      label,
-      href:
-        i < arr.length
-          ? `/k/${arr
-              .slice(0, i + 1)
-              .map(slugify)
-              .join("/")}`
-          : undefined,
-    })),
+    ...categoryTrail,
     { label: product.sku },
   ];
 
@@ -176,7 +159,8 @@ export default async function ProductPage({ params }: RouteProps) {
   ]);
 
   const overlayBadges = deriveImageBadges(product);
-  const cleanDescription = stripHtml(product.description);
+  const cleanDescription = isPlaceholderDescription(product.description)
+    ? "" : seoPlainText(product.description);
 
   const materials = product.materials;
   const pdpLayout = resolveProductPdpLayout(product);
@@ -302,7 +286,8 @@ export default async function ProductPage({ params }: RouteProps) {
                 descriptionPreview={cleanDescription}
                 standardDeliveryTermsMarkdown={standardDeliveryTermsMarkdown}
                 sections={{
-                  description: product.description,
+                  description: isPlaceholderDescription(product.description)
+                    ? productSeoDescription(product) : product.description,
                   deliveryTerms: product.pdpInfo?.deliveryTerms,
                   declaration: product.pdpInfo?.declaration,
                   assemblyInstructions: product.pdpInfo?.assemblyInstructions,
@@ -436,7 +421,7 @@ export default async function ProductPage({ params }: RouteProps) {
       {similar.length ? (
         <SectionRail
           title="Možda će vam se svideti"
-          href={`/k/${product.categoryPath.map(slugify).join("/")}`}
+          href={categoryTrail.at(-1)?.href ?? "/pretraga"}
           ctaLabel="Sve iz kategorije"
           products={similar}
           mobileMinimal
@@ -551,11 +536,4 @@ function PdpStickerBadge({
       />
     </span>
   );
-}
-
-function stripHtml(value: string) {
-  return value
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
 }

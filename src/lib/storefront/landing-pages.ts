@@ -3,6 +3,8 @@ import "server-only";
 import { unstable_cache } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import { db, hasDatabaseConnection } from "@/lib/db";
+import { getSeoCatalog } from "@/lib/seo/catalog.server";
+import { landingIsIndexable } from "@/lib/seo/landing";
 import {
   EMPTY_HERO_PICTOGRAMS,
   legacySectionsToBlocks,
@@ -148,11 +150,13 @@ export async function getPublishedLandingPagesForSitemap() {
       orderBy: { slug: "asc" },
     });
     const now = new Date();
+    const catalog = await getSeoCatalog();
+    const publicSkus = catalog ? new Set(catalog.products.map(p => p.sku)) : undefined;
     return pages.flatMap((page) => {
       const snapshot = page.publishedRevision
         ? normalizeSnapshot(page, page.publishedRevision.snapshot)
         : directSnapshot(page);
-      return withinPublicationWindow(snapshot, now) && snapshot.robotsIndex
+      return withinPublicationWindow(snapshot, now) && landingIsIndexable(snapshot, publicSkus)
         ? [{ slug: page.slug, publishedAt: page.publishedRevision?.createdAt ?? page.publishedAt ?? page.updatedAt }]
         : [];
     });

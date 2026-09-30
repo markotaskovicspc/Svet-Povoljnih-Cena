@@ -6,6 +6,7 @@ import { LISTING_PAGE_SIZE } from "@/lib/listing/filters";
 import { getTabTitleIcon } from "@/lib/storefront/content";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/outlet" },
   title: "Outlet — komadi po najnižim cenama",
   description:
     "Outlet ponuda: poslednji komadi, dok traju zalihe i najveći popusti u ponudi.",

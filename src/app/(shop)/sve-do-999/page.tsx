@@ -6,6 +6,7 @@ import { LISTING_PAGE_SIZE } from "@/lib/listing/filters";
 import { getTabTitleIcon } from "@/lib/storefront/content";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/sve-do-999" },
   title: "Sve do 999",
   description:
     "Praktični dodaci i sitnice za dom po ceni do 999 RSD.",

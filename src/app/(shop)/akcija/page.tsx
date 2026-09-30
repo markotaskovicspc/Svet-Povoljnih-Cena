@@ -7,7 +7,7 @@ import { getTabTitleIcon } from "@/lib/storefront/content";
 import { getMonthlyActionMetadata } from "@/lib/storefront/monthly-action-metadata";
 
 export async function generateMetadata(): Promise<Metadata> {
-  return getMonthlyActionMetadata();
+  return { ...await getMonthlyActionMetadata(), alternates: { canonical: "/akcija" } };
 }
 
 export default async function AkcijaPage() {

@@ -5,6 +5,7 @@ import { listProducts } from "@/lib/api/catalog";
 import { getTabTitleIcon } from "@/lib/storefront/content";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/novo" },
   title: "Novo u ponudi — najnoviji proizvodi",
   description:
     "Najnoviji proizvodi u ponudi, sortirani od najnovijih ka starijima.",

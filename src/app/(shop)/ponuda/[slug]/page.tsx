@@ -18,6 +18,9 @@ import {
   getLandingPageForStorefront,
 } from "@/lib/storefront/landing-pages";
 import { cn } from "@/lib/utils";
+import { getSeoCatalog } from "@/lib/seo/catalog.server";
+import { landingIsIndexable } from "@/lib/seo/landing";
+import { seoPlainText } from "@/lib/seo/catalog";
 
 type RouteProps = {
   params: Promise<{ slug: string }>;
@@ -50,7 +53,10 @@ export async function generateMetadata({
   }
   const snapshot = page.snapshot;
   const title = snapshot.seoTitle || snapshot.title;
-  const description = snapshot.seoDescription || snapshot.lead || undefined;
+  const description = seoPlainText(snapshot.seoDescription || snapshot.lead)
+    || `${snapshot.title} — pregled proizvoda, cena i dostupnosti u Svetu Povoljnih Cena.`;
+  const catalog = await getSeoCatalog();
+  const index = landingIsIndexable(snapshot, catalog ? new Set(catalog.products.map(p => p.sku)) : undefined);
   const canonical = absoluteUrl(snapshot.canonicalUrl || `/ponuda/${page.slug}`);
   const image = snapshot.ogImageUrl || snapshot.heroImageUrl;
   return {
@@ -59,7 +65,7 @@ export async function generateMetadata({
     alternates: { canonical },
     robots: preview
       ? { index: false, follow: false }
-      : { index: snapshot.robotsIndex, follow: snapshot.robotsIndex },
+      : { index, follow: true },
     openGraph: {
       type: "website",
       url: canonical,

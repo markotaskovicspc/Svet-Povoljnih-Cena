@@ -6,6 +6,7 @@ import { LISTING_PAGE_SIZE } from "@/lib/listing/filters";
 import { getTabTitleIcon } from "@/lib/storefront/content";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/heroji-meseca" },
   title: "Heroji meseca — preporučena selekcija",
   description:
     "Ručno odabrani komadi sa najboljim odnosom cene i kvaliteta u tekućem mesecu.",

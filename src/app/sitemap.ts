@@ -1,19 +1,20 @@
 import type { MetadataRoute } from "next";
-import { db, hasDatabaseConnection } from "@/lib/db";
 import { BRAND } from "@/lib/brand";
 import { getCmsSitemapState } from "@/lib/cms/pages";
 import { SYSTEM_CONTENT_SLUGS } from "@/lib/cms/system-pages";
-import { webStorefrontProductWhere } from "@/lib/web-storefront-availability";
+import { getSeoCatalog } from "@/lib/seo/catalog.server";
+import { populatedCategoryPaths } from "@/lib/seo/catalog";
 import { getPublishedLandingPagesForSitemap } from "@/lib/storefront/landing-pages";
 
 const STATIC_PATHS = [
   "", "/akcija", "/heroji-meseca", "/niske-cene-pod-zastitom",
   "/ogranicena-ponuda", "/novo", "/outlet", "/sve-do-999",
-  "/specijalne-ponude", "/nedeljna-akcija", "/svet-akcija", "/o-nama",
+  "/specijalne-ponude", "/nedeljna-akcija", "/o-nama",
   "/kontakt", "/pomoc", "/servis", "/reklamacije", "/komentari",
   "/uslovi-koriscenja", "/uslovi-isporuke", "/uslovi-kupovine",
   "/politika-privatnosti", "/brisanje-podataka", "/podesavanja-kolacica",
 ];
+export const revalidate = 60;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = BRAND.url.replace(/\/$/, "");
@@ -44,28 +45,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         priority: 0.6,
       })),
   );
-  if (!hasDatabaseConnection()) return entries;
   try {
-    const [products, categories, collections, landingPages] = await Promise.all([
-      db.product.findMany({
-        where: {
-          ...webStorefrontProductWhere(),
-          deletedAt: null,
-          OR: [
-            { familyMembership: { is: null } },
-            { familyMembership: { is: { storefrontEnabled: true } } },
-          ],
-        },
-        select: { slug: true, updatedAt: true },
-      }),
-      db.category.findMany({ select: { path: true, updatedAt: true } }),
-      db.collection.findMany({ select: { slug: true } }),
+    const [catalog, landingPages] = await Promise.all([
+      getSeoCatalog(),
       getPublishedLandingPagesForSitemap(),
     ]);
+    if (!catalog) return entries;
+    const { products, categories, collections } = catalog;
+    const populatedPaths = populatedCategoryPaths(products);
+    const collectionIds = new Set(products.map(p => p.collectionId));
     entries.push(
       ...products.map((item) => ({ url: `${base}/p/${item.slug}`, lastModified: item.updatedAt, changeFrequency: "weekly" as const, priority: 0.8 })),
-      ...categories.filter((item) => item.path).map((item) => ({ url: `${base}/k/${item.path.replace(/^\/+/, "")}`, lastModified: item.updatedAt, changeFrequency: "weekly" as const, priority: 0.7 })),
-      ...collections.map((item) => ({ url: `${base}/kolekcija/${item.slug}`, changeFrequency: "weekly" as const, priority: 0.7 })),
+      ...categories.filter((item) => populatedPaths.has(item.path)).map((item) => ({ url: `${base}/k/${item.path.replace(/^\/+/, "")}`, lastModified: item.updatedAt, changeFrequency: "weekly" as const, priority: 0.7 })),
+      ...collections.filter(item => collectionIds.has(item.id)).map((item) => ({ url: `${base}/kolekcija/${item.slug}`, changeFrequency: "weekly" as const, priority: 0.7 })),
       ...landingPages.map((item) => ({ url: `${base}/ponuda/${item.slug}`, lastModified: item.publishedAt, changeFrequency: "weekly" as const, priority: 0.75 })),
     );
   } catch {

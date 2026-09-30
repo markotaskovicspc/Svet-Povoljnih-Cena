@@ -6,6 +6,7 @@ import { LISTING_PAGE_SIZE } from "@/lib/listing/filters";
 import { getTabTitleIcon } from "@/lib/storefront/content";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/specijalne-ponude" },
   title: "Trajno niskom cenom",
   description:
     "Izdvojeni proizvodi sa trajno niskom cenom.",

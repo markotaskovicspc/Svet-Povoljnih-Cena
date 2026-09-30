@@ -1,0 +1,1339 @@
+[
+  {
+    "sku": "110132",
+    "name": "Baštenski set HARMONY",
+    "url": "https://www.svetpovoljnihcena.rs/p/100007-de9c7b",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210025",
+    "name": "Friteza FRY SMART – 6L",
+    "url": "https://www.svetpovoljnihcena.rs/p/100019-d846f1",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210027",
+    "name": "Kompjuter sto X DESK – 70x48",
+    "url": "https://www.svetpovoljnihcena.rs/p/100010-9ce68e",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210023",
+    "name": "Električni roštilj MAX TASTE",
+    "url": "https://www.svetpovoljnihcena.rs/p/100017-dbf4fe",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210019",
+    "name": "3u1 set za doručak BON APPETIT",
+    "url": "https://www.svetpovoljnihcena.rs/p/100017-c8941b",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100040",
+    "name": "POMPEA Set brazilki (2 kom) INVISIBLE, M, crne",
+    "url": "https://www.svetpovoljnihcena.rs/p/100040-1e7429",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "READY_FOR_REVIEW",
+    "pilot": true
+  },
+  {
+    "sku": "100043",
+    "name": "POMPEA Set slip gaćica (2 kom) INVISIBLE, M, bele",
+    "url": "https://www.svetpovoljnihcena.rs/p/100043-144dea",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100047",
+    "name": "POMPEA Ženski grudnjak SEAMLESS crni, S/M, bešavni",
+    "url": "https://www.svetpovoljnihcena.rs/p/100047-bac219",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210033",
+    "name": "Set klub stolova DUO CIRCLE",
+    "url": "https://www.svetpovoljnihcena.rs/p/100012-101a32",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110057",
+    "name": "Set za čišćenje ULTRA MOP DUO",
+    "url": "https://www.svetpovoljnihcena.rs/p/100007-f83bed",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210026",
+    "name": "Kompjuter sto LOFT – 80x40",
+    "url": "https://www.svetpovoljnihcena.rs/p/100010-0407e7",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100038",
+    "name": "POMPEA Set brazilki (2 kom) INVISIBLE, M, bele",
+    "url": "https://www.svetpovoljnihcena.rs/p/100038-4bc434",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "READY_FOR_REVIEW",
+    "pilot": true
+  },
+  {
+    "sku": "100042",
+    "name": "POMPEA Set slip gaćica (2 kom) INVISIBLE, L, bele",
+    "url": "https://www.svetpovoljnihcena.rs/p/100042-3ed830",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100039",
+    "name": "POMPEA Set brazilki (2 kom) INVISIBLE, L, bele",
+    "url": "https://www.svetpovoljnihcena.rs/p/100039-d42a63",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100033",
+    "name": "POMPEA Set slip gaćica (2 kom) INVISIBLE, M, bele",
+    "url": "https://www.svetpovoljnihcena.rs/p/100033-344eb2",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100027",
+    "name": "POMPEA Ženski steznik COMFORT SIZE, bež, XL",
+    "url": "https://www.svetpovoljnihcena.rs/p/100027-015ab4",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100025",
+    "name": "POMPEA Set slip gaća (2 kom) TOMMY XL, crne, pamučne",
+    "url": "https://www.svetpovoljnihcena.rs/p/100025-62836f",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100028",
+    "name": "POMPEA Ženski steznik COMFORT SIZE, bež, XXL",
+    "url": "https://www.svetpovoljnihcena.rs/p/100028-71211c",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100051",
+    "name": "POMPEA Ženski grudnjak COTTON crni,L,bešavni",
+    "url": "https://www.svetpovoljnihcena.rs/p/100051-a2e477",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100056",
+    "name": "POMPEA Ženska majica COTTON bela,XL",
+    "url": "https://www.svetpovoljnihcena.rs/p/100056-51f466",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210022",
+    "name": "Bežična pegla sa zaštitom od kapanja IRON PRO",
+    "url": "https://www.svetpovoljnihcena.rs/p/100017-5bae6f",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100029",
+    "name": "POMPEA Ženske slip gaće SEAMLESS, bele, S/M",
+    "url": "https://www.svetpovoljnihcena.rs/p/100029-71c48d",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100035",
+    "name": "POMPEA Set slip gaćica (2 kom) INVISIBLE, M, crne",
+    "url": "https://www.svetpovoljnihcena.rs/p/100035-41e781",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110154",
+    "name": "Fotelja PATCHWORK",
+    "url": "https://www.svetpovoljnihcena.rs/p/100004-7581bd",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100055",
+    "name": "POMPEA Ženska majica COTTON bela, L",
+    "url": "https://www.svetpovoljnihcena.rs/p/100055-283c66",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100024",
+    "name": "POMPEA Set slip gaća (2 kom) TOMMY L, crne, pamučne",
+    "url": "https://www.svetpovoljnihcena.rs/p/100024-b10193",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100021",
+    "name": "POMPEA Set bokserica (2kom) TOMMY M, crne, pamučne",
+    "url": "https://www.svetpovoljnihcena.rs/p/100021-7b9450",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100022",
+    "name": "POMPEA Set bokserica (2 kom) TOMMY L, crne, pamučne",
+    "url": "https://www.svetpovoljnihcena.rs/p/100022-8f6f4a",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100050",
+    "name": "POMPEA Ženski grudnjak COTTON crni,M,bešavni",
+    "url": "https://www.svetpovoljnihcena.rs/p/100050-e2a873",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110073",
+    "name": "Kuhinjski četkasti čistač sa ugrađenim dozatorom sapuna CLEAN FLOW",
+    "url": "https://www.svetpovoljnihcena.rs/p/100020-2db36f",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100036",
+    "name": "POMPEA Set slip gaćica (2 kom) INVISIBLE, L, crne",
+    "url": "https://www.svetpovoljnihcena.rs/p/100036-fc4ade",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100046",
+    "name": "POMPEA Ženski grudnjak SEAMLESS beli, L/XL, bešavni",
+    "url": "https://www.svetpovoljnihcena.rs/p/100046-6dfe6a",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100057",
+    "name": "POMPEA Ženska majica COTTON crna, S",
+    "url": "https://www.svetpovoljnihcena.rs/p/100057-d77682",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100059",
+    "name": "POMPEA Ženska majica COTTON crna, L",
+    "url": "https://www.svetpovoljnihcena.rs/p/100059-4a8b01",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210021",
+    "name": "Kuvalo HYDRO HEAT",
+    "url": "https://www.svetpovoljnihcena.rs/p/100017-2683c8",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "SENSITIVE_CLAIM_VERIFY"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210011",
+    "name": "Električna džezva INFUSO",
+    "url": "https://www.svetpovoljnihcena.rs/p/100015-d7407e",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "SENSITIVE_CLAIM_VERIFY"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110112",
+    "name": "Električna mašinica za nokte SILKY TOUCH",
+    "url": "https://www.svetpovoljnihcena.rs/p/100020-511b3e",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE",
+      "GENERIC_PHRASE_REVIEW",
+      "SENSITIVE_CLAIM_VERIFY"
+    ],
+    "status": "READY_FOR_REVIEW",
+    "pilot": true
+  },
+  {
+    "sku": "110060",
+    "name": "Mop MAGIC SPRAY",
+    "url": "https://www.svetpovoljnihcena.rs/p/100010-82ea79",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210000",
+    "name": "Blender sa dve posude MIX MASTER",
+    "url": "https://www.svetpovoljnihcena.rs/p/100019-85cc63",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210034",
+    "name": "Set klub stolova DUO SQUARE",
+    "url": "https://www.svetpovoljnihcena.rs/p/100012-69d6ef",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100026",
+    "name": "POMPEA Set bokserica (2 kom) POSEIDON, L/XL, tamno plava, bešavne",
+    "url": "https://www.svetpovoljnihcena.rs/p/100026-96c71f",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110059",
+    "name": "Mop MAGIC SPRAY",
+    "url": "https://www.svetpovoljnihcena.rs/p/100007-631dc1",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100030",
+    "name": "POMPEA Ženske slip gaće SEAMLESS, bele, L/XL",
+    "url": "https://www.svetpovoljnihcena.rs/p/100030-48de7a",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210001",
+    "name": "Blender sa dve posude MIX MASTER",
+    "url": "https://www.svetpovoljnihcena.rs/p/100020-70ee4a",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100048",
+    "name": "POMPEA Ženski grudnjak SEAMLESS beli, L/XL, bešavni, šire bretele",
+    "url": "https://www.svetpovoljnihcena.rs/p/100048-aee5d9",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100052",
+    "name": "POMPEA Ženski grudnjak COTTON bež,M,bešavni",
+    "url": "https://www.svetpovoljnihcena.rs/p/100052-14da08",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100053",
+    "name": "POMPEA Ženska majica COTTON bela,S",
+    "url": "https://www.svetpovoljnihcena.rs/p/100053-89b419",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100060",
+    "name": "POMPEA Ženska majica COTTON crna, XL",
+    "url": "https://www.svetpovoljnihcena.rs/p/100060-b8283c",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210017",
+    "name": "Kuvalo H2O HERO",
+    "url": "https://www.svetpovoljnihcena.rs/p/100016-ae6d4a",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100034",
+    "name": "POMPEA Set slip gaćica (2 kom) INVISIBLE, L, bele",
+    "url": "https://www.svetpovoljnihcena.rs/p/100034-8613ad",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210005",
+    "name": "Pegla GOLD CORE",
+    "url": "https://www.svetpovoljnihcena.rs/p/100015-bec18f",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100045",
+    "name": "POMPEA Set slip gaćica (2 kom) INVISIBLE, M, crne",
+    "url": "https://www.svetpovoljnihcena.rs/p/100045-902fe8",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100049",
+    "name": "POMPEA Ženski grudnjak SEAMLESS crni, L/XL, bešavni, šire bretele",
+    "url": "https://www.svetpovoljnihcena.rs/p/100049-bfddd9",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110185",
+    "name": "Korpa za veš CLEAN BOX",
+    "url": "https://www.svetpovoljnihcena.rs/p/100007-775a94",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110133",
+    "name": "Baštenska stolica RELAX",
+    "url": "https://www.svetpovoljnihcena.rs/p/100004-e52853",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110134",
+    "name": "Baštenska stolica SUNSHINE",
+    "url": "https://www.svetpovoljnihcena.rs/p/100005-68b874",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW",
+      "SENSITIVE_CLAIM_VERIFY"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110157",
+    "name": "Set stočića COMPACT",
+    "url": "https://www.svetpovoljnihcena.rs/p/100007-aba1ea",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210013",
+    "name": "Električna džezva BARISTA",
+    "url": "https://www.svetpovoljnihcena.rs/p/100015-c927a6",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210009",
+    "name": "Blender sa staklenom posudom TURBO MIX",
+    "url": "https://www.svetpovoljnihcena.rs/p/100015-ac8c4b",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "READY_FOR_REVIEW",
+    "pilot": true
+  },
+  {
+    "sku": "100023",
+    "name": "POMPEA Set bokserica (2 kom) TOMMY XL, crne, pamučne",
+    "url": "https://www.svetpovoljnihcena.rs/p/100023-8a6437",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210024",
+    "name": "Električna ringla SINGLE COOK",
+    "url": "https://www.svetpovoljnihcena.rs/p/100017-0262b7",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110156",
+    "name": "Fotelja URBAN RECLINER",
+    "url": "https://www.svetpovoljnihcena.rs/p/100007-9ab4b5",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100058",
+    "name": "POMPEA Ženska majica COTTON crna, M",
+    "url": "https://www.svetpovoljnihcena.rs/p/100058-0fe8d2",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100031",
+    "name": "POMPEA Ženske slip gaće SEAMLESS, crne, S/M",
+    "url": "https://www.svetpovoljnihcena.rs/p/100031-b24748",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110061",
+    "name": "Fleksibilna, sklopiva kofa FLEXI BUCKET",
+    "url": "https://www.svetpovoljnihcena.rs/p/100020-47ebb5",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110072",
+    "name": "Kuhinjski četkasti čistač sa ugrađenim dozatorom sapuna CLEAN FLOW",
+    "url": "https://www.svetpovoljnihcena.rs/p/100020-30d4e2",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210028",
+    "name": "Kompjuter sto X DESK LUX – 90x50",
+    "url": "https://www.svetpovoljnihcena.rs/p/100010-d8e8bf",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210016",
+    "name": "Indukciona ploča POWER COOK",
+    "url": "https://www.svetpovoljnihcena.rs/p/100016-b9d68e",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110127",
+    "name": "Ženske čarape NANOTECH 40 DEN, veličina S",
+    "url": "https://www.svetpovoljnihcena.rs/p/100020-6e5ebc",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110070",
+    "name": "Četkasti čistač za čaše sa dvostrukim glavama GLASS MATE X",
+    "url": "https://www.svetpovoljnihcena.rs/p/100020-ffaabf",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "PLACEHOLDER",
+      "BODY_VERY_SHORT_REVIEW"
+    ],
+    "status": "NEEDS_FACTS",
+    "pilot": true
+  },
+  {
+    "sku": "110122",
+    "name": "Ženske čarape LIGHT MASSAGE 20 DEN, S",
+    "url": "https://www.svetpovoljnihcena.rs/p/100020-1f05d6",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110130",
+    "name": "Ženske čarape NANOTECH 70 DEN, veličina S",
+    "url": "https://www.svetpovoljnihcena.rs/p/100020-43082c",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110129",
+    "name": "Ženske čarape NANOTECH 70 DEN, veličina M",
+    "url": "https://www.svetpovoljnihcena.rs/p/100020-f775c2",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100054",
+    "name": "POMPEA Ženska majica COTTON bela, M",
+    "url": "https://www.svetpovoljnihcena.rs/p/100054-8126d5",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110182",
+    "name": "Super secko TURBO CUT",
+    "url": "https://www.svetpovoljnihcena.rs/p/100007-b8617a",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210029",
+    "name": "Otvorena polica LOFT – 145x50x30",
+    "url": "https://www.svetpovoljnihcena.rs/p/100010-bcd8e2",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "READY_FOR_REVIEW",
+    "pilot": true
+  },
+  {
+    "sku": "110158",
+    "name": "Trpezarijski sto MODERN LINE",
+    "url": "https://www.svetpovoljnihcena.rs/p/100021-05c9f5",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100032",
+    "name": "POMPEA Ženske slip gaće SEAMLESS, crne, L/XL",
+    "url": "https://www.svetpovoljnihcena.rs/p/100032-a5f5a2",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110120",
+    "name": "Ženske čarape EVERYWEAR REDUCTOR 40 DEN, S",
+    "url": "https://www.svetpovoljnihcena.rs/p/100020-8ae631",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110088",
+    "name": "Trpezarijska stolica DIAMOND SEAT",
+    "url": "https://www.svetpovoljnihcena.rs/p/nov-2026-00005-4932c0",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210010",
+    "name": "Električna džezva KAFINA",
+    "url": "https://www.svetpovoljnihcena.rs/p/100015-c33220",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "SENSITIVE_CLAIM_VERIFY"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110068",
+    "name": "Brisač stakla PURE STEAM PRO",
+    "url": "https://www.svetpovoljnihcena.rs/p/100020-8c40f7",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "PLACEHOLDER",
+      "BODY_VERY_SHORT_REVIEW"
+    ],
+    "status": "NEEDS_FACTS",
+    "pilot": true
+  },
+  {
+    "sku": "110176",
+    "name": "Trosed RELAXO",
+    "url": "https://www.svetpovoljnihcena.rs/p/100004-b6d1da",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW",
+      "SENSITIVE_CLAIM_VERIFY"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110159",
+    "name": "Otvorena polica EASY STORE – 4",
+    "url": "https://www.svetpovoljnihcena.rs/p/100007-3c590a",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110144",
+    "name": "Ležaj VENUS",
+    "url": "https://www.svetpovoljnihcena.rs/p/100008-319809",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW",
+      "SENSITIVE_CLAIM_VERIFY"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110058",
+    "name": "Mop MAGIC SPRAY",
+    "url": "https://www.svetpovoljnihcena.rs/p/100010-651ab4",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110086",
+    "name": "Trpezarijska stolica ELEGANCE SEAT",
+    "url": "https://www.svetpovoljnihcena.rs/p/100005-b8028d",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210008",
+    "name": "Usisivač CLEAN HOME",
+    "url": "https://www.svetpovoljnihcena.rs/p/100015-863198",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110152",
+    "name": "Barski set – sto i četiri stolice URBAN",
+    "url": "https://www.svetpovoljnihcena.rs/p/100004-7ea30f",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110054",
+    "name": "Set za čišćenje POWER MOP",
+    "url": "https://www.svetpovoljnihcena.rs/p/100007-8021f3",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110126",
+    "name": "Ženske čarape NANOTECH 40 DEN, veličina M",
+    "url": "https://www.svetpovoljnihcena.rs/p/100020-f93a96",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210020",
+    "name": "Električna ringla DUO COOK",
+    "url": "https://www.svetpovoljnihcena.rs/p/100017-0ede9c",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210015",
+    "name": "Kuvalo BELLA",
+    "url": "https://www.svetpovoljnihcena.rs/p/100016-02fe84",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW",
+      "SENSITIVE_CLAIM_VERIFY"
+    ],
+    "status": "NEEDS_FACTS",
+    "pilot": true
+  },
+  {
+    "sku": "110181",
+    "name": "Multifunkcionalni super secko 12u1 KITCHEN PRO",
+    "url": "https://www.svetpovoljnihcena.rs/p/100010-a7cbe4",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100041",
+    "name": "POMPEA Set brazilki (2 kom) INVISIBLE, L, crne",
+    "url": "https://www.svetpovoljnihcena.rs/p/100041-363063",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210007",
+    "name": "Rerna BAKE MASTER",
+    "url": "https://www.svetpovoljnihcena.rs/p/100015-97d3c9",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "100044",
+    "name": "POMPEA Set slip gaćica (2 kom) INVISIBLE, L, crne",
+    "url": "https://www.svetpovoljnihcena.rs/p/100044-a0ce9a",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110143",
+    "name": "Ležaj VENUS",
+    "url": "https://www.svetpovoljnihcena.rs/p/100008-58b204",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW",
+      "SENSITIVE_CLAIM_VERIFY"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110174",
+    "name": "Trpezarijska stolica CITY LINE",
+    "url": "https://www.svetpovoljnihcena.rs/p/100005-24b063",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110153",
+    "name": "Fotelja ZEN REST",
+    "url": "https://www.svetpovoljnihcena.rs/p/100021-f66667",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210003",
+    "name": "Bežična parna stanica STEAM PRO",
+    "url": "https://www.svetpovoljnihcena.rs/p/100015-343b26",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210006",
+    "name": "Električna seckalica, 2 brzine CHOP GENIE XXL",
+    "url": "https://www.svetpovoljnihcena.rs/p/100015-9dee33",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110183",
+    "name": "Teleskopski mop sa cediljkom PRO CLEAN",
+    "url": "https://www.svetpovoljnihcena.rs/p/100007-aabcaa",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110155",
+    "name": "Klub sto ELEGANT LIVING",
+    "url": "https://www.svetpovoljnihcena.rs/p/100004-0f51f6",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110177",
+    "name": "Trpezarijski sto HOME STYLE",
+    "url": "https://www.svetpovoljnihcena.rs/p/100004-9f2464",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "SENSITIVE_CLAIM_VERIFY"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110082",
+    "name": "Kancelarijska stolica FLEX SEAT",
+    "url": "https://www.svetpovoljnihcena.rs/p/100005-060a1d",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE",
+      "GENERIC_PHRASE_REVIEW",
+      "SENSITIVE_CLAIM_VERIFY"
+    ],
+    "status": "READY_FOR_REVIEW",
+    "pilot": true
+  },
+  {
+    "sku": "110179",
+    "name": "Trpezarijski set URBAN",
+    "url": "https://www.svetpovoljnihcena.rs/p/100004-e1a5ea",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110065",
+    "name": "Mop DEEP CLEAN",
+    "url": "https://www.svetpovoljnihcena.rs/p/100009-b4ada3",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110085",
+    "name": "Konferencijska stolica CONFERENCE MASTER",
+    "url": "https://www.svetpovoljnihcena.rs/p/100005-a45ab3",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110083",
+    "name": "Gejmerska stolica GAME THRONE",
+    "url": "https://www.svetpovoljnihcena.rs/p/100004-7a059b",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110071",
+    "name": "Super secko za povrće sa praktičnim posudama sa 15 nastavaka FRESH CUT",
+    "url": "https://www.svetpovoljnihcena.rs/p/100010-16a005",
+    "baselineFlags": [
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210018",
+    "name": "Kuvalo HEAT MASTER",
+    "url": "https://www.svetpovoljnihcena.rs/p/100017-c5463f",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "SENSITIVE_CLAIM_VERIFY"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210014",
+    "name": "Fen za kosu TURBO AIR",
+    "url": "https://www.svetpovoljnihcena.rs/p/100016-01ed40",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210031",
+    "name": "Fotelja CUBE – 190x80",
+    "url": "https://www.svetpovoljnihcena.rs/p/100010-ec1aa0",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210030",
+    "name": "Fotelja CUBE – 190x80",
+    "url": "https://www.svetpovoljnihcena.rs/p/100010-6b45ec",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "HTML_ENTITY_VISIBLE"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210012",
+    "name": "Električna džezva INFUSO",
+    "url": "https://www.svetpovoljnihcena.rs/p/100015-1c6bb4",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "SENSITIVE_CLAIM_VERIFY"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110184",
+    "name": "Korpa za veš CLEAN BASKET",
+    "url": "https://www.svetpovoljnihcena.rs/p/100009-cc51cc",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210002",
+    "name": "Mikser sa 7 brzina i 2 nastavka TWIST PRO",
+    "url": "https://www.svetpovoljnihcena.rs/p/100015-dbf28d",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "READY_FOR_REVIEW",
+    "pilot": true
+  },
+  {
+    "sku": "110055",
+    "name": "Set za čišćenje POWER MOP",
+    "url": "https://www.svetpovoljnihcena.rs/p/100007-3a1b8c",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110064",
+    "name": "Set za čišćenje SMART SPIN",
+    "url": "https://www.svetpovoljnihcena.rs/p/100007-7c0620",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110087",
+    "name": "Trpezarijska stolica URBAN SEAT",
+    "url": "https://www.svetpovoljnihcena.rs/p/nov-2026-00003-720e84",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110056",
+    "name": "Set za čišćenje FLEXI MOP PRO",
+    "url": "https://www.svetpovoljnihcena.rs/p/100009-e85af5",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "110067",
+    "name": "Komplet za čišćenje DUST AWAY 360º",
+    "url": "https://www.svetpovoljnihcena.rs/p/100009-1d671e",
+    "baselineFlags": [
+      "META_GENERIC_SHORT",
+      "GENERIC_PHRASE_REVIEW",
+      "SENSITIVE_CLAIM_VERIFY"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  },
+  {
+    "sku": "210004",
+    "name": "Pegla AQUA STEAM",
+    "url": "https://www.svetpovoljnihcena.rs/p/100015-65280c",
+    "baselineFlags": [
+      "META_GENERIC_SHORT"
+    ],
+    "status": "PENDING",
+    "pilot": false
+  }
+]

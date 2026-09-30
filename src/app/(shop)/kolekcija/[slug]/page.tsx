@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ListingShell } from "@/components/listing/listing-shell";
 import { getCollectionBySlug, listProducts } from "@/lib/api/catalog";
 import { LISTING_PAGE_SIZE } from "@/lib/listing/filters";
+import { getSeoCatalog } from "@/lib/seo/catalog.server";
 
 interface RouteProps {
   params: Promise<{ slug: string }>;
@@ -22,10 +23,15 @@ export async function generateMetadata({ params }: RouteProps): Promise<Metadata
   const { slug } = await params;
   const collection = await getCollectionBySlug(normalizeSlug(slug));
   if (!collection) return { title: "Kolekcija" };
+  const catalog = await getSeoCatalog();
+  const collectionId = catalog?.collections.find(c => c.slug === collection.slug)?.id;
+  const hasProducts = catalog?.products.some(p => p.collectionId === collectionId);
 
   return {
     title: `${collection.name} kolekcija`,
-    description: `Svi proizvodi iz kolekcije ${collection.name}.`,
+    description: `${collection.name} u ponudi Sveta Povoljnih Cena. Pogledajte modele, dostupne varijante, cene i informacije o isporuci.`,
+    alternates: { canonical: `/kolekcija/${collection.slug}` },
+    ...(hasProducts === false ? { robots: { index: false, follow: true } } : {}),
   };
 }
 

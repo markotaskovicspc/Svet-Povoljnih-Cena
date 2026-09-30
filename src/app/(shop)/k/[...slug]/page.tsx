@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { ListingShell } from "@/components/listing/listing-shell";
-import { getCategoryByPath, listProducts } from "@/lib/api/catalog";
+import { getCategoryByPath, getCategoryBySlug, listProducts } from "@/lib/api/catalog";
 import { LISTING_PAGE_SIZE } from "@/lib/listing/filters";
 import type { Crumb } from "@/components/layout/breadcrumbs";
 import { getTabTitleIcon } from "@/lib/storefront/content";
+import { getSeoCatalog } from "@/lib/seo/catalog.server";
+import { populatedCategoryPaths, productCategoryTrail, seoPlainText } from "@/lib/seo/catalog";
 
 /**
  * Catch-all category listing.
@@ -20,21 +22,26 @@ async function resolveTrailAndTitle(slugSegments: string[]): Promise<{
   trail: Crumb[];
   title: string;
   subtitle?: string;
+  path: string;
+  canonical: string;
+  isAlias: boolean;
+  index?: boolean;
 } | null> {
   const path = `/${slugSegments.map((s) => decodeURIComponent(s).toLowerCase()).join("/")}`;
-  const category = await getCategoryByPath(path);
+  const category = await getCategoryByPath(path)
+    ?? (slugSegments.length === 1 ? await getCategoryBySlug(path.slice(1)) : null);
   if (!category) return null;
-
-  const parts = category.path.split("/").filter(Boolean);
-  const labels = category.name.split(" / ");
-  const trail: Crumb[] = parts.map((part, i) => ({
-    label: labels[i] ?? part,
-    href: i < parts.length - 1 ? `/k/${parts.slice(0, i + 1).join("/")}` : undefined,
-  }));
+  const catalog = await getSeoCatalog();
+  const trail: Crumb[] = productCategoryTrail([category.path], catalog?.categories ?? []);
+  if (trail.length) trail[trail.length - 1].href = undefined;
   return {
     trail,
     title: category.name,
     subtitle: category.description ?? undefined,
+    path: category.path,
+    canonical: `/k${category.path}`,
+    isAlias: path !== category.path,
+    index: catalog ? populatedCategoryPaths(catalog.products).has(category.path) : undefined,
   };
 }
 
@@ -51,24 +58,27 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: RouteProps): Promise<Metadata> {
   const { slug } = await params;
   const resolved = await resolveTrailAndTitle(slug);
-  if (!resolved) return { title: "Kategorija" };
+  if (!resolved) return { title: "Kategorija", robots: { index: false, follow: true } };
   return {
     title: resolved.title,
-    description: resolved.subtitle,
+    description: seoPlainText(resolved.subtitle) || `${resolved.title} u ponudi Sveta Povoljnih Cena. Uporedite modele, karakteristike i cene i proverite dostupnost i uslove isporuke.`,
+    alternates: { canonical: resolved.canonical },
+    ...(resolved.index === false ? { robots: { index: false, follow: true } } : {}),
   };
 }
 
 export default async function CategoryPage({ params }: RouteProps) {
   const { slug } = await params;
   if (!slug?.length) notFound();
-  const categoryPath = `/${slug.map((s) => decodeURIComponent(s).toLowerCase()).join("/")}`;
+  const resolved = await resolveTrailAndTitle(slug);
+  if (!resolved) notFound();
+  if (resolved.isAlias) permanentRedirect(resolved.canonical);
+  const categoryPath = resolved.path;
   const query = { categoryPath };
-  const [resolved, { items: products, nextCursor, total }, titleIcon] = await Promise.all([
-    resolveTrailAndTitle(slug),
+  const [{ items: products, nextCursor, total }, titleIcon] = await Promise.all([
     listProducts({ ...query, limit: LISTING_PAGE_SIZE }),
     getTabTitleIcon(`/k${categoryPath}`),
   ]);
-  if (!resolved) notFound();
 
   return (
     <ListingShell

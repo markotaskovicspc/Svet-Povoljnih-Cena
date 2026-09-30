@@ -7,6 +7,8 @@ import { BRAND } from "@/lib/brand";
 const SVET_AKCIJA_PAGE_SIZE = 60;
 
 export const metadata: Metadata = {
+  robots: { index: false, follow: true },
+  alternates: { canonical: "/svet-akcija" },
   title: `${BRAND.name} katalog`,
   description:
     `Pregled proizvoda iz izvornog ${BRAND.name} kataloga, sa tačnim šiframa, nazivima, opisima i akcijskim cenama.`,

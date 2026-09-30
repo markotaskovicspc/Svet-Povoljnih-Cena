@@ -11,6 +11,7 @@ import type { SearchHit } from "@/types/search";
 export const metadata: Metadata = {
   title: "Pretraga",
   description: "Rezultati pretrage proizvoda iz aktuelne ponude.",
+  robots: { index: false, follow: true },
 };
 
 interface SearchPageProps {

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { connection } from "next/server";
 import { ArrowLeft } from "lucide-react";
 import {
@@ -20,6 +20,8 @@ import {
 } from "@/lib/svet-akcija/db";
 import { SvetAkcijaProductGallery } from "@/components/listing/svet-akcija-product-gallery";
 import { formatRsd } from "@/lib/format";
+import { getSeoCatalog } from "@/lib/seo/catalog.server";
+import { seoPlainText } from "@/lib/seo/catalog";
 
 interface RouteProps {
   params: Promise<{ sifra: string }>;
@@ -28,16 +30,20 @@ interface RouteProps {
 export async function generateMetadata({ params }: RouteProps): Promise<Metadata> {
   const { sifra } = await params;
   const product = findStaticProduct(sifra);
-  if (!product) return { title: "Proizvod" };
+  if (!product) return { title: "Proizvod", robots: { index: false, follow: true } };
   return {
     title: `${sourceProductDisplayName(product)} — ${sourceValue(product, "Šifra")}`,
     description: sourceValue(product, "Opis"),
+    robots: { index: false, follow: true },
   };
 }
 
 export default async function SvetAkcijaProductPage({ params }: RouteProps) {
   const { sifra } = await params;
   await connection();
+  const catalog = await getSeoCatalog();
+  const current = catalog?.products.find(p => p.sku === decodeURIComponent(sifra));
+  if (current) permanentRedirect(`/p/${current.slug}`);
   const product = await getSvetAkcijaProductBySku(sifra);
   if (!product) notFound();
 
@@ -115,7 +121,7 @@ export default async function SvetAkcijaProductPage({ params }: RouteProps) {
               <p className="text-sm font-semibold text-ink-900">Dugi opis</p>
               {longDescription ? (
                 <div className="mt-3 whitespace-pre-line text-sm leading-6 text-ink-700">
-                  {longDescription}
+                  {seoPlainText(longDescription)}
                 </div>
               ) : (
                 <p className="mt-1 text-sm text-ink-500">
