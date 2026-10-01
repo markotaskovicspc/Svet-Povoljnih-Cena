@@ -4,7 +4,7 @@ import { reportDestinationsForRole } from "@/lib/admin/reports-hub";
 describe("admin reports hub permissions", () => {
   it.each([
     ["OPS", ["Dnevni promet", "Knjigovodstveni izveštaji"]],
-    ["ADS", ["Posete i konverzije", "3D i AR"]],
+    ["ADS", ["Posete i konverzije", "3D i AR", "Exit-intent ponuda"]],
     ["CONTENT", ["QA objave"]],
     [
       "SUPER",
@@ -13,6 +13,7 @@ describe("admin reports hub permissions", () => {
         "Knjigovodstveni izveštaji",
         "Posete i konverzije",
         "3D i AR",
+        "Exit-intent ponuda",
         "QA objave",
         "Audit log",
       ],

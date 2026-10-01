@@ -98,7 +98,7 @@ export function getConsentedAnalyticsContext(): ConsentedAnalyticsContext | unde
 }
 
 export function recordFirstPartyEvent(input: {
-  type: "PAGE_VIEW" | "PRODUCT_VIEW" | "ADD_TO_CART" | "CHECKOUT_STARTED" | "PRODUCT_AR";
+  type: "PAGE_VIEW" | "PRODUCT_VIEW" | "ADD_TO_CART" | "CHECKOUT_STARTED" | "PRODUCT_AR" | "EXIT_INTENT";
   path?: string;
   productId?: string;
   quantity?: number;

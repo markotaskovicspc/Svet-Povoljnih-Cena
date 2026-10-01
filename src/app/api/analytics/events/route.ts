@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { AnalyticsEventType } from "@prisma/client";
+import { exitIntentMetadataSchema, exitIntentEventId } from "@/lib/analytics/exit-intent";
 import { productArMetadataSchema } from "@/lib/analytics/product-ar-events";
 import { getProductArAsset } from "@/lib/product-ar";
 import { db } from "@/lib/db";
@@ -13,6 +14,7 @@ import {
 } from "@/lib/analytics/tracking-consent";
 
 const PUBLIC_EVENT_TYPES = new Set<AnalyticsEventType>([
+  "EXIT_INTENT",
   "PRODUCT_AR",
   "PAGE_VIEW",
   "PRODUCT_VIEW",
@@ -85,6 +87,14 @@ export async function POST(request: Request) {
   let productId =
     typeof body?.productId === "string" && body.productId ? body.productId : null;
   let arMetadata: ReturnType<typeof productArMetadataSchema.parse> | undefined;
+  let exitMetadata: ReturnType<typeof exitIntentMetadataSchema.parse> | undefined;
+  if (type === "EXIT_INTENT") {
+    const parsed = exitIntentMetadataSchema.safeParse(body?.metadata);
+    if (!parsed.success || productId || quantity !== null || value !== null) {
+      return NextResponse.json({ ok: false, error: "Neispravan popup događaj." }, { status: 400 });
+    }
+    exitMetadata = parsed.data;
+  }
   if (type === "PRODUCT_AR") {
     const parsed = productArMetadataSchema.safeParse(body?.metadata);
     if (!parsed.success || !getProductArAsset(parsed.data.slug)) {
@@ -106,16 +116,17 @@ export async function POST(request: Request) {
   const event = await db.analyticsEvent.create({
     data: {
       ...(arMetadata ? { id: `ar:${arMetadata.eventId}` } : {}),
+      ...(exitMetadata ? { id: exitIntentEventId(exitMetadata) } : {}),
       type,
       anonymousId,
       sessionId:
         typeof body?.sessionId === "string" ? body.sessionId.slice(0, 96) : null,
-      path: typeof body?.path === "string" ? body.path.slice(0, 500) : null,
+      path: typeof body?.path === "string" ? (exitMetadata ? body.path.split(/[?#]/)[0] : body.path).slice(0, 500) : null,
       productId,
       quantity,
       value,
       consentVersion,
-      metadata: arMetadata ?? (
+      metadata: exitMetadata ?? arMetadata ?? (
         body?.metadata &&
         typeof body.metadata === "object" &&
         !Array.isArray(body.metadata)
@@ -125,6 +136,9 @@ export async function POST(request: Request) {
     },
     select: { id: true },
   }).catch((error: unknown) => {
+    if (exitMetadata && error && typeof error === "object" && "code" in error && error.code === "P2002") {
+      return { id: exitIntentEventId(exitMetadata) };
+    }
     if (arMetadata && error && typeof error === "object" && "code" in error && error.code === "P2002") {
       return { id: `ar:${arMetadata.eventId}` };
     }
