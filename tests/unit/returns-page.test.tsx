@@ -51,6 +51,13 @@ describe("ERP returns page", () => {
     expect(html).toContain("/admin/erp/preuzimanja/b");
     expect(html).not.toContain('name="buyerId"');
   });
+  it("shows an expected return before its new goods are loaded into picking", async () => {
+    mocks.reshipments.mockResolvedValue([{ id: "r", orderId: "o", batchId: null, batch: null, reason: "Ponovno slanje", order: { number: "SPC-RETRY" }, sourceShipmentId: "s", sourceShipment: { provider: "X_EXPRESS", trackingNo: "OLD", status: "IN_TRANSIT" }, items: [{ id: "ri", sku: "SKU", name: "Sto", quantity: 2, receivedQty: 0 }] }]);
+    const html = renderToStaticMarkup(await ReturnsPage());
+    expect(html).toContain("dostupna za učitavanje u picking");
+    expect(html).toContain("Primi 1 kom na lager");
+    expect(html).not.toContain("/admin/erp/preuzimanja/null");
+  });
   it("shows the missing refund data and a retry for an already received package", async () => {
     mocks.orders.mockResolvedValue([returnedOrder("1")]);
     mocks.movements.mockResolvedValue([{ id: "receipt", idempotencyKey: "order-return:SPC-1:item-1:1", warehouseId: "warehouse", createdAt: new Date(), warehouse: { code: "MAG-004", name: "Povrati" } }]);
