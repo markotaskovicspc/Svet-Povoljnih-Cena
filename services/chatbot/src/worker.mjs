@@ -1,3 +1,5 @@
+import {staffSummary} from './support-summary.mjs';
+import {receiveAdContext} from './ad-context.mjs';
 import { orderErrorMessage } from './delivery.mjs';
 import { classifyOrderIntent } from './order-intent.mjs';
 import { randomUUID } from 'node:crypto';
@@ -40,6 +42,10 @@ export class Worker {
         const events=await c.query(`SELECT * FROM spc_chat_events WHERE conversation=$1 AND status='pending' ORDER BY created_at,id LIMIT 1`,[row.id]);
         const job=events.rows[0]; if(!job || new Date(job.next_at)>new Date()) return;
         const event=this.store.decode(job.payload);
+        if(event.referralOnly){
+          if(inWindow(event.timestamp))await receiveAdContext({state,event,account:this.accounts.find(a=>a.channel===row.channel&&a.id===row.account),graphVersion:this.graphVersion,model:this.model});
+          await this.store.save(c,row.id,state);await c.query("UPDATE spc_chat_events SET status='done' WHERE id=$1",[job.id]);return;
+        }
         if(isStaffOrderCommand(event)&&this.allowed(row.sender)&&inWindow(event.timestamp)&&inWindow(Number(row.last_customer))){
           const ours=await c.query('SELECT id FROM spc_chat_outbox WHERE meta_id=$1',[event.id.substring(event.channel.length+1)]);
           if(!ours.rowCount){
@@ -94,6 +100,7 @@ export class Worker {
             state.historyVersion=2;
           }
           await this.store.importCommentContext(c,row.id,state,event);
+          await receiveAdContext({state,event,account:this.accounts.find(a=>a.channel===row.channel&&a.id===row.account),graphVersion:this.graphVersion,model:this.model});
           if(state.reclamationContext&&Date.now()-state.reclamationContext.createdAt>2*3600000)delete state.reclamationContext;
           if(!activeVisualContext(state))delete state.visualContext;
           if(event.attachments.length&&!state.reclamationContext){
@@ -329,7 +336,8 @@ export class Worker {
     }
     message=await executeStaffOrder({event,state,spc:this.spc,save:()=>this.store.save(c,row.id,state),prepare:async()=>{
       if(state.staffHistoryIncomplete)return {ok:false,message:'Porudžbina nije kreirana jer nije preuzeta cela duga prepiska. Potrebna je provera istorije; ne ponavljajte podatke kupca.'};
-      const prepared=await this.staffPrepareFn({event,state,spc:this.spc,model:this.model});
+      delete state.staffPlanSummary;
+      const prepared=await this.staffPrepareFn({event,state,spc:this.spc,model:this.model,onPlan:plan=>{state.staffPlanSummary=plan.input?{lines:plan.input.lines,agreedTotal:plan.agreedTotal,unitPrices:plan.unitPrices,shipping:plan.input.shipping,guestEmail:plan.input.guestEmail}:null;}});
       // A failed extraction/check is not missing customer data. Retry the read-only
       // preparation before escalating; never retry an ERP write with a new quote.
       if(!prepared.ok&&['STAFF_PLAN_INCOMPLETE','STAFF_PRICE_EVIDENCE_INVALID','STAFF_CONTACT_EVIDENCE_INVALID','STAFF_CART_CHECK_FAILED'].includes(prepared.code)){
@@ -360,8 +368,8 @@ export class Worker {
     state.staffOrderAttention={eventId:event.id,reason,createdAt:Date.now()};
     const transcript=state.history.slice(-40).map(m=>`${m.role==='user'?'Kupac':'SPC'}: ${m.content}`).join('\n').slice(-8500);
     const payload={action:'support_handoff',id:`staff-order:${event.id}`,channel:row.channel,conversationId:row.id,
-      reason:'Komanda /porudzbina: potrebna pažnja prodavca',
-      transcript:`RAZLOG: ${reason.slice(0,1000)}\nDetalji nisu poslati kupcu. Proverite dogovor i ERP, pa završite porudžbinu.\n\n${transcript}`};
+      reason:reason.slice(0,200),
+      transcript:(`RAZLOG: ${reason.slice(0,1000)}\nDetalji nisu poslati kupcu. Proverite dogovor i ERP, pa završite porudžbinu.\n\n${staffSummary(state)}\n\n${transcript}`).slice(0,10000)};
     await c.query('INSERT INTO spc_chat_support(id,conversation,payload) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[payload.id,row.id,this.store.encode(payload)]);
   }
   async flush() {

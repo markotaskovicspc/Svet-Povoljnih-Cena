@@ -28,7 +28,7 @@ export class Store {
       await c.query(`INSERT INTO spc_chat_conversations(id,channel,account,sender,state) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`,
         [event.conversation,event.channel,event.account,event.sender,seal({history:[],orders:[]},this.key)]);
       const inserted = await c.query(`INSERT INTO spc_chat_events(id,conversation,payload) VALUES($1,$2,$3) ON CONFLICT DO NOTHING RETURNING id`, [event.id,event.conversation,seal(event,this.key)]);
-      if (inserted.rowCount && !event.echo) await c.query(`UPDATE spc_chat_conversations SET last_customer=GREATEST(last_customer,$2),updated_at=now() WHERE id=$1`, [event.conversation,event.timestamp]);
+      if (inserted.rowCount && !event.echo && !event.referralOnly) await c.query(`UPDATE spc_chat_conversations SET last_customer=GREATEST(last_customer,$2),updated_at=now() WHERE id=$1`, [event.conversation,event.timestamp]);
       if (event.echo && !event.botEcho) {
         const ours = await c.query('SELECT id FROM spc_chat_outbox WHERE meta_id=$1',[event.id.substring(event.channel.length+1)]);
         const comment=this.commentsEnabled&&!ours.rowCount?await c.query('SELECT id FROM spc_comment_events WHERE meta_id=$1',[event.id.substring(event.channel.length+1)]):{rowCount:0};

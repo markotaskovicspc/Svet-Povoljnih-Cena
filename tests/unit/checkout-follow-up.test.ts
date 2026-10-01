@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ order: vi.fn(), enqueue: vi.fn(), process: vi.fn() }));
+const mocks = vi.hoisted(() => ({ order: vi.fn(), enqueue: vi.fn(), process: vi.fn(), internalMail:vi.fn() }));
+vi.mock('@/lib/checkout/internal-order-email',()=>({notifyOrderWithoutEmail:mocks.internalMail}));
 vi.mock("@/lib/db", () => ({ db: { order: { findUniqueOrThrow: mocks.order } } }));
 vi.mock("@/lib/background-jobs", () => ({ enqueueBackgroundJob: mocks.enqueue, processBackgroundJob: mocks.process }));
 import { prepareCheckoutFollowUp } from "@/lib/checkout/follow-up";
@@ -14,6 +15,12 @@ beforeEach(() => {
   });
   mocks.enqueue.mockImplementation(async ({ idempotencyKey }) => ({ id: idempotencyKey }));
   mocks.process.mockResolvedValue({ claimed: true, ok: true });
+});
+it('notifies staff without scheduling a customer email when no buyer address exists',async()=>{
+ mocks.order.mockResolvedValue({id:'o1',number:'SPC-TEST',guestEmail:null,user:null,total:3398,shipping:399,paymentMethod:'POUZECE_GOTOVINA',shippingMethod:'KURIR',supplierFulfillments:[],items:[]});
+ await prepareCheckoutFollowUp('o1','access-token-1234567890',true);
+ expect(mocks.internalMail).toHaveBeenCalledTimes(1);
+ expect(mocks.enqueue.mock.calls.some(([job])=>job.kind==='BUYER_RECEIPT')).toBe(false);
 });
 
 it("email draft workflow skips automatic buyer receipt while retaining fulfillment jobs", async () => {

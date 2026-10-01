@@ -1,4 +1,5 @@
-import { createHmac, timingSafeEqual, createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import {adReferral} from './ad-context.mjs';
+import { createHmac, createHash, timingSafeEqual, createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 export function equal(a, b) {
   const x = Buffer.from(a ?? ''); const y = Buffer.from(b ?? '');
   return x.length > 0 && x.length === y.length && timingSafeEqual(x, y);
@@ -40,15 +41,20 @@ export function parseEvents(body, accounts) {
     const account=accounts.find(a => a.channel === channel && a.id === entry.id);
     if (!account) continue;
     for (const event of entry.messaging ?? []) {
-      if (!event.message?.mid || !Number.isFinite(event.timestamp)) continue;
-      const echo = event.message.is_echo === true;
+      const referral=adReferral(event);
+      if ((!event.message?.mid&&!referral) || !Number.isFinite(event.timestamp)) continue;
+      const message=event.message??{};
+      const referralOnly=!message.mid;
+      const eventId=message.mid??('referral:'+createHash('sha256').update(JSON.stringify([entry.id,event.sender?.id,event.timestamp,referral])).digest('hex'));
+      const echo = message.is_echo === true;
       if(echo&&event.sender?.id!==entry.id)continue;
       const sender = echo ? event.recipient?.id : event.sender?.id;
       if (!sender || (!echo && event.recipient?.id !== entry.id)) continue;
-      events.push({ id: `${channel}:${event.message.mid}`, channel, account: entry.id, sender,
+      events.push({ id: `${channel}:${eventId}`, channel, account: entry.id, sender,
         conversation: `${channel}:${entry.id}:${sender}`, timestamp: event.timestamp,
-        echo, botEcho: event.message.metadata === 'spc-bot' || (echo && Boolean(account.appId) && String(event.message.app_id??'')===account.appId), sentByApp:Boolean(event.message.app_id), text: String(event.message.text ?? '').slice(0, 6000),
-        attachments: (event.message.attachments ?? []).slice(0, 5).map(a => ({type:a.type, url:a.payload?.url})),
+        echo, botEcho: message.metadata === 'spc-bot' || (echo && Boolean(account.appId) && String(message.app_id??'')===account.appId), sentByApp:Boolean(message.app_id), text: String(message.text ?? '').slice(0, 6000),
+        referral: echo?null:referral,referralOnly,
+        attachments: (message.attachments ?? []).slice(0, 5).map(a => ({type:a.type, url:a.payload?.url})),
       });
     }
   }

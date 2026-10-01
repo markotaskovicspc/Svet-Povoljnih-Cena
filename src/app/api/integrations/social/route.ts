@@ -1,3 +1,4 @@
+import {supportEmail} from '@/lib/social/support-email';
 import { after, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -69,12 +70,7 @@ export async function POST(req: Request) {
     }
     if (body.action === "support_handoff") {
       if (getEmailConfig().provider === "none") return NextResponse.json({ ok: false, error: "EMAIL_NOT_CONFIGURED" }, { status: 503 });
-      const panelLink = `https://spc-chatbot-production.up.railway.app/?conversation=${encodeURIComponent(body.conversationId)}`;
-      const caseLink = body.reclamationId ? `\nReklamacija u ERP-u: https://www.svetpovoljnihcena.rs/admin/erp/reklamacije-dnevnik/${encodeURIComponent(body.reclamationId)}` : "";
-      const text = `Potreban je odgovor SPC podrške.${body.customerName?`\nKupac: ${body.customerName}`:''}\nKanal: ${body.channel}\nRazgovor: ${body.conversationId}\nRazlog: ${body.reason}${caseLink}\nTačna prepiska u SPC panelu (pristupni ključ operatera): ${panelLink}${body.conversationLink?`\nProverena prepiska u Business Suite: ${body.conversationLink}`:''}${body.inboxUrl?`\nBusiness Suite inbox: ${body.inboxUrl}\n${body.customerName?`U pretrazi inboxa unesite: ${body.customerName}`:'Izaberite kupca u inboxu.'}`:''}\n\nPoslednje poruke:\n${body.transcript}\n\nBot nastavlja da pomaže oko novih pitanja dok zaposleni ne preuzme razgovor.`;
-      const escaped = text.replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[c]!);
-      const escapeHref=(value:string)=>value.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]!);
-      const result = await trackedDispatch({ kind: "social_support_handoff", to: "podrska@svetpovoljnihcena.rs", subject: `SPC ${body.channel} — upit za podršku`, text, html: `<p><a href="${panelLink}">Otvori tačnu prepisku u SPC panelu</a> (pristupni ključ operatera)</p>${body.conversationLink?`<p><a href="${escapeHref(body.conversationLink)}">Otvori proverenu prepisku u Business Suite</a></p>`:''}${body.inboxUrl?`<p><a href="${escapeHref(body.inboxUrl)}">Otvori Business Suite inbox</a></p>`:''}<pre style="white-space:pre-wrap">${escaped}</pre>`, idempotencyKey: `social-support:${createHash('sha256').update(body.conversationId+':'+body.id).digest('hex')}` });
+      const result = await trackedDispatch({ kind: "social_support_handoff", to: "podrska@svetpovoljnihcena.rs", ...supportEmail(body), idempotencyKey: `social-support:${createHash('sha256').update(body.conversationId+':'+body.id).digest('hex')}` });
       return NextResponse.json({ ok: result.ok && result.provider !== "none" });
     }
     if (body.action === "search") {

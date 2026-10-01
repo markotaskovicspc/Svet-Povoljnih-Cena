@@ -2,6 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {unverifiedOrderReply} from '../src/order-reply-guard.mjs';
 const state={orders:[{number:'EXISTING-1',items:[{sku:'CHAIR',qty:10}]}],history:[]};
+test('negating order creation before the first purchase does not erase the useful answer',async()=>{
+ assert.equal(await unverifiedOrderReply({text:'Porudžbina još nije kreirana. Dostava je 599 din.',state:{orders:[],history:[]},classify:async()=>({kind:'not_order_confirmation',orderNumber:null})}),false);
+ assert.equal(await unverifiedOrderReply({text:'Porudžbina je kreirana.',state:{orders:[],history:[]},classify:async()=>({kind:'existing_order',orderNumber:'FAKE'})}),true);
+});
 test('delivery reply about a stored order does not require repeating its number',async()=>{
  assert.equal(await unverifiedOrderReply({text:'Vaša porudžbina je evidentirana. Dostava je obično za 2–3 dana.',event:{text:'Za ovih 10 stolica'},state,classify:async()=>({kind:'existing_order',orderNumber:'EXISTING-1'})}),false);
 });

@@ -135,7 +135,7 @@ export function buildDashboardDataQuery(input: DashboardDataInput, section: "all
       , COALESCE(SUM(o.shipping) FILTER (WHERE o.channel = 'ANANAS' AND o."createdAt" >= ${todayPeriod.start} AND o."createdAt" < ${todayPeriod.endExclusive}), 0)::double precision AS today_ananas_shipping
       , COALESCE(SUM(o.shipping) FILTER (WHERE o.channel = 'ANANAS' AND o."createdAt" >= ${ordersPeriod.start} AND o."createdAt" < ${ordersPeriod.endExclusive}), 0)::double precision AS period_ananas_shipping
       FROM (
-        SELECT o."createdAt", o.total - COALESCE(o.shipping, 0) AS total, o.shipping, o.channel::text AS channel
+        SELECT o."createdAt", o.total - CASE WHEN o.channel = 'ANANAS' THEN COALESCE(o.shipping, 0) ELSE 0 END AS total, o.shipping, o.channel::text AS channel
         FROM "Order" o
         WHERE o.status <> 'OTKAZANO'
           AND NOT (o.channel = 'ANANAS' AND EXISTS (SELECT 1 FROM "AnanasOrder" a WHERE a.id = COALESCE(o."externalOrderNo", o.number)))

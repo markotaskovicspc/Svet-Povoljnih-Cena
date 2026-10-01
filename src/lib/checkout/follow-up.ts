@@ -8,17 +8,17 @@ export async function prepareCheckoutFollowUp(orderId: string, accessToken: stri
   const order = await db.order.findUniqueOrThrow({
     where: { id: orderId },
     select: {
-      number: true, paymentMethod: true, shippingMethod: true,
+      id: true, guestEmail: true, user: { select: { email: true } }, total: true, shipping: true, number: true, paymentMethod: true, shippingMethod: true,
       supplierFulfillments: { select: { id: true } },
       items: { select: {
-        qty: true, productId: true,
+        name: true, sku: true, qty: true, productId: true,
         product: { select: { supplier: { select: { integrationKey: true } } } },
       } },
     },
   });
   // Persist every child job before running any provider. If interrupted here,
   // retrying the parent repairs missing jobs using the same idempotency keys.
-  const buyer = customerReplyDraftOnly ? null : await enqueueBackgroundJob({
+  const buyer = customerReplyDraftOnly || (order.guestEmail === null && !order.user?.email) ? null : await enqueueBackgroundJob({
     kind: "BUYER_RECEIPT", payload: { orderId, accessToken },
     idempotencyKey: `buyer-receipt:${orderId}`,
   });
@@ -47,6 +47,10 @@ export async function prepareCheckoutFollowUp(orderId: string, accessToken: stri
       payload: { orderNumber: order.number, lines: genericLines },
       idempotencyKey: `supplier-reservation:${orderId}`,
     });
+  }
+  if (order.guestEmail === null && !order.user?.email) {
+    const { notifyOrderWithoutEmail } = await import('./internal-order-email');
+    await notifyOrderWithoutEmail(order);
   }
   // These are independent jobs with their own retries. A broken supplier PDF
   // cannot prevent the buyer job from running. Documents retain their existing

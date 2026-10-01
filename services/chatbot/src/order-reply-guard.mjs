@@ -17,7 +17,6 @@ unverified_new_order: tekst tvrdi da je kreirana/potvrđena nova kupovina za koj
 export async function unverifiedOrderReply({text,event,state,model,classify=classifyOrderReply}) {
  const normalized=String(text??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'dj');
  if(!/potvrdjeno|porudzbin[^.!?\n]{0,70}(?:kreiran|potvrdjen|evidentiran|primljen|uspesn)/i.test(normalized))return false;
- if(!state.orders.length)return true;
  try{
   const result=verdict.parse(await classify({text,event,state,model}));
   return !(result.kind==='not_order_confirmation'||(result.kind==='existing_order'&&state.orders.some(o=>o.number===result.orderNumber)));

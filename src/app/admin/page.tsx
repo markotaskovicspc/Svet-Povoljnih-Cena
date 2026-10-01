@@ -164,6 +164,8 @@ type OperationalSectionProps = {
   warehouseLabel: string;
 };
 
+function shippingShare(shipping: number, total: number) { return total > 0 ? `${(shipping / total * 100).toLocaleString("sr-Latn-RS", { maximumFractionDigits: 2 })}%` : "—"; }
+
 async function OperationalCards({ data, input, warehouseLabel }: OperationalSectionProps) {
   const { warehouseId, ordersPeriod, fiscalPeriod, reclamationsPeriod } = input;
   const { orderSummary, fiscalRows, reclamationCount, reclamationQuantity, reclamationDeliveredQuantity, warehouseStockRows, incomingRows } = await data;
@@ -207,15 +209,17 @@ async function OperationalCards({ data, input, warehouseLabel }: OperationalSect
             <StatCard label="Porudžbine danas" value={String(ordersToday)} amount={formatRsd(ordersTodayAmount)} breakdown={[
               { label: `SPC · ${ordersToday - (orderSummary.today_ananas ?? 0)} porudžbina`, value: formatRsd(ordersTodayAmount - (orderSummary.today_ananas_total ?? 0)) },
               { label: `Ananas · ${orderSummary.today_ananas ?? 0} preuzetih porudžbina`, value: formatRsd(orderSummary.today_ananas_total ?? 0) },
-              { label: "SPC dostava (odvojeno)", value: formatRsd(orderSummary.today_shipping) },
+              { label: "SPC dostava (u iznosu SPC)", value: formatRsd(orderSummary.today_shipping) },
+              { label: "Udeo dostave u SPC prodaji", value: shippingShare(orderSummary.today_shipping, ordersTodayAmount - (orderSummary.today_ananas_total ?? 0)) },
               { label: "Ananas dostava (odvojeno)", value: formatRsd(orderSummary.today_ananas_shipping ?? 0) },
-            ]} hint={`Bez otkazanih · Vrednost robe bez dostave · ${warehouseLabel}${warehouseId ? " · Uvezeni Ananas podaci dostupni su za sve magacine zajedno" : ""}`} />
+            ]} hint={`Bez otkazanih · SPC artikli + dostava · Ananas artikli · ${warehouseLabel}${warehouseId ? " · Uvezeni Ananas podaci dostupni su za sve magacine zajedno" : ""}`} />
             <StatCard label="Porudžbine u periodu" value={String(ordersInPeriod)} amount={formatRsd(ordersInPeriodAmount)} breakdown={[
               { label: `SPC · ${ordersInPeriod - (orderSummary.period_ananas ?? 0)} porudžbina`, value: formatRsd(ordersInPeriodAmount - (orderSummary.period_ananas_total ?? 0)) },
               { label: `Ananas · ${orderSummary.period_ananas ?? 0} preuzetih porudžbina`, value: formatRsd(orderSummary.period_ananas_total ?? 0) },
-              { label: "SPC dostava (odvojeno)", value: formatRsd(orderSummary.period_shipping) },
+              { label: "SPC dostava (u iznosu SPC)", value: formatRsd(orderSummary.period_shipping) },
+              { label: "Udeo dostave u SPC prodaji", value: shippingShare(orderSummary.period_shipping, ordersInPeriodAmount - (orderSummary.period_ananas_total ?? 0)) },
               { label: "Ananas dostava (odvojeno)", value: formatRsd(orderSummary.period_ananas_shipping ?? 0) },
-            ]} hint={`Bez otkazanih · Vrednost robe bez dostave · ${ordersPeriod.label} · ${warehouseLabel}`} />
+            ]} hint={`Bez otkazanih · SPC artikli + dostava · Ananas artikli · ${ordersPeriod.label} · ${warehouseLabel}`} />
             <StatCard label="Promet danas (neto fiskalizovano)" value={formatRsd(fiscal.today_net)} hint={warehouseLabel} />
             <StatCard label="Promet u periodu (neto fiskalizovano)" value={formatRsd(fiscal.period_net)} hint={`${fiscalPeriod.label} · ${warehouseLabel}`} />
           </div>
