@@ -69,6 +69,9 @@ export async function GET(request: Request) {
   ];
   overview.addRows([
     { metric: "Period", value: period.label },
+    { metric: "Od – do", value: `${period.fromInput} – ${period.toInput}` },
+    { metric: "Ukupno poseta (zbir dnevnih sesija)", value: dailyRows.reduce((sum, row) => sum + row.visits, 0) },
+    { metric: "Pregledi stranica", value: dailyRows.reduce((sum, row) => sum + row.pageViews, 0) },
     { metric: "Jedinstveni posetioci", value: summary.visitors },
     { metric: "Kupci", value: summary.purchasers },
     {
@@ -105,7 +108,12 @@ export async function GET(request: Request) {
     { header: "Konverzija (%)", key: "conversionPct", width: 18 },
     { header: "Vrednost (RSD)", key: "purchaseValue", width: 20 },
   ];
-  detail.addRows(rows);
+  detail.addRows(rows.map((row) => ({
+    ...row,
+    bucket: granularity === "period"
+      ? `${period.fromInput} – ${period.toInput}`
+      : granularity === "month" ? row.bucket.slice(0, 7) : row.bucket,
+  })));
   styleHeader(detail.getRow(1));
   detail.autoFilter = {
     from: { row: 1, column: 1 },

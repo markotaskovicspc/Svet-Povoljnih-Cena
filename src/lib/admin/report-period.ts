@@ -7,6 +7,7 @@ export const REPORT_PERIOD_PRESETS = [
   { key: "30d", label: "Poslednjih 30 dana", days: 30 },
   { key: "90d", label: "Poslednjih 90 dana", days: 90 },
   { key: "mtd", label: "Tekući mesec", days: null },
+  { key: "previous-month", label: "Prethodni mesec", days: null },
   { key: "ytd", label: "Od početka godine", days: null },
 ] as const;
 
@@ -48,6 +49,10 @@ export function resolveReportPeriod(
   if (preset.key === "yesterday") {
     const yesterday = addCalendarDays(today, -1);
     return buildPeriod(preset.key, yesterday, yesterday, preset.label);
+  }
+  if (preset.key === "previous-month") {
+    const lastDay = addCalendarDays(`${today.slice(0, 7)}-01`, -1);
+    return buildPeriod(preset.key, `${lastDay.slice(0, 7)}-01`, lastDay, preset.label);
   }
   const fromInput =
     preset.key === "ytd"

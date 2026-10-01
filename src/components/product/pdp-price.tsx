@@ -53,10 +53,15 @@ export function PdpPriceContent({
           <p className="text-sm text-ink-500">
             Redovna cena:{" "}
             <span className={actionOffer ? "line-through" : undefined}>
-              {formatRsd(quote.full)}
+              {formatRsd(product.fullPrice)}
             </span>
           </p>
         )}
+        {actionOffer && quote.full !== product.fullPrice ? (
+          <p className="text-xs text-ink-500">
+            Najniža cena u 30 dana pre akcije: {formatRsd(quote.full)}
+          </p>
+        ) : null}
         {actionOffer ? (
           <PriceOfferRow
             label="Akcijska cena"

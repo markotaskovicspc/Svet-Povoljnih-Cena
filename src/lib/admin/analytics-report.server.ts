@@ -38,7 +38,7 @@ export async function getDailyVisitsReport(
   `);
 }
 
-export const ANALYTICS_GRANULARITIES = ["day", "week", "month"] as const;
+export const ANALYTICS_GRANULARITIES = ["day", "week", "month", "period"] as const;
 export type AnalyticsGranularity =
   (typeof ANALYTICS_GRANULARITIES)[number];
 
@@ -48,7 +48,7 @@ export function normalizeAnalyticsGranularity(
   const selected = Array.isArray(value) ? value[0] : value;
   return ANALYTICS_GRANULARITIES.includes(selected as AnalyticsGranularity)
     ? (selected as AnalyticsGranularity)
-    : "day";
+    : "period";
 }
 
 export type PageConversionReportRow = {
@@ -73,22 +73,27 @@ type PageConversionDatabaseRow = {
 function bucketSql(
   granularity: AnalyticsGranularity,
   value: Prisma.Sql,
+  period: ReportPeriod,
 ) {
+  if (granularity === "period") return Prisma.sql`${period.fromInput}::date`;
+  // occurredAt is a UTC timestamp WITHOUT time zone, so interpret it as UTC
+  // before converting to the Belgrade wall clock used for calendar buckets.
+  const local = Prisma.sql`${value} AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Belgrade'`;
   if (granularity === "week") {
-    return Prisma.sql`date_trunc('week', ${value} AT TIME ZONE 'Europe/Belgrade')`;
+    return Prisma.sql`date_trunc('week', ${local})`;
   }
   if (granularity === "month") {
-    return Prisma.sql`date_trunc('month', ${value} AT TIME ZONE 'Europe/Belgrade')`;
+    return Prisma.sql`date_trunc('month', ${local})`;
   }
-  return Prisma.sql`date_trunc('day', ${value} AT TIME ZONE 'Europe/Belgrade')`;
+  return Prisma.sql`date_trunc('day', ${local})`;
 }
 
 export async function getPageConversionReport(
   period: ReportPeriod,
   granularity: AnalyticsGranularity,
 ): Promise<PageConversionReportRow[]> {
-  const visitBucket = bucketSql(granularity, Prisma.sql`a."occurredAt"`);
-  const purchaseBucket = bucketSql(granularity, Prisma.sql`c."occurredAt"`);
+  const visitBucket = bucketSql(granularity, Prisma.sql`a."occurredAt"`, period);
+  const purchaseBucket = bucketSql(granularity, Prisma.sql`c."occurredAt"`, period);
   const rows = await db.$queryRaw<PageConversionDatabaseRow[]>(Prisma.sql`
     WITH page_visits AS (
       SELECT

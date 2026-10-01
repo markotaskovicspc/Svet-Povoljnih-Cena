@@ -8,8 +8,8 @@ import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle, StatCard } from "@/components/admin/card";
 import { DataTable } from "@/components/admin/data-table";
 import { ErpGrid } from "@/components/admin/erp-grid";
-import { Input } from "@/components/ui/input";
-import { REPORT_PERIOD_PRESETS, resolveReportPeriod } from "@/lib/admin/report-period";
+import { AnalyticsFilters } from "@/components/admin/analytics-filters";
+import { dateInputInTimeZone, resolveReportPeriod } from "@/lib/admin/report-period";
 import {
   getAnalyticsFunnelSummary,
   getDailyVisitsReport,
@@ -232,37 +232,21 @@ export default async function AnalyticsConversionPage({
         ]}
       />
       <div className="space-y-8 px-8 py-6">
-        <form method="get" className="grid gap-3 rounded-xl border border-border/60 bg-surface p-4 md:grid-cols-2 xl:grid-cols-5">
-          <label className="text-xs font-medium text-ink-600">
-            Period
-            <select name="range" defaultValue={period.preset} className="mt-1 h-9 w-full rounded-lg border border-border bg-white px-3 text-sm">
-              {REPORT_PERIOD_PRESETS.map((preset) => (
-                <option key={preset.key} value={preset.key}>{preset.label}</option>
-              ))}
-              <option value="custom">Tačan raspon</option>
-            </select>
-          </label>
-          <label className="text-xs font-medium text-ink-600">
-            Od
-            <Input name="from" type="date" defaultValue={period.fromInput} className="mt-1 h-9" />
-          </label>
-          <label className="text-xs font-medium text-ink-600">
-            Do
-            <Input name="to" type="date" defaultValue={period.toInput} className="mt-1 h-9" />
-          </label>
-          <label className="text-xs font-medium text-ink-600">
-            Grupisanje stranica
-            <select name="group" defaultValue={granularity} className="mt-1 h-9 w-full rounded-lg border border-border bg-white px-3 text-sm">
-              <option value="day">Dnevno</option>
-              <option value="week">Nedeljno</option>
-              <option value="month">Mesečno</option>
-            </select>
-          </label>
-          <div className="flex items-end gap-2">
-            <button className="h-9 rounded-lg bg-walnut px-4 text-sm font-medium text-white">Primeni</button>
-            <a href={exportHref} className="inline-flex h-9 items-center rounded-lg border border-border px-4 text-sm font-medium text-ink-700">Excel</a>
-          </div>
-        </form>
+        <AnalyticsFilters
+          key={`${period.preset}:${period.fromInput}:${period.toInput}:${granularity}`}
+          preset={period.preset}
+          fromInput={period.fromInput}
+          toInput={period.toInput}
+          granularity={granularity}
+          exportHref={exportHref}
+          today={dateInputInTimeZone(now)}
+        />
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <StatCard label="Ukupno poseta u periodu" value={dailyVisits.reduce((sum, row) => sum + row.visits, 0).toLocaleString("sr-Latn-RS")} hint={`${period.fromInput} – ${period.toInput} · Zbir dnevnih sesija`} />
+          <StatCard label="Pregledi stranica u periodu" value={dailyVisits.reduce((sum, row) => sum + row.pageViews, 0).toLocaleString("sr-Latn-RS")} hint={period.label} />
+          <StatCard label="Jedinstveni posetioci u periodu" value={funnel.visitors.toLocaleString("sr-Latn-RS")} hint="Anonimni posetioci uz saglasnost za analitiku" />
+        </div>
 
         <Card>
           <CardTitle description={`${period.label} · Vreme u Srbiji. Ista sesija računa se jednom dnevno na celom sajtu. Prikazuju se samo posete uz saglasnost za analitiku; današnji podaci još nisu konačni.`}>
@@ -299,7 +283,7 @@ export default async function AnalyticsConversionPage({
           </CardTitle>
           <DataTable
             columns={[
-              { key: "period", label: granularity === "day" ? "Dan" : granularity === "week" ? "Nedelja od" : "Mesec" },
+              { key: "period", label: granularity === "period" ? "Period" : granularity === "day" ? "Dan" : granularity === "week" ? "Nedelja od" : "Mesec" },
               { key: "path", label: "Proizvod / stranica" },
               { key: "pageViews", label: "Pregledi", align: "right" },
               { key: "visits", label: "Jedinstvene posete", align: "right" },
@@ -315,7 +299,11 @@ export default async function AnalyticsConversionPage({
               return {
                 id: `${row.bucket}:${row.path}`,
                 cells: {
-                  period: row.bucket,
+                  period: granularity === "period"
+                    ? `${period.fromInput} – ${period.toInput}`
+                    : granularity === "month"
+                      ? `${row.bucket.slice(5, 7)}.${row.bucket.slice(0, 4)}.`
+                      : row.bucket.split("-").reverse().join(".") + ".",
                   path: destination ? (
                     <Link
                       href={destination.href}
@@ -386,7 +374,7 @@ export default async function AnalyticsConversionPage({
                 value: formatRsd(row.purchase_value),
               },
             }))}
-            empty="Nema događaja dodavanja u korpu u poslednjih 30 dana."
+            empty="Nema događaja dodavanja u korpu u izabranom periodu."
           />
         </Card>
 

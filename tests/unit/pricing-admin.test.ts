@@ -2,10 +2,19 @@ import { describe, expect, it } from "vitest";
 import {
   formatBelgradePricingDateTime,
   parseBelgradePricingDateTime,
+  parseBelgradePricingDate,
 } from "@/lib/admin/pricing-date-time";
 import { actionSalePriceError } from "@/lib/pricing/action-price";
 
 describe("pricing admin date and price validation", () => {
+  it("keeps an empty end date unlimited and includes the entire Serbian end day", () => {
+    expect(parseBelgradePricingDate("", "end")).toBeNull();
+    expect(parseBelgradePricingDate(null, "end")).toBeNull();
+    expect(parseBelgradePricingDate("2026-10-01", "start")?.toISOString()).toBe("2026-09-30T22:00:00.000Z");
+    expect(parseBelgradePricingDate("2026-10-01", "end")?.toISOString()).toBe("2026-10-01T21:59:59.999Z");
+    expect(parseBelgradePricingDate("2026-10-25", "end")?.toISOString()).toBe("2026-10-25T22:59:59.999Z");
+    expect(() => parseBelgradePricingDate("2026-02-30", "end")).toThrow();
+  });
   it("parses and formats Serbian summer and winter wall-clock times", () => {
     const summer = parseBelgradePricingDateTime("2026-08-01T00:00");
     const winter = parseBelgradePricingDateTime("2026-01-01T00:00");

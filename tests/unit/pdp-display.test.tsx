@@ -10,6 +10,8 @@ import { PdpPictograms } from "@/components/product/pdp-pictograms";
 import { PdpPriceContent } from "@/components/product/pdp-price";
 import { getProductAvailability } from "@/lib/product-availability";
 import type { EffectivePrice, ProductPriceQuote } from "@/lib/pricing";
+import { resolveProductPriceQuote } from "@/lib/pricing";
+import { resolveRetailPrice, lowestPublicPriceLast30Days } from "@/lib/pricing/retail-price";
 import type { Product } from "@/types";
 
 const product = {
@@ -48,6 +50,31 @@ function quote({
 }
 
 describe("PDP price and benefit display", () => {
+  it("shows the October retail price while retaining September history as the action reference", () => {
+    const priceList = { id: "mp", code: "MP", name: "MP", active: true, validFrom: null, validTo: null };
+    const entries = [
+      { price: 856, validFrom: new Date("2026-09-14T22:00:00Z"), validTo: new Date("2026-09-30T21:59:59.999Z"), priceList },
+      { price: 999, validFrom: new Date("2026-09-30T22:00:00Z"), validTo: null, priceList },
+    ];
+    const now = new Date("2026-10-01T08:00:00Z");
+    const action = { startsAt: new Date("2026-09-30T22:00:00Z"), endsAt: new Date("2026-10-31T22:59:59Z"), priority: 1 };
+    expect(resolveRetailPrice(entries, 856, new Date("2026-09-30T21:59:59.999Z")).price).toBe(856);
+    const current = { ...product, fullPrice: resolveRetailPrice(entries, 856, now).price,
+      referencePrice: lowestPublicPriceLast30Days(entries, [{ salePrice: 699, action }], 999, now),
+      actionPrices: [{ price: 699, ...action }],
+    } as unknown as Product;
+    const currentQuote = resolveProductPriceQuote(current, { now });
+    expect(current.fullPrice).toBe(999);
+    expect(currentQuote.full).toBe(856);
+    const desktop = renderToStaticMarkup(<PdpPriceContent product={current} quote={currentQuote} loyaltyEligible={false} />);
+    const mobile = renderToStaticMarkup(<PdpMobilePriceContent quote={currentQuote} regularPrice={current.fullPrice} />);
+    for (const markup of [desktop, mobile]) {
+      expect(markup).toMatch(/Redovna(?: cena)?: <span[^>]*>999 RSD<\/span>/);
+      expect(markup).toContain("856 RSD");
+      expect(markup).toContain("699 RSD");
+      expect(markup).toContain("Najniža");
+    }
+  });
   it("shows a standalone loyalty price in red without crossing out the regular price", () => {
     const loyaltyOffer = price({ effective: 6_999, kind: "loyalty" });
     const markup = renderToStaticMarkup(
