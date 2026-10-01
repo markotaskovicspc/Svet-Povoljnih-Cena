@@ -160,7 +160,7 @@ export class Worker {
               delete state.claimVerification;
               message='Porudžbina je povezana sa ovim razgovorom. Na koji artikal se odnosi problem: '+result.order.items.map(i=>i.name).slice(0,6).join(', ')+'?';
             } else {
-              message='Kod nije prihvaćen ili je istekao. Možete zatražiti novi kod ili pomoć kolege.';
+              message='Kod nije prihvaćen ili je istekao. Možete zatražiti novi kod ili pomoć korisničke podrške.';
               if(result.error?.code!=='VERIFICATION_INVALID')delete state.claimVerification;
             }
           } else if (state.reclamation?.reclamationToken && reclamationIntent==='confirm') {
@@ -172,7 +172,7 @@ export class Worker {
               const result=await this.spc({action:'submit_reclamation',channel:event.channel,conversationId:row.id,reclamationToken:pending.reclamationToken});
               if(result.ok) {
                 state.reclamations??=[];if(!state.reclamations.some(r=>r.number===result.number))state.reclamations.push({number:result.number,orderNumber:pending.number,sku:pending.input.sku});
-                message=result.alreadyExists?'Za ovaj artikal već postoji reklamacija '+result.number+'. Dopunu prosleđujem kolegama uz postojeću prijavu.':'Reklamacija '+result.number+' je zabeležena. Kolege će pregledati prijavu i javiti se o daljim koracima.';
+                message=result.alreadyExists?'Za ovaj artikal već postoji reklamacija '+result.number+'. Dopunu prosleđujem korisničkoj podršci uz postojeću prijavu.':'Reklamacija '+result.number+' je zabeležena. Korisnička podrška će pregledati prijavu i javiti se o daljim koracima.';
                 state.supportRequest={reason:(result.alreadyExists?'Dopuna postojeće reklamacije ':'Nova reklamacija ')+result.number,reclamationId:result.id};
                 delete state.reclamationContext;
               } else {
@@ -201,7 +201,7 @@ export class Worker {
                   state.supportRequest={reason:`Provera uplate/isporuke nakon otkazivanja ${order.number}`};
                 }
               } else {
-                message=`Porudžbina ${order.number} nije otkazana. Trenutni status zahteva proveru podrške; prosleđujem zahtev kolegama.`;
+                message=`Porudžbina ${order.number} nije otkazana. Trenutni status zahteva proveru podrške; prosleđujem zahtev korisničkoj podršci.`;
                 state.supportRequest={reason:`Otkazivanje nije izvršeno: ${order.number}`};
               }
               delete state.cancellation;delete state.cancelling;

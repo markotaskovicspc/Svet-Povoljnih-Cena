@@ -10,7 +10,7 @@ export async function guardLoyaltyPrice({input,products,state,event,spc}){
  if(input.guestEmail){
   const consent=await prepareLoyalty({email:input.guestEmail,event,state,spc});
   if(!consent.ok)state.supportRequest={reason:'Loyalty saglasnost nije dostupna; proveriti ponuđenu cenu'};
-  return {ok:false,code:'LOYALTY_CONFIRMATION_PENDING',message:consent.ok?'Za ponuđenu loyalty cenu server sada prikazuje posebnu saglasnost. Sačekaj DA, ne pripremaj skuplju ponudu.':'Loyalty potvrda nije dostupna. Ne menjaj ponuđenu cenu; prosledi proveru kolegi.'};
+  return {ok:false,code:'LOYALTY_CONFIRMATION_PENDING',message:consent.ok?'Za ponuđenu loyalty cenu server sada prikazuje posebnu saglasnost. Sačekaj DA, ne pripremaj skuplju ponudu.':'Loyalty potvrda nije dostupna. Ne menjaj ponuđenu cenu; prosledi proveru korisničkoj podršci.'};
  }
  state.supportRequest={reason:'Kupovina bez mejla: proveriti ponuđenu loyalty cenu za '+discounted.map(p=>p.sku).join(', ')};
  return {ok:false,code:'LOYALTY_IDENTITY_REVIEW',message:'Možemo da nastavimo bez mejla. Kolega će proveriti kako da zadržimo ponuđenu loyalty cenu; ne pravim skuplju porudžbinu.'};

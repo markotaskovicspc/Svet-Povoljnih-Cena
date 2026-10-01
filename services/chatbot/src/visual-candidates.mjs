@@ -28,7 +28,7 @@ export async function findVisualCandidates({state,imageNumber,objectNumber,query
  if(!object)return {ok:false,error:'Izabrani predmet nije pronađen na aktuelnoj slici. Pitaj koji predmet/položaj kupac želi ili traži isečak.'};
  const queries=[object.visibleSku,object.visibleName,query].filter(Boolean);let products=[];
  for(const q of [...new Set(queries)]){const result=await spc({action:'search',query:q.slice(0,100)});products=result.items??[];if(products.length)break;}
- if(!products.length)return {ok:true,candidates:[],message:'Nije pronađen kandidat. Zatraži krupniji isečak izabranog predmeta ili prosledi kolegi; ne tvrdi da modela nema na stanju.'};
+ if(!products.length)return {ok:true,candidates:[],message:'Nije pronađen kandidat. Zatraži krupniji isečak izabranog predmeta ili prosledi korisničkoj podršci; ne tvrdi da modela nema na stanju.'};
  const result=await rank({object,products:products.slice(0,6),model});
  const candidates=result.candidates.flatMap(c=>{const p=products.find(p=>p.sku===c.sku);return p?[{...p,reason:c.reason}]:[];}).slice(0,3);
  return {ok:true,candidates,uncertain:result.uncertain,message:'Ovo su samo moguća poklapanja. Pozovi show_product za najviše 3 kandidata i pitaj koji je pravi. Nikad ne naručuj na osnovu položaja ili vizuelnog poređenja bez kupčeve potvrde konkretnog proizvoda.'};
