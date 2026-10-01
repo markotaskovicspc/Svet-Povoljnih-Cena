@@ -1,4 +1,5 @@
 import "server-only";
+import { courierApiWeightKg } from "@/lib/courier/api-weight";
 
 import {
   Prisma,
@@ -160,7 +161,7 @@ export function buildMyGlsParcelForOrder(
     ParcelPropertyList: packages.map((pkg) => ({
       Content: (pkg.content?.trim() || content).slice(0, 120),
       PackageType: 2,
-      Weight: pkg.weightKg,
+      Weight: courierApiWeightKg(pkg.weightKg),
       Height: myGlsDimension(pkg.heightCm),
       Width: myGlsDimension(pkg.widthCm),
       Length: myGlsDimension(pkg.depthCm),

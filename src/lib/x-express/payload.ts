@@ -1,4 +1,5 @@
 import "server-only";
+import { courierApiWeightKg } from "@/lib/courier/api-weight";
 
 import {
   Prisma,
@@ -282,7 +283,7 @@ export function buildXExpressCreateOrderPayload(args: {
       : {}),
     Packages: args.trackingCodes.map((code, index) => ({
       Code: code,
-      Mass: masses[index]!,
+      Mass: courierApiWeightKg(masses[index]!),
       Content: providerContent(
         suppliedContents?.[index] ?? content,
         50,

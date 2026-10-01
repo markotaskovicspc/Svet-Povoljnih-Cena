@@ -78,6 +78,17 @@ const packages = [
 ];
 
 describe("MyGLS reclamation payload", () => {
+  it("adjusts only outgoing weight once, preserving inputs, COD and dimensions on retries", () => {
+    const before = structuredClone(packages);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = buildMyGlsParcelsForOrder({ cfg: config, order, packages });
+      expect(result.map(p => p.ParcelPropertyList?.[0]?.Weight)).toEqual([6, 6]);
+      expect(result[0].ParcelPropertyList?.[0]).toMatchObject({ Width: 40, Length: 50, Height: 30 });
+      expect(result.map(p => p.CODAmount)).toEqual([12000, 0]);
+    }
+    expect(packages).toEqual(before);
+    expect(() => buildMyGlsParcelForOrder({cfg: config, order, packages: [{...packages[0], weightKg: 45}]})).toThrow("MyGLS granica");
+  });
   it("keeps the full reshipment identity and parcel number for long order numbers", () => {
     const parcels = buildMyGlsParcelsForOrder({ cfg: config, order: { ...order, number: "SPC-" + "1".repeat(40) }, packages, clientReferenceSuffix: "S123456789012" });
     expect(parcels).toHaveLength(2);
@@ -192,7 +203,7 @@ describe("MyGLS reclamation payload", () => {
       {
         Content: "Stolica",
         PackageType: 2,
-        Weight: 7.5,
+        Weight: 6,
         Height: 30,
         Width: 40,
         Length: 50,
@@ -200,7 +211,7 @@ describe("MyGLS reclamation payload", () => {
       {
         Content: "Stolica",
         PackageType: 2,
-        Weight: 7.5,
+        Weight: 6,
         Height: 30,
         Width: 40,
         Length: 50,
@@ -242,7 +253,7 @@ describe("MyGLS reclamation payload", () => {
 
     expect(parcel.ParcelPropertyList).toEqual([
       expect.objectContaining({
-        Weight: 7.5,
+        Weight: 6,
         Height: 7,
         Width: 89,
         Length: 44,

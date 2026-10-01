@@ -227,8 +227,8 @@ describe("X Express official API contract", () => {
       },
     ]);
     expect(payload.Packages).toEqual([
-      { Code: "AAA0850300001", Mass: 1.8, Content: "Stolica" },
-      { Code: "AAA0850300002", Mass: 1.8, Content: "Stolica" },
+      { Code: "AAA0850300001", Mass: 1.44, Content: "Stolica" },
+      { Code: "AAA0850300002", Mass: 1.44, Content: "Stolica" },
     ]);
   });
 
@@ -254,16 +254,21 @@ describe("X Express official API contract", () => {
     expect(payload).not.toHaveProperty("Options");
   });
 
-  it("uses operator-confirmed package masses when they are supplied", () => {
-    const payload = buildXExpressCreateOrderPayload({
+  it("adjusts supplied package masses once without mutating them on retries", () => {
+    const packageMasses = [1.25, 2.5];
+    const args = {
       cfg: config,
       reference: "758bb513-499d-4ab1-8697-5e747602f222",
       trackingCodes: ["AAA0850300001", "AAA0850300002"],
-      packageMasses: [1.25, 2.5],
+      packageMasses,
       order,
       townId: 791113,
-    });
-    expect(payload.Packages.map((pkg) => pkg.Mass)).toEqual([1.25, 2.5]);
+    };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const payload = buildXExpressCreateOrderPayload(args);
+      expect(payload.Packages.map((pkg) => pkg.Mass)).toEqual([1, 2]);
+    }
+    expect(packageMasses).toEqual([1.25, 2.5]);
   });
 
   it("keeps the exact product name on each individual package", () => {
