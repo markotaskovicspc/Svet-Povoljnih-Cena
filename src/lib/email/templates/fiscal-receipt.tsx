@@ -23,7 +23,7 @@ export function FiscalReceiptEmail({
 }: FiscalReceiptProps) {
   const orderUrl = order.userId
     ? `${baseUrl}/nalog/porudzbine/${encodeURIComponent(order.id)}`
-    : `${baseUrl}/checkout/potvrda?order=${encodeURIComponent(order.id)}`;
+    : null;
   return (
     <EmailLayout preview={`Fiskalni račun ${receiptNumber}`}>
       <EmailHeading>Fiskalni račun je izdat</EmailHeading>
@@ -48,7 +48,7 @@ export function FiscalReceiptEmail({
           <a href={qrUrl}>{qrUrl}</a>
         </EmailParagraph>
       ) : null}
-      <EmailButton href={orderUrl}>Pregled porudžbine</EmailButton>
+      {orderUrl ? <EmailButton href={orderUrl}>Pregled porudžbine</EmailButton> : null}
     </EmailLayout>
   );
 }

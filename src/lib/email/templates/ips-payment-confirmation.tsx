@@ -42,7 +42,7 @@ export function IpsPaymentConfirmation({
   const payment = order.payment;
   const orderUrl = order.userId
     ? `${baseUrl}/nalog/porudzbine/${encodeURIComponent(order.id)}`
-    : `${baseUrl}/checkout/potvrda?order=${encodeURIComponent(order.id)}&status=paid`;
+    : null;
   const customerEmail = order.customerEmail ?? order.guestEmail ?? "—";
   const paidAt = payment?.paidAt ? dateFmt.format(new Date(payment.paidAt)) : "—";
 
@@ -158,7 +158,7 @@ export function IpsPaymentConfirmation({
         {MERCHANT_LEGAL_INFO.pdvNote}
       </EmailParagraph>
 
-      <EmailButton href={orderUrl}>Pregled porudžbine</EmailButton>
+      {orderUrl ? <EmailButton href={orderUrl}>Pregled porudžbine</EmailButton> : null}
     </EmailLayout>
   );
 }

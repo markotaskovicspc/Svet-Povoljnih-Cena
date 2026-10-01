@@ -151,6 +151,9 @@ describe("all transactional Resend send flows", () => {
     expect(input.html).not.toContain("Svet Akcija");
     expect(input.html).toContain("/reklamacije/prijava?order=");
     expect(input.html).toContain("guest-order-access-token-123456789");
+    expect(input.html).toContain(
+      `href="https://www.svetpovoljnihcena.rs/checkout/potvrda?order=${order.id}&amp;token=guest-order-access-token-123456789"`,
+    );
     expect(input.html).toContain("Vrednost artikala");
     expect(input.html).toContain("Popust za prvu kupovinu");
     expect(input.html).toContain("Popust za sačuvanu karticu");
@@ -401,6 +404,49 @@ describe("all transactional Resend send flows", () => {
         html: expect.stringContaining("tracking.example/audit"),
       }),
     );
+  });
+
+  it.each([undefined, "audit-user"])(
+    "only includes usable order links in transactional emails (userId=%s)",
+    async (userId) => {
+      const customerOrder = { ...order, userId };
+      const recipient = { order: customerOrder, to: "delivered@resend.dev" };
+
+      await sendOrderStatusChanged({ ...recipient, status: "vraceno", trackingUrl: "" });
+      await sendIpsPaymentConfirmation(recipient);
+      await sendFiscalReceipt({ ...recipient, receiptNumber: "AUDIT-LINK-1" });
+      await sendOrderConfirmation({ ...recipient, attachInvoice: false });
+
+      expect(mocks.trackedDispatch).toHaveBeenCalledTimes(4);
+      for (const [input] of mocks.trackedDispatch.mock.calls) {
+        expect(input.html).toContain(order.id);
+        expect(input.html).not.toContain("/checkout/potvrda");
+        if (userId) {
+          expect(input.html).toContain(
+            `href="https://www.svetpovoljnihcena.rs/nalog/porudzbine/${order.id}"`,
+          );
+        } else {
+          expect(input.html).not.toContain("/nalog/porudzbine/");
+          expect(input.html).not.toMatch(
+            /<a\b[^>]*>(?:Pregled porudžbine|Pogledaj porudžbinu)<\/a>/,
+          );
+        }
+      }
+    },
+  );
+
+  it("does not promise a tracking link when no tracking URL is available", async () => {
+    await sendOrderStatusChanged({
+      order,
+      status: "u_isporuci",
+      to: "delivered@resend.dev",
+    });
+
+    const input = mocks.trackedDispatch.mock.calls[0]?.[0];
+    expect(input.html).toContain("Kurir je preuzeo paket.");
+    expect(input.html).not.toContain("klikom ispod");
+    expect(input.html).not.toContain("Pregled porudžbine");
+    expect(input.html).not.toContain("Prati pošiljku");
   });
 
   it("obaveštava kupca o uklonjenoj stavci i potvrđuje da ostale ostaju", async () => {
