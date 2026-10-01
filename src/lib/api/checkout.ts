@@ -1,4 +1,5 @@
 import "server-only";
+import {staffLoyaltyPricesMatch, type StaffLoyaltyPrice} from "@/lib/checkout/staff-loyalty-pricing";
 import { customerTownLabel } from "@/lib/x-express/town-aliases";
 import {
   Prisma,
@@ -316,7 +317,7 @@ export async function createOrder(
   input: CreateOrderInput,
   userId: string | null,
   guestLoyalty: { email: string; consentVersion: string; consentAt: Date } | null = null,
-  options: { previewOnly?: boolean; expectedTotal?: number; customerReplyDraftOnly?: boolean; allowGuestWithoutEmail?: boolean } = {},
+  options: { previewOnly?: boolean; expectedTotal?: number; customerReplyDraftOnly?: boolean; allowGuestWithoutEmail?: boolean; staffLoyaltyPrices?: readonly StaffLoyaltyPrice[] } = {},
 ): Promise<
   { ok: true; data: CreateOrderResult } | { ok: false; error: CreateOrderError }
 > {
@@ -515,7 +516,7 @@ export async function createOrder(
         discountPct: p.discountPct,
         loyaltyPrice: null,
         loyaltyDiscountPct: ruleInputs.loyaltyDiscountPct,
-        loyaltyEligible: Boolean(userId || guestLoyalty),
+        loyaltyEligible: Boolean(userId || guestLoyalty || options.staffLoyaltyPrices?.some(approved => approved.sku === line.sku)),
         action: p.action ?? null,
         actionPrices: p.actionPrices.map((entry) => ({
           price: num(entry.salePrice),
@@ -531,10 +532,15 @@ export async function createOrder(
     };
   });
 
+  if (options.staffLoyaltyPrices && (userId || guestLoyalty || !staffLoyaltyPricesMatch(pricingLines, options.staffLoyaltyPrices))) {
+    return {ok:false, error:{code:"PRICE_CHANGED"}};
+  }
+
   const deliveryQuote = await resolveDeliveryQuote({
     city: input.shipping.city,
     lines: input.lines.map((line) => ({ sku: line.sku, qty: line.qty })),
     loggedIn: Boolean(userId || guestLoyalty),
+    staffLoyaltySkus: options.staffLoyaltyPrices?.map(approved => approved.sku),
   });
   if (input.shippingMethod === "KAMION" && !deliveryQuote.truckAvailable) {
     return { ok: false, error: { code: "DELIVERY_UNAVAILABLE" } };
@@ -583,7 +589,7 @@ export async function createOrder(
   }
 
   // Resolve eligibility from the auth context (server-only).
-  const firstPurchase = await isFirstPurchaseDiscountEligible(userId, guestLoyalty?.email);
+  const firstPurchase = options.staffLoyaltyPrices ? false : await isFirstPurchaseDiscountEligible(userId, guestLoyalty?.email);
   // A boolean supplied by the browser cannot prove which token will be
   // charged. Keep the discount disabled until the selected payment instrument
   // is server-verified and bound to the actual card authorization.

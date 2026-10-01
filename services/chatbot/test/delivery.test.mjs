@@ -27,3 +27,13 @@ test('quote sends courier dictionary ID to ERP and rejects unmatched address bef
   assert.equal(bad.error.code,'DELIVERY_ADDRESS_INVALID');assert.equal(calls.filter(c=>c.body).length,1);
  } finally {globalThis.fetch=original;}
 });
+
+test('staff quote resolves optional postcode and omits null email while preserving approval',async()=>{
+ const original=globalThis.fetch;let sent;
+ globalThis.fetch=async(url,options)=>({ok:true,json:async()=>options?.body?(sent=JSON.parse(options.body),{ok:true}):{items:[town]}});
+ try{
+  const staffPricing={commandId:'seller-1',prices:[{sku:'TABLE',price:2999}]};
+  await createSpcClient('https://example.test','synthetic')({action:'staff_quote',staffPricing,input:{guestEmail:null,shipping:{city:'Kruševac',postalCode:null}}});
+  assert.equal(sent.action,'staff_quote');assert.deepEqual(sent.staffPricing,staffPricing);assert(!('guestEmail' in sent.input));assert.equal(sent.input.shipping.postalCode,'37000');assert.equal(sent.input.shipping.xExpressTownId,123);
+ }finally{globalThis.fetch=original;}
+});

@@ -24,7 +24,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 const identity = z.object({ channel: z.enum(["facebook", "instagram"]), conversationId: z.string().min(3).max(200) });
 const loyaltyContext=z.object({email:z.email(),consentVersion:z.string(),consentAt:z.string()}).nullable().optional();
-const quotePayload = identity.extend({ input: createOrderSchema, total: z.number().nonnegative(), expiresAt: z.number(),loyaltyProof:z.string().optional(),loyalty:loyaltyContext });
+const staffPricingSchema=z.object({commandId:z.string().min(1).max(300),prices:z.array(z.object({sku:z.string().min(1).max(100),price:z.number().positive()})).min(1).max(30)});
+const quotePayload = identity.extend({ input: createOrderSchema, total: z.number().nonnegative(), expiresAt: z.number(),loyaltyProof:z.string().optional(),loyalty:loyaltyContext,staffPricing:staffPricingSchema.optional() });
 const cancellationPayload = identity.extend({ purpose: z.literal("cancel_order"), number: z.string(), expiresAt: z.number() });
 const requestSchema = z.discriminatedUnion("action", [
   socialDeliveryRequest,
@@ -36,6 +37,7 @@ const requestSchema = z.discriminatedUnion("action", [
   identity.extend({ action: z.literal("existing_loyalty"), email:z.email() }),
   identity.extend({ action: z.literal("accept_loyalty"), email:z.email(),challenge:z.string().max(5000) }),
   identity.extend({ action: z.literal("quote"), input: createOrderSchema,loyaltyProof:z.string().max(5000).optional() }),
+  identity.extend({ action: z.literal("staff_quote"), input: createOrderSchema, staffPricing:staffPricingSchema }),
   identity.extend({ action: z.literal("create_order"), quoteToken: z.string().max(20000) }),
   z.object({ action: z.literal("order_status"), number: z.string().max(80), accessToken: z.string().max(200) }),
   identity.extend({ action: z.literal("prepare_cancellation"), number: z.string().max(80), accessToken: z.string().max(200) }),
@@ -86,24 +88,26 @@ export async function POST(req: Request) {
         available: p.stock >= body.quantity, checkedQuantity: body.quantity, availabilitySource: p.availabilitySource, image: p.media.images[0] ?? null,
       })) });
     }
-    if (body.action === "quote") {
-      const loyalty=await channelLoyalty(body.loyaltyProof,{...body,email:body.input.guestEmail??''},secret);
-      if(body.loyaltyProof&&!loyalty)return NextResponse.json({ok:false,error:{code:'LOYALTY_CONSENT_REQUIRED'}});
+    if (body.action === "quote" || body.action === "staff_quote") {
+      const staffPricing=body.action==="staff_quote"?body.staffPricing:undefined;
+      const loyaltyProof=body.action==="quote"?body.loyaltyProof:undefined;
+      const loyalty=staffPricing?null:await channelLoyalty(loyaltyProof,{...body,email:body.input.guestEmail??''},secret);
+      if(loyaltyProof&&!loyalty)return NextResponse.json({ok:false,error:{code:'LOYALTY_CONSENT_REQUIRED'}});
       // Auth identity and discounts cannot be supplied by the model.
       const input = createOrderSchema.parse({ ...body.input, checkoutSessionId: undefined, guestLoyalty: Boolean(loyalty), useSavedCard: false,
         analytics: undefined, voucherCode: undefined,
-        notes: `[${body.channel.toUpperCase()}] ${body.conversationId}${body.input.notes?.trim() ? `\nNapomena kupca: ${body.input.notes.trim().slice(0,250)}` : ""}`,
+        notes: `[${body.channel.toUpperCase()}] ${staffPricing?body.conversationId.slice(0,120):body.conversationId}${staffPricing ? `\nCena po nalogu prodavca #${createHash("sha256").update(staffPricing.commandId).digest("hex").slice(0,12)} (cenovnik ${createHash("sha256").update(JSON.stringify(staffPricing.prices)).digest("hex").slice(0,12)}); bez članstva.` : ""}${body.input.notes?.trim() ? `\nNapomena kupca: ${body.input.notes.trim().slice(0,250)}` : ""}`,
       });
       if (!["POUZECE_GOTOVINA", "UPLATA_NA_RACUN"].includes(input.paymentMethod)) {
         return NextResponse.json({ ok: false, error: { code: "CHAT_PAYMENT_UNSUPPORTED" } });
       }
-      const preview = await createOrder(input, null, loyalty, { previewOnly: true, allowGuestWithoutEmail: true });
+      const preview = await createOrder(input, null, loyalty, { previewOnly: true, allowGuestWithoutEmail: true, ...(staffPricing?{staffLoyaltyPrices:staffPricing.prices}:{}) });
       if (!preview.ok) return NextResponse.json(preview);
       input.checkoutSessionId = `social_${randomUUID().replaceAll("-", "")}`;
       const expiresAt = Date.now() + 15 * 60_000;
-      const quoteToken = signSocialQuote({ channel: body.channel, conversationId: body.conversationId, input, total: preview.data.total, expiresAt,loyaltyProof:body.loyaltyProof,loyalty }, secret);
+      const quoteToken = signSocialQuote({ channel: body.channel, conversationId: body.conversationId, input, total: preview.data.total, expiresAt,loyaltyProof,loyalty,staffPricing }, secret);
       const { id: _id, number: _number, accessToken: _token, ...totals } = preview.data;
-      return NextResponse.json({ ok: true, quoteToken, expiresAt, totals, input,loyaltyApplied:Boolean(loyalty) });
+      return NextResponse.json({ ok: true, quoteToken, expiresAt, totals, input,loyaltyApplied:Boolean(loyalty),staffPricingApplied:Boolean(staffPricing) });
     }
     if (body.action === "create_order") {
       const quote = quotePayload.parse(readSocialQuote(body.quoteToken, secret));
@@ -113,7 +117,7 @@ export async function POST(req: Request) {
       if (quote.expiresAt < Date.now() && !existing?.orderId) return NextResponse.json({ ok: false, error: { code: "QUOTE_EXPIRED" } });
       const loyalty=existing?.orderId&&quote.loyalty?{...quote.loyalty,consentAt:new Date(quote.loyalty.consentAt)}:await channelLoyalty(quote.loyaltyProof,{...body,email:quote.input.guestEmail??''},secret);
       if(quote.input.guestLoyalty&&!loyalty)return NextResponse.json({ok:false,error:{code:'LOYALTY_CONSENT_REQUIRED'}});
-      const result = await createOrder(quote.input, null, loyalty, { expectedTotal: quote.total, allowGuestWithoutEmail: true, customerReplyDraftOnly: !quote.input.guestEmail });
+      const result = await createOrder(quote.input, null, loyalty, { expectedTotal: quote.total, allowGuestWithoutEmail: true, customerReplyDraftOnly: !quote.input.guestEmail, ...(quote.staffPricing?{staffLoyaltyPrices:quote.staffPricing.prices}:{}) });
       if (result.ok) {
         after(async () => {
           try {

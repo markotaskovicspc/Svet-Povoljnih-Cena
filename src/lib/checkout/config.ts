@@ -164,11 +164,14 @@ export async function resolveDeliveryQuote({
   city,
   lines = [],
   loggedIn = false,
+  staffLoyaltySkus = [],
   tariffAt,
 }: {
   city?: string | null;
   lines?: QuoteLineInput[];
   loggedIn?: boolean;
+  /** Server-approved per-item price benefit, not membership or first-purchase eligibility. */
+  staffLoyaltySkus?: readonly string[];
   tariffAt?: Date;
 }): Promise<CheckoutDeliveryQuote> {
   if (!hasDatabaseConnection()) {
@@ -353,7 +356,7 @@ export async function resolveDeliveryQuote({
             salePrice: product.salePrice == null ? null : num(product.salePrice),
             discountPct: product.discountPct,
             loyaltyDiscountPct: ruleInputs.loyaltyDiscountPct,
-            loyaltyEligible: loggedIn,
+            loyaltyEligible: loggedIn || staffLoyaltySkus.includes(line.sku),
             action: product.action,
             actionPrices: product.actionPrices.map((entry) => ({
               price: num(entry.salePrice),

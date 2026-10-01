@@ -4,7 +4,7 @@ export function createSpcClient(base, secret) {
   const url = new URL('/api/integrations/social',base);
   if (url.protocol !== 'https:' && !['localhost','127.0.0.1'].includes(url.hostname)) throw new Error('SPC_HTTPS_REQUIRED');
   return async payload => {
-    if(payload.action==='quote') {
+    if(payload.action==='quote'||payload.action==='staff_quote') {
       const shipping=payload.input.shipping;
       const lookup=new URL('/api/x-express/locations',base);
       lookup.searchParams.set('q',shipping.postalCode?.trim()||shipping.city);lookup.searchParams.set('limit','20');

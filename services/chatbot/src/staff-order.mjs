@@ -46,6 +46,7 @@ export function suppliedContact(input,history,customer){
  return [...Object.values(required),...(input.guestEmail?[input.guestEmail]:[]),...(postalCode?[postalCode]:[]),...(input.notes?[input.notes]:[])].every(value=>value!=null&&normalize(value).length>0&&source.includes(normalize(value)));
 }
 export async function prepareStaffOrder({event,state,spc,model,extractFn,cartCheckFn=checkCart,onPlan}){
+ if(!isStaffOrderCommand(event))return {ok:false,code:'STAFF_COMMAND_REQUIRED',message:'Ovu radnju može pokrenuti samo prodavac komandom /porudzbina.'};
  const history=currentPurchaseHistory(state),catalog=new Map();
  const search=async({query})=>{const result=await searchStaffProducts(spc,query);for(const p of result.items??[])catalog.set(p.sku,p);return result;};
  let plan;
@@ -82,20 +83,22 @@ agreedTotal je poslednji DOGOVORENI konačni iznos sa dostavom, samo ako je izri
  if(!selection.ok)return {ok:false,code:selection.code==='CART_EVIDENCE_INVALID'||selection.code==='CART_CHECK_UNAVAILABLE'?'STAFF_CART_CHECK_FAILED':undefined,message:selection.code==='CART_EVIDENCE_INVALID'||selection.code==='CART_CHECK_UNAVAILABLE'?'Porudžbina nije kreirana zbog greške provere prepiske. Ne morate ponavljati podatke kupca; ponovite /porudzbina.':'Porudžbina nije kreirana: potrebno je razjasniti izbor artikla, varijante ili količine u dogovoru. Dopunite samo nejasan podatak pa ponovite /porudzbina.'};
  let loyalty=input.guestEmail?activeLoyalty(state,input.guestEmail):null;
  const needsLoyalty=plan.unitPrices.some(a=>products.some(p=>p.sku===a.sku&&p.loyaltyPrice!=null&&Math.abs(p.loyaltyPrice-a.price)<0.01&&Math.abs(p.price-a.price)>0.01));
- if(!loyalty&&needsLoyalty){
-  if(!input.guestEmail)return {ok:false,message:'Dogovorena loyalty cena zahteva povezano članstvo. Podrška treba da proveri pogodnost bez mejla; cena nije povećana i porudžbina nije kreirana.'};
+ if(!loyalty&&needsLoyalty&&input.guestEmail){
   const existing=await spc({action:'existing_loyalty',channel:event.channel,conversationId:event.conversation,email:input.guestEmail});
   if(existing.ok&&existing.active&&existing.proof){loyalty={email:existing.email,proof:existing.proof,expiresAt:existing.expiresAt};state.loyalty=loyalty;}
-  else return {ok:false,message:'Artikal, količina i dogovorena cena su prepoznati, ali za navedeni mejl u sistemu nije pronađeno aktivno loyalty članstvo. Potrebno je povezati postojeće članstvo ili evidentirati saglasnost; porudžbina nije kreirana po višoj ceni.'};
  }
+ // A verified seller command can honor advertised prices without manufacturing
+ // membership/consent. The ERP independently rechecks these exact SKU prices.
+ const staffPrices=!loyalty&&needsLoyalty?plan.unitPrices.filter(a=>products.some(p=>p.sku===a.sku&&p.loyaltyPrice>0&&p.loyaltyPrice<p.price&&Math.abs(p.loyaltyPrice-a.price)<0.01)).map(({sku,price})=>({sku,price})):[];
  for(const agreed of plan.unitPrices){
   const product=products.find(p=>p.sku===agreed.sku);
-  const price=loyalty&&product?.loyaltyPrice!=null?product.loyaltyPrice:product?.price;
+  const price=(loyalty||staffPrices.some(p=>p.sku===agreed.sku))&&product?.loyaltyPrice!=null?product.loyaltyPrice:product?.price;
   if(!product)return {ok:false,message:'Porudžbina nije kreirana zbog greške povezivanja cene i artikla. Podaci kupca ostaju u razgovoru; ponovite /porudzbina.'};
   if(Math.abs(price-agreed.price)>0.01)return {ok:false,message:`Za ${product.name} u razgovoru je navedeno ${dinars(agreed.price)} po komadu, a trenutno proverena cena je ${dinars(price)}. Razjasnite samo cenu pa ponovite /porudzbina; ostale podatke ne morate ponavljati. Porudžbina još nije kreirana.`};
  }
- const quote=await spc({action:'quote',channel:event.channel,conversationId:event.conversation,loyaltyProof:loyalty?.proof,input:{...input,consent:true,billingSameAsShipping:true,shipping:{...input.shipping,country:'RS'}}});
+ const quote=await spc({action:staffPrices.length?'staff_quote':'quote',channel:event.channel,conversationId:event.conversation,...(staffPrices.length?{staffPricing:{commandId:event.id,prices:staffPrices}}:{loyaltyProof:loyalty?.proof}),input:{...input,consent:true,billingSameAsShipping:true,shipping:{...input.shipping,country:'RS'}}});
  if(!quote.ok)return {ok:false,message:orderErrorMessage(quote.error?.code)};
+ if(staffPrices.length&&!quote.staffPricingApplied)return {ok:false,message:'ERP nije potvrdio odobrenu cenu; porudžbina nije kreirana po drugoj ceni.'};
  if(plan.agreedTotal!=null&&Math.abs(quote.totals.total-plan.agreedTotal)>0.01)return {ok:false,message:'Porudžbina nije kreirana: ERP ukupan iznos sa dostavom se razlikuje od dogovorenog. Proverite dogovor pre ponavljanja komande.'};
  const fingerprint=createHash('sha256').update(JSON.stringify({email:input.guestEmail?.toLowerCase()??'',shipping:input.shipping,lines:[...input.lines].sort((a,b)=>a.sku.localeCompare(b.sku)),payment:input.paymentMethod,shippingMethod:input.shippingMethod})).digest('hex');
  return {ok:true,quote,customer:customerFromQuote(input),items:products.map(p=>({sku:p.sku,name:p.name,qty:p.qty})),fingerprint};

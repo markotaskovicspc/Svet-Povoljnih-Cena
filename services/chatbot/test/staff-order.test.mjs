@@ -29,10 +29,10 @@ test('price citations allow quotation marks but never a fabricated or omitted pr
 test('staff loyalty price reuses a recorded membership without accepting new consent',async()=>{
  const context=state();context.history.push({role:'assistant',content:'Cena je 700 din.'});let active=true,quoteCalls=0;
  const plan={input,reason:'',agreedTotal:null,priceEvidence:null,unitPrices:[{sku:'IRON',price:700,evidence:'Cena je 700 din.'}]};
- const spc=async p=>{if(p.action==='search')return {ok:true,items:[{sku:'IRON',name:'Pegla',price:1000,loyaltyPrice:700,available:true}]};if(p.action==='existing_loyalty')return {ok:true,active,email:input.guestEmail,proof:active?'existing-proof':undefined,expiresAt:Date.now()+60000};if(p.action==='quote'){quoteCalls++;assert.equal(p.loyaltyProof,'existing-proof');return {ok:true,totals:{total:700}};}throw Error('No enrollment/write');};
+ const spc=async p=>{if(p.action==='search')return {ok:true,items:[{sku:'IRON',name:'Pegla',price:1000,loyaltyPrice:700,available:true}]};if(p.action==='existing_loyalty')return {ok:true,active,email:input.guestEmail,proof:active?'existing-proof':undefined,expiresAt:Date.now()+60000};if(p.action==='quote'){quoteCalls++;assert.equal(p.loyaltyProof,'existing-proof');return {ok:true,totals:{total:700}};}if(p.action==='staff_quote'){quoteCalls++;assert.deepEqual(p.staffPricing.prices,[{sku:'IRON',price:700}]);return {ok:true,staffPricingApplied:true,totals:{total:700}};}throw Error('No enrollment/write');};
  const prepare=()=>prepareStaffOrder({event,state:context,spc,model:'test',extractFn:async()=>plan,cartCheckFn:async()=>({ok:true})});
  assert((await prepare()).ok);assert.equal(quoteCalls,1);delete context.loyalty;active=false;
- assert(!(await prepare()).ok);assert.equal(quoteCalls,1);
+ assert((await prepare()).ok);assert.equal(quoteCalls,2);assert.equal(context.loyalty,undefined);
 });
 test('Page command includes Business Suite app echoes; customer, bot and spoofed echoes are not privileged',()=>{
  const envelope=message=>({object:'page',entry:[{id:'page',messaging:[{sender:{id:'page'},recipient:{id:'buyer'},timestamp:Date.now(),message:{mid:'test',is_echo:true,text:'/porudzbina',...message}}]}]});
@@ -72,4 +72,18 @@ test('loyalty offer uses exact ERP prices in Serbian format without markdown or 
  const offer=productOffer({price:2580,loyaltyPrice:1799});
  assert.match(offer,/2\.580 din/);assert.match(offer,/1\.799 din/);assert.match(offer,/Vaš pristanak/);assert(!offer.includes('**'));assert(!offer.includes('besplatna dostava'));
  assert(!productOffer({price:1000,loyaltyPrice:null}).includes('loyalty'));
+});
+
+test('seller command honors agreed loyalty prices without email, membership or fake consent',async()=>{
+ const context=state();context.history.push({role:'assistant',content:'Cena je 700 din.'});
+ const noEmail={...input,guestEmail:null};const calls=[];
+ const plan={input:noEmail,reason:'',agreedTotal:null,priceEvidence:null,unitPrices:[{sku:'IRON',price:700,evidence:'Cena je 700 din.'}]};
+ const spc=async p=>{calls.push(p);if(p.action==='search')return {ok:true,items:[{sku:'IRON',name:'Pegla',price:1000,loyaltyPrice:700,available:true}]};if(p.action==='staff_quote')return {ok:true,staffPricingApplied:true,quoteToken:'signed',totals:{total:999}};throw Error('Unexpected enrollment or write');};
+ const params={event,state:context,spc,model:'test',extractFn:async()=>plan,cartCheckFn:async()=>({ok:true})};
+ assert((await prepareStaffOrder(params)).ok);
+ const quote=calls.find(p=>p.action==='staff_quote');assert.equal(quote.input.guestEmail,null);assert.equal(quote.input.guestLoyalty,undefined);assert.equal(quote.loyaltyProof,undefined);
+ assert.deepEqual(quote.staffPricing,{commandId:event.id,prices:[{sku:'IRON',price:700}]});assert.equal(context.loyalty,undefined);
+ calls.length=0;assert(!(await prepareStaffOrder({...params,event:{...event,echo:false}})).ok);assert.equal(calls.length,0);
+ plan.unitPrices=[{sku:'IRON',price:600,evidence:'Cena je 600 din.'}];context.history.push({role:'assistant',content:'Cena je 600 din.'});
+ assert(!(await prepareStaffOrder(params)).ok);assert(!calls.some(p=>p.action==='staff_quote'));
 });

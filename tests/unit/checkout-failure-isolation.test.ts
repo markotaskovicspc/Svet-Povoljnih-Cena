@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  after: vi.fn(), log: vi.fn(), transaction: vi.fn(), product: vi.fn(),
+  pricingRules:vi.fn(), firstPurchase:vi.fn(), after: vi.fn(), log: vi.fn(), transaction: vi.fn(), product: vi.fn(),
   session: vi.fn(), lookupJob: vi.fn(), repairJob: vi.fn(), customer: vi.fn(), town: vi.fn(),
 }));
 vi.mock("next/server", async importOriginal => ({
@@ -25,9 +25,9 @@ vi.mock("@/lib/checkout/config", () => ({
   isPaymentMethodEnabled: async () => true,
   resolveDeliveryQuote: async () => ({ truckAvailable: true, prices: { kamion: 0, kurir: 299 }, assemblyPricesBySku: {}, assemblyPrice: 0 }),
 }));
-vi.mock("@/lib/checkout/first-purchase.server", () => ({ isFirstPurchaseDiscountEligible: async () => false }));
+vi.mock("@/lib/checkout/first-purchase.server", () => ({ isFirstPurchaseDiscountEligible: mocks.firstPurchase }));
 vi.mock("@/lib/pricing/rules", () => ({
-  getActivePricingRules: async () => [], pricingRuleInputsForProduct: () => ({ linearPromotions: [], loyaltyDiscountPct: null }),
+  getActivePricingRules: async () => [], pricingRuleInputsForProduct: mocks.pricingRules,
 }));
 vi.mock("@/lib/channel-availability.server", () => ({ syncProductChannelAvailability: async () => undefined }));
 
@@ -54,6 +54,8 @@ let committed: { order?: Record<string, unknown>; job?: Record<string, unknown> 
 let failQueue: boolean;
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.pricingRules.mockReturnValue({linearPromotions:[],loyaltyDiscountPct:null});
+  mocks.firstPurchase.mockResolvedValue(false);
   mocks.after.mockReset();
   committed = {}; failQueue = false;
   mocks.product.mockResolvedValue([product]);
@@ -140,3 +142,15 @@ it("returns the existing order on replay even if queue repair fails", async () =
 });
 
 it("trusted social checkout creates a real null email record, while public guest checkout still rejects absent email",async()=>{const {createOrder,createOrderSchema}=await import('@/lib/api/checkout');const noEmail=createOrderSchema.parse({...input,guestEmail:undefined});expect(await createOrder(noEmail,null)).toMatchObject({ok:false,error:{code:'GUEST_REQUIRES_EMAIL'}});expect((await createOrder(noEmail,null,null,{allowGuestWithoutEmail:true,customerReplyDraftOnly:true})).ok).toBe(true);expect(committed.order?.guestEmail).toBeNull();expect(committed.job).toMatchObject({payload:{customerReplyDraftOnly:true}});});
+
+it('trusted staff price creates no-email discounted order without membership or extra first-purchase discount',async()=>{
+ const {createOrder,createOrderSchema}=await import('@/lib/api/checkout');
+ mocks.product.mockResolvedValue([{...product,fullPrice:1000,priceListEntries:[{...product.priceListEntries[0],price:1000}]}]);
+ mocks.pricingRules.mockReturnValue({linearPromotions:[],loyaltyDiscountPct:30});mocks.firstPurchase.mockResolvedValue(true);
+ const noEmail=createOrderSchema.parse({...input,guestEmail:undefined});
+ const options={allowGuestWithoutEmail:true,staffLoyaltyPrices:[{sku:'TEST',price:700}]};
+ const result=await createOrder(noEmail,null,null,options);expect(result).toMatchObject({ok:true,data:{total:700,firstPurchaseDiscount:0}});
+ expect(committed.order).toMatchObject({guestEmail:null,guestLoyaltyEmail:null,guestLoyaltyConsentVersion:null});expect(mocks.firstPurchase).not.toHaveBeenCalled();
+ mocks.transaction.mockClear();mocks.pricingRules.mockReturnValue({linearPromotions:[],loyaltyDiscountPct:20});
+ expect(await createOrder(noEmail,null,null,options)).toMatchObject({ok:false,error:{code:'PRICE_CHANGED'}});expect(mocks.transaction).not.toHaveBeenCalled();
+});

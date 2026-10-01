@@ -113,3 +113,16 @@ it('support fallback identifies the buyer and Business Suite inbox without inven
  expect((await POST(request({...payload,inboxUrl:payload.inboxUrl+'&selected_item_id=456'}))).status).toBe(400);
  expect((await POST(request({...payload,inboxUrl:'https://evil.test/'}))).status).toBe(400);
 });
+
+it('binds seller-approved catalog prices to the signed quote without granting membership',async()=>{
+ const identity={channel:'facebook',conversationId:'fb:staff'};
+ const staffPricing={commandId:'seller-event',prices:[{sku:input.lines[0].sku,price:700}]};
+ const payload={action:'staff_quote',...identity,input:{...input,guestEmail:undefined},staffPricing};
+ expect((await POST(request(payload,false))).status).toBe(401);expect(mocks.create).not.toHaveBeenCalled();
+ const q=await(await POST(request(payload))).json();expect(q.ok).toBe(true);expect(q.staffPricingApplied).toBe(true);expect(q.loyaltyApplied).toBe(false);
+ expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({guestLoyalty:false,notes:expect.stringContaining('bez članstva')}),null,null,{previewOnly:true,allowGuestWithoutEmail:true,staffLoyaltyPrices:staffPricing.prices});
+ mocks.create.mockClear();await POST(request({action:'create_order',...identity,quoteToken:q.quoteToken,staffPricing:{...staffPricing,prices:[{sku:input.lines[0].sku,price:1}]}}));
+ expect(mocks.create).toHaveBeenCalledWith(expect.anything(),null,null,expect.objectContaining({staffLoyaltyPrices:staffPricing.prices,customerReplyDraftOnly:true}));
+ mocks.create.mockClear();expect((await POST(request({action:'create_order',...identity,conversationId:'fb:other',quoteToken:q.quoteToken}))).status).toBe(403);expect(mocks.create).not.toHaveBeenCalled();
+ await POST(request({...payload,action:'quote'}));expect(mocks.create.mock.calls.at(-1)[3]).not.toHaveProperty('staffLoyaltyPrices');
+});
