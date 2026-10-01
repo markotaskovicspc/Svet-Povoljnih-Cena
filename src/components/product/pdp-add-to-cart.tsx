@@ -47,9 +47,11 @@ export function getPdpAvailabilityMessage(
 export function PdpMobilePriceContent({
   quote,
   action,
+  regularPrice = quote.full,
 }: {
   quote: ProductPriceQuote;
   action?: PromoAction;
+  regularPrice?: number;
 }) {
   const reducedOffer = quote.actionOffer ?? quote.loyaltyOffer;
 
@@ -77,9 +79,14 @@ export function PdpMobilePriceContent({
       <p className="whitespace-nowrap text-[9px] leading-tight font-medium text-ink-500">
         Redovna:{" "}
         <span className={cn(!isLoyalty && "line-through")}>
-          {formatRsd(quote.full)}
+          {formatRsd(regularPrice)}
         </span>
       </p>
+      {quote.actionOffer && quote.full !== regularPrice ? (
+        <p className="text-[9px] leading-tight text-ink-500">
+          Najniža pre akcije (30 dana): {formatRsd(quote.full)}
+        </p>
+      ) : null}
       <p className="mt-0.5 text-[9px] leading-tight font-semibold uppercase tracking-wide text-action">
         {isLoyalty ? "Loyalty cena" : "Akcijska cena"}
       </p>
@@ -253,7 +260,7 @@ export function PdpAddToCart({
             aria-hidden
           />
         </button>
-        <PdpMobilePriceContent quote={priceQuote} action={product.action} />
+        <PdpMobilePriceContent quote={priceQuote} action={product.action} regularPrice={product.fullPrice} />
         {ctas}
       </div>
     </div>

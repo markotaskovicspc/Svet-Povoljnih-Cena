@@ -2851,14 +2851,14 @@ model OrderReshipment {
   id String @id @default(cuid())
   orderId String
   sourceShipmentId String @unique
-  batchId String
+  batchId String?
   reason String
   actorId String
   codAmount Decimal @db.Decimal(12, 2)
   createdAt DateTime @default(now())
   order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
   sourceShipment Shipment @relation(fields: [sourceShipmentId], references: [id], onDelete: Restrict)
-  batch PickupBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  batch PickupBatch? @relation(fields: [batchId], references: [id], onDelete: Restrict)
   items OrderReshipmentItem[]
   @@index([orderId])
   @@index([batchId])

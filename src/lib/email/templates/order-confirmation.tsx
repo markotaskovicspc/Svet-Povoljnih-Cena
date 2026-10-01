@@ -77,9 +77,9 @@ export function OrderConfirmation({
   const businessDisplayName = businessName || contactName;
   const orderUrl = order.userId
     ? `${baseUrl}/nalog/porudzbine/${encodeURIComponent(order.id)}`
-    : `${baseUrl}/checkout/potvrda?order=${encodeURIComponent(order.id)}${
-        accessToken ? `&token=${encodeURIComponent(accessToken)}` : ""
-      }`;
+    : accessToken
+      ? `${baseUrl}/checkout/potvrda?order=${encodeURIComponent(order.id)}&token=${encodeURIComponent(accessToken)}`
+      : null;
   const guestReclamationUrl =
     !order.userId && accessToken
       ? `${baseUrl}/reklamacije/prijava?order=${encodeURIComponent(order.id)}&token=${encodeURIComponent(accessToken)}`
@@ -302,12 +302,12 @@ export function OrderConfirmation({
         </>
       ) : null}
 
-      {previewMode ? null : (
+      {!previewMode && orderUrl ? (
         <>
           <EmailDivider />
           <EmailButton href={orderUrl}>Pogledaj porudžbinu</EmailButton>
         </>
-      )}
+      ) : null}
 
       {!previewMode && guestReclamationUrl ? (
         <>

@@ -4,7 +4,7 @@ const { tx, availability } = vi.hoisted(() => ({ availability: vi.fn(), tx: {
   $queryRaw: vi.fn(),
   pickupBatch: { findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), deleteMany: vi.fn() },
   pickupBatchLine: { findFirst: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
-  orderReshipment: { updateMany: vi.fn() },
+  orderReshipment: { updateMany: vi.fn(), findMany: vi.fn() },
   reclamation: { findMany: vi.fn() },
   warehouse: { findFirst: vi.fn() },
   orderStatusEvent: { create: vi.fn() },
@@ -20,6 +20,7 @@ beforeEach(() => {
   tx.pickupBatch.findMany.mockResolvedValue([]);
   tx.warehouse.findFirst.mockResolvedValue({ id: "dc" });
   tx.reclamation.findMany.mockResolvedValue([]);
+  tx.orderReshipment.findMany.mockResolvedValue([]);
   availability.mockResolvedValue({ provider: "X_EXPRESS", reason: null });
 });
 
@@ -35,7 +36,9 @@ describe("shared picking work", () => {
 
   it("collects unsent reshipments without moving replacements already on a picking list", async () => {
     tx.pickupBatch.findMany.mockResolvedValue([{ ...batch, id: "old-special" }]);
-    await loadEligibleOrders("shared", "admin");
+    const result = await loadEligibleOrders("shared", "admin");
+    expect(result).toMatchObject({ reshipmentCount: 0, reshipmentLineCount: 0 });
+    expect(tx.orderReshipment.findMany).toHaveBeenCalled();
     expect(tx.pickupBatchLine.updateMany).toHaveBeenCalledWith({
       where: { batchId: "old-special", purpose: "ORDER_DELIVERY", OR: [
         { lineGroupKey: { startsWith: "reshipment:" } }, { deferredFromLineId: { not: null } },
@@ -48,9 +51,10 @@ describe("shared picking work", () => {
     });
   });
 
-  it("opening a draft does not collect newly prepared replacements", async () => {
-    await loadEligibleOrders("shared", "admin", undefined, { includeReplacements: false });
+  it("opening a draft does not collect pending reshipments or newly prepared replacements", async () => {
+    await loadEligibleOrders("shared", "admin", undefined, { includeReplacements: false, includeReshipments: false });
     expect(tx.reclamation.findMany).not.toHaveBeenCalled();
+    expect(tx.orderReshipment.findMany).not.toHaveBeenCalled();
   });
 
   it("does not collect unrelated work during an explicitly scoped recovery", async () => {

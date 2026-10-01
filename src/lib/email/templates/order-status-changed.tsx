@@ -57,11 +57,16 @@ export function OrderStatusChanged({
   const copy = STATUS_COPY[status];
   const orderUrl = order.userId
     ? `${baseUrl}/nalog/porudzbine/${encodeURIComponent(order.id)}`
-    : `${baseUrl}/checkout/potvrda?order=${encodeURIComponent(order.id)}`;
+    : null;
+  const actionUrl = trackingUrl || orderUrl;
+  const body =
+    status === "u_isporuci" && !trackingUrl
+      ? "Kurir je preuzeo paket. Vaša porudžbina je na putu ka vama."
+      : copy.body;
   return (
     <EmailLayout preview={`${copy.title} — ${order.id}`}>
       <EmailHeading>{copy.title}</EmailHeading>
-      <EmailParagraph>{copy.body}</EmailParagraph>
+      <EmailParagraph>{body}</EmailParagraph>
       <EmailParagraph>
         Broj porudžbine: <strong>{order.id}</strong>
         {order.payment?.paymentReference ? (
@@ -71,9 +76,11 @@ export function OrderStatusChanged({
           </>
         ) : null}
       </EmailParagraph>
-      <EmailButton href={trackingUrl ?? orderUrl}>
-        {trackingUrl ? "Prati pošiljku" : "Pregled porudžbine"}
-      </EmailButton>
+      {actionUrl ? (
+        <EmailButton href={actionUrl}>
+          {trackingUrl ? "Prati pošiljku" : "Pregled porudžbine"}
+        </EmailButton>
+      ) : null}
     </EmailLayout>
   );
 }

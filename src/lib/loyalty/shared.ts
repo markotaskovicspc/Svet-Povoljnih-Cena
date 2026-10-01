@@ -1,8 +1,8 @@
-export const LOYALTY_CONSENT_VERSION = "spc-loyalty-2026-09-30-v4";
+export const LOYALTY_CONSENT_VERSION = "spc-loyalty-2026-09-30-v5";
 
 // A commercial rate change does not revoke an existing customer's membership.
 export function isSupportedLoyaltyConsentVersion(version: unknown) {
-  return version === LOYALTY_CONSENT_VERSION || version === "spc-loyalty-2026-09-24-v3";
+  return version === LOYALTY_CONSENT_VERSION || version === "spc-loyalty-2026-09-30-v4" || version === "spc-loyalty-2026-09-24-v3";
 }
 export const LOYALTY_CONSENT_SECTIONS = [
   {
@@ -19,7 +19,7 @@ export const LOYALTY_CONSENT_SECTIONS = [
   },
   {
     title: "Loyalty pogodnosti",
-    body: "Nakon prihvatanja saglasnosti ostvarujem 30% loyalty popusta na artikle koji nisu na aktivnoj akciji. Ako ispunjavam uslov za prvu kupovinu, ostvarujem i dodatni popust na već obračunatu vrednost artikala, bez dostave: 15% za porudžbine do 30. septembra 2026, odnosno 10% za porudžbine od 1. oktobra 2026. u 00:00, po vremenu u Srbiji. Pravo na pogodnost za prvu kupovinu proverava se po unosu mejl adrese pri poručivanju, prema istoriji porudžbina povezanih sa mojom mejl adresom: pogodnost je iskorišćena kada postoji izdat fiskalni račun za prodaju. Konačne cene i popusti prikazuju se pre potvrde porudžbine.",
+    body: "Nakon prihvatanja saglasnosti ostvarujem 30% loyalty popusta na artikle koji nisu na aktivnoj akciji. Do 30. septembra 2026. dodatnih 15% za prvu kupovinu dostupno je i gostima sa loyalty članstvom, uz proveru istorije kupovine po mejl adresi. Od 1. oktobra 2026. u 00:00, po vremenu u Srbiji, dodatni popust za prvu kupovinu iznosi 10% i važi isključivo za kupovinu preko prijavljenog korisničkog naloga na sajtu. Gostima sa loyalty članstvom i kupcima preko Facebooka, Instagrama ili mejla taj dodatni popust se ne obračunava. Popust za prvu kupovinu računa se na vrednost artikala, bez dostave. Pravo se proverava prema istoriji porudžbina naloga i povezane mejl adrese: pogodnost je iskorišćena kada postoji izdat fiskalni račun za prodaju. Konačne cene i popusti prikazuju se pre potvrde porudžbine.",
   },
   {
     title: "Pristup podacima i čuvanje",

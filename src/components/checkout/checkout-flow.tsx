@@ -260,14 +260,15 @@ export function CheckoutFlow({
     name: "perItemAssembly",
   });
   const isAuthenticatedCustomer = initialCustomer?.authenticated === true;
+  const { id: commerceTermsId, firstPurchasePct, guestFirstPurchaseAllowed } = useCommerceTerms();
   const guestLoyalty = useGuestLoyalty();
   const useGuestBenefits = !isAuthenticatedCustomer && guestLoyalty.active;
   const loyaltyEmail = normalizeLoyaltyEmail(shippingEmail);
   const [loyaltyCheck, setLoyaltyCheck] = useState<{ email: string; eligible: boolean } | null>(null);
-  const effectiveFirstPurchaseEligible = firstPurchaseEligible ||
-    (useGuestBenefits && loyaltyCheck?.email === loyaltyEmail && loyaltyCheck.eligible);
+  const effectiveFirstPurchaseEligible = (isAuthenticatedCustomer && firstPurchaseEligible) ||
+    (guestFirstPurchaseAllowed && useGuestBenefits && loyaltyCheck?.email === loyaltyEmail && loyaltyCheck.eligible);
   useEffect(() => {
-    if (!useGuestBenefits || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loyaltyEmail)) return;
+    if (!guestFirstPurchaseAllowed || !useGuestBenefits || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loyaltyEmail)) return;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       void fetch("/api/loyalty/eligibility", {
@@ -280,7 +281,7 @@ export function CheckoutFlow({
       }).catch(() => { /* Final order pricing remains authoritative. */ });
     }, 350);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [useGuestBenefits, loyaltyEmail]);
+  }, [guestFirstPurchaseAllowed, useGuestBenefits, loyaltyEmail]);
   useEffect(() => {
     if (useGuestBenefits && guestLoyalty.email && !getValues("shipping.email")) {
       setValue("shipping.email", guestLoyalty.email!);
@@ -377,7 +378,6 @@ export function CheckoutFlow({
     [lines],
   );
 
-  const { id: commerceTermsId, firstPurchasePct } = useCommerceTerms();
   const deliveryQuoteKey = `${shippingCity.trim().toLocaleLowerCase("sr-Latn-RS")}|${quoteLineKey}|${guestLoyalty.active}|${commerceTermsId}`;
   const deliveryQuote = resolvedDeliveryQuote.quote;
   const deliveryQuoteIsCurrent =
@@ -886,7 +886,7 @@ export function CheckoutFlow({
                   ) : null}
                   {step === "shipping" ? (
                     <div className="flex flex-col gap-4 sm:gap-5">
-                      {useGuestBenefits && <p role="status" className="rounded-lg bg-muted-bg p-3 text-sm text-ink-700">Loyalty popust je aktivan. Mejl je obavezan za evidenciju članstva.{loyaltyCheck?.email === loyaltyEmail ? (loyaltyCheck.eligible ? ` Primenjeno je i dodatnih ${firstPurchasePct}% za prvu kupovinu.` : " Pogodnost za prvu kupovinu je već iskorišćena.") : ` Po unosu mejla proveravamo i dodatnih ${firstPurchasePct}% za prvu kupovinu.`}</p>}
+                      {useGuestBenefits && <p role="status" className="rounded-lg bg-muted-bg p-3 text-sm text-ink-700">Loyalty popust je aktivan. Mejl je obavezan za evidenciju članstva.{guestFirstPurchaseAllowed && (loyaltyCheck?.email === loyaltyEmail ? (loyaltyCheck.eligible ? ` Primenjeno je i dodatnih ${firstPurchasePct}% za prvu kupovinu.` : " Pogodnost za prvu kupovinu je već iskorišćena.") : ` Po unosu mejla proveravamo i dodatnih ${firstPurchasePct}% za prvu kupovinu.`)}</p>}
                       <ShippingForm
                         xExpressAddressEnabled={xExpressAddressEnabled}
                       />

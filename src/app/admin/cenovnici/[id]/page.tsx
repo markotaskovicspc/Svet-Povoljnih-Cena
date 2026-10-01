@@ -5,7 +5,9 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireAdminAction, withAdminState } from "@/lib/admin";
 import type { AdminActionState } from "@/lib/admin/action-state";
-import { dateInputValue, optionalDateInput } from "@/lib/article-master";
+import { dateInputInTimeZone } from "@/lib/admin/report-period";
+import { parseBelgradePricingDate } from "@/lib/admin/pricing-date-time";
+import { PriceValidTo } from "@/components/admin/price-valid-to";
 import { resolveRetailPrice } from "@/lib/pricing/retail-price";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle } from "@/components/admin/card";
@@ -40,8 +42,8 @@ async function saveEntry(_state: AdminActionState, formData: FormData) {
       if (!parsed.success) {
         return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Neispravan unos." };
       }
-      const validFrom = optionalDateInput(parsed.data.validFrom);
-      const validTo = optionalDateInput(parsed.data.validTo);
+      const validFrom = parseBelgradePricingDate(parsed.data.validFrom, "start");
+      const validTo = parseBelgradePricingDate(parsed.data.validTo, "end");
       if (!validFrom) return { ok: false as const, error: "Datum važenja od je obavezan." };
       if (validTo && validFrom > validTo) {
         return { ok: false as const, error: "Datum važenja od ne može biti posle datuma do." };
@@ -210,7 +212,7 @@ export default async function PriceListDetail({
                 <th>Naziv</th>
                 <th className="text-right">Cena</th>
                 {priceList.kind === "RETAIL" ? (
-                  <th className="text-right">BM%</th>
+                  <th className="px-3 text-right">BM%</th>
                 ) : null}
                 <th>Važi od</th>
                 <th>Važi do</th>
@@ -228,7 +230,7 @@ export default async function PriceListDetail({
                   <td>{entry.product.name}</td>
                   <td className="text-right font-semibold">{formatRsd(Number(entry.price))}</td>
                   {priceList.kind === "RETAIL" ? (
-                    <td className="text-right tabular-nums">
+                    <td className="px-3 text-right tabular-nums">
                       {grossMarginPct(
                         Number(entry.price),
                         entry.product.cogs == null
@@ -237,8 +239,8 @@ export default async function PriceListDetail({
                       ) ?? "—"}
                     </td>
                   ) : null}
-                  <td>{entry.validFrom.toLocaleDateString("sr-Latn-RS")}</td>
-                  <td>{entry.validTo?.toLocaleDateString("sr-Latn-RS") ?? "—"}</td>
+                  <td>{entry.validFrom.toLocaleDateString("sr-Latn-RS", { timeZone: "Europe/Belgrade" })}</td>
+                  <td>{entry.validTo?.toLocaleDateString("sr-Latn-RS", { timeZone: "Europe/Belgrade" }) ?? "Neograničeno"}</td>
                   <td className="text-right">
                     <AdminActionForm action={deleteEntry}>
                       <input type="hidden" name="id" value={entry.id} />
@@ -263,11 +265,9 @@ export default async function PriceListDetail({
               <Input name="price" type="number" min={0.01} step="0.01" required />
             </Field>
             <Field label="Važi od">
-              <Input name="validFrom" type="date" required defaultValue={dateInputValue(new Date())} />
+              <Input name="validFrom" type="date" required defaultValue={dateInputInTimeZone(new Date())} />
             </Field>
-            <Field label="Važi do">
-              <Input name="validTo" type="date" />
-            </Field>
+            <PriceValidTo />
             <SubmitButton>Sačuvaj stavku</SubmitButton>
           </AdminActionForm>
         </Card>

@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   daily: vi.fn(),
   summary: vi.fn(),
   pages: vi.fn(),
+  granularity: vi.fn(),
 }));
 
 vi.mock("@/lib/admin", () => ({ requireAdminAction: mocks.authorize }));
@@ -13,12 +14,13 @@ vi.mock("@/lib/admin/analytics-report.server", () => ({
   getDailyVisitsReport: mocks.daily,
   getAnalyticsFunnelSummary: mocks.summary,
   getPageConversionReport: mocks.pages,
-  normalizeAnalyticsGranularity: () => "week",
+  normalizeAnalyticsGranularity: mocks.granularity,
 }));
 
 import { GET } from "@/app/api/admin/analytics/conversions/export/route";
 
 beforeEach(() => {
+  mocks.granularity.mockReturnValue("week");
   mocks.authorize.mockResolvedValue(undefined);
   mocks.daily.mockResolvedValue([
     { day: "2026-09-11", visits: 0, pageViews: 0 },
@@ -28,6 +30,20 @@ beforeEach(() => {
     visitors: 2, purchasers: 0, purchaseValue: 0, cartBuyers: 0, convertedCartBuyers: 0,
   });
   mocks.pages.mockResolvedValue([]);
+});
+
+it("exports the complete selected interval and site totals for whole-period grouping", async () => {
+  mocks.granularity.mockReturnValue("period");
+  mocks.pages.mockResolvedValue([{ bucket: "2026-09-01", path: "/", pageViews: 5, visits: 2, purchases: 0, conversionPct: 0, purchaseValue: 0 }]);
+  const response = await GET(new Request("http://localhost/api/admin/analytics/conversions/export?range=custom&from=2026-09-01&to=2026-09-30&group=period"));
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(await response.arrayBuffer());
+  expect(workbook.getWorksheet("Stranice")!.getCell("A2").value).toBe("2026-09-01 – 2026-09-30");
+  const overview = workbook.getWorksheet("Sažetak")!;
+  const metrics = new Map();
+  overview.eachRow((row) => metrics.set(row.getCell(1).value, row.getCell(2).value));
+  expect(metrics.get("Ukupno poseta (zbir dnevnih sesija)")).toBe(2);
+  expect(metrics.get("Pregledi stranica")).toBe(5);
 });
 
 it("exports daily site totals and zero days even when page details use weekly grouping", async () => {

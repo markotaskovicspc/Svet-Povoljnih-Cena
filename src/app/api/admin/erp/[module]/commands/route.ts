@@ -583,9 +583,9 @@ async function createPickupBatchCommand(
     : null;
   if (!provider) throw new Error("Izaberite X Express ili MyGLS.");
   const batch = await createPickupBatch(provider);
-  await loadEligibleOrders(batch.id, actorId, undefined, { includeReplacements: false });
+  await loadEligibleOrders(batch.id, actorId, undefined, { includeReplacements: false, includeReshipments: false });
   return {
-    message: `Otvoren je zajednički picking nalog ${batch.number}; učitane su dostupne porudžbine i ponovne isporuke. Spremne zamene dodajte klikom „Učitaj porudžbine“.`,
+    message: `Otvoren je zajednički picking nalog ${batch.number}; učitane su dostupne porudžbine. Ponovna slanja i spremne zamene dodajte klikom „Učitaj porudžbine“.`,
     createdId: batch.id,
     redirect: `/admin/erp/preuzimanja/${batch.id}?mode=edit`,
   };

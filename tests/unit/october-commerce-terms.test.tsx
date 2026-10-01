@@ -18,8 +18,8 @@ afterEach(() => vi.useRealTimers());
 describe("October terms at midnight in Serbia", () => {
   it("switches at midnight local time, not UTC midnight or deployment time", () => {
     expect(OCTOBER_TERMS_AT_MS).toBe(after.getTime());
-    expect(commerceTermsAt(before)).toMatchObject({ firstPurchasePct: 15, freeCategoryOneThresholdRsd: 4_000 });
-    expect(commerceTermsAt(after)).toMatchObject({ firstPurchasePct: 10, freeCategoryOneThresholdRsd: 20_000 });
+    expect(commerceTermsAt(before)).toMatchObject({ firstPurchasePct: 15, guestFirstPurchaseAllowed: true, freeCategoryOneThresholdRsd: 4_000 });
+    expect(commerceTermsAt(after)).toMatchObject({ firstPurchasePct: 10, guestFirstPurchaseAllowed: false, freeCategoryOneThresholdRsd: 20_000 });
     expect(freeCategoryOneThresholdRsd(before)).toBe(4_000);
     expect(freeCategoryOneThresholdRsd(after)).toBe(20_000);
   });
@@ -78,6 +78,7 @@ describe("October terms at midnight in Serbia", () => {
     expect(hero(after)).not.toContain(banner.imageDesktop.url.slice(1));
     expect(hero(after)).toContain("10");
     expect(hero(after)).toContain("Popusta za nove kupce");
+    expect(hero(after)).toContain("preko prijavljenog naloga na sajtu");
     const delivery = { ...banner, id: "old-delivery", imageDesktop: { url: "/1788249570385-84e358deb7361629-desktop.webp" } };
     const editorial = (at: Date) => renderToStaticMarkup(<CommerceTermsProvider initialAt={at.getTime()}><EditorialBanner banner={delivery} /></CommerceTermsProvider>);
     expect(editorial(before)).toContain(delivery.imageDesktop.url.slice(1));

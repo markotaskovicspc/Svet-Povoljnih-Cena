@@ -4,6 +4,16 @@ import { resolveReportPeriod } from "@/lib/admin/report-period";
 describe("admin report period", () => {
   const julyNow = new Date("2026-07-27T10:00:00.000Z");
 
+  it.each([
+    ["2026-10-01T09:00:00Z", "2026-09-01", "2026-09-30"],
+    ["2026-01-01T09:00:00Z", "2025-12-01", "2025-12-31"],
+    ["2028-03-01T09:00:00Z", "2028-02-01", "2028-02-29"],
+  ])("selects the complete previous calendar month at %s", (now, fromInput, toInput) => {
+    expect(resolveReportPeriod({ range: "previous-month" }, new Date(now))).toMatchObject({
+      preset: "previous-month", fromInput, toInput,
+    });
+  });
+
   it("includes only today's Belgrade calendar day", () => {
     const period = resolveReportPeriod({ range: "today" }, julyNow);
 

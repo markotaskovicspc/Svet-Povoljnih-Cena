@@ -402,12 +402,12 @@ async function reshipOrderAction(_state: AdminActionState, formData: FormData) {
       const orderId = String(data.get("orderId") ?? "");
       const shipmentId = String(data.get("shipmentId") ?? "");
       const reason = String(data.get("reason") ?? "");
-      const batch = await queueOrderReshipment({ orderId, shipmentId, reason, actorId });
+      const retry = await queueOrderReshipment({ orderId, shipmentId, reason, actorId });
       revalidatePath(`/admin/erp/prodajni-nalozi/${orderId}`);
       revalidatePath("/admin/erp/preuzimanja");
       revalidatePath("/admin/erp/povrati");
       revalidatePath("/admin/erp/preuzimanja/povrati");
-      return { ok: true as const, entityId: orderId, diff: { shipmentId, batchId: batch.id, reason }, message: `Nova roba je u picking nalogu ${batch.number}. Stara pošiljka je u očekivanim povratima. Povrat dogovorite sa kurirom; stara adresnica nije automatski otkazana.` };
+      return { ok: true as const, entityId: orderId, diff: { shipmentId, reshipmentId: retry.id, batchId: retry.batchId, reason }, message: `${retry.batch ? `Nova roba je već u picking nalogu ${retry.batch.number}.` : "Nova roba je dostupna za učitavanje u picking preko dugmeta „Učitaj porudžbine“."} Stara pošiljka je u očekivanim povratima. Povrat dogovorite sa kurirom; stara adresnica nije automatski otkazana.` };
     },
   )(formData);
 }
@@ -2502,15 +2502,15 @@ export async function WebOrderDetail({ id }: { id: string }) {
                         {shipment.reshipment ? (
                           <p className="mb-3 rounded-lg bg-muted p-3">
                             Stara pošiljka je u <Link className="underline" href="/admin/erp/povrati">očekivanim povratima</Link>.
-                            {" "}Nova roba: <Link className="underline" href={`/admin/erp/preuzimanja/${shipment.reshipment.batchId}`}>{shipment.reshipment.batch.number}</Link>.
+                            {" "}Nova roba: {shipment.reshipment.batch ? <Link className="underline" href={`/admin/erp/preuzimanja/${shipment.reshipment.batchId}`}>{shipment.reshipment.batch.number}</Link> : "dostupna za učitavanje u picking preko dugmeta „Učitaj porudžbine“"}.
                           </p>
                         ) : shipment.purpose === "ORDER_DELIVERY" && canReshipCourierDelivery(shipment) && !["OTKAZANO", "ISPORUCENO"].includes(order.status) ? (
                           <AdminActionForm action={reshipOrderAction} refreshOnSuccess className="mb-4 space-y-3 rounded-lg border border-border p-3">
                             <input type="hidden" name="orderId" value={order.id} />
                             <input type="hidden" name="shipmentId" value={shipment.id} />
-                            <p>Pripremi novu robu za kupca, a ovu pošiljku evidentiraj u očekivanim povratima. Prijem stare robe ne pokreće refundaciju. Povrat stare pošiljke dogovorite sa kurirom.</p>
+                            <p>Omogući učitavanje nove robe u picking, a ovu pošiljku evidentiraj u očekivanim povratima. Picking nalog birate zasebno i robu dodajete preko „Učitaj porudžbine“. Prijem stare robe ne pokreće refundaciju. Povrat stare pošiljke dogovorite sa kurirom.</p>
                             <Field label="Razlog ponovnog slanja"><Textarea name="reason" required minLength={5} maxLength={500} rows={2} /></Field>
-                            <SubmitButton size="sm" confirm="Izdvojiti novu robu sa lagera i napraviti novi picking nalog? Stara roba će biti na čekanju za prijem povrata, bez refundacije kupcu.">Pošalji novu robu / vrati u picking</SubmitButton>
+                            <SubmitButton size="sm" confirm="Izdvojiti novu robu sa lagera i omogućiti njeno kasnije učitavanje u picking? Picking nalog se neće automatski kreirati. Stara roba će biti na čekanju za prijem povrata, bez refundacije kupcu.">Pripremi za ponovno slanje</SubmitButton>
                           </AdminActionForm>
                         ) : null}
                         <dl className="space-y-1 text-ink-700">

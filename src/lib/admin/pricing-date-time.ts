@@ -1,5 +1,18 @@
 export const PRICING_TIME_ZONE = "Europe/Belgrade";
 
+/** Inclusive calendar dates used by the price-list form. Empty means unbounded. */
+export function parseBelgradePricingDate(
+  value: string | null | undefined,
+  boundary: "start" | "end",
+) {
+  if (!value?.trim()) return null;
+  const instant = parseBelgradePricingDateTime(
+    `${value.trim()}T${boundary === "start" ? "00:00:00" : "23:59:59"}`,
+  );
+  if (boundary === "end") instant.setUTCMilliseconds(999);
+  return instant;
+}
+
 const DATE_TIME_LOCAL_PATTERN =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/;
 

@@ -1,4 +1,5 @@
 import "server-only";
+import { loadPendingOrderReshipments } from "./order-reshipment.server";
 import { getPickupPostingAvailability } from "@/lib/admin/pickup-availability.server";
 
 import {
@@ -396,7 +397,7 @@ export async function loadEligibleOrders(
   batchId: string,
   actorId: string,
   onlyOrderIds?: readonly string[],
-  options: { includeReplacements?: boolean } = {},
+  options: { includeReplacements?: boolean; includeReshipments?: boolean } = {},
 ) {
   return db.$transaction(async (tx) => {
     if (!onlyOrderIds) await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('pickup-work-collection'))::text`;
@@ -419,6 +420,10 @@ export async function loadEligibleOrders(
     // Previously queued reships may live in their own old draft.
     // Replacements already on a picking list stay in that batch.
     if (!onlyOrderIds) await collectPendingPickupWork(tx, batch.id, provider);
+
+    const reshipments = onlyOrderIds || options.includeReshipments === false
+      ? { reshipmentCount: 0, reshipmentLineCount: 0 }
+      : await loadPendingOrderReshipments(tx, batch, provider, actorId);
 
     const replacements = onlyOrderIds || options.includeReplacements === false
       ? { replacementCount: 0, replacementLineCount: 0 }
@@ -517,6 +522,7 @@ export async function loadEligibleOrders(
     if (!candidateOrderIds.length) {
       return {
         ...replacements,
+        ...reshipments,
         orderCount: 0,
         lineCount: 0,
         candidateCount: 0,
@@ -559,6 +565,7 @@ export async function loadEligibleOrders(
     if (!orderIds.length) {
       return {
         ...replacements,
+        ...reshipments,
         orderCount: 0,
         lineCount: 0,
         candidateCount: candidateOrderIds.length,
@@ -673,6 +680,7 @@ export async function loadEligibleOrders(
     if (!loadedOrderIds.length) {
       return {
         ...replacements,
+        ...reshipments,
         orderCount: 0,
         lineCount: 0,
         candidateCount: candidateOrderIds.length,
@@ -715,6 +723,7 @@ export async function loadEligibleOrders(
     });
     return {
       ...replacements,
+      ...reshipments,
       orderCount: loadedOrderIds.length,
       lineCount: packages.length,
       candidateCount: candidateOrderIds.length,

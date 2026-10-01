@@ -1,5 +1,5 @@
 import "server-only";
-import { firstPurchaseDiscountPct } from "@/lib/commerce-terms";
+import { commerceTermsAt } from "@/lib/commerce-terms";
 import {createHash, randomUUID} from "node:crypto";
 import {z} from "zod";
 import {db} from "@/lib/db";
@@ -12,7 +12,11 @@ const tokenSchema=scopeSchema.extend({purpose:z.enum(['loyalty_invitation','loya
 const digest=(value:string)=>createHash('sha256').update(value).digest('hex');
 const normalized=(scope:Scope)=>({...scope,email:scope.email.trim().toLowerCase()});
 const duration=30*24*60*60*1000;
-export const loyaltySummary=(email:string)=>`Loyalty pogodnosti za ${email}: 30% popusta na artikle koji nisu na aktivnoj akciji. Za prvu kupovinu dodatnih ${firstPurchaseDiscountPct()}% na artikle, ako ERP potvrdi pravo; dostava se ne umanjuje. Konačan iznos dobijate u ponudi.\nPristup je dobrovoljan. Čuvamo mejl, vreme i verziju saglasnosti radi članstva i obračuna pogodnosti. Ovo nije prijava za reklamne poruke.\nIzjava i prava: https://www.svetpovoljnihcena.rs/loyalty/uslovi\nOdgovorite DA ako prihvatate izjavu i želite loyalty pogodnosti. Ovim ne potvrđujete porudžbinu. Za kupovinu bez članstva odgovorite NE.`;
+export const loyaltySummary=(email:string)=>{
+ const terms=commerceTermsAt();
+ const firstPurchase=terms.guestFirstPurchaseAllowed?` Za prvu kupovinu dodatnih ${terms.firstPurchasePct}% na artikle, ako ERP potvrdi pravo; dostava se ne umanjuje.`:'';
+ return `Loyalty pogodnosti za ${email}: 30% popusta na artikle koji nisu na aktivnoj akciji.${firstPurchase} Konačan iznos dobijate u ponudi.\nPristup je dobrovoljan. Čuvamo mejl, vreme i verziju saglasnosti radi članstva i obračuna pogodnosti. Ovo nije prijava za reklamne poruke.\nIzjava i prava: https://www.svetpovoljnihcena.rs/loyalty/uslovi\nOdgovorite DA ako prihvatate izjavu i želite loyalty pogodnosti. Ovim ne potvrđujete porudžbinu. Za kupovinu bez članstva odgovorite NE.`;
+};
 export function prepareChannelLoyalty(raw:Scope,secret:string){
  const scope=normalized(scopeSchema.parse(raw)),expiresAt=Date.now()+24*60*60*1000;
  return {ok:true as const,email:scope.email,summary:loyaltySummary(scope.email),expiresAt,challenge:signSocialQuote({...scope,purpose:'loyalty_invitation',version:LOYALTY_CONSENT_VERSION,nonce:randomUUID(),expiresAt},secret)};

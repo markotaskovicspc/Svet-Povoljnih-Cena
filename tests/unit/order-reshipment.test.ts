@@ -1,9 +1,10 @@
+import type { Prisma } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const { tx, adjust } = vi.hoisted(() => ({ adjust: vi.fn(), tx: {
   $queryRaw: vi.fn(), shipment: { findUnique: vi.fn() }, order: { update: vi.fn() },
   pickupBatch: { findMany: vi.fn(), findFirst: vi.fn(), findUniqueOrThrow: vi.fn(), create: vi.fn() },
   pickupBatchLine: { findMany: vi.fn(), createMany: vi.fn() },
-  orderReshipment: { create: vi.fn() }, orderReshipmentItem: { findUniqueOrThrow: vi.fn(), update: vi.fn() },
+  orderReshipment: { create: vi.fn(), findMany: vi.fn(), updateMany: vi.fn() }, orderReshipmentItem: { findUniqueOrThrow: vi.fn(), update: vi.fn() },
   stockMovement: { findFirst: vi.fn(), findUnique: vi.fn() },
   product: { findUniqueOrThrow: vi.fn() }, warehouse: { findUnique: vi.fn() },
   orderStatusEvent: { create: vi.fn() },
@@ -11,7 +12,7 @@ const { tx, adjust } = vi.hoisted(() => ({ adjust: vi.fn(), tx: {
 vi.mock("@/lib/db", () => ({ db: { $transaction: (fn: (client: typeof tx) => unknown) => fn(tx) } }));
 vi.mock("@/lib/inventory", () => ({ adjustInventory: adjust }));
 vi.mock("@/lib/fiscal/return-lock", () => ({ lockOrderReturn: vi.fn() }));
-import { queueOrderReshipment, receiveReshipmentReturn } from "@/lib/admin/order-reshipment.server";
+import { queueOrderReshipment, receiveReshipmentReturn, loadPendingOrderReshipments } from "@/lib/admin/order-reshipment.server";
 
 const input = { orderId: "o", shipmentId: "s", actorId: "admin", reason: "Kurir ne može da pronađe robu" };
 const source = () => ({ id: "s", orderId: "o", purpose: "ORDER_DELIVERY", provider: "X_EXPRESS", status: "IN_TRANSIT", reshipment: null, trackingNo: "OLD", codAmount: null,
@@ -25,7 +26,9 @@ beforeEach(() => {
   tx.pickupBatchLine.findMany.mockResolvedValue([1, 2].map(packageNo => ({ orderItemId: "i", quantity: 2, packageNo, weightKg: 4, widthCm: 30, heightCm: 30, depthCm: 30 })));
   tx.pickupBatch.findMany.mockResolvedValue([]);
   tx.pickupBatch.create.mockResolvedValue({ id: "b", number: "PRE-2026-0001" });
-  tx.orderReshipment.create.mockResolvedValue({ id: "r" });
+  tx.orderReshipment.create.mockResolvedValue({ id: "r", batchId: null, batch: null });
+  tx.orderReshipment.findMany.mockResolvedValue([]);
+  tx.orderReshipment.updateMany.mockResolvedValue({ count: 1 });
   tx.stockMovement.findFirst.mockResolvedValue(null);
   tx.stockMovement.findUnique.mockResolvedValue(null);
   tx.product.findUniqueOrThrow.mockResolvedValue({ sku: "SKU", stock: 10, warehouseStocks: [{ warehouseId: "w", qty: 10 }], orderItems: [], partnerReservations: [] });
@@ -34,7 +37,7 @@ beforeEach(() => {
 describe("new goods for an unresolved courier delivery", () => {
   it("queues new goods and the old shipment return after X Express incomplete delivery", async () => {
     tx.shipment.findUnique.mockResolvedValue({ ...source(), status: "FAILED", providerStatusCode: "DLV_FAIL_INCOMPLETE" });
-    expect(await queueOrderReshipment(input)).toMatchObject({ id: "b" });
+    expect(await queueOrderReshipment(input)).toMatchObject({ id: "r", batchId: null });
     expect(adjust.mock.calls[0][1]).toMatchObject({ qtyDelta: -2 });
     expect(tx.orderReshipment.create.mock.calls[0][0].data.sourceShipmentId).toBe("s");
   });
@@ -44,34 +47,33 @@ describe("new goods for an unresolved courier delivery", () => {
     expect(tx.pickupBatch.create).not.toHaveBeenCalled();
     expect(adjust).not.toHaveBeenCalled();
   });
-  it("creates distinct picking packages, debits new goods once per item and keeps the original fiscal ledger untouched", async () => {
-    expect(await queueOrderReshipment(input)).toMatchObject({ id: "b" });
+  it("queues without creating or filling a picking batch, reserves goods once and preserves the fiscal ledger", async () => {
+    expect(await queueOrderReshipment(input)).toMatchObject({ id: "r", batchId: null });
     expect(adjust).toHaveBeenCalledTimes(1);
     const debit = adjust.mock.calls[0][1];
     expect(debit).toMatchObject({ qtyDelta: -2, warehouseId: "w", idempotencyKey: "reshipment-out:r:i", kind: "ADJUSTMENT" });
     expect(debit).not.toHaveProperty("orderItemId");
-    expect(tx.pickupBatchLine.createMany.mock.calls[0][0].data).toEqual([1, 2].map(packageNo => expect.objectContaining({ lineGroupKey: "reshipment:r", quantity: 2, packageNo })));
+    expect(tx.pickupBatch.create).not.toHaveBeenCalled();
+    expect(tx.pickupBatchLine.createMany).not.toHaveBeenCalled();
+    expect(tx.orderReshipment.create.mock.calls[0][0].data).not.toHaveProperty("batchId");
     expect(tx.orderReshipment.create.mock.calls[0][0].data).toMatchObject({ sourceShipmentId: "s", codAmount: 4500 });
     expect(tx.order.update).toHaveBeenCalledWith({ where: { id: "o" }, data: { status: "U_PRIPREMI" } });
   });
-  it("puts a reshipment in the shared unstarted courier batch", async () => {
+  it("leaves an existing courier draft untouched until explicit loading", async () => {
     tx.pickupBatch.findFirst.mockResolvedValue({ id: "shared", number: "PRE-shared" });
-    tx.pickupBatch.findUniqueOrThrow.mockResolvedValue({ id: "shared", status: "DRAFT", labelsCreationStartedAt: null, labelsCreatedAt: null });
-    tx.pickupBatchLine.findMany.mockResolvedValue([{ orderItemId: "i", quantity: 2, packedQuantity: 2, packageNo: 1 }]);
-    expect(await queueOrderReshipment(input)).toMatchObject({ id: "shared" });
+    expect(await queueOrderReshipment(input)).toMatchObject({ id: "r", batchId: null });
+    expect(tx.pickupBatch.findFirst).not.toHaveBeenCalled();
     expect(tx.pickupBatch.create).not.toHaveBeenCalled();
-    expect(tx.orderReshipment.create.mock.calls[0][0].data).toMatchObject({ batchId: "shared", codAmount: 4500 });
-    expect(tx.pickupBatchLine.createMany.mock.calls[0][0].data).toEqual([
-      expect.objectContaining({ batchId: "shared", packedQuantity: 2, quantity: 2 }),
-    ]);
-    expect(adjust.mock.calls[0][1]).toMatchObject({ qtyDelta: -2 });
+    expect(tx.pickupBatchLine.createMany).not.toHaveBeenCalled();
   });
 
-  it("returns the existing picking batch on a repeated request without debiting again", async () => {
-    tx.shipment.findUnique.mockResolvedValue({ ...source(), reshipment: { batch: { id: "existing" } } });
-    expect(await queueOrderReshipment(input)).toEqual({ id: "existing" });
+  it.each([null, { id: "existing", number: "PRE-existing" }])("returns an existing reshipment without debiting again (batch %s)", async batch => {
+    const retry = { id: "r", batchId: batch?.id ?? null, batch };
+    tx.shipment.findUnique.mockResolvedValue({ ...source(), reshipment: retry });
+    expect(await queueOrderReshipment(input)).toEqual(retry);
     expect(adjust).not.toHaveBeenCalled();
     expect(tx.orderReshipment.create).not.toHaveBeenCalled();
+    expect(tx.pickupBatchLine.createMany).not.toHaveBeenCalled();
   });
   it.each(["DELIVERED", "CREATED", "FAILED"])("rejects %s before writing", async status => {
     tx.shipment.findUnique.mockResolvedValue({ ...source(), status });
@@ -141,5 +143,56 @@ it("resends a consolidated parcel as one package and reserves every contained SK
     expect.objectContaining({ productId: "p", qtyDelta: -2 }),
     expect.objectContaining({ productId: "p2", qtyDelta: -3 }),
   ]);
-  expect(tx.pickupBatchLine.createMany.mock.calls[0][0].data).toEqual([expect.objectContaining({ packedItems, packedQuantity: 5, quantity: 5, packageNo: 1 })]);
+  expect(tx.pickupBatchLine.createMany).not.toHaveBeenCalled();
+  expect(tx.orderReshipment.create.mock.calls[0][0].data.items.create).toEqual([
+    expect.objectContaining({ orderItemId: "i", quantity: 2 }),
+    expect.objectContaining({ orderItemId: "j", quantity: 3 }),
+  ]);
+});
+
+
+describe("explicit loading of pending reshipments", () => {
+  const batch = { id: "selected", number: "PRE-selected" };
+  const load = (provider: "X_EXPRESS" | "MYGLS" = "X_EXPRESS") => loadPendingOrderReshipments(tx as unknown as Prisma.TransactionClient, batch, provider, "admin");
+  const pending = () => ({ id: "r", orderId: "o", sourceShipment: source(), order: source().order, items: [{ orderItemId: "i", quantity: 2 }] });
+  beforeEach(() => tx.orderReshipment.findMany.mockResolvedValue([pending()]));
+
+  it.each(["X_EXPRESS", "MYGLS"] as const)("loads only pending %s work into the selected batch without another stock debit", async provider => {
+    expect(await load(provider)).toEqual({ reshipmentCount: 1, reshipmentLineCount: 2 });
+    expect(tx.orderReshipment.findMany.mock.calls[0][0].where).toEqual({ batchId: null, sourceShipment: { provider } });
+    expect(tx.orderReshipment.updateMany).toHaveBeenCalledWith({ where: { id: "r", batchId: null }, data: { batchId: "selected" } });
+    expect(tx.pickupBatchLine.createMany.mock.calls[0][0].data).toEqual([1, 2].map(packageNo => expect.objectContaining({ batchId: "selected", lineGroupKey: "reshipment:r", quantity: 2, packageNo })));
+    expect(adjust).not.toHaveBeenCalled();
+    expect(tx.pickupBatch.create).not.toHaveBeenCalled();
+  });
+
+  it("does not load an already claimed reshipment a second time", async () => {
+    tx.orderReshipment.updateMany.mockResolvedValue({ count: 0 });
+    expect(await load()).toEqual({ reshipmentCount: 0, reshipmentLineCount: 0 });
+    expect(tx.pickupBatchLine.createMany).not.toHaveBeenCalled();
+  });
+
+  it("keeps consolidated parcel contents and quantities", async () => {
+    const packedItems = ["i", "j"].map((orderItemId, i) => ({ orderItemId, quantity: 2 + i }));
+    tx.pickupBatchLine.findMany.mockResolvedValue([{ orderItemId: "i", packedQuantity: 5, packedItems, packageNo: 1 }]);
+    tx.orderReshipment.findMany.mockResolvedValue([{ ...pending(), items: [{ orderItemId: "i", quantity: 2 }, { orderItemId: "j", quantity: 3 }] }]);
+    expect(await load()).toEqual({ reshipmentCount: 1, reshipmentLineCount: 1 });
+    expect(tx.pickupBatchLine.createMany.mock.calls[0][0].data).toEqual([expect.objectContaining({ packedItems, quantity: 5, packedQuantity: 5, packageNo: 1 })]);
+  });
+
+  it("rejects missing source packages before claiming the pending work", async () => {
+    tx.pickupBatchLine.findMany.mockResolvedValue([]);
+    await expect(load()).rejects.toThrow("picking evidenciju");
+    expect(tx.orderReshipment.updateMany).not.toHaveBeenCalled();
+    expect(tx.pickupBatchLine.createMany).not.toHaveBeenCalled();
+  });
+
+  it("preserves payment readiness and skips cancelled orders", async () => {
+    const retry = pending();
+    tx.orderReshipment.findMany.mockResolvedValue([{ ...retry, order: { ...retry.order, paymentMethod: "UPLATA_NA_RACUN" } }]);
+    await expect(load()).rejects.toThrow();
+    expect(tx.pickupBatchLine.createMany).not.toHaveBeenCalled();
+    tx.orderReshipment.findMany.mockResolvedValue([{ ...retry, order: { ...retry.order, status: "OTKAZANO" } }]);
+    expect(await load()).toEqual({ reshipmentCount: 0, reshipmentLineCount: 0 });
+  });
 });

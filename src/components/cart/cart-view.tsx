@@ -162,14 +162,14 @@ function CartSummary({
   const shipping = shippingMethod ? quote?.prices[shippingMethod] ?? null : null;
   const guestLoyalty = useGuestLoyalty();
   const loggedIn = useLoyaltyEligibility();
-  const { firstPurchasePct } = useCommerceTerms();
+  const { firstPurchasePct, guestFirstPurchaseAllowed } = useCommerceTerms();
   const { voucherDiscount, firstPurchaseDiscount, total } = computeTotals({
     firstPurchasePct,
     itemsFull: fullTotal, itemsSale: subtotal, assemblyTotal: 0,
     shippingMethod: shippingMethod ?? "kurir",
     shippingPrices: quote?.prices ?? { kurir: null, kamion: null },
     voucherDiscountRsd: voucherDiscountForSubtotal(voucher, subtotal),
-    firstPurchaseEligible: !loggedIn && guestLoyalty.active && guestLoyalty.firstPurchase,
+    firstPurchaseEligible: guestFirstPurchaseAllowed && !loggedIn && guestLoyalty.active && guestLoyalty.firstPurchase,
   });
 
   async function applyCartVoucher(e: React.FormEvent) {

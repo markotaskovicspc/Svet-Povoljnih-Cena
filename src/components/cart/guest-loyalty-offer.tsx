@@ -13,7 +13,7 @@ import { activateGuestLoyalty, refreshGuestLoyalty, useGuestLoyalty } from "@/li
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 
 export function GuestLoyaltyOffer() {
-  const { firstPurchasePct } = useCommerceTerms();
+  const { firstPurchasePct, guestFirstPurchaseAllowed } = useCommerceTerms();
   const lines = useCart((state) => state.lines);
   const member = useGuestLoyalty();
   const [open, setOpen] = useState(false);
@@ -65,7 +65,7 @@ export function GuestLoyaltyOffer() {
       <input id={id} type="checkbox" checked={member.active} disabled={busy || !member.ready} onChange={(event) => { if (event.target.checked) void request(); else void removeBenefits(); }} aria-describedby={`${id}-consent`} className="mt-0.5 size-5 shrink-0 accent-ink-900 disabled:cursor-wait" />
       <span>{busy ? "Obračunavam pogodnosti…" : "Želim da pristupim loyalty programu"}</span>
     </label>
-    <p id={`${id}-consent`} className="mt-2 text-xs leading-5 text-ink-500">Označavanjem prihvatate <button type="button" onClick={() => setOpen(true)} className="font-medium text-ink-700 underline underline-offset-2">izjavu o saglasnosti</button>. Bez naloga i kartice. Dodatnih {firstPurchasePct}% za prvu kupovinu proveravamo po unosu mejla pri poručivanju.</p>
+    <p id={`${id}-consent`} className="mt-2 text-xs leading-5 text-ink-500">Označavanjem prihvatate <button type="button" onClick={() => setOpen(true)} className="font-medium text-ink-700 underline underline-offset-2">izjavu o saglasnosti</button>. Bez naloga i kartice.{guestFirstPurchaseAllowed && <> Dodatnih {firstPurchasePct}% za prvu kupovinu proveravamo po unosu mejla pri poručivanju.</>}</p>
     {error && <p role="alert" className="mt-2 text-sm text-action">{error}</p>}
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetContent initialFocus={panelHeader} className="w-full! max-w-full! gap-0! overflow-hidden bg-white! sm:max-w-[560px]!">
@@ -80,7 +80,7 @@ export function GuestLoyaltyOffer() {
                 <div className="px-5 py-5 sm:px-6">
                 <p className="relative text-xs font-semibold tracking-[0.2em] text-white/70">SVET POVOLJNIH CENA</p>
                 <h3 className="relative mt-3 text-2xl font-semibold leading-tight">Više razloga za dobru kupovinu.</h3>
-                <div className="relative mt-6 flex gap-6 border-t border-white/20 pt-5"><div><p className="text-3xl font-bold">−30%</p><p className="mt-1 text-xs text-white/75">na artikle van akcije</p></div><div className="border-l border-white/20 pl-6"><p className="text-3xl font-bold">−{firstPurchasePct}%</p><p className="mt-1 text-xs text-white/75">dodatno za prvu kupovinu</p></div></div>
+                <div className="relative mt-6 flex gap-6 border-t border-white/20 pt-5"><div><p className="text-3xl font-bold">−30%</p><p className="mt-1 text-xs text-white/75">na artikle van akcije</p></div>{guestFirstPurchaseAllowed && <div className="border-l border-white/20 pl-6"><p className="text-3xl font-bold">−{firstPurchasePct}%</p><p className="mt-1 text-xs text-white/75">dodatno za prvu kupovinu</p></div>}</div>
                 </div>
               </div>
               <p className="mt-5 text-sm leading-6 text-ink-700">Pročitajte izjavu i prihvatite pristupanje programu. Popust odmah obračunavamo u ovoj korpi. Mejl ćete uneti kasnije, uz podatke za porudžbinu.</p>

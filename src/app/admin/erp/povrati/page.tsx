@@ -208,7 +208,7 @@ export default async function ReturnsPage() {
             {reshipments.length === 0 ? <p className="text-sm text-ink-500">Nema očekivanih povrata po ponovnom slanju.</p> : null}
             {reshipments.map(retry => <div key={retry.id} className="space-y-3 rounded-lg border border-border p-4">
               <p><Link className="font-medium underline" href={`/admin/erp/prodajni-nalozi/${retry.orderId}`}>{retry.order.number}</Link> · Stara pošiljka: {retry.sourceShipment.provider} / {retry.sourceShipment.trackingNo ?? retry.sourceShipmentId} · {retry.sourceShipment.status}</p>
-              <p className="text-sm">Razlog: {retry.reason} · Nova roba: <Link className="underline" href={`/admin/erp/preuzimanja/${retry.batchId}`}>{retry.batch.number}</Link></p>
+              <p className="text-sm">Razlog: {retry.reason} · Nova roba: {retry.batch ? <Link className="underline" href={`/admin/erp/preuzimanja/${retry.batchId}`}>{retry.batch.number}</Link> : "dostupna za učitavanje u picking"}</p>
               {retry.items.map(item => <div key={item.id} className="rounded-lg bg-muted p-3 text-sm">
                 <p>{item.sku} · {item.name} · Primljeno {item.receivedQty}/{item.quantity} kom</p>
                 {item.receivedQty < item.quantity ? <AdminActionForm action={receiveReshipmentReturnAction} refreshOnSuccess className="mt-2 flex flex-wrap items-end gap-3">

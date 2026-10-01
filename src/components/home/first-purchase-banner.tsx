@@ -9,7 +9,7 @@ export function FirstPurchaseBanner({ percent }: { percent: number }) {
       <div className="shrink-0 text-[clamp(4.5rem,12vw,10rem)] font-black leading-none tracking-tighter text-[#ff354e]">{percent}%</div>
       <div className="max-w-64">
         <p className="text-sm font-semibold md:text-2xl">Popusta za nove kupce</p>
-        <p className="mt-1 text-xs leading-relaxed text-white/80 md:mt-2 md:text-sm">Popust se obračunava na artikle pri prvoj kupovini. Bez promo koda.</p>
+        <p className="mt-1 text-xs leading-relaxed text-white/80 md:mt-2 md:text-sm">Za prvu kupovinu preko prijavljenog naloga na sajtu. Bez promo koda.</p>
       </div>
     </div>
   );
