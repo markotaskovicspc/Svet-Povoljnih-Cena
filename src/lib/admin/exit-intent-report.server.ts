@@ -31,7 +31,8 @@ export function exitIntentReportQuery(period: ReportPeriod, now = new Date()) {
         bool_or(e.metadata->>'event' = 'login_clicked') AS logged_in,
         bool_or(e.metadata->>'event' = 'shop_clicked') AS shop_clicked,
         bool_or(e.metadata->>'event' = 'dismissed') AS dismissed,
-        bool_or(e.metadata->>'event' = 'retained') AS retained
+        bool_or(e.metadata->>'event' = 'retained' AND e."occurredAt" >= x."occurredAt" + interval '30 seconds'
+          AND e."occurredAt" < x."occurredAt" + interval '30 minutes') AS retained
       FROM cohort x JOIN "AnalyticsEvent" e ON e."anonymousId" = x."anonymousId"
         AND e.type = 'EXIT_INTENT' AND e.metadata->>'campaign' = ${EXIT_INTENT_CAMPAIGN}
         AND e.metadata->>'exposureId' = x.exposure

@@ -4,6 +4,7 @@ export const EXIT_INTENT_CAMPAIGN = "first-purchase-exit-v1";
 export const EXIT_INTENT_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1_000;
 export const EXIT_INTENT_ARM_MS = 15_000;
 export const EXIT_INTENT_RETAIN_MS = 30_000;
+export const EXIT_INTENT_RETENTION_WINDOW_MS = 30 * 60 * 1_000;
 export const exitIntentMetadataSchema = z.object({
   campaign: z.literal(EXIT_INTENT_CAMPAIGN),
   exposureId: z.uuid(),

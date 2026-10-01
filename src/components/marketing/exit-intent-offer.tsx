@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { useCommerceTerms } from "@/components/pricing/commerce-terms-provider";
 import { getConsentedAnalyticsContext, recordFirstPartyEvent } from "@/components/analytics/first-party-analytics";
 import {
-  EXIT_INTENT_CAMPAIGN, EXIT_INTENT_COOLDOWN_MS, EXIT_INTENT_RETAIN_MS,
+  EXIT_INTENT_CAMPAIGN, EXIT_INTENT_COOLDOWN_MS, EXIT_INTENT_RETAIN_MS, EXIT_INTENT_RETENTION_WINDOW_MS,
   exitIntentMetadataSchema, exitIntentPathAllowed, isTopExit,
   type ExitIntentEvent, type ExitIntentMetadata,
 } from "@/lib/analytics/exit-intent";
@@ -30,7 +30,7 @@ function restoreExposure(): Exposure | null {
     const parsed = exitIntentMetadataSchema.safeParse(saved?.metadata);
     if (parsed.success && saved.anonymousId === context.anonymousId &&
       typeof saved.at === "number" && saved.at <= Date.now() &&
-      Date.now() - saved.at < EXIT_INTENT_COOLDOWN_MS) {
+      Date.now() - saved.at < EXIT_INTENT_RETENTION_WINDOW_MS) {
       return { ...saved, metadata: parsed.data, retained: saved.retained === true };
     }
   } catch { /* No usable consented exposure. */ }
@@ -108,7 +108,7 @@ export function ExitIntentOffer() {
         activeMs = 0;
         interacted = false;
       }
-      if (!current || current.retained || openRef.current || Date.now() - current.at >= EXIT_INTENT_COOLDOWN_MS) return;
+      if (!current || current.retained || openRef.current || Date.now() - current.at >= EXIT_INTENT_RETENTION_WINDOW_MS) return;
       if (document.visibilityState === "visible" && document.hasFocus() && interacted) activeMs += elapsed;
       if (activeMs >= EXIT_INTENT_RETAIN_MS && track("retained")) {
         current.retained = true;
@@ -117,13 +117,13 @@ export function ExitIntentOffer() {
     }, 1_000);
     window.addEventListener("pointerdown", activity);
     window.addEventListener("keydown", activity);
-    window.addEventListener("scroll", activity, { passive: true });
+    window.addEventListener("wheel", activity, { passive: true });
     window.addEventListener("spc-cookie-consent", forgetWithoutConsent);
     return () => {
       window.clearInterval(interval);
       window.removeEventListener("pointerdown", activity);
       window.removeEventListener("keydown", activity);
-      window.removeEventListener("scroll", activity);
+      window.removeEventListener("wheel", activity);
       window.removeEventListener("spc-cookie-consent", forgetWithoutConsent);
     };
   }, []);

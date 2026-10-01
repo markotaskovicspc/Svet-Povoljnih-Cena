@@ -32,6 +32,8 @@ beforeAll(async () => {
   await event("spoof-other-browser", "2026-10-01T08:01:00Z", "a", "shop_clicked");
   await order("active", "2026-10-03T09:00:00Z", "KREIRANO", "WEB", "PAID");
   await event("passive", "2026-10-01T09:00:00Z", "b");
+  await event("passive", "2026-10-01T09:00:02Z", "b", "retained");
+  await event("passive", "2026-10-01T09:31:00Z", "b", "retained");
   await order("passive", "2026-10-02T09:00:00Z", "ISPORUCENO");
   for (const [who, status, channel, payment] of [
     ["cancelled", "OTKAZANO", "WEB"], ["returned", "VRACENO", "WEB"],

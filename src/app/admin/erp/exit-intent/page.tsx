@@ -58,7 +58,7 @@ export default async function ExitIntentReport({ searchParams }: { searchParams:
       } }))} empty="Još nema izmerenih prikaza ponude za odabrani period. Merenje počinje objavom popupa." />
       <div className="space-y-2 text-sm leading-relaxed text-ink-600">
         <p>Ponuda se prikazuje na računaru pri izlasku kursora preko gornje ivice prozora, posle najmanje 15 sekundi na stranici. Najviše jednom u 7 dana po pregledaču. Ne otvara se tokom naplate, prijave ni preko drugog dijaloga.</p>
-        <p>„Ostali aktivni” znači najmanje 30 sekundi sa sajtom u prvom planu, nakon interakcije van popupa. Vreme u skrivenom tabu i samo zatvaranje ponude se ne računaju.</p>
+        <p>„Ostali aktivni” znači najmanje 30 sekundi sa sajtom u prvom planu, nakon interakcije van popupa, u prvih 30 minuta od prikaza. Vreme u skrivenom tabu, samo zatvaranje ponude i kasniji povratak drugog dana se ne računaju.</p>
         <p>Porudžbina se povezuje sa poslednjim prikazom ponude u istom pregledaču tokom prethodnih 7 dana, i kada nije bilo klika na ponudu. Broji se jednom i potvrđuje serverskim zapisom o kreiranju. Drugi uređaji i posetioci bez saglasnosti ne mogu se povezati. Dnevne grupe mogu da se preklapaju; ukupan broj pregledača se računa zasebno.</p>
         <p>Ovo pokazuje šta se desilo nakon ponude, ali bez kontrolne grupe ne dokazuje da je popup izazvao kupovinu. Rezultati za poslednjih 7 dana još mogu da rastu. Datumi su po vremenu u Srbiji.</p>
       </div>
