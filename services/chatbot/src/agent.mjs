@@ -17,7 +17,7 @@ import {deliveryQuoteTool,deliveryQuoteInstructions} from './delivery-quote.mjs'
 import {visualCandidatesTool,resolveVisualSelection} from './visual-candidates.mjs';
 setTracingDisabled(true);
 const address = z.object({firstName:z.string(),lastName:z.string(),phone:z.string(),street:z.string(),houseNumber:z.string(),city:z.string(),postalCode:z.string().nullable()});
-const purchase = z.object({guestEmail:z.email().nullable(),shipping:address,lines:z.array(z.object({sku:z.string(),qty:z.number().int().positive()})),paymentMethod:z.enum(['POUZECE_GOTOVINA','UPLATA_NA_RACUN']),shippingMethod:z.enum(['KURIR','KAMION'])});
+const purchase = z.object({guestEmail:z.email().nullable(),shipping:address,lines:z.array(z.object({sku:z.string(),qty:z.number().int().positive()})),paymentMethod:z.literal('POUZECE_GOTOVINA'),shippingMethod:z.enum(['KURIR','KAMION'])});
 export async function answer({event,state,spc,pause,model}) {
   // Resolve an ambiguous collage before catalog search can anchor on an arbitrary item.
   const visualQuestion=await resolveVisualSelection({state,event,model});
@@ -150,7 +150,7 @@ export function quoteMessage(pending) {
   const address=[[s.street,s.houseNumber].filter(Boolean).join(' '),[s.postalCode,s.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
   return [
     'Za potvrdu porudžbine odgovorite: DA\nPorudžbina još nije kreirana.',
-    [i.lines.map(l=>`${pending.productNames?.[l.sku]||l.sku} × ${l.qty}`).join('\n'),`Ukupno: ${money(pending.totals.total)}`,`Dostava: ${pending.totals.shipping===0?'besplatna':money(pending.totals.shipping)} · Plaćanje ${i.paymentMethod==='POUZECE_GOTOVINA'?'pouzećem':'uplatom na račun'}`,benefit].filter(Boolean).join('\n'),
+    [i.lines.map(l=>`${pending.productNames?.[l.sku]||l.sku} × ${l.qty}`).join('\n'),`Ukupno: ${money(pending.totals.total)}`,`Artikli: ${money(Math.round((pending.totals.total-pending.totals.shipping-(pending.totals.assemblyTotal??0))*100)/100)}`,pending.totals.assemblyTotal>0?`Montaža: ${money(pending.totals.assemblyTotal)}`:'',`Dostava: ${pending.totals.shipping===0?'besplatna':money(pending.totals.shipping)} · Plaćanje ${i.paymentMethod==='POUZECE_GOTOVINA'?'pouzećem':'uplatom na račun'}`,benefit].filter(Boolean).join('\n'),
     [[s.firstName,s.lastName].filter(Boolean).join(' '),address,s.phone,i.guestEmail].filter(Boolean).join('\n'),
     'Ponuda važi 15 minuta. Ako nešto nije tačno, napišite ispravku.'
   ].join('\n\n');
