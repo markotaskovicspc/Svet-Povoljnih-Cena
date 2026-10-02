@@ -2,6 +2,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import {createHttpServer} from '../src/server.mjs';
+test('staff diagnostics require authentication, scope reads and omit order credentials',async()=>{
+ const reads=[];const state={staffOrderCheckFailure:'CONTACT',staffOrder:{eventId:'cmd',status:'creating',quote:{quoteToken:'SECRET'}},staffPlanSummary:{lines:[{sku:'123',qty:1}],guestEmail:'buyer@example.com',shipping:{city:'Belica'}},orders:[{accessToken:'SECRET'}]};
+ const store={decode:x=>x,pool:{query:async(sql,args)=>{reads.push({sql,args});return sql.includes('spc_chat_support')?{rows:[{status:'sent',payload:{reason:'CONTACT',transcript:'RAZLOG: CONTACT\n\nPrivate history'}}]}:{rowCount:1,rows:[{state}]};}}};
+ const server=await createHttpServer({store,worker:{},accounts:[],adminToken:'operator'});
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));const base=`http://127.0.0.1:${server.address().port}/admin/staff-diagnostics`;
+ try{
+  assert.equal((await fetch(base+'?id=facebook:123:456')).status,401);assert.equal(reads.length,0);
+  const headers={authorization:'Bearer operator'};
+  assert.equal((await fetch(base,{headers})).status,400);
+  const response=await fetch(base+'?id=facebook:123:456',{headers});assert.equal(response.status,200);
+  const body=await response.text();assert.ok(!body.includes('SECRET'));assert.ok(!body.includes('buyer@example.com'));assert.ok(!body.includes('Private history'));
+  assert.equal(JSON.parse(body).plan.emailPresent,true);assert.ok(reads.every(r=>r.args[0]==='facebook:123:456'&&r.sql.startsWith('SELECT')));
+ }finally{await new Promise(r=>server.close(r));}
+});
 test('only an authenticated operator can save a verified link for the matching Facebook page',async()=>{
  const state={inboxLink:'legacy'};let saves=0;
  const store={withConversation:async(id,fn)=>fn(id==='facebook:123:456'?{id,channel:'facebook',account:'123'}:null,state,{}),save:async()=>{saves++;}};

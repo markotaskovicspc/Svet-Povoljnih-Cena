@@ -52,6 +52,21 @@ test('staff command reads manual messages, creates immediately once, and leaves 
   const out=(await store.pool.query('SELECT payload FROM spc_chat_outbox')).rows;assert.equal(out.length,1);assert.equal(store.decode(out[0].payload).allowPaused,true);
  }finally{await store.close();}
 });
+test('staff preparation timeout keeps phase diagnostics and never blames missing email or leaks raw errors',async()=>{
+ const {store,worker,event}=await setup();const notices=[];
+ try{
+  await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
+  worker.staffPrepareFn=async({onProgress})=>{onProgress('cart_check');const e=new Error('raw secret or personal data');e.name='TimeoutError';throw e;};
+  worker.spc=async p=>{assert.equal(p.action,'support_handoff');notices.push(p);return {ok:true};};
+  const command={...event,id:'facebook:phase-diagnostic',echo:true,botEcho:false,text:'/porudzbina'};
+  await store.accept(command);
+  for(let i=0;i<3;i++){await store.pool.query('UPDATE spc_chat_events SET next_at=now() WHERE id=$1',[command.id]);await worker.tick();}
+  const state=store.decode((await store.pool.query('SELECT state FROM spc_chat_conversations')).rows[0].state);
+  assert.equal(state.staffOrderDiagnostic.phase,'cart_check');assert.equal(state.staffOrderDiagnostic.errorType,'TimeoutError');assert.equal(state.staffOrderDiagnostic.attempts,3);
+  assert.equal(notices.length,1);assert.match(notices[0].reason,/cart_check/);assert(!JSON.stringify(notices).includes('raw secret'));
+  assert.equal((await store.pool.query('SELECT * FROM spc_chat_outbox')).rows.length,0);assert.equal(state.orders.length,0);
+ }finally{await store.close();}
+});
 test('customer slash command cannot authorize a pending order',async()=>{
  const {store,worker,event,calls}=await setup();
  try{

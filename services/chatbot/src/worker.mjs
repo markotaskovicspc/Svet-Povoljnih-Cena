@@ -50,13 +50,17 @@ export class Worker {
           const ours=await c.query('SELECT id FROM spc_chat_outbox WHERE meta_id=$1',[event.id.substring(event.channel.length+1)]);
           if(!ours.rowCount){
             try{await this.staffOrder({event,row,state,c,job});}
-            catch{
+            catch(error){
               await c.query('ROLLBACK');
+              const diagnostic=state.staffOrderDiagnostic??{eventId:event.id,phase:'history'};
+              const errorType=['TimeoutError','AbortError','APIConnectionTimeoutError','RateLimitError','ZodError','MaxTurnsExceededError'].includes(error.name)?error.name:'ServiceError';
+              state.staffOrderDiagnostic={...diagnostic,errorType,attempts:job.attempts+1,at:Date.now()};
+              await this.store.save(c,row.id,state);
               if(job.attempts>=2){
                 await this.store.pause(row.id,'Proveriti ishod komande /porudzbina');
                 await c.query('BEGIN');
                 const uncertain=state.staffOrder?.status==='creating'||Boolean(state.operatorOrder);
-                const reason=uncertain?'Ishod upisa porudžbine nije potvrđen. Proverite ERP pre ručnog kreiranja da ne nastane duplikat.':state.staffOrderCheckFailure??'Komanda /porudzbina nije završena ni posle tri pokušaja. Potrebna je provera prodavca.';
+                const reason=uncertain?'Ishod upisa porudžbine nije potvrđen. Proverite ERP pre ručnog kreiranja da ne nastane duplikat.':state.staffOrderCheckFailure??`Tehnički neuspeh komande /porudzbina u fazi ${diagnostic.phase} (${errorType}), posle tri pokušaja. Podaci nisu proglašeni nedostajućim; proverite servis.`;
                 await this.staffOrderAttention({event,row,state,c,reason});
                 await this.store.save(c,row.id,state);
                 await c.query("UPDATE spc_chat_events SET status='failed',attempts=attempts+1 WHERE id=$1",[job.id]);
@@ -327,6 +331,8 @@ export class Worker {
     // A staff command executes once but never resumes autonomous replies.
     await this.store.pause(row.id,'Odgovor zaposlenog u Meta inboxu');
     let message;
+    state.staffOrderDiagnostic={eventId:event.id,phase:'history',at:Date.now()};
+    delete state.staffOrderCheckFailure;
     if(state.staffOrder?.eventId!==event.id){
       const local=await this.store.history(c,row.id,event);
       const account=this.accounts.find(a=>a.channel===row.channel&&a.id===row.account);
@@ -334,14 +340,18 @@ export class Worker {
       const remote=account?await this.historyFn({account,sender:row.sender,before:event.timestamp,graphVersion:this.graphVersion,maxMessages:STAFF_HISTORY_LIMIT,onCoverage:coverage=>{state.staffHistoryIncomplete=!coverage.complete;}}):[];
       state.history=mergeStaffHistory({saved:state.history,remote,local,before:event.timestamp});
     }
-    message=await executeStaffOrder({event,state,spc:this.spc,save:()=>this.store.save(c,row.id,state),prepare:async()=>{
+    message=await executeStaffOrder({event,state,spc:async payload=>{
+      if(payload.action==='create_order')state.staffOrderDiagnostic.phase='create_order';
+      return this.spc(payload);
+    },save:()=>this.store.save(c,row.id,state),prepare:async()=>{
       if(state.staffHistoryIncomplete)return {ok:false,message:'Porudžbina nije kreirana jer nije preuzeta cela duga prepiska. Potrebna je provera istorije; ne ponavljajte podatke kupca.'};
       delete state.staffPlanSummary;
-      const prepared=await this.staffPrepareFn({event,state,spc:this.spc,model:this.model,onPlan:plan=>{state.staffPlanSummary=plan.input?{lines:plan.input.lines,agreedTotal:plan.agreedTotal,unitPrices:plan.unitPrices,shipping:plan.input.shipping,guestEmail:plan.input.guestEmail}:null;}});
+      const prepared=await this.staffPrepareFn({event,state,spc:this.spc,model:this.model,onProgress:phase=>{state.staffOrderDiagnostic.phase=phase;},onPlan:plan=>{state.staffPlanSummary=plan.input?{lines:plan.input.lines,agreedTotal:plan.agreedTotal,unitPrices:plan.unitPrices,shipping:plan.input.shipping,guestEmail:plan.input.guestEmail}:null;}});
       // A failed extraction/check is not missing customer data. Retry the read-only
       // preparation before escalating; never retry an ERP write with a new quote.
       if(!prepared.ok&&['STAFF_PLAN_INCOMPLETE','STAFF_PRICE_EVIDENCE_INVALID','STAFF_CONTACT_EVIDENCE_INVALID','STAFF_CART_CHECK_FAILED'].includes(prepared.code)){
         state.staffOrderCheckFailure=prepared.message;
+        state.staffOrderDiagnostic.code=prepared.code;
         throw new Error('STAFF_ORDER_CHECK_RETRY');
       }
       const newer=await c.query("SELECT payload FROM spc_chat_events WHERE conversation=$1 AND id<>$2 ORDER BY created_at DESC LIMIT 30",[row.id,event.id]);

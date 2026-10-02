@@ -66,6 +66,20 @@ const server=http.createServer(async(req,res)=>{
       const attachments=await store.pool.query('SELECT payload FROM spc_chat_events WHERE conversation=$1 ORDER BY created_at DESC LIMIT 30',[url.searchParams.get('id')]);
       return reply(200,{history:state.history,orders:state.orders.map(o=>({number:o.number})),attachments:attachments.rows.flatMap(e=>store.decode(e.payload).attachments??[])});
     }
+    if(req.method==='GET'&&url.pathname==='/admin/staff-diagnostics'){
+      const id=url.searchParams.get('id');
+      if(!id||id.length>200)return reply(400,{error:'Invalid conversation'});
+      const result=await store.pool.query('SELECT state FROM spc_chat_conversations WHERE id=$1',[id]);
+      if(!result.rowCount)return reply(404,{error:'Not found'});
+      const state=store.decode(result.rows[0].state),plan=state.staffPlanSummary;
+      const support=await store.pool.query('SELECT status,created_at,payload FROM spc_chat_support WHERE conversation=$1 ORDER BY created_at DESC LIMIT 5',[id]);
+      // Explicit allowlist: never expose access tokens, signed quotes or credentials.
+      return reply(200,{diagnostic:state.staffOrderDiagnostic??null,checkFailure:state.staffOrderCheckFailure??null,attention:state.staffOrderAttention??null,
+        historyIncomplete:state.staffHistoryIncomplete??false,
+        attempt:state.staffOrder?{eventId:state.staffOrder.eventId,status:state.staffOrder.status,message:state.staffOrder.message}:null,
+        plan:plan?{lines:plan.lines,agreedTotal:plan.agreedTotal,unitPrices:plan.unitPrices,shipping:plan.shipping,emailPresent:Boolean(plan.guestEmail)}:null,
+        support:support.rows.map(r=>{const p=store.decode(r.payload);return {status:r.status,at:r.created_at,reason:p.reason,detail:p.transcript?.split('\n\n')[0]};})});
+    }
     if(req.method==='POST'&&url.pathname==='/admin/action'){
       const body=JSON.parse(raw);if(typeof body.id!=='string'||body.id.length>200)return reply(400,{error:'Invalid conversation'});
       if(body.action==='set_inbox_link'){
