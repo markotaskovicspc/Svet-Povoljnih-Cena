@@ -7,6 +7,18 @@ import {productOffer} from '../src/product-media.mjs';
 const input={guestEmail:'buyer@example.com',shipping:{firstName:'Petar',lastName:'Petrović',phone:'0601234567',street:'Test',houseNumber:'12',city:'Kragujevac',postalCode:'34000'},lines:[{sku:'IRON',qty:1}],paymentMethod:'POUZECE_GOTOVINA',shippingMethod:'KURIR'};
 const event={id:'command-1',channel:'facebook',conversation:'page:buyer',echo:true,text:'/porudzbina',timestamp:Date.now()};
 const state=()=>({history:[{role:'user',content:'Želim jednu peglu IRON. Petar Petrović, 0601234567, Test 12, Kragujevac 34000, buyer@example.com, pouzećem.',timestamp:Date.now()-1000}],orders:[]});
+test('full slash address and separate literal delivery notes survive without customer email',async()=>{
+ const shipping={...input.shipping,city:'Kruševac',houseNumber:'40/63'};
+ const context={orders:[],history:[{role:'user',content:'Želim jednu peglu IRON. Петар Петровић, 0601234567, Тест 40/63, Крушевац 34000.'},{role:'assistant',content:'Možemo da potvrdimo termin isporuke u utorak'},{role:'user',content:'Onda može. Ulaz C.'}]};
+ const notes=['Možemo da potvrdimo termin isporuke u utorak','Ulaz C'];
+ let writes=0;
+ const prepare=deliveryNotes=>prepareStaffOrder({event,state:context,model:'test',extractFn:async()=>({input:{...input,guestEmail:null,shipping},reason:'',agreedTotal:null,priceEvidence:null,unitPrices:[],deliveryNotes}),cartCheckFn:async()=>({ok:true}),spc:async p=>{
+  if(p.action==='search')return {ok:true,items:[{sku:'IRON',name:'Pegla',price:1000,available:true}]};
+  assert.equal(p.action,'quote');assert.equal(p.input.shipping.houseNumber,'40/63');assert.equal(p.input.guestEmail,null);assert.equal(p.input.notes,notes.join('; '));writes++;return {ok:true,totals:{total:1400}};
+ }});
+ assert((await prepare(notes)).ok);assert.equal(writes,1);
+ const bad=await prepare(['Ulaz D']);assert.equal(bad.code,'STAFF_DELIVERY_NOTES_EVIDENCE_INVALID');assert.equal(writes,1);
+});
 test('empty full-name lookup falls back to model name; multiple genuine confirmations support one cart line',async()=>{
  const calls=[];const found=await searchStaffProducts(async p=>{calls.push(p.query);return {ok:true,items:p.query==='ELEGANCE SEAT'?[{sku:'CHAIR'}]:[]};},'ELEGANCE SEAT crna');
  assert.deepEqual(calls,['ELEGANCE SEAT crna','ELEGANCE SEAT']);assert.equal(found.items[0].sku,'CHAIR');

@@ -5,7 +5,10 @@ export function createSpcClient(base, secret) {
   if (url.protocol !== 'https:' && !['localhost','127.0.0.1'].includes(url.hostname)) throw new Error('SPC_HTTPS_REQUIRED');
   return async payload => {
     if(payload.action==='quote'||payload.action==='staff_quote') {
-      const shipping=payload.input.shipping;
+      const supplied=payload.input.shipping;
+      // Formatting only: 033 is the same building as 33. Keep suffixes and
+      // slash-separated address components; never guess a missing number.
+      const shipping={...supplied,houseNumber:typeof supplied.houseNumber==='string'?supplied.houseNumber.trim().replace(/^0+(?=[1-9]\d*(?:[A-Za-z]|[/-][\p{L}\d]+)*$)/u,''):supplied.houseNumber};
       const lookup=async query=>{
         const url=new URL('/api/x-express/locations',base);
         url.searchParams.set('q',query);url.searchParams.set('limit','20');

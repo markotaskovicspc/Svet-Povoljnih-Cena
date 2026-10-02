@@ -3,6 +3,16 @@ import assert from 'node:assert/strict';
 import {selectTown,orderErrorMessage} from '../src/delivery.mjs';
 import {createSpcClient} from '../src/spc.mjs';
 const town={townId:123,name:'Kruševac',postalCode:'37000'};
+test('quote normalizes only leading zeros in house numbers and preserves full suffixes',async()=>{
+ const original=globalThis.fetch;
+ globalThis.fetch=async(url,options)=>({ok:true,json:async()=>options?.body?{ok:true,input:JSON.parse(options.body).input}:{items:[town]}});
+ try{
+  for(const [supplied,expected] of [['033','33'],['0033A','33A'],['0040/63','40/63'],['40/63','40/63'],['12-14','12-14'],['bb','bb'],['000','000'],['','']]){
+   const r=await createSpcClient('https://example.test','test')({action:'quote',input:{shipping:{city:'Kruševac',houseNumber:supplied}}});
+   assert.equal(r.input.shipping.houseNumber,expected);
+  }
+ }finally{globalThis.fetch=original;}
+});
 test('Belica with nearby post office postcode resolves by exact unique locality, without buyer email',async()=>{
  const original=globalThis.fetch,calls=[];
  globalThis.fetch=async(url,options)=>{
