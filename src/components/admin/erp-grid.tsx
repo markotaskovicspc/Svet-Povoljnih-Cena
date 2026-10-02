@@ -9,10 +9,12 @@ import {
   type FormEvent,
   type SetStateAction,
 } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import {
+  ArrowUp,
+  ArrowDown,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -55,18 +57,7 @@ import {
   type SalesOrderGridSummary,
 } from "@/lib/admin/sales-order-overview";
 
-type SavedView = {
-  id?: string;
-  name: string;
-  visibleColumns: string[];
-  columnOrder: string[];
-  columnWidths: Record<string, number>;
-  filters: AdminGridFilter[];
-  sorting: AdminGridSort[];
-  query: string;
-  searchColumn?: string;
-  context?: Record<string, string>;
-};
+import { savedGridViewHref, savedViewLocation, type SavedGridView as SavedView } from "@/lib/admin/saved-views";
 
 export type ErpGridInitialView = Omit<SavedView, "id" | "name">;
 
@@ -205,31 +196,12 @@ function localDateValue() {
   return `${year}-${month}-${day}`;
 }
 
-function storageKey(moduleSlug: string) {
-  return `svet-akcija:erp:${moduleSlug}:views`;
-}
-
 function columnOrderKey(moduleSlug: string) {
   return `svet-akcija:erp:${moduleSlug}:column-order`;
 }
 
 function columnOrderVersionKey(moduleSlug: string) {
   return `svet-akcija:erp:${moduleSlug}:column-order-version`;
-}
-
-function readViews(moduleSlug: string): SavedView[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(storageKey(moduleSlug));
-    return raw ? (JSON.parse(raw) as SavedView[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeViews(moduleSlug: string, views: SavedView[]) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(storageKey(moduleSlug), JSON.stringify(views));
 }
 
 function readColumnOrder(moduleSlug: string, columns: ErpColumn[]) {
@@ -372,15 +344,7 @@ function operatorsFor(column: ErpColumn): AdminGridFilter["operator"][] {
 
 const EMPTY_FIXED_FILTERS: AdminGridFilter[] = [];
 
-export function ErpGrid({
-  module,
-  fixedFilters = EMPTY_FIXED_FILTERS,
-  initialVisibleColumns,
-  initialQuery = "",
-  initialSearchColumn = "",
-  initialContext = {},
-  initialView,
-}: {
+type ErpGridProps = {
   module: ErpModule;
   fixedFilters?: AdminGridFilter[];
   initialVisibleColumns?: string[];
@@ -388,7 +352,30 @@ export function ErpGrid({
   initialSearchColumn?: string;
   initialContext?: Record<string, string>;
   initialView?: ErpGridInitialView;
-}) {
+};
+
+export function ErpGrid(props: ErpGridProps) {
+  const pathname = usePathname();
+  const search = useSearchParams();
+  const legacyView = props.module.slug === "artikli" && !["archived-articles", "rabalux-stock"].includes(search.get("view") ?? "") ? search.get("view") : null;
+  const selectedViewId = search.get("savedView") ?? legacyView ?? "";
+  const [openCount, setOpenCount] = useState(0);
+  useEffect(() => {
+    const reopen = (event: Event) => {
+      if ((event as CustomEvent<string>).detail === selectedViewId) setOpenCount(count => count + 1);
+    };
+    window.addEventListener("spc:open-saved-view", reopen);
+    return () => window.removeEventListener("spc:open-saved-view", reopen);
+  }, [selectedViewId]);
+  return <ErpGridContent key={`${props.module.slug}:${pathname}?${search}:${openCount}`} {...props}
+    selectedViewId={selectedViewId} pagePath={pathname} routeSearch={search.toString()} />;
+}
+
+function ErpGridContent({
+  module, fixedFilters = EMPTY_FIXED_FILTERS, initialVisibleColumns,
+  initialQuery = "", initialSearchColumn = "", initialContext = {}, initialView,
+  selectedViewId, pagePath, routeSearch,
+}: ErpGridProps & { selectedViewId: string; pagePath: string; routeSearch: string }) {
   const router = useRouter();
   const [navigationReady, setNavigationReady] = useState(false);
   const restoredSnapshot = useRef(false);
@@ -455,6 +442,12 @@ export function ErpGrid({
   const [showSaveViewForm, setShowSaveViewForm] = useState(false);
   const [saveViewName, setSaveViewName] = useState("");
   const [savingView, setSavingView] = useState(false);
+  const [saveAsNew, setSaveAsNew] = useState(true);
+  const [showInSidebar, setShowInSidebar] = useState(true);
+  const [viewLoadError, setViewLoadError] = useState<string | null>(null);
+  const [editingView, setEditingView] = useState<SavedView | null>(null);
+  const [editViewName, setEditViewName] = useState("");
+  const activeView = views.find(view => view.id === selectedViewId);
   const [pendingDeleteViewId, setPendingDeleteViewId] = useState<string | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(
     initialView?.columnWidths ?? {},
@@ -476,17 +469,17 @@ export function ErpGrid({
   const [activeCommand, setActiveCommand] = useState<ErpCommand | null>(null);
   const [commandInput, setCommandInput] = useState<Record<string, string>>({});
   const [commandFormError, setCommandFormError] = useState<string | null>(null);
-  const [serverRows, setServerRows] = useState<ErpRow[]>(module.rows);
+  const [serverRows, setServerRows] = useState<ErpRow[]>(selectedViewId ? [] : module.rows);
   const reuseInitialRows = useRef(createInitialGridRowsReuse(module));
   const [page, setPage] = useState(1);
   const [pageCount, setPageCount] = useState(Math.max(1, Math.ceil((module.initialRowsTotal ?? module.rows.length) / 100)));
-  const [totalRows, setTotalRows] = useState(module.initialRowsTotal ?? module.rows.length);
+  const [totalRows, setTotalRows] = useState(selectedViewId ? 0 : module.initialRowsTotal ?? module.rows.length);
   const [summary, setSummary] = useState<SalesOrderGridSummary | null>(() =>
-    module.slug === "prodajni-nalozi" && !module.initialRowsPending
+    module.slug === "prodajni-nalozi" && !selectedViewId && !module.initialRowsPending
       ? summarizeSalesOrderRows(module.rows)
       : null,
   );
-  const [loadingRows, setLoadingRows] = useState(module.initialRowsPending === true);
+  const [loadingRows, setLoadingRows] = useState(Boolean(selectedViewId) || module.initialRowsPending === true);
   const [reloadToken, setReloadToken] = useState(0);
   const [context, setContext] = useState<Record<string, string>>(() =>
     ({
@@ -522,7 +515,41 @@ export function ErpGrid({
     setVisibleColumns(value);
   };
 
+  function restoreView(view: SavedView) {
+    const visible = view.visibleColumns.filter((key) => knownColumnKeys.has(key));
+    updateVisibleColumns(visible.length ? visible : defaultColumns);
+    if (view.columnOrder?.length) {
+      const savedOrder = view.columnOrder.filter((key) => knownColumnKeys.has(key));
+      const completeOrder = [
+        ...savedOrder,
+        ...module.columns
+          .map((column) => column.key)
+          .filter((key) => !savedOrder.includes(key)),
+      ];
+      setColumnOrder(completeOrder);
+    }
+    setColumnWidths(Object.fromEntries(Object.entries(view.columnWidths ?? {}).filter(([key]) => knownColumnKeys.has(key))));
+    updateFilters(
+      view.filters
+        .filter((filter) => knownColumnKeys.has(filter.columnKey))
+        .map((filter) => ({
+          ...filter,
+          operator: filter.operator ?? "contains",
+        })),
+    );
+    updateSorting(
+      (view.sorting ?? []).filter((sort) => knownColumnKeys.has(sort.columnKey)),
+    );
+    updateQuery(view.query);
+    setSearchColumn(view.searchColumn && knownColumnKeys.has(view.searchColumn) ? view.searchColumn : "");
+    setContext({ ...Object.fromEntries((module.contextFilters ?? []).map(filter => [filter.key, ""])), ...initialContext, ...(view.context ?? {}) });
+    setPage(1);
+    setSelectedIds(new Set());
+    setTableSettingsOpen(false);
+  };
+
   useEffect(() => {
+    if (selectedViewId) return; // An explicit saved view always wins over browser history.
     navigationKey.current = `spc:grid-navigation:${module.slug}:${window.location.pathname}${window.location.search}`;
     try {
       const raw = sessionStorage.getItem(navigationKey.current);
@@ -536,7 +563,7 @@ export function ErpGrid({
       }
     } catch { /* Storage can be unavailable in private browsing. */ }
     setNavigationReady(true);
-  }, [module.slug, module.columns]);
+  }, [module.slug, module.columns, selectedViewId]);
 
   useEffect(() => {
     if (!navigationReady || !navigationKey.current) return;
@@ -547,12 +574,12 @@ export function ErpGrid({
   }, [navigationReady, query, searchColumn, filters, sorting, visibleColumns, columnOrder, columnWidths, context, page]);
 
   useEffect(() => {
-    if (restoredSnapshot.current || initialView?.columnOrder?.length) return;
+    if (selectedViewId || restoredSnapshot.current || initialView?.columnOrder?.length) return;
     const timeout = window.setTimeout(() => {
       setColumnOrder(readColumnOrder(module.slug, module.columns));
     }, 0);
     return () => window.clearTimeout(timeout);
-  }, [initialView?.columnOrder, module.columns, module.slug]);
+  }, [initialView?.columnOrder, module.columns, module.slug, selectedViewId]);
 
   useEffect(() => {
     if (!tableSettingsOpen) return;
@@ -571,24 +598,31 @@ export function ErpGrid({
 
   useEffect(() => {
     let cancelled = false;
-    const localViews = readViews(module.slug);
     fetch(`/api/admin/saved-views?module=${encodeURIComponent(module.slug)}`)
-      .then(async (response) => {
-        if (!response.ok) throw new Error("Pogledi nisu učitani.");
-        return response.json() as Promise<{ views?: SavedView[] }>;
+      .then(async response => {
+        if (!response.ok) throw new Error("Pogledi nisu učitani. Pokušajte ponovo.");
+        return response.json() as Promise<{ views: SavedView[] }>;
       })
-      .then((payload) => {
-        if (!cancelled) {
-          setViews(payload.views?.length ? payload.views : localViews);
+      .then(payload => {
+        if (cancelled) return;
+        setViews(payload.views);
+        if (selectedViewId) {
+          const selected = payload.views.find(view => view.id === selectedViewId);
+          if (!selected) { setViewLoadError("Pogled je obrisan ili nije dostupan vašem nalogu."); return; }
+          restoreView(selected);
+          setNavigationReady(true);
         }
       })
-      .catch(() => {
-        if (!cancelled) setViews(localViews);
+      .catch(error => {
+        if (!cancelled) {
+          if (selectedViewId) setViewLoadError(error.message);
+          else setCommandMessage({ ok: false, text: error.message });
+        }
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [module.slug]);
+    return () => { cancelled = true; };
+  // The keyed grid remounts when its module, page filters or selected view changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const refreshRows = () => setReloadToken((current) => current + 1);
@@ -614,7 +648,7 @@ export function ErpGrid({
     if (!navigationReady) return;
     // Invalidate permanently on any changed request or server refresh. Returning
     // to the first page after a filter/edit must not resurrect the old snapshot.
-    if (reuseInitialRows.current(module, {
+    if (!selectedViewId && reuseInitialRows.current(module, {
       page, query, filters: [...fixedFilters, ...filters], sorting, context, reloadToken,
     })) return;
     const controller = new AbortController();
@@ -673,6 +707,7 @@ export function ErpGrid({
     };
   }, [
     navigationReady,
+    selectedViewId,
     filters,
     fixedFilters,
     module,
@@ -939,6 +974,9 @@ export function ErpGrid({
       return;
     }
     const view: SavedView = {
+      ...(!saveAsNew && activeView?.id ? { id: activeView.id } : {}),
+      ...savedViewLocation(module.slug, pagePath, Object.fromEntries(new URLSearchParams(routeSearch))),
+      showInSidebar,
       name,
       visibleColumns,
       columnOrder,
@@ -963,14 +1001,9 @@ export function ErpGrid({
       if (!response.ok || !payload?.view) {
         throw new Error(payload?.error ?? "Pogled nije snimljen.");
       }
-      setViews((current) => {
-        const next = [
-          ...current.filter((item) => item.name !== view.name),
-          payload.view!,
-        ];
-        writeViews(module.slug, next);
-        return next;
-      });
+      setViews(current => [...current.filter(item => item.id !== payload.view!.id), payload.view!]);
+      window.history.replaceState(null, "", savedGridViewHref(module.slug, { ...payload.view!, id: payload.view!.id! }));
+      router.refresh();
       setSaveViewName("");
       setShowSaveViewForm(false);
       setCommandMessage({ ok: true, text: `Pogled „${view.name}” je snimljen u bazu.` });
@@ -1004,44 +1037,41 @@ export function ErpGrid({
     }
     setViews((current) => {
       const next = current.filter((item) => item.id !== view.id);
-      writeViews(module.slug, next);
       return next;
     });
+    if (view.id === selectedViewId) {
+      const params = new URLSearchParams(routeSearch);
+      params.delete("savedView");
+      if (params.get("view") === view.id) params.delete("view");
+      window.history.replaceState(null, "", `${pagePath}${params.size ? `?${params}` : ""}`);
+    }
+    router.refresh();
     setPendingDeleteViewId(null);
     setCommandMessage({ ok: true, text: `Pogled „${view.name}” je obrisan.` });
   };
 
   const applyView = (view: SavedView) => {
-    const visible = view.visibleColumns.filter((key) => knownColumnKeys.has(key));
-    updateVisibleColumns(visible.length ? visible : defaultColumns);
-    if (view.columnOrder?.length) {
-      const savedOrder = view.columnOrder.filter((key) => knownColumnKeys.has(key));
-      const completeOrder = [
-        ...savedOrder,
-        ...module.columns
-          .map((column) => column.key)
-          .filter((key) => !savedOrder.includes(key)),
-      ];
-      setColumnOrder(completeOrder);
-      writeColumnOrder(module.slug, completeOrder);
-    }
-    setColumnWidths(view.columnWidths ?? {});
-    updateFilters(
-      view.filters
-        .filter((filter) => knownColumnKeys.has(filter.columnKey))
-        .map((filter) => ({
-          ...filter,
-          operator: filter.operator ?? "contains",
-        })),
-    );
-    updateSorting(
-      (view.sorting ?? []).filter((sort) => knownColumnKeys.has(sort.columnKey)),
-    );
-    updateQuery(view.query);
-    setSearchColumn(view.searchColumn ?? "");
-    setContext((current) => ({ ...current, ...(view.context ?? {}) }));
-    setTableSettingsOpen(false);
+    if (view.id === selectedViewId) window.dispatchEvent(new CustomEvent("spc:open-saved-view", { detail: view.id }));
+    else if (view.id) router.push(savedGridViewHref(module.slug, { ...view, id: view.id }));
   };
+
+  async function changeView(view: SavedView, changes: { name?: string; showInSidebar?: boolean; move?: "up" | "down" }) {
+    setSavingView(true);
+    try {
+      const response = await fetch("/api/admin/saved-views", {
+        method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: view.id, ...changes }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "Pogled nije izmenjen.");
+      setViews(payload.views);
+      setEditingView(null);
+      setCommandMessage({ ok: true, text: "Podešavanja pogleda su sačuvana." });
+      router.refresh();
+    } catch (error) {
+      setCommandMessage({ ok: false, text: error instanceof Error ? error.message : "Pogled nije izmenjen." });
+    } finally { setSavingView(false); }
+  }
+
 
   const commitCell = async (row: ErpRow, column: ErpColumn, value: ErpValue) => {
     if (!isEditMode || !canEditColumn(column.key)) return;
@@ -1178,6 +1208,14 @@ export function ErpGrid({
     a.download = `${module.slug}.xlsx`;
     a.click();
   };
+
+  if (selectedViewId && (!navigationReady || viewLoadError)) return (
+    <div role={viewLoadError ? "alert" : "status"} className="rounded-xl border border-border bg-surface p-6">
+      <p>{viewLoadError ?? "Učitavanje sačuvanog pogleda…"}</p>
+      {viewLoadError ? <div className="mt-3 flex gap-3"><Button onClick={() => window.location.reload()}>Pokušaj ponovo</Button>
+        <Link href={pagePath}>Otvori osnovni prikaz</Link></div> : null}
+    </div>
+  );
 
   return (
     <div
@@ -1589,6 +1627,7 @@ export function ErpGrid({
         <div className="min-w-0 rounded-2xl border border-border/60 bg-surface shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
             <div className="space-y-1">
+              {activeView ? <p className="text-sm font-medium text-walnut">Pogled: {activeView.name}</p> : null}
               <p className="text-sm text-ink-500">
                 {loadingRows
                   ? "Učitavanje…"
@@ -1609,13 +1648,20 @@ export function ErpGrid({
                 type="button"
                 variant="outline"
                 onClick={() => {
+                  setSaveAsNew(true);
+                  setSaveViewName("");
+                  setShowInSidebar(true);
                   setShowSaveViewForm(true);
                   setCommandMessage(null);
                 }}
               >
                 <Save className="size-4" aria-hidden />
-                Snimi pogled
+                {activeView ? "Sačuvaj kao novi" : "Sačuvaj pogled"}
               </Button>
+              {activeView ? <Button type="button" variant="outline" onClick={() => {
+                setSaveAsNew(false); setSaveViewName(activeView.name);
+                setShowInSidebar(activeView.showInSidebar ?? false); setShowSaveViewForm(true);
+              }}>Sačuvaj izmene</Button> : null}
               <Button type="button" variant="outline" onClick={resetColumns}>
                 Reset kolona
               </Button>
@@ -1683,7 +1729,7 @@ export function ErpGrid({
                     </div>
                     {views.length ? (
                       <div className="space-y-2">
-                        {views.map((view) => (
+                        {views.map((view, viewIndex) => (
                           <div
                             key={view.id ?? view.name}
                             className="flex overflow-hidden rounded-lg border border-border/60"
@@ -1695,6 +1741,11 @@ export function ErpGrid({
                             >
                               {view.name}
                             </button>
+                            {view.id ? <>
+                              <button type="button" disabled={savingView || viewIndex === 0} className="px-1 disabled:opacity-30" aria-label={`Pomeri gore: ${view.name}`} onClick={() => void changeView(view, { move: "up" })}><ArrowUp className="size-4" /></button>
+                              <button type="button" disabled={savingView || viewIndex === views.length - 1} className="px-1 disabled:opacity-30" aria-label={`Pomeri dole: ${view.name}`} onClick={() => void changeView(view, { move: "down" })}><ArrowDown className="size-4" /></button>
+                              <button type="button" className="px-2" aria-label={`Uredi pogled: ${view.name}`} onClick={() => { setEditingView(view); setEditViewName(view.name); setCommandMessage(null); }}><Pencil className="size-4" /></button>
+                            </> : null}
                             {view.id ? (
                               <button
                                 type="button"
@@ -1746,37 +1797,26 @@ export function ErpGrid({
             </div>
           </div>
 
-          {showSaveViewForm ? (
-            <div
-              role="group"
-              aria-label="Novi sačuvani ERP pogled"
-              className="flex flex-wrap items-end gap-2 border-b border-border/60 bg-muted-bg/40 px-4 py-3"
-            >
-              <label className="min-w-64 flex-1 text-xs font-medium text-ink-600">
-                Naziv ERP pogleda
-                <Input
-                  autoFocus
-                  value={saveViewName}
-                  onChange={(event) => setSaveViewName(event.currentTarget.value)}
-                  className="mt-1 h-9 bg-surface"
-                />
-              </label>
-              <Button type="button" disabled={savingView} onClick={() => void saveView()}>
-                {savingView ? "Čuvanje…" : "Sačuvaj pogled"}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={savingView}
-                onClick={() => {
-                  setShowSaveViewForm(false);
-                  setSaveViewName("");
-                }}
-              >
-                Otkaži
-              </Button>
-            </div>
-          ) : null}
+          <Dialog open={showSaveViewForm} onOpenChange={setShowSaveViewForm}>
+            <DialogContent>
+              <DialogHeader><DialogTitle>{saveAsNew ? "Sačuvaj pogled" : "Sačuvaj izmene pogleda"}</DialogTitle>
+                <DialogDescription>Sačuvajte filtere, pretragu, sortiranje i raspored kolona za svoj nalog.</DialogDescription></DialogHeader>
+              <label className="text-sm">Naziv pogleda<Input autoFocus maxLength={80} value={saveViewName} onChange={event => setSaveViewName(event.target.value)} /></label>
+              <label className="flex items-center gap-2 text-sm"><Checkbox checked={showInSidebar} onCheckedChange={checked => setShowInSidebar(checked === true)} />Prikaži u levom meniju</label>
+              {commandMessage && !commandMessage.ok ? <p role="alert" className="text-sm text-danger">{commandMessage.text}</p> : null}
+              <DialogFooter><Button variant="outline" disabled={savingView} onClick={() => setShowSaveViewForm(false)}>Otkaži</Button>
+                <Button disabled={savingView || !saveViewName.trim()} onClick={() => void saveView()}>{savingView ? "Čuvanje…" : saveAsNew ? "Sačuvaj" : "Sačuvaj izmene"}</Button></DialogFooter>
+            </DialogContent>
+          </Dialog>
+          <Dialog open={Boolean(editingView)} onOpenChange={open => { if (!open) setEditingView(null); }}>
+            <DialogContent>
+              <DialogHeader><DialogTitle>Uredi pogled</DialogTitle><DialogDescription>Promenite naziv ili prikaz prečice. Sačuvani filteri ostaju isti.</DialogDescription></DialogHeader>
+              <label className="text-sm">Naziv pogleda<Input maxLength={80} value={editViewName} onChange={event => setEditViewName(event.target.value)} /></label>
+              <label className="flex items-center gap-2 text-sm"><Checkbox checked={editingView?.showInSidebar ?? false} onCheckedChange={checked => setEditingView(current => current ? { ...current, showInSidebar: checked === true } : null)} />Prikaži u levom meniju</label>
+              {commandMessage && !commandMessage.ok ? <p role="alert" className="text-sm text-danger">{commandMessage.text}</p> : null}
+              <DialogFooter><Button variant="outline" onClick={() => setEditingView(null)}>Otkaži</Button><Button disabled={savingView || !editViewName.trim()} onClick={() => editingView && void changeView(editingView, { name: editViewName, showInSidebar: editingView.showInSidebar })}>Sačuvaj</Button></DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           <div className="max-h-[calc(100vh-14rem)] overflow-auto">
             <table className="min-w-full text-sm">
