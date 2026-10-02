@@ -35,6 +35,78 @@ beforeEach(() => {
   tx.warehouse.findUnique.mockResolvedValue({ active: true, isDefault: true });
 });
 describe("new goods for an unresolved courier delivery", () => {
+  it("requires explicit confirmation when an accepted X Express shipment has no pickup scan", async () => {
+    tx.shipment.findUnique.mockResolvedValue({ ...source(), status: "CREATED", providerShipmentId: "accepted-request" });
+    await expect(queueOrderReshipment(input)).rejects.toThrow("Potvrdite da je X Express preuzeo robu");
+    expect(tx.orderReshipment.create).not.toHaveBeenCalled();
+    expect(tx.order.update).not.toHaveBeenCalled();
+    expect(adjust).not.toHaveBeenCalled();
+  });
+
+  it("returns an unscanned legacy shipment to picking without rewriting courier evidence or debiting twice", async () => {
+    const s = source();
+    const unscanned = { ...s, status: "CREATED", providerShipmentId: "accepted-request", order: { ...s.order, status: "KREIRANO" } };
+    tx.shipment.findUnique.mockResolvedValue(unscanned);
+    // Old picking records, including SPC-2026-000779, have no direct shipmentId.
+    tx.pickupBatchLine.findMany.mockResolvedValue([{ orderItemId: "i", shipmentId: null, quantity: 2, packedQuantity: 2, packageNo: 1 }]);
+    const confirmed = { ...input, confirmUnscannedPickup: true };
+    expect(await queueOrderReshipment(confirmed)).toMatchObject({ id: "r", batchId: null });
+    expect(tx.orderStatusEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      actorId: "admin", status: "U_PRIPREMI", note: expect.stringContaining("Operater je potvrdio da je X Express preuzeo robu bez evidentiranog preuzimanja"),
+    }) });
+    expect(tx.orderReshipment.create.mock.calls[0][0].data).toMatchObject({ sourceShipmentId: "s", reason: input.reason, actorId: "admin", codAmount: 4500 });
+    expect(tx.pickupBatchLine.findMany.mock.calls[0][0].where).toMatchObject({ lineGroupKey: "order:o:X_EXPRESS", batch: { provider: "X_EXPRESS", status: { in: ["BOOKED", "PICKED_UP"] } } });
+    expect(unscanned.status).toBe("CREATED");
+    expect(tx.pickupBatchLine.createMany).not.toHaveBeenCalled();
+
+    tx.shipment.findUnique.mockResolvedValue({ ...unscanned, reshipment: { id: "r", batchId: null } });
+    await queueOrderReshipment(confirmed);
+    expect(tx.orderReshipment.create).toHaveBeenCalledTimes(1);
+    expect(adjust).toHaveBeenCalledTimes(1);
+
+    tx.orderReshipment.findMany.mockResolvedValue([{ id: "r", orderId: "o", sourceShipment: unscanned, order: unscanned.order, items: [{ orderItemId: "i", quantity: 2 }] }]);
+    expect(await loadPendingOrderReshipments(tx as unknown as Prisma.TransactionClient, { id: "selected", number: "PRE-selected" }, "X_EXPRESS", "admin"))
+      .toEqual({ reshipmentCount: 1, reshipmentLineCount: 1 });
+    expect(tx.pickupBatchLine.createMany.mock.calls[0][0].data).toEqual([expect.objectContaining({ batchId: "selected", lineGroupKey: "reshipment:r", quantity: 2 })]);
+    expect(adjust).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { status: "CREATED", providerShipmentId: null },
+    { status: "CREATED", providerShipmentId: " " },
+    { status: "CREATED", providerShipmentId: "accepted", trackingNo: " " },
+    { status: "CREATED", providerShipmentId: "accepted", provider: "MYGLS" },
+    { status: "FAILED", providerShipmentId: "accepted", providerStatusCode: "LOCAL_ANNOUNCEMENT_FAILED" },
+    { status: "DELIVERED", providerShipmentId: "accepted" },
+  ])("manual confirmation cannot bypass an ineligible shipment: %j", async fields => {
+    tx.shipment.findUnique.mockResolvedValue({ ...source(), ...fields });
+    await expect(queueOrderReshipment({ ...input, confirmUnscannedPickup: true })).rejects.toThrow("Ponovno slanje");
+    expect(tx.orderReshipment.create).not.toHaveBeenCalled();
+    expect(adjust).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { status: "OTKAZANO" },
+    { status: "ISPORUCENO" },
+    { cancelledAt: new Date() },
+    { stockRestoredAt: new Date() },
+    { paymentRefunds: [{ id: "refund" }] },
+  ])("manual confirmation retains order safeguards: %j", async fields => {
+    const s = source();
+    tx.shipment.findUnique.mockResolvedValue({ ...s, status: "CREATED", providerShipmentId: "accepted", order: { ...s.order, ...fields } });
+    await expect(queueOrderReshipment({ ...input, confirmUnscannedPickup: true })).rejects.toThrow("ne može ponovo");
+    expect(tx.orderReshipment.create).not.toHaveBeenCalled();
+    expect(adjust).not.toHaveBeenCalled();
+  });
+
+  it("requires the original booked picking evidence even for confirmed unscanned pickup", async () => {
+    tx.shipment.findUnique.mockResolvedValue({ ...source(), status: "CREATED", providerShipmentId: "accepted" });
+    tx.pickupBatchLine.findMany.mockResolvedValue([]);
+    await expect(queueOrderReshipment({ ...input, confirmUnscannedPickup: true })).rejects.toThrow("picking evidenciju");
+    expect(tx.orderReshipment.create).not.toHaveBeenCalled();
+    expect(adjust).not.toHaveBeenCalled();
+  });
+
   it("queues new goods and the old shipment return after X Express incomplete delivery", async () => {
     tx.shipment.findUnique.mockResolvedValue({ ...source(), status: "FAILED", providerStatusCode: "DLV_FAIL_INCOMPLETE" });
     expect(await queueOrderReshipment(input)).toMatchObject({ id: "r", batchId: null });
