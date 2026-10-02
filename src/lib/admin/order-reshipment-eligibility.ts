@@ -15,11 +15,14 @@ export function canReshipCourierDelivery(shipment: ReshipmentSource) {
     && Boolean(shipment.providerStatusCode?.trim().toUpperCase().startsWith("DLV_FAIL_"));
 }
 
-/** An accepted announcement can lack a pickup scan. Requires an explicit operator
- * confirmation; a locally prepared or failed announcement is not sufficient. */
+/** An accepted announcement can lack a pickup scan or later be marked DELETED.
+ * Physical handover requires explicit operator confirmation in both cases;
+ * a locally prepared or failed announcement is not sufficient. */
 export function canConfirmUnscannedXExpressPickup(shipment: ReshipmentSource) {
+  const missingPickupScan = shipment.status === "CREATED"
+    || (shipment.status === "FAILED" && shipment.providerStatusCode?.trim().toUpperCase() === "DELETED");
   return shipment.provider === "X_EXPRESS"
-    && shipment.status === "CREATED"
+    && missingPickupScan
     && Boolean(shipment.providerShipmentId?.trim())
     && Boolean(shipment.trackingNo?.trim());
 }

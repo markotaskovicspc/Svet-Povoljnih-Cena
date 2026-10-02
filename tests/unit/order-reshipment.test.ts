@@ -35,17 +35,23 @@ beforeEach(() => {
   tx.warehouse.findUnique.mockResolvedValue({ active: true, isDefault: true });
 });
 describe("new goods for an unresolved courier delivery", () => {
-  it("requires explicit confirmation when an accepted X Express shipment has no pickup scan", async () => {
-    tx.shipment.findUnique.mockResolvedValue({ ...source(), status: "CREATED", providerShipmentId: "accepted-request" });
+  it.each([
+    { status: "CREATED", providerStatusCode: "CREATED" },
+    { status: "FAILED", providerStatusCode: "DELETED" },
+  ])("requires explicit confirmation when an accepted X Express shipment has no pickup scan: %j", async state => {
+    tx.shipment.findUnique.mockResolvedValue({ ...source(), ...state, providerShipmentId: "accepted-request" });
     await expect(queueOrderReshipment(input)).rejects.toThrow("Potvrdite da je X Express preuzeo robu");
     expect(tx.orderReshipment.create).not.toHaveBeenCalled();
     expect(tx.order.update).not.toHaveBeenCalled();
     expect(adjust).not.toHaveBeenCalled();
   });
 
-  it("returns an unscanned legacy shipment to picking without rewriting courier evidence or debiting twice", async () => {
+  it.each([
+    { status: "CREATED", providerStatusCode: "CREATED" },
+    { status: "FAILED", providerStatusCode: "DELETED" },
+  ])("returns an unscanned legacy shipment to picking without rewriting courier evidence or debiting twice: %j", async state => {
     const s = source();
-    const unscanned = { ...s, status: "CREATED", providerShipmentId: "accepted-request", order: { ...s.order, status: "KREIRANO" } };
+    const unscanned = { ...s, ...state, providerShipmentId: "accepted-request", order: { ...s.order, status: "KREIRANO" } };
     tx.shipment.findUnique.mockResolvedValue(unscanned);
     // Old picking records, including SPC-2026-000779, have no direct shipmentId.
     tx.pickupBatchLine.findMany.mockResolvedValue([{ orderItemId: "i", shipmentId: null, quantity: 2, packedQuantity: 2, packageNo: 1 }]);
@@ -56,7 +62,7 @@ describe("new goods for an unresolved courier delivery", () => {
     }) });
     expect(tx.orderReshipment.create.mock.calls[0][0].data).toMatchObject({ sourceShipmentId: "s", reason: input.reason, actorId: "admin", codAmount: 4500 });
     expect(tx.pickupBatchLine.findMany.mock.calls[0][0].where).toMatchObject({ lineGroupKey: "order:o:X_EXPRESS", batch: { provider: "X_EXPRESS", status: { in: ["BOOKED", "PICKED_UP"] } } });
-    expect(unscanned.status).toBe("CREATED");
+    expect(unscanned.status).toBe(state.status);
     expect(tx.pickupBatchLine.createMany).not.toHaveBeenCalled();
 
     tx.shipment.findUnique.mockResolvedValue({ ...unscanned, reshipment: { id: "r", batchId: null } });
@@ -73,6 +79,9 @@ describe("new goods for an unresolved courier delivery", () => {
 
   it.each([
     { status: "CREATED", providerShipmentId: null },
+    { status: "FAILED", providerStatusCode: "DELETED", providerShipmentId: null },
+    { status: "FAILED", providerStatusCode: "DELETED", providerShipmentId: "accepted", trackingNo: null },
+    { status: "FAILED", providerStatusCode: "PCK_FAIL_INCOMPLETE", providerShipmentId: "accepted" },
     { status: "CREATED", providerShipmentId: " " },
     { status: "CREATED", providerShipmentId: "accepted", trackingNo: " " },
     { status: "CREATED", providerShipmentId: "accepted", provider: "MYGLS" },

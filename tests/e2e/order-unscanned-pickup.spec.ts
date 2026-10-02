@@ -4,7 +4,7 @@ import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { requireSafeE2EDatabase } from "../helpers/e2e-database-safety";
 
-test("unscanned X Express pickup can be explicitly returned to picking once", async ({ page, context }) => {
+test("unscanned X Express pickup marked DELETED can be explicitly returned to picking once", async ({ page, context }) => {
   test.skip(process.env.E2E_ORDER_RESHIPMENT !== "1", "Run with the isolated client-feedback acceptance runner.");
   test.setTimeout(240_000);
   const raw = requireSafeE2EDatabase();
@@ -35,8 +35,8 @@ test("unscanned X Express pickup can be explicitly returned to picking once", as
     }, include: { items: true } });
     const assignment = { assignment: { orderItemIds: [order.items[0].id], codAmount: 1998 } };
     const shipment = await db.shipment.create({ data: {
-      orderId: order.id, provider: "X_EXPRESS", service: "COURIER_SMALL", purpose: "ORDER_DELIVERY", status: "CREATED",
-      trackingNo: `QA-${run}`, providerShipmentId: `accepted-${run}`, providerStatusCode: "CREATED", rawCreateResponse: assignment,
+      orderId: order.id, provider: "X_EXPRESS", service: "COURIER_SMALL", purpose: "ORDER_DELIVERY", status: "FAILED",
+      trackingNo: `QA-${run}`, providerShipmentId: `accepted-${run}`, providerStatusCode: "DELETED", rawCreateResponse: assignment,
     } });
     const sourceBatch = await db.pickupBatch.create({ data: {
       number: `PRE-${run}-OLD`, provider: "X_EXPRESS", courier: "COURIER_SMALL", status: "BOOKED", labelsCreatedAt: new Date(),
@@ -73,7 +73,7 @@ test("unscanned X Express pickup can be explicitly returned to picking once", as
     expect(await db.pickupBatch.count()).toBe(2);
     expect(await db.stockMovement.count({ where: { orderId: order.id, kind: "ADJUSTMENT" } })).toBe(1);
     expect((await db.product.findUniqueOrThrow({ where: { id: product.id } })).stock).toBe(9);
-    expect(await db.shipment.findUniqueOrThrow({ where: { id: shipment.id } })).toMatchObject({ status: "CREATED", trackingNo: shipment.trackingNo, providerShipmentId: shipment.providerShipmentId, rawCreateResponse: assignment, shippedAt: null });
+    expect(await db.shipment.findUniqueOrThrow({ where: { id: shipment.id } })).toMatchObject({ status: "FAILED", providerStatusCode: "DELETED", trackingNo: shipment.trackingNo, providerShipmentId: shipment.providerShipmentId, rawCreateResponse: assignment, shippedAt: null });
     expect(await db.orderStatusEvent.findFirst({ where: { orderId: order.id, note: { contains: "Operater je potvrdio" } } })).toMatchObject({ actorId: admin.id, status: "U_PRIPREMI" });
 
     await page.goto(`/admin/erp/preuzimanja/${targetBatch.id}`);
