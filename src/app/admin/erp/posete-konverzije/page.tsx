@@ -224,6 +224,7 @@ export default async function AnalyticsConversionPage({
     <>
       <PageHeader
         title="Posete i konverzije"
+        actions={<Link href="/admin/erp/exit-intent" className="rounded-lg border border-border px-4 py-2 text-sm font-semibold">Exit-intent ponuda</Link>}
         description="Dnevni pregled poseta celom sajtu, detalji po stranicama i Excel izvoz za izabrani period."
         crumbs={[
           { href: "/admin", label: "Admin" },

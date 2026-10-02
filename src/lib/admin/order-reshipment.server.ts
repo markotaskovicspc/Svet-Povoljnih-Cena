@@ -1,6 +1,6 @@
 import { readPackedItems } from "@/lib/courier/parcel-contents";
 import "server-only";
-import { canReshipCourierDelivery } from "./order-reshipment-eligibility";
+import { canConfirmUnscannedXExpressPickup, canReshipCourierDelivery } from "./order-reshipment-eligibility";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { adjustInventory } from "@/lib/inventory";
@@ -12,7 +12,7 @@ import { isCashOnDeliveryPaymentMethod, assertFulfillmentPaymentReady } from "@/
 
 const transactionOptions = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 10_000, timeout: 30_000 } as const;
 
-export async function queueOrderReshipment(input: { orderId: string; shipmentId: string; reason: string; actorId: string }) {
+export async function queueOrderReshipment(input: { orderId: string; shipmentId: string; reason: string; actorId: string; confirmUnscannedPickup?: boolean }) {
   const reason = input.reason.trim();
   if (reason.length < 5 || reason.length > 500) throw new Error("Unesite razlog ponovnog slanja (5–500 znakova).");
   return db.$transaction(async (tx) => {
@@ -27,7 +27,11 @@ export async function queueOrderReshipment(input: { orderId: string; shipmentId:
     if (!source || source.orderId !== input.orderId || source.purpose !== "ORDER_DELIVERY") throw new Error("Pošiljka porudžbine nije pronađena.");
     if (source.reshipment) return source.reshipment;
     const order = source.order;
-    if (!canReshipCourierDelivery(source)) throw new Error("Ponovno slanje je dostupno za pošiljku koju je kurir već preuzeo, a nije isporučena kupcu.");
+    const unscannedPickup = canConfirmUnscannedXExpressPickup(source);
+    if (!canReshipCourierDelivery(source)) {
+      if (!unscannedPickup) throw new Error("Ponovno slanje je dostupno za pošiljku koju je kurir već preuzeo, a nije isporučena kupcu.");
+      if (input.confirmUnscannedPickup !== true) throw new Error("Potvrdite da je X Express preuzeo robu iako preuzimanje nije evidentirano.");
+    }
     if (order.cancelledAt || order.stockRestoredAt || ["OTKAZANO", "ISPORUCENO"].includes(order.status) || order.paymentRefunds.length) throw new Error("Otkazana, isporučena ili refundirana porudžbina ne može ponovo da se šalje.");
     if (source.provider !== "X_EXPRESS" && source.provider !== "MYGLS") throw new Error("Ponovno slanje podržava X Express i MyGLS.");
     assertFulfillmentPaymentReady({ purpose: "ORDER_DELIVERY", orderNumber: order.number, paymentMethod: order.paymentMethod, paymentStatuses: order.payments.map(p => p.status) });
@@ -64,7 +68,7 @@ export async function queueOrderReshipment(input: { orderId: string; shipmentId:
       // fiscalization must still debit the original sale exactly once.
       await adjustInventory(tx, { idempotencyKey: `reshipment-out:${retry.id}:${item.id}`, productId: item.productId!, warehouseId: item.warehouseId!, sku: item.sku, qtyDelta: -quantity, kind: "ADJUSTMENT", orderId: order.id, actorId: input.actorId, note: `Nova roba izdvojena za ponovno slanje ${order.number}; ${quantity} kom, stavka ${item.id}, stara pošiljka ${source.trackingNo ?? source.id}.` });
     }
-    await tx.orderStatusEvent.create({ data: { orderId: order.id, status: "U_PRIPREMI", actorId: input.actorId, note: `Nova roba je dostupna za učitavanje u picking. Stara pošiljka ${source.trackingNo ?? source.id} evidentirana je kao očekivani povrat, bez refundacije. Razlog: ${reason}` } });
+    await tx.orderStatusEvent.create({ data: { orderId: order.id, status: "U_PRIPREMI", actorId: input.actorId, note: `${unscannedPickup ? "Operater je potvrdio da je X Express preuzeo robu bez evidentiranog preuzimanja. " : ""}Nova roba je dostupna za učitavanje u picking. Stara pošiljka ${source.trackingNo ?? source.id} evidentirana je kao očekivani povrat, bez refundacije. Razlog: ${reason}` } });
     return retry;
   }, transactionOptions);
 }

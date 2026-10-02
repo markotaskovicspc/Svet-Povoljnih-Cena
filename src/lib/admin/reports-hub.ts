@@ -37,6 +37,12 @@ export const REPORT_DESTINATIONS: readonly ReportDestination[] = [
     allowed: ["ADS"],
   },
   {
+    href: "/admin/erp/exit-intent",
+    title: "Exit-intent ponuda",
+    description: "Prikazi ponude za prvu kupovinu, zadržavanje posetilaca i naknadne porudžbine.",
+    allowed: ["ADS"],
+  },
+  {
     href: "/admin/erp/neobjavljeni-artikli",
     title: "QA objave",
     description:
