@@ -5,6 +5,7 @@ import {parseComments} from './comments.mjs';
 import {completeOperatorQuote} from './operator-order.mjs';
 import {auditWindow,conversationAuditPage} from './conversation-audit.mjs';
 import {verifiedConversationLink} from './inbox-link.mjs';
+import {suppliedContact} from './staff-order.mjs';
 
 export async function createHttpServer({store,worker,emailWorker,commentWorker,accounts,adminToken,appSecret,verifyToken}) {
 const page=await readFile(new URL('../public/index.html',import.meta.url));
@@ -77,7 +78,7 @@ const server=http.createServer(async(req,res)=>{
       return reply(200,{diagnostic:state.staffOrderDiagnostic??null,checkFailure:state.staffOrderCheckFailure??null,attention:state.staffOrderAttention??null,
         historyIncomplete:state.staffHistoryIncomplete??false,
         attempt:state.staffOrder?{eventId:state.staffOrder.eventId,status:state.staffOrder.status,message:state.staffOrder.message}:null,
-        plan:plan?{lines:plan.lines,agreedTotal:plan.agreedTotal,unitPrices:plan.unitPrices,shipping:plan.shipping,emailPresent:Boolean(plan.guestEmail)}:null,
+        plan:plan?{lines:plan.lines,agreedTotal:plan.agreedTotal,unitPrices:plan.unitPrices,shipping:plan.shipping,emailPresent:Boolean(plan.guestEmail),contactEvidenceMatched:plan.shipping?suppliedContact({shipping:plan.shipping,guestEmail:plan.guestEmail},state.history??[],state.customer):false}:null,
         support:support.rows.map(r=>{const p=store.decode(r.payload);return {status:r.status,at:r.created_at,reason:p.reason,detail:p.transcript?.split('\n\n')[0]};})});
     }
     if(req.method==='POST'&&url.pathname==='/admin/action'){
