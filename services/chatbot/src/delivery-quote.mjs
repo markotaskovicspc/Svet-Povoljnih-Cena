@@ -7,7 +7,14 @@ function cityWasProvided(city,event,state){
  const words=text=>normalizePlace(text).match(/[a-z]+/g)?.map(w=>w.length>3?w.replace(/(?:om|em|a|u|i|e)$/,''):w)??[];
  const wanted=words(city);
  const sources=[event.text,state.customer?.shipping?.city,...(state.history??[]).filter(m=>m.role==='user').map(m=>m.content)];
- return wanted.length>0&&sources.some(source=>{const tokens=words(source);return tokens.some((_,i)=>wanted.every((w,j)=>tokens[i+j]===w));});
+ const contains=source=>{const tokens=words(source);return tokens.some((_,i)=>wanted.every((w,j)=>tokens[i+j]===w));};
+ if(!wanted.length)return false;
+ if(sources.some(contains))return true;
+ // A buyer can confirm the corrected town in the seller's immediately preceding
+ // question. An unconfirmed suggestion or an unrelated DA is not city evidence.
+ const history=[...(state.history??[])];
+ if(event.text&&history.at(-1)?.content!==event.text)history.push({role:'user',content:event.text});
+ return history.some((m,i)=>m.role==='user'&&/^(?:da|jeste|tacno|tako je|da tamo)[.!\s]*$/.test(normalizePlace(m.content))&&history[i-1]?.role==='assistant'&&/\?/.test(history[i-1].content)&&contains(history[i-1].content));
 }
 
 export const deliveryQuoteInstructions=`DOSTAVA PRE NARUČIVANJA: Na pitanje koliko je dostava koristi get_delivery_quote čim znaš tačne artikle, količine i mesto u Srbiji. Izvuci ih iz aktuelne prepiske/objave, ne iz stare završene porudžbine. Pitaj samo šta nedostaje; za sam obračun ne traži ime, telefon, ulicu, mejl ili pristanak na kupovinu. Ne pretpostavljaj količinu: ako kupac nije izabrao koliko želi, pitaj. KURIR je podrazumevan; KAMION samo kada kupac izričito traži. shipping je cena dostave cele navedene korpe, ne cena po komadu ili paketu. Navedi kratko na koju količinu/proizvod i mesto se odnosi. Nula znači besplatnu dostavu samo za upravo obračunatu korpu. Ne obećavaj rok, zalihe, cenu robe ili ukupan račun na osnovu ovog alata. Ne množi i ne prepravljaj poštarinu sam. Kad se artikli/količine/mesto ili loyalty status promene, ponovi obračun. pricingBasis=regular znači bez potvrđenog članstva; ne tvrdi da taj iznos već uključuje loyalty. Ne traži mejl samo radi dostave; konačna ponuda ponovo obračunava pogodnosti. Za nejasan artikal prvo katalog/razjašnjenje. Ako alat ne može da izračuna cenu (DELIVERY_PRICE_UNAVAILABLE), kratko reci da tačan iznos treba proveriti, ne izmišljaj cenu i ne koristi staru. To NIJE dokaz da dostava nije moguća: ne tvrdi da kurir ne dostavlja i ne nudi kamion samoinicijativno. Ovaj alat samo čita: ne priprema ponudu za DA i nikad ne kreira porudžbinu.`;

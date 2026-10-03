@@ -88,7 +88,7 @@ agreedTotal je poslednji DOGOVORENI konačni iznos sa dostavom, samo ako je izri
   products.push({...product,qty:line.qty});
  }
  onProgress('cart_check');
- const selection=await cartCheckFn({state,event:{...event,text:''},items:products,model});
+ const selection=await cartCheckFn({state,event:{...event,text:''},items:products,model,requireVisualPresentation:false});
  if(!selection.ok)return {ok:false,code:selection.code==='CART_EVIDENCE_INVALID'||selection.code==='CART_CHECK_UNAVAILABLE'?'STAFF_CART_CHECK_FAILED':undefined,message:selection.code==='CART_EVIDENCE_INVALID'||selection.code==='CART_CHECK_UNAVAILABLE'?'Porudžbina nije kreirana zbog greške provere prepiske. Ne morate ponavljati podatke kupca; ponovite /porudzbina.':'Porudžbina nije kreirana: potrebno je razjasniti izbor artikla, varijante ili količine u dogovoru. Dopunite samo nejasan podatak pa ponovite /porudzbina.'};
  onProgress('loyalty');
  let loyalty=input.guestEmail?activeLoyalty(state,input.guestEmail):null;

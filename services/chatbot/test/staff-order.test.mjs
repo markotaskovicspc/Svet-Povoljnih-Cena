@@ -7,6 +7,16 @@ import {productOffer} from '../src/product-media.mjs';
 const input={guestEmail:'buyer@example.com',shipping:{firstName:'Petar',lastName:'Petrović',phone:'0601234567',street:'Test',houseNumber:'12',city:'Kragujevac',postalCode:'34000'},lines:[{sku:'IRON',qty:1}],paymentMethod:'POUZECE_GOTOVINA',shippingMethod:'KURIR'};
 const event={id:'command-1',channel:'facebook',conversation:'page:buyer',echo:true,text:'/porudzbina',timestamp:Date.now()};
 const state=()=>({history:[{role:'user',content:'Želim jednu peglu IRON. Petar Petrović, 0601234567, Test 12, Kragujevac 34000, buyer@example.com, pouzećem.',timestamp:Date.now()-1000}],orders:[]});
+test('staff command checks the complete buyer agreement despite a later attachment',async()=>{
+ const context=state();context.visualContext={createdAt:Date.now(),images:[]};context.history.push({role:'user',content:'[Prilog kupca]',timestamp:Date.now()});
+ const r=await prepareStaffOrder({event,state:context,model:'test',extractFn:async()=>({input,reason:'',agreedTotal:null,priceEvidence:null,unitPrices:[],deliveryNotes:[]}),cartCheckFn:async args=>{
+  assert.equal(args.requireVisualPresentation,false);
+  assert.equal(args.state.history.length,2);
+  assert.match(args.state.history[0].content,/Želim jednu peglu/);
+  return {ok:true};
+ },spc:async p=>p.action==='search'?{ok:true,items:[{sku:'IRON',name:'Pegla',price:1000,available:true}]}:{ok:true,totals:{total:1400}}});
+ assert.equal(r.ok,true);
+});
 test('full slash address and separate literal delivery notes survive without customer email',async()=>{
  const shipping={...input.shipping,city:'Kruševac',houseNumber:'40/63'};
  const context={orders:[],history:[{role:'user',content:'Želim jednu peglu IRON. Петар Петровић, 0601234567, Тест 40/63, Крушевац 34000.'},{role:'assistant',content:'Možemo da potvrdimo termin isporuke u utorak'},{role:'user',content:'Onda može. Ulaz C.'}]};
