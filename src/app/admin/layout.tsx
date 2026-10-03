@@ -66,15 +66,11 @@ export default async function AdminLayout({
       ? [{ ...view, title: definition.title, allowed }]
       : [];
   });
-  const nav = withSavedViewLinks(
-    applyAdminNavPreferences(
-      availableNav,
-      adminNavPreferencesFromColumns(navigationView?.columns),
-    ),
-    gridViews,
+  const availableNavWithViews = withSavedViewLinks(availableNav, gridViews);
+  const nav = applyAdminNavPreferences(
+    availableNavWithViews,
+    adminNavPreferencesFromColumns(navigationView?.columns),
   );
-  // Saved shortcuts have their own controls; this dialog customizes standard pages.
-  const availableNavWithViews = availableNav;
 
   async function doSignOut() {
     "use server";

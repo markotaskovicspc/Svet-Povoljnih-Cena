@@ -160,9 +160,7 @@ function AdminNavCustomizer({
     group.items.map((item) => ({ ...item, group: group.label })),
   );
   const visibleHrefs = nav.flatMap((group) =>
-    group.items
-      .filter((item) => !item.href.includes("savedView="))
-      .map((item) => item.href),
+    group.items.map((item) => item.href),
   );
   const initialOrder = Array.from(
     new Set([...visibleHrefs, ...availableItems.map((item) => item.href)]),
@@ -234,6 +232,8 @@ function AdminNavCustomizer({
         size="icon-sm"
         aria-label="Prilagodi levi meni"
         onClick={() => {
+          setOrder(initialOrder);
+          setVisible(new Set(visibleHrefs));
           setMessage(null);
           setOpen(true);
         }}
@@ -245,7 +245,8 @@ function AdminNavCustomizer({
           <DialogHeader>
             <DialogTitle>Prilagodi levi meni</DialogTitle>
             <DialogDescription>
-              Izaberite i poređajte prečice. Ovlašćenja se ovim ne menjaju.
+              Izaberite i poređajte stranice i sačuvane poglede. Ovlašćenja se
+              ovim ne menjaju.
             </DialogDescription>
           </DialogHeader>
           {message ? (

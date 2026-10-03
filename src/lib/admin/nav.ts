@@ -13,6 +13,7 @@ export type AdminNavItem = {
   description?: string;
   nested?: boolean;
   parentHref?: string;
+  savedViewId?: string;
 };
 
 export type AdminNavGroup = {
@@ -294,25 +295,54 @@ export function applyAdminNavPreferences(
   );
   if (byHref.has("/admin")) visible.add("/admin");
 
+  // Existing menus predate saved shortcuts, and newly pinned views must appear
+  // without requiring another menu save. Keep their default placement until
+  // the user explicitly includes them in the menu's ordering.
+  const configured = new Set(preferences.order);
+  const newViews = allowedItems.filter(
+    (item) => item.savedViewId && !configured.has(item.href),
+  );
+  const newViewHrefs = new Set(newViews.map((item) => item.href));
+
   const orderedHrefs = Array.from(
     new Set([
       "/admin",
       ...preferences.order,
       ...allowedItems.map((item) => item.href),
     ]),
-  ).filter((href) => visible.has(href) && byHref.has(href));
+  ).filter(
+    (href) => visible.has(href) && byHref.has(href) && !newViewHrefs.has(href),
+  );
+  const items = orderedHrefs.flatMap((href) => {
+    const item = byHref.get(href)!;
+    const children = newViews.filter((view) => view.parentHref === href);
+    children.forEach((view) => newViewHrefs.delete(view.href));
+    return [
+      // A manually positioned shortcut is independent of its original parent,
+      // so collapsing that page cannot hide a shortcut moved elsewhere.
+      item.savedViewId
+        ? { ...item, nested: false, parentHref: undefined }
+        : item,
+      ...children,
+    ];
+  });
+  items.push(
+    ...newViews
+      .filter((view) => newViewHrefs.has(view.href))
+      .map((view) => ({ ...view, nested: false, parentHref: undefined })),
+  );
 
-  return orderedHrefs.length
+  return items.length
     ? [
         {
           label: "Moj meni",
-          items: orderedHrefs.map((href) => byHref.get(href)!),
+          items,
         },
       ]
     : nav;
 }
 
-/** Views already filtered by ownership, module existence and role by the layout. */
+/** Views already filtered by ownership, module existence and role by the caller. */
 export function withSavedViewLinks(
   nav: AdminNavGroup[],
   views: Array<{
@@ -345,6 +375,7 @@ export function withSavedViewLinks(
           allowed: view.allowed,
           nested: true,
           parentHref: item.href,
+          savedViewId: view.id,
         })),
       ];
     }),
@@ -356,6 +387,7 @@ export function withSavedViewLinks(
         href: savedGridViewHref(view.module, view),
         label: `${view.name} · ${view.title}`,
         allowed: view.allowed,
+        savedViewId: view.id,
       })),
     });
   return result;

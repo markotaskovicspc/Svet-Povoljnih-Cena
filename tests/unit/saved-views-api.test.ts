@@ -19,7 +19,7 @@ vi.mock("@/lib/admin", () => ({
 vi.mock("@/lib/admin/erp", () => ({
   getErpModuleDefinition: (slug: string) =>
     ["artikli", "prodajni-nalozi"].includes(slug)
-      ? { columns: [{ key: "name" }], contextFilters: [] }
+      ? { title: slug, columns: [{ key: "name" }], contextFilters: [] }
       : undefined,
 }));
 vi.mock("@/lib/db", () => {
@@ -63,6 +63,50 @@ beforeEach(() => {
   mocks.findFirstOrThrow.mockResolvedValue(row);
 });
 describe("saved view ownership and mutations", () => {
+  it("saves canonical grid shortcuts with their page filters in the menu", async () => {
+    mocks.findMany.mockResolvedValue([
+      {
+        ...row,
+        columns: { ...row.columns, routeContext: { channel: "WEB" } },
+      },
+    ]);
+    const href = "/admin/erp/prodajni-nalozi?channel=WEB&savedView=view-a";
+    const response = await POST(
+      request("POST", {
+        module: "admin-navigation",
+        name: "Levi meni",
+        isDefault: true,
+        visibleColumns: [
+          "/admin", href, "/admin/erp/prodajni-nalozi?savedView=foreign",
+        ],
+        columnOrder: [href, "/admin"],
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(mocks.findMany.mock.calls[0][0].where.adminUserId).toBe("admin-a");
+    expect(mocks.upsert.mock.calls[0][0].create.columns).toMatchObject({
+      visibleColumns: ["/admin", href],
+      columnOrder: [href, "/admin"],
+    });
+  });
+
+  it("does not allow pinned shortcuts outside the current role", async () => {
+    mocks.admin.role = "CONTENT";
+    const href = "/admin/erp/prodajni-nalozi?savedView=view-a";
+    await POST(
+      request("POST", {
+        module: "admin-navigation",
+        name: "Levi meni",
+        visibleColumns: ["/admin", href],
+        columnOrder: [href, "/admin"],
+      }),
+    );
+    expect(mocks.upsert.mock.calls[0][0].create.columns).toMatchObject({
+      visibleColumns: ["/admin"],
+      columnOrder: ["/admin"],
+    });
+  });
+
   it("lists only the signed-in administrator's views", async () => {
     const response = await GET(
       new Request(

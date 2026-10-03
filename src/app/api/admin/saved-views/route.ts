@@ -7,7 +7,11 @@ import {
   DASHBOARD_CONTEXT_KEYS,
   isDashboardContextEntry,
 } from "@/lib/admin/dashboard-context";
-import { allowedNavFor, articleSavedViewHref } from "@/lib/admin/nav";
+import {
+  allowedNavFor,
+  articleSavedViewHref,
+  withSavedViewLinks,
+} from "@/lib/admin/nav";
 
 import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
 import {
@@ -196,22 +200,35 @@ export async function POST(request: Request) {
       );
   }
 
-  const articleSavedViewHrefs =
+  const navigationViews =
     moduleSlug === ADMIN_NAVIGATION_MODULE
-      ? (
-          await db.adminSavedView.findMany({
-            where: { adminUserId: admin.id, module: "artikli" },
-            select: { id: true },
-          })
-        ).map((view) => articleSavedViewHref(view.id))
+      ? await db.adminSavedView.findMany({
+          where: {
+            adminUserId: admin.id,
+            module: { notIn: [ADMIN_NAVIGATION_MODULE, "dashboard"] },
+          },
+          select: { id: true, name: true, module: true, columns: true },
+        })
       : [];
+  const allowedNavigationViews = navigationViews.flatMap((view) => {
+    const viewDefinition = getErpModuleDefinition(view.module);
+    const allowed = allowedRolesForErpModule(view.module);
+    return viewDefinition &&
+      !viewDefinition.redirectHref &&
+      isAuthorized(admin.role, allowed)
+      ? [{ ...view, title: viewDefinition.title, allowed }]
+      : [];
+  });
   const knownColumns = new Set(
     moduleSlug === ADMIN_NAVIGATION_MODULE
       ? [
-          ...allowedNavFor(admin.role).flatMap((group) =>
-            group.items.map((item) => item.href),
-          ),
-          ...articleSavedViewHrefs,
+          ...withSavedViewLinks(
+            allowedNavFor(admin.role),
+            allowedNavigationViews,
+          ).flatMap((group) => group.items.map((item) => item.href)),
+          ...allowedNavigationViews
+            .filter((view) => view.module === "artikli")
+            .map((view) => articleSavedViewHref(view.id)),
         ]
       : (definition?.columns.map((column) => column.key) ?? []),
   );
