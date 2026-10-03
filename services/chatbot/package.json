@@ -14,8 +14,10 @@
   "dependencies": {
     "@openai/agents": "0.18.0",
     "imapflow": "2.0.7",
+    "mailauth": "7.1.0",
     "mailparser": "3.9.28",
     "nodemailer": "10.0.10",
+    "pdfjs-dist": "6.2.108",
     "pg": "^8.20.0",
     "zod": "^4.4.1"
   },

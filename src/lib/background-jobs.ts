@@ -2,6 +2,7 @@ import "server-only";
 
 import { Prisma, type ShipmentStatus } from "@prisma/client";
 import { z } from "zod";
+import {bankEntrySchema} from '@/lib/payments/bank-statements';
 import { db } from "@/lib/db";
 import { BackgroundJobDeferredError } from "@/lib/background-job-deferral";
 import { rabaluxCourierAvailableAt } from "@/lib/rabalux/dispatch-policy";
@@ -12,6 +13,10 @@ import {
 } from "@/lib/channel-availability.server";
 
 const schemas = {
+  BANK_TRANSFER_RECONCILE: bankEntrySchema,
+  BANK_PAYMENT_EMAIL: bankEntrySchema.extend({orderId:z.string().min(1)}),
+  BANK_PAYMENT_REVIEW_EMAIL: bankEntrySchema.extend({reason:z.string().min(1).max(100)}),
+  BANK_STATEMENT_REVIEW_EMAIL:z.object({sourceHash:z.string().regex(/^[a-f0-9]{64}$/),reason:z.string().regex(/^BANK_[A-Z_]{1,80}$/)}),
   CHECKOUT_POST_COMMIT: z.object({
     orderId: z.string().min(1), accessToken: z.string().min(20),
     customerReplyDraftOnly: z.boolean().optional(),
@@ -129,6 +134,10 @@ const schemas = {
 export type BackgroundJobKind = keyof typeof schemas;
 
 const HIGH_PRIORITY_BACKGROUND_JOB_KINDS: BackgroundJobKind[] = [
+  'BANK_TRANSFER_RECONCILE',
+  'BANK_PAYMENT_EMAIL',
+  'BANK_PAYMENT_REVIEW_EMAIL',
+  'BANK_STATEMENT_REVIEW_EMAIL',
   "CHECKOUT_POST_COMMIT",
   "PASSWORD_RESET_EMAIL",
   "GUEST_RECLAMATION_LINK_EMAIL",
@@ -813,6 +822,26 @@ async function dispatchJob(job: JobRow) {
       const result = await sendIpsPaymentConfirmation({ order: loaded.order, to: loaded.recipient });
       if (!result.ok) throw new Error(result.error);
       return;
+    }
+    case 'BANK_TRANSFER_RECONCILE': {
+      const {reconcileBankEntry}=await import('@/lib/payments/bank-statements.server');
+      const jobs=await reconcileBankEntry(schemas.BANK_TRANSFER_RECONCILE.parse(payload));
+      for(const id of jobs)await processBackgroundJob(id);return;
+    }
+    case 'BANK_PAYMENT_EMAIL': {
+      const {sendBankPaymentConfirmation}=await import('@/lib/email/bank-payment');
+      const result=await sendBankPaymentConfirmation(schemas.BANK_PAYMENT_EMAIL.parse(payload));
+      if(!result.ok)throw new Error(result.error);return;
+    }
+    case 'BANK_PAYMENT_REVIEW_EMAIL': {
+      const {sendBankPaymentReview}=await import('@/lib/email/bank-payment');
+      const result=await sendBankPaymentReview(schemas.BANK_PAYMENT_REVIEW_EMAIL.parse(payload));
+      if(!result.ok)throw new Error(result.error);return;
+    }
+    case 'BANK_STATEMENT_REVIEW_EMAIL': {
+      const {sendBankStatementReview}=await import('@/lib/email/bank-payment');
+      const result=await sendBankStatementReview(schemas.BANK_STATEMENT_REVIEW_EMAIL.parse(payload));
+      if(!result.ok)throw new Error(result.error);return;
     }
     case "RETURN_FISCAL_REFUND": {
       const { refundReceivedOrder } = await import("@/lib/fiscal/returned-order-refund");
