@@ -88,7 +88,7 @@ export class EmailDraftWorker {
             const pdfs=(parsed.attachments??[]).filter(a=>/\.pdf$/i.test(a.filename??'')&&a.content?.subarray(0,5).toString()==='%PDF-');
             payload={bankStatements:[]};status='bank_pending';reason=null;
             try{if(!await verifyBankMail(fetched.source,parsed,this.env))throw Error('BANK_SENDER_NOT_VERIFIED');if(!pdfs.length||pdfs.length>5)throw Error('BANK_ATTACHMENTS_INVALID');for(const pdf of pdfs)payload.bankStatements.push(await parseErsteStatement(pdf.content));}
-            catch(e){payload={bankStatements:[],bankError:/^BANK_[A-Z_]+$/.test(e.message)?e.message:'BANK_PARSE_FAILED',sourceHash:hash(fetched.source)};}
+            catch(e){if(e.message==='BANK_VERIFICATION_UNAVAILABLE')throw e;payload={bankStatements:[],bankError:/^BANK_[A-Z_]+$/.test(e.message)?e.message:'BANK_PARSE_FAILED',sourceHash:hash(fetched.source)};}
           }
         }
       }

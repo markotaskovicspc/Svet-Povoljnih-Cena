@@ -65,6 +65,7 @@ export async function verifyBankMail(source,mail,env,verify=dkimVerify){
   if(!isBankMail(mail,env))return false;
   const domain=mail.from.value[0].address.toLowerCase().split('@')[1];
   const result=await verify(source,{rejectRsaSha1:true});
+  if(result.results.some(r=>r.status?.result==='temperror'))throw Error('BANK_VERIFICATION_UNAVAILABLE');
   // Verify the actual signature, never trust a customer-supplied Authentication-Results header.
   return result.results.some(r=>r.status?.result==='pass'&&r.signingDomain?.toLowerCase()===domain&&!r.canonBodyLengthLimited&&!r.status.testing);
 }

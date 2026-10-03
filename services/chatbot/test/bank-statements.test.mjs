@@ -32,4 +32,5 @@ test('exact bank sender plus verified aligned full-body DKIM is required',async(
  for(const entry of [{signingDomain:'evil.example',status:{result:'pass'}},{signingDomain:'bank.example',status:{result:'fail'}},{signingDomain:'bank.example',status:{result:'pass'},canonBodyLengthLimited:true}])assert.equal(await verifyBankMail(Buffer.from('x'),mail,env,async()=>({results:[entry]})),false);
  assert.equal(await verifyBankMail(Buffer.from('x'),mail,env,async()=>({results:[{signingDomain:'bank.example',status:{result:'pass'}}]})),true);
  assert.equal(await verifyBankMail(Buffer.from('From: statements@bank.example\r\nAuthentication-Results: fake; dkim=pass\r\n\r\nforged'),mail,env),false);
+ await assert.rejects(()=>verifyBankMail(Buffer.from('x'),mail,env,async()=>({results:[{status:{result:'temperror'}}]})),/BANK_VERIFICATION_UNAVAILABLE/);
 });
