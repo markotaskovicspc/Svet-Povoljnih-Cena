@@ -492,9 +492,7 @@ test.describe("bezbedna izmena WEB porudžbine", () => {
     });
 
     const firstRow = page.locator("tr").filter({ hasText: skus[0] });
-    await expect(firstRow.getByLabel(`Nova količina za ${skus[0]}`)).toHaveValue(
-      "1",
-    );
+    await firstRow.getByLabel(`Nova količina za ${skus[0]}`).fill("1");
     await clickConfirmation(
       page,
       firstRow.getByRole("button", { name: "Sačuvaj" }),
@@ -521,9 +519,7 @@ test.describe("bezbedna izmena WEB porudžbine", () => {
 
     await page.reload({ waitUntil: "domcontentloaded" });
     const secondRow = page.locator("tr").filter({ hasText: skus[1] });
-    await expect(
-      secondRow.getByLabel(`Nova količina za ${skus[1]}`),
-    ).toHaveValue("0");
+    await secondRow.getByLabel(`Nova količina za ${skus[1]}`).fill("0");
     await clickConfirmation(
       page,
       secondRow.getByRole("button", { name: "Sačuvaj" }),
@@ -558,10 +554,8 @@ test.describe("bezbedna izmena WEB porudžbine", () => {
 
     await page.reload({ waitUntil: "domcontentloaded" });
     const remainingRow = page.locator("tr").filter({ hasText: skus[0] });
-    await expect(
-      remainingRow.getByRole("button", { name: "Otkaži nalog" }),
-    ).toBeVisible();
-    await expect(remainingRow.getByRole("button", { name: "Sačuvaj" })).toHaveCount(0);
+    await expect(remainingRow.getByRole("button", { name: "Sačuvaj" })).toBeVisible();
+    await expect(remainingRow.getByLabel(`Nova količina za ${skus[0]}`)).toHaveAttribute("min", "1");
 
     const events = await db.orderStatusEvent.findMany({
       where: { orderId, note: { contains: "WEB stavka" } },

@@ -1,3 +1,4 @@
+import { assertReturnNotLost } from "./return-resolution.server";
 import "server-only";
 
 import { db } from "@/lib/db";
@@ -11,7 +12,7 @@ import { lockOrderReturn } from "@/lib/fiscal/return-lock";
 // reclamation or a separately created RECLAMATION_RETURN shipment.
 const returnedOrdersWhere = {
   OR: [
-    { status: "VRACENO" },
+    { status: "VRACENO", shipments: { none: { reshipment: { isNot: null } } } },
     { shipments: { some: { purpose: "ORDER_DELIVERY", status: "RETURNED", reshipment: null } } },
   ],
 } satisfies Prisma.OrderWhereInput;
@@ -25,6 +26,7 @@ export async function listReturnedOrders() {
       select: {
         id: true,
         number: true,
+        updatedAt: true,
         paymentRefunds: { select: { status: true, error: true } },
         items: {
           select: {
@@ -86,6 +88,7 @@ export async function receiveReturnedOrderUnit(args: {
     const existing = await tx.stockMovement.findUnique({ where: { idempotencyKey: key } });
     let movement = existing;
     if (!movement) {
+      await assertReturnNotLost(tx, `order:${args.orderId}`);
       const balance = await returnedStockBalance(tx, item.id);
       const qtyDelta = Math.max(0, Math.max(balance.received + 1, balance.refunded) - balance.posted);
       if (!qtyDelta && balance.movements.some(row => row.qty > 0 && row.warehouseId !== warehouse.id)) {

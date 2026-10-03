@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const { tx, adjust } = vi.hoisted(() => ({ adjust: vi.fn(), tx: {
+  returnResolution: { findUnique: vi.fn() },
   $queryRaw: vi.fn(), shipment: { findUnique: vi.fn() }, order: { update: vi.fn() },
   pickupBatch: { findMany: vi.fn(), findFirst: vi.fn(), findUniqueOrThrow: vi.fn(), create: vi.fn() },
   pickupBatchLine: { findMany: vi.fn(), createMany: vi.fn() },
@@ -187,7 +188,7 @@ describe("new goods for an unresolved courier delivery", () => {
   });
 });
 describe("physical return of the old goods", () => {
-  beforeEach(() => tx.orderReshipmentItem.findUniqueOrThrow.mockResolvedValue({ id: "ri", quantity: 2, receivedQty: 0, productId: "p", sku: "SKU", reshipment: { orderId: "o", order: { number: "WEB-1", status: "U_PRIPREMI" }, sourceShipment: { trackingNo: "OLD" } } }));
+  beforeEach(() => tx.orderReshipmentItem.findUniqueOrThrow.mockResolvedValue({ id: "ri", reshipmentId: "r", quantity: 2, receivedQty: 0, productId: "p", sku: "SKU", reshipment: { orderId: "o", order: { number: "WEB-1", status: "U_PRIPREMI" }, sourceShipment: { trackingNo: "OLD" } } }));
   const receipt = { itemId: "ri", unitNo: 1, warehouseId: "w", actorId: "admin" };
   it("receives one inspected unit without a fiscal return or changing the active order", async () => {
     await receiveReshipmentReturn(receipt);
@@ -201,6 +202,11 @@ describe("physical return of the old goods", () => {
     await receiveReshipmentReturn(receipt);
     expect(adjust).not.toHaveBeenCalled();
     expect(tx.orderReshipmentItem.update).not.toHaveBeenCalled();
+  });
+  it("blocks stock receipt after a lost closure", async () => {
+    tx.returnResolution.findUnique.mockResolvedValue({ key: "reshipment:r" });
+    await expect(receiveReshipmentReturn(receipt)).rejects.toThrow("izgubljen");
+    expect(adjust).not.toHaveBeenCalled();
   });
   it("requires an explicit receiving warehouse", async () => {
     await expect(receiveReshipmentReturn({ ...receipt, warehouseId: "" })).rejects.toThrow("magacin");

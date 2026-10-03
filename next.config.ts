@@ -117,6 +117,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   distDir,
+  typescript: { tsconfigPath: "tsconfig.build.json" },
   poweredByHeader: false,
   allowedDevOrigins: ["127.0.0.1", ...(process.env.AR_PREVIEW_HOST ? [process.env.AR_PREVIEW_HOST] : [])],
   // resvg selects a platform-specific native binding at runtime. Keep it out

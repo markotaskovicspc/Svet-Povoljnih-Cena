@@ -3,7 +3,9 @@ const m = vi.hoisted(() => ({
   transaction: vi.fn(), query: vi.fn(), order: vi.fn(), warehouse: vi.fn(),
   find: vi.fn(), movements: vi.fn(), create: vi.fn(), fiscal: vi.fn(), adjust: vi.fn(), enqueue: vi.fn(), updateJob: vi.fn(), findJob: vi.fn(),
 }));
+const lost = vi.fn();
 const tx = {
+  returnResolution: { findUnique: lost },
   $queryRaw: m.query, order: { findFirst: m.order }, warehouse: { findFirst: m.warehouse },
   stockMovement: { findUnique: m.find, findMany: m.movements, create: m.create },
   fiscalDocumentLine: { aggregate: m.fiscal }, backgroundJob: { updateMany: m.updateJob, findUnique: m.findJob },
@@ -16,6 +18,7 @@ import { receiveReturnedOrderUnit } from "@/lib/admin/returned-orders.server";
 const input = { orderId: "order", orderItemId: "item", unitNo: 1, warehouseId: "warehouse", actorId: "admin" };
 beforeEach(() => {
   vi.clearAllMocks();
+  lost.mockResolvedValue(null);
   m.transaction.mockImplementation(run => run(tx));
   m.query.mockResolvedValue([{ locked: true }]);
   m.order.mockResolvedValue({ number: "SPC-1", items: [{ id: "item", productId: "product", sku: "sku", qty: 3 }] });
@@ -30,6 +33,19 @@ beforeEach(() => {
 });
 
 describe("physical returned package receipt", () => {
+  it("blocks a new receipt for a lost return", async () => {
+    lost.mockResolvedValue({ key: "order:order" });
+    await expect(receiveReturnedOrderUnit(input)).rejects.toThrow("izgubljen");
+    expect(m.adjust).not.toHaveBeenCalled();
+    expect(m.enqueue).not.toHaveBeenCalled();
+  });
+  it("allows refund retries for goods received before the rest was lost", async () => {
+    lost.mockResolvedValue({ key: "order:order" });
+    m.find.mockResolvedValue({ id: "receipt", qty: 1 });
+    await receiveReturnedOrderUnit(input);
+    expect(m.adjust).not.toHaveBeenCalled();
+    expect(m.enqueue).toHaveBeenCalled();
+  });
   it("does not mutate stock while another refund holds the order lock", async () => {
     m.query.mockResolvedValue([{ locked: false }]);
     await expect(receiveReturnedOrderUnit(input)).rejects.toThrow("već obrađuje");
