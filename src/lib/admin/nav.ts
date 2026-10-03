@@ -1,4 +1,9 @@
 import { AdminRoleName } from "@prisma/client";
+import {
+  compareSavedViews,
+  savedGridViewHref,
+  savedViewMetadata,
+} from "./saved-views";
 
 export type AdminNavItem = {
   href: string;
@@ -7,6 +12,7 @@ export type AdminNavItem = {
   allowed: readonly AdminRoleName[];
   description?: string;
   nested?: boolean;
+  parentHref?: string;
 };
 
 export type AdminNavGroup = {
@@ -28,23 +34,33 @@ const ALL: AdminRoleName[] = ["CONTENT", "OPS", "ADS"];
 export const adminNav: AdminNavGroup[] = [
   {
     label: "Pregled",
-    items: [
-      { href: "/admin", label: "Kontrolna tabla", allowed: ALL },
-    ],
+    items: [{ href: "/admin", label: "Kontrolna tabla", allowed: ALL }],
   },
   {
     label: "Sadržaj",
     items: [
       { href: "/admin/pocetna", label: "Početna", allowed: C },
-      { href: "/admin/mobilna-pretraga", label: "Mobilna pretraga", allowed: C },
+      {
+        href: "/admin/mobilna-pretraga",
+        label: "Mobilna pretraga",
+        allowed: C,
+      },
       { href: "/admin/sadrzaj", label: "Stranice", allowed: C },
       { href: "/admin/baneri", label: "Baneri", allowed: C },
       { href: "/admin/promo-traka", label: "Promo traka", allowed: C },
       { href: "/admin/tabovi", label: "Desktop navigacija", allowed: C },
       { href: "/admin/kategorije", label: "Kategorije", allowed: C },
       { href: "/admin/piktogrami", label: "Piktogrami", allowed: C },
-      { href: "/admin/erp/landing-strane", label: "Landing strane", allowed: C },
-      { href: "/admin/erp/mobilni-tabovi", label: "Mobilni prečaci", allowed: C },
+      {
+        href: "/admin/erp/landing-strane",
+        label: "Landing strane",
+        allowed: C,
+      },
+      {
+        href: "/admin/erp/mobilni-tabovi",
+        label: "Mobilni prečaci",
+        allowed: C,
+      },
     ],
   },
   {
@@ -52,15 +68,35 @@ export const adminNav: AdminNavGroup[] = [
     items: [
       { href: "/admin/erp", label: "ERP radni prostor", allowed: ALL },
       { href: "/admin/erp/artikli", label: "Artikli", allowed: CO },
-      { href: "/admin/erp/dobavljaci", label: "Dobavljači i nabavka", allowed: O },
+      {
+        href: "/admin/erp/dobavljaci",
+        label: "Dobavljači i nabavka",
+        allowed: O,
+      },
       { href: "/admin/erp/akcije", label: "Cene i promocije", allowed: C },
       { href: "/admin/erp/magacini", label: "Magacini", allowed: O },
-      { href: "/admin/erp/stanje-po-magacinima", label: "DC lager", allowed: O },
-      { href: "/admin/erp/prodajni-nalozi", label: "Prodajni nalozi", allowed: O },
+      {
+        href: "/admin/erp/stanje-po-magacinima",
+        label: "DC lager",
+        allowed: O,
+      },
+      {
+        href: "/admin/erp/prodajni-nalozi",
+        label: "Prodajni nalozi",
+        allowed: O,
+      },
       { href: "/admin/erp/otpremnice", label: "Otpremnice", allowed: O },
       { href: "/admin/erp/kupci", label: "Kupci i partneri", allowed: O },
-      { href: "/admin/erp/ananas", label: "Ananas — računi i promet", allowed: O },
-      { href: "/admin/fiskalizacija", label: "Fiskalizacija i refundacija", allowed: O },
+      {
+        href: "/admin/erp/ananas",
+        label: "Ananas — računi i promet",
+        allowed: O,
+      },
+      {
+        href: "/admin/fiskalizacija",
+        label: "Fiskalizacija i refundacija",
+        allowed: O,
+      },
       {
         href: "/admin/erp/racunovodstveni-registri",
         label: "Knjigovodstveni izveštaji",
@@ -81,10 +117,26 @@ export const adminNav: AdminNavGroup[] = [
     label: "Operativa",
     items: [
       { href: "/admin/checkouti", label: "Checkouti", allowed: O },
-      { href: "/admin/erp/picking-pozicije", label: "Picking pozicije", allowed: O },
-      { href: "/admin/erp/preuzimanja", label: "Picking i preuzimanja", allowed: O },
-      { href: "/admin/erp/reklamacije-dnevnik", label: "Reklamacije", allowed: O },
-      { href: "/admin/erp/preuzimanja/povrati", label: "Povrati za prijem", allowed: O },
+      {
+        href: "/admin/erp/picking-pozicije",
+        label: "Picking pozicije",
+        allowed: O,
+      },
+      {
+        href: "/admin/erp/preuzimanja",
+        label: "Picking i preuzimanja",
+        allowed: O,
+      },
+      {
+        href: "/admin/erp/reklamacije-dnevnik",
+        label: "Reklamacije",
+        allowed: O,
+      },
+      {
+        href: "/admin/erp/preuzimanja/povrati",
+        label: "Povrati za prijem",
+        allowed: O,
+      },
       { href: "/admin/xml-import", label: "XML feed", allowed: O },
       { href: "/admin/sistem", label: "Monitoring i backup", allowed: O },
     ],
@@ -102,16 +154,30 @@ export const adminNav: AdminNavGroup[] = [
     items: [
       { href: "/admin/preporuke", label: "Preporuke kupovine", allowed: C },
       { href: "/admin/izvestaji", label: "Izveštajni centar", allowed: ALL },
-      { href: "/admin/erp/posete-konverzije", label: "Posete i konverzije", allowed: A },
-      { href: "/admin/erp/exit-intent", label: "Exit-intent ponuda", allowed: A },
+      {
+        href: "/admin/erp/posete-konverzije",
+        label: "Posete i konverzije",
+        allowed: A,
+      },
+      {
+        href: "/admin/erp/exit-intent",
+        label: "Exit-intent ponuda",
+        allowed: A,
+      },
       { href: "/admin/erp/3d-ar", label: "3D i AR", allowed: A },
-      { href: "/admin/erp/neobjavljeni-artikli", label: "QA objave", allowed: C },
+      {
+        href: "/admin/erp/neobjavljeni-artikli",
+        label: "QA objave",
+        allowed: C,
+      },
       { href: "/admin/audit-log", label: "Audit log", allowed: [] },
     ],
   },
 ];
 
-export function allowedNavFor(role: AdminRoleName | null | undefined): AdminNavGroup[] {
+export function allowedNavFor(
+  role: AdminRoleName | null | undefined,
+): AdminNavGroup[] {
   if (!role) return [];
   return adminNav
     .map((g) => ({
@@ -199,7 +265,10 @@ export function adminNavPreferencesFromColumns(
     return null;
   }
   const value = columns as Record<string, unknown>;
-  if (!Array.isArray(value.visibleColumns) || !Array.isArray(value.columnOrder)) {
+  if (
+    !Array.isArray(value.visibleColumns) ||
+    !Array.isArray(value.columnOrder)
+  ) {
     return null;
   }
   const strings = (items: unknown[]) =>
@@ -241,4 +310,53 @@ export function applyAdminNavPreferences(
         },
       ]
     : nav;
+}
+
+/** Views already filtered by ownership, module existence and role by the layout. */
+export function withSavedViewLinks(
+  nav: AdminNavGroup[],
+  views: Array<{
+    id: string;
+    name: string;
+    module: string;
+    columns: unknown;
+    title: string;
+    allowed: readonly AdminRoleName[];
+  }>,
+): AdminNavGroup[] {
+  const links = views
+    .map((view) => ({
+      ...view,
+      ...savedViewMetadata(view.module, view.columns),
+    }))
+    .filter((view) => view.showInSidebar)
+    .sort(compareSavedViews);
+  const remaining = new Set(links);
+  const result = nav.map((group) => ({
+    ...group,
+    items: group.items.flatMap((item) => {
+      const children = links.filter((view) => view.pagePath === item.href);
+      children.forEach((view) => remaining.delete(view));
+      return [
+        item,
+        ...children.map((view) => ({
+          href: savedGridViewHref(view.module, view),
+          label: view.name,
+          allowed: view.allowed,
+          nested: true,
+          parentHref: item.href,
+        })),
+      ];
+    }),
+  }));
+  if (remaining.size)
+    result.push({
+      label: "Moji pogledi",
+      items: Array.from(remaining).map((view) => ({
+        href: savedGridViewHref(view.module, view),
+        label: `${view.name} · ${view.title}`,
+        allowed: view.allowed,
+      })),
+    });
+  return result;
 }

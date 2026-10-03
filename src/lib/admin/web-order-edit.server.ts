@@ -322,8 +322,8 @@ export async function updateWebOrderItemQuantity(input: {
   if (!input.orderId || !input.orderItemId) {
     throw new Error("Nedostaje porudžbina ili stavka.");
   }
-  if (!Number.isInteger(input.newQty) || input.newQty < 0) {
-    throw new Error("Nova količina mora biti nenegativan ceo broj.");
+  if (!Number.isInteger(input.newQty) || input.newQty < 0 || input.newQty > 999) {
+    throw new Error("Nova količina mora biti ceo broj od 0 do 999.");
   }
 
   const preview = await db.order.findUnique({
@@ -346,8 +346,13 @@ export async function updateWebOrderItemQuantity(input: {
   if (!preview) throw new Error("Porudžbina ne postoji.");
   const previewItem = preview.items.find((item) => item.id === input.orderItemId);
   if (!previewItem) throw new Error("Stavka ne pripada porudžbini.");
-  if (input.newQty >= previewItem.qty) {
-    throw new Error("Količina može samo da se smanji.");
+  if (input.newQty === previewItem.qty) throw new Error("Unesite drugačiju količinu.");
+  if (input.newQty > previewItem.qty) {
+    return addWebOrderItem({
+      orderId: input.orderId, sku: previewItem.sku,
+      qty: input.newQty - previewItem.qty, actorId: input.actorId,
+      expectedItem: { id: previewItem.id, qty: previewItem.qty, updatedAt: preview.updatedAt },
+    });
   }
   const previewLines = preview.items.flatMap((item) => {
     const qty = item.id === input.orderItemId ? input.newQty : item.qty;
@@ -784,6 +789,7 @@ export async function addWebOrderItem(input: {
   sku: string;
   qty: number;
   actorId: string;
+  expectedItem?: { id: string; qty: number; updatedAt: Date };
 }) {
   const requestedSku = input.sku.trim();
   if (!input.orderId || !requestedSku) {
@@ -825,6 +831,12 @@ export async function addWebOrderItem(input: {
     );
   }
   const previewTarget = previewMatches[0] ?? null;
+  if (input.expectedItem && (
+    previewTarget?.id !== input.expectedItem.id ||
+    previewTarget.qty !== input.expectedItem.qty ||
+    preview.updatedAt.getTime() !== input.expectedItem.updatedAt.getTime()
+  )) throw new Error("Porudžbina je u međuvremenu promenjena. Osvežite stranicu i pokušajte ponovo.");
+  if ((previewTarget?.qty ?? 0) + input.qty > 999) throw new Error("Količina može biti najviše 999.");
   const previewLines = preview.items.map((item) => ({
     sku: item.sku,
     qty: item.qty + (item.id === previewTarget?.id ? input.qty : 0),

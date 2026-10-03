@@ -163,15 +163,28 @@ export function derivePhysicalPackages(
       const packedQuantity = Math.min(unitsPerBox, quantity - index * unitsPerBox);
       const multiple = packedQuantity > 1;
       const matchingCarton = item.product?.packQty === packedQuantity;
+      const measurements = {
+        weightKg: multiple ? (matchingCarton ? positiveNumber(item.product?.packGrossWeightKg) : null) : courierUnitWeightKg(item.product),
+        widthCm: positiveNumber(multiple ? item.product?.packWidthCm : item.product?.unitPackWidthCm),
+        depthCm: positiveNumber(multiple ? item.product?.packDepthCm : item.product?.unitPackDepthCm),
+        heightCm: positiveNumber(multiple ? item.product?.packHeightCm : item.product?.unitPackHeightCm),
+      };
+      const unitWeight = courierUnitWeightKg(item.product);
       packages.push({
         packedQuantity,
         packageNo: packages.length + 1,
         orderItemId: item.id,
         content: item.name,
-        weightKg: multiple ? (matchingCarton ? positiveNumber(item.product?.packGrossWeightKg) : null) : courierUnitWeightKg(item.product),
-        widthCm: positiveNumber(multiple ? item.product?.packWidthCm : item.product?.unitPackWidthCm),
-        depthCm: positiveNumber(multiple ? item.product?.packDepthCm : item.product?.unitPackDepthCm),
-        heightCm: positiveNumber(multiple ? item.product?.packHeightCm : item.product?.unitPackHeightCm),
+        ...measurements,
+        // Keep grouped articles visible in picking even before their outer box
+        // is measured. Unit measurements only guide the preliminary courier;
+        // they must never become the declared dimensions of a multi-unit box.
+        ...(multiple ? { routingMeasurements: {
+          weightKg: measurements.weightKg ?? (unitWeight == null ? null : unitWeight * packedQuantity),
+          widthCm: measurements.widthCm ?? positiveNumber(item.product?.unitPackWidthCm),
+          depthCm: measurements.depthCm ?? positiveNumber(item.product?.unitPackDepthCm),
+          heightCm: measurements.heightCm ?? positiveNumber(item.product?.unitPackHeightCm),
+        } } : {}),
       });
     }
   }

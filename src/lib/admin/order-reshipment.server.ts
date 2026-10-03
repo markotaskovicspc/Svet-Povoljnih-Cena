@@ -1,3 +1,4 @@
+import { assertReturnNotLost } from "./return-resolution.server";
 import { readPackedItems } from "@/lib/courier/parcel-contents";
 import "server-only";
 import { canConfirmUnscannedXExpressPickup, canReshipCourierDelivery } from "./order-reshipment-eligibility";
@@ -148,6 +149,8 @@ export async function receiveReshipmentReturn(input: { itemId: string; unitNo: n
   return db.$transaction(async tx => {
     await tx.$queryRaw`SELECT "id" FROM "OrderReshipmentItem" WHERE "id" = ${input.itemId} FOR UPDATE`;
     const item = await tx.orderReshipmentItem.findUniqueOrThrow({ where: { id: input.itemId }, include: { reshipment: { include: { order: true, sourceShipment: true } } } });
+    await lockOrderReturn(tx, item.reshipment.orderId);
+    await assertReturnNotLost(tx, `reshipment:${item.reshipmentId}`);
     if (!Number.isInteger(input.unitNo) || input.unitNo < 1 || input.unitNo > item.quantity) throw new Error("Neispravna jedinica povrata.");
     const key = `reshipment-return:${item.id}:${input.unitNo}`;
     if (await tx.stockMovement.findUnique({ where: { idempotencyKey: key } })) return;

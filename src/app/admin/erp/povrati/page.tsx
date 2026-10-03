@@ -1,10 +1,19 @@
-import { canReceiveReclamationShipment, myGlsReturnStatusLabel } from "@/lib/mygls/return-booking";
+import {
+  canReceiveReclamationShipment,
+  myGlsReturnStatusLabel,
+} from "@/lib/mygls/return-booking";
 import Link from "next/link";
+import type { ReactNode } from "react";
+import { markReturnLost } from "@/lib/admin/return-resolution.server";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { processBackgroundJob } from "@/lib/background-jobs";
 import { z } from "zod";
-import { requireAdminAction, withAdminState, type AdminActionState } from "@/lib/admin";
+import {
+  requireAdminAction,
+  withAdminState,
+  type AdminActionState,
+} from "@/lib/admin";
 import { receiveReclamationReturn } from "@/lib/admin/reclamation-fulfillment.server";
 import {
   listReturnedOrders,
@@ -49,9 +58,14 @@ async function receiveReturnAction(
       entity: "Reclamation",
     },
     async (actorId, formData: FormData) => {
-      const parsed = receiveSchema.safeParse(Object.fromEntries(formData.entries()));
+      const parsed = receiveSchema.safeParse(
+        Object.fromEntries(formData.entries()),
+      );
       if (!parsed.success) {
-        return { ok: false as const, error: "Izaberite povrat i magacin prijema." };
+        return {
+          ok: false as const,
+          error: "Izaberite povrat i magacin prijema.",
+        };
       }
       const result = await receiveReclamationReturn({
         ...parsed.data,
@@ -59,7 +73,9 @@ async function receiveReturnAction(
       });
       revalidatePath("/admin/erp/povrati");
       revalidatePath("/admin/erp/preuzimanja/povrati");
-      revalidatePath(`/admin/erp/reklamacije-dnevnik/${parsed.data.reclamationId}`);
+      revalidatePath(
+        `/admin/erp/reklamacije-dnevnik/${parsed.data.reclamationId}`,
+      );
       revalidatePath("/admin/erp/stanje-po-magacinima");
       return {
         ok: true as const,
@@ -91,13 +107,18 @@ async function receiveOrderUnitAction(
         Object.fromEntries(actionData.entries()),
       );
       if (!parsed.success) {
-        return { ok: false as const, error: "Izaberite vraćeni paket i magacin prijema." };
+        return {
+          ok: false as const,
+          error: "Izaberite vraćeni paket i magacin prijema.",
+        };
       }
       const result = await receiveReturnedOrderUnit({
         ...parsed.data,
         actorId,
       });
-      after(async () => { await processBackgroundJob(result.jobId); });
+      after(async () => {
+        await processBackgroundJob(result.jobId);
+      });
       revalidatePath("/admin/erp/preuzimanja/povrati");
       revalidatePath("/admin/erp/povrati");
       revalidatePath("/admin/erp/stanje-po-magacinima");
@@ -110,10 +131,30 @@ async function receiveOrderUnitAction(
   )(formData);
 }
 
-export default async function ReturnsPage() {
+export default async function ReturnsPage({
+  searchParams,
+}: { searchParams?: Promise<{ view?: string }> } = {}) {
   await requireAdminAction(["OPS"]);
-  const reshipments = await db.orderReshipment.findMany({ orderBy: { createdAt: "desc" }, take: 500, include: { items: true, order: { select: { number: true } }, sourceShipment: true, batch: true } });
-  const [returnedOrders, reclamations, warehouseCandidates, movements] = await Promise.all([
+  const view =
+    (await searchParams)?.view === "completed" ? "completed" : "active";
+  const [
+    reshipments,
+    returnedOrders,
+    reclamations,
+    warehouses,
+    movements,
+    resolutions,
+  ] = await Promise.all([
+    db.orderReshipment.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 500,
+      include: {
+        items: true,
+        order: { select: { number: true } },
+        sourceShipment: true,
+        batch: true,
+      },
+    }),
     listReturnedOrders(),
     db.reclamation.findMany({
       where: { shipments: { some: { purpose: "RECLAMATION_RETURN" } } },
@@ -122,7 +163,6 @@ export default async function ReturnsPage() {
       include: {
         order: { select: { number: true } },
         orderItem: { select: { name: true } },
-        warehouse: { select: { code: true, name: true } },
         shipments: {
           where: { purpose: "RECLAMATION_RETURN" },
           orderBy: { createdAt: "desc" },
@@ -132,8 +172,8 @@ export default async function ReturnsPage() {
     }),
     db.warehouse.findMany({
       where: { active: true },
-      orderBy: [{ code: "asc" }],
-      select: { id: true, code: true, name: true, active: true, isDefault: true },
+      orderBy: { code: "asc" },
+      select: { id: true, code: true, name: true },
     }),
     db.stockMovement.findMany({
       where: {
@@ -142,285 +182,598 @@ export default async function ReturnsPage() {
           { idempotencyKey: { startsWith: "order-return:" } },
         ],
       },
-      select: { id: true, idempotencyKey: true, warehouseId: true, createdAt: true, warehouse: { select: { code: true, name: true } } },
+      select: {
+        id: true,
+        idempotencyKey: true,
+        warehouseId: true,
+        createdAt: true,
+        warehouse: { select: { code: true, name: true } },
+      },
     }),
+    db.returnResolution.findMany(),
   ]);
-  const jobs = movements.length ? await db.backgroundJob.findMany({
-    where: { idempotencyKey: { in: movements.filter(row => row.idempotencyKey?.startsWith("order-return:")).map(row => `return-fiscal:${row.id}`) } },
-    select: { idempotencyKey: true, status: true, lastError: true },
-  }) : [];
-  const jobByReceipt = new Map(jobs.map(job => [job.idempotencyKey, job]));
-  const paymentJobs = returnedOrders.orders.length ? await db.backgroundJob.findMany({
-    where: { kind: "PAYMENT_REFUND", status: { not: "COMPLETED" }, OR: returnedOrders.orders.map(order => ({ payload: { path: ["orderId"], equals: order.id } })) },
-    select: { payload: true, lastError: true },
-  }) : [];
-  const warehouses = warehouseCandidates;
-  const receiptByReclamation = new Map(
-    movements
-      .filter((movement) => movement.idempotencyKey?.startsWith("reclamation-return:"))
-      .map((movement) => [
-        movement.idempotencyKey?.slice("reclamation-return:".length),
-        movement,
-      ]),
+  const receiptByKey = new Map(movements.map((m) => [m.idempotencyKey, m]));
+  const lostByKey = new Map(resolutions.map((r) => [r.key, r]));
+  const jobs = movements.length
+    ? await db.backgroundJob.findMany({
+        where: {
+          idempotencyKey: {
+            in: movements
+              .filter((m) => m.idempotencyKey?.startsWith("order-return:"))
+              .map((m) => `return-fiscal:${m.id}`),
+          },
+        },
+        select: { idempotencyKey: true, status: true, lastError: true },
+      })
+    : [];
+  const jobByReceipt = new Map(jobs.map((j) => [j.idempotencyKey, j]));
+  const paymentJobs = returnedOrders.orders.length
+    ? await db.backgroundJob.findMany({
+        where: {
+          kind: "PAYMENT_REFUND",
+          status: { not: "COMPLETED" },
+          OR: returnedOrders.orders.map((order) => ({
+            payload: { path: ["orderId"], equals: order.id },
+          })),
+        },
+        select: { payload: true, lastError: true },
+      })
+    : [];
+  const warehouseSelect = (
+    <Field label="Magacin prijema">
+      <select
+        name="warehouseId"
+        required
+        className="h-9 max-w-full rounded-lg border border-input bg-background px-2"
+        defaultValue=""
+      >
+        <option value="" disabled>
+          Izaberite magacin
+        </option>
+        {warehouses.map((w) => (
+          <option key={w.id} value={w.id}>
+            {w.code} · {w.name}
+          </option>
+        ))}
+      </select>
+    </Field>
   );
-  const orderReceiptByKey = new Map(
-    movements
-      .filter((movement) => movement.idempotencyKey?.startsWith("order-return:"))
-      .map((movement) => [movement.idempotencyKey, movement]),
-  );
-  const readyForReceipt = reclamations.filter((reclamation) =>
-    canReceiveReclamationShipment(reclamation.shipments[0]),
-  );
-  const posted = reclamations.filter((reclamation) => receiptByReclamation.has(reclamation.id));
-
+  type Row = {
+    key: string;
+    kind: string;
+    id: string;
+    orderId: string;
+    number: string;
+    type: string;
+    shipment: ReactNode;
+    details: ReactNode;
+    received: boolean;
+    date: number;
+  };
+  const rows: Row[] = [];
+  for (const retry of reshipments) {
+    const key = `reshipment:${retry.id}`;
+    const lost = lostByKey.has(key);
+    rows.push({
+      key,
+      kind: "reshipment",
+      id: retry.id,
+      orderId: retry.orderId,
+      number: retry.order.number,
+      type: "Ponovno slanje",
+      date: retry.createdAt?.getTime() ?? 0,
+      received: retry.items.every((item) => item.receivedQty >= item.quantity),
+      shipment: (
+        <>
+          {retry.sourceShipment.provider} ·{" "}
+          {retry.sourceShipment.trackingNo ?? retry.sourceShipmentId} ·{" "}
+          {retry.sourceShipment.status}
+        </>
+      ),
+      details: (
+        <>
+          <p className="text-sm text-ink-500">
+            Razlog: {retry.reason} · Nova roba:{" "}
+            {retry.batch ? (
+              <Link
+                className="underline"
+                href={`/admin/erp/preuzimanja/${retry.batchId}`}
+              >
+                {retry.batch.number}
+              </Link>
+            ) : (
+              "dostupna za učitavanje u picking"
+            )}
+          </p>
+          <p className="text-xs text-ink-500">
+            Prijem stare robe na lager, bez refundacije kupcu.
+          </p>
+          {retry.items.map((item) => (
+            <div key={item.id} className="rounded-lg bg-muted p-3 text-sm">
+              <p>
+                {item.sku} · {item.name} · Primljeno {item.receivedQty}/
+                {item.quantity} kom
+              </p>
+              {!lost && item.receivedQty < item.quantity ? (
+                <AdminActionForm
+                  action={receiveReshipmentReturnAction}
+                  refreshOnSuccess
+                  className="mt-2 flex flex-wrap items-end gap-3"
+                >
+                  <input type="hidden" name="itemId" value={item.id} />
+                  <input
+                    type="hidden"
+                    name="unitNo"
+                    value={item.receivedQty + 1}
+                  />
+                  {warehouseSelect}
+                  <SubmitButton
+                    size="sm"
+                    disabled={!warehouses.length}
+                    confirm="Potvrđujete da je 1 komad stare robe fizički primljen, pregledan i spreman za lager? Novac kupcu neće biti refundiran."
+                  >
+                    Primi 1 kom na lager
+                  </SubmitButton>
+                </AdminActionForm>
+              ) : null}
+            </div>
+          ))}
+        </>
+      ),
+    });
+  }
+  for (const order of returnedOrders.orders) {
+    const key = `order:${order.id}`;
+    const lost = lostByKey.has(key);
+    const received = order.items.every((item) =>
+      Array.from({ length: item.qty }, (_, index) =>
+        receiptByKey.has(
+          `order-return:${order.number}:${item.id}:${index + 1}`,
+        ),
+      ).every(Boolean),
+    );
+    rows.push({
+      key,
+      kind: "order",
+      id: order.id,
+      orderId: order.id,
+      number: order.number,
+      type: "Povrat porudžbine",
+      received,
+      date: order.updatedAt?.getTime() ?? 0,
+      shipment: order.shipments.length ? (
+        order.shipments.map((shipment) => (
+          <p key={shipment.id}>
+            {shipment.provider ?? "Kurir"} ·{" "}
+            {shipment.trackingNo ?? "Bez broja za praćenje"} · Vraćeno
+          </p>
+        ))
+      ) : (
+        <>Povrat evidentiran na porudžbini, bez kurirske potvrde.</>
+      ),
+      details: (
+        <>
+          <p className="text-xs text-ink-500">
+            Prijem pregledane robe vraća stanje i pokreće fiskalnu refundaciju.
+          </p>
+          {order.items.map((item) => (
+            <div
+              key={item.id}
+              className="space-y-2 rounded-lg bg-muted p-3 text-sm"
+            >
+              <p>
+                {item.sku} · {item.name} · {item.qty} kom
+              </p>
+              {Array.from({ length: item.qty }, (_, index) => {
+                const unitNo = index + 1;
+                const receipt = receiptByKey.get(
+                  `order-return:${order.number}:${item.id}:${unitNo}`,
+                );
+                const job = receipt
+                  ? jobByReceipt.get(`return-fiscal:${receipt.id}`)
+                  : null;
+                const receivedQty = Array.from({ length: item.qty }, (_, i) =>
+                  receiptByKey.has(
+                    `order-return:${order.number}:${item.id}:${i + 1}`,
+                  ),
+                ).filter(Boolean).length;
+                const fiscalDone =
+                  receivedQty > 0 &&
+                  (item.fiscalLines ?? []).reduce(
+                    (sum, line) => sum + line.refundedQty,
+                    0,
+                  ) >= receivedQty;
+                return receipt ? (
+                  <div
+                    key={unitNo}
+                    className="space-y-2 rounded-lg border border-border p-2"
+                  >
+                    <p className="text-xs text-success">
+                      Paket {unitNo}/{item.qty} primljen{" "}
+                      {formatDate(receipt.createdAt)} · {receipt.warehouse.code}
+                    </p>
+                    <p className="text-xs">
+                      {job?.status === "COMPLETED" || fiscalDone
+                        ? "Fiskalna refundacija obrađena."
+                        : job?.lastError || "Fiskalna refundacija čeka obradu."}
+                    </p>
+                    {job?.status !== "COMPLETED" && !fiscalDone ? (
+                      <AdminActionForm
+                        action={receiveOrderUnitAction}
+                        refreshOnSuccess
+                        className="flex flex-wrap items-end gap-2"
+                      >
+                        <input type="hidden" name="orderId" value={order.id} />
+                        <input
+                          type="hidden"
+                          name="orderItemId"
+                          value={item.id}
+                        />
+                        <input type="hidden" name="unitNo" value={unitNo} />
+                        <input
+                          type="hidden"
+                          name="warehouseId"
+                          value={receipt.warehouseId}
+                        />
+                        <Field label="Identifikacija kupca (ako nedostaje)">
+                          <input
+                            name="buyerId"
+                            maxLength={100}
+                            placeholder="10:PIB ili drugi važeći ID"
+                            className="h-9 rounded-lg border border-input px-2"
+                          />
+                        </Field>
+                        <SubmitButton size="sm">
+                          Dopuni / ponovi refundaciju
+                        </SubmitButton>
+                      </AdminActionForm>
+                    ) : null}
+                  </div>
+                ) : lost ? (
+                  <p key={unitNo} className="text-xs text-warning">
+                    Paket {unitNo}/{item.qty}: izgubljen, nije primljen na
+                    lager.
+                  </p>
+                ) : item.productId ? (
+                  <AdminActionForm
+                    key={unitNo}
+                    action={receiveOrderUnitAction}
+                    refreshOnSuccess
+                    className="flex flex-wrap items-end gap-2 rounded-lg border border-border p-2"
+                  >
+                    <input type="hidden" name="orderId" value={order.id} />
+                    <input type="hidden" name="orderItemId" value={item.id} />
+                    <input type="hidden" name="unitNo" value={unitNo} />
+                    <p className="w-full text-xs">
+                      Paket {unitNo}/{item.qty}
+                    </p>
+                    {warehouseSelect}
+                    <Field label="Identifikacija kupca (ako nije na računu)">
+                      <input
+                        name="buyerId"
+                        maxLength={100}
+                        placeholder="10:PIB ili drugi važeći ID"
+                        className="h-9 rounded-lg border border-input px-2"
+                      />
+                    </Field>
+                    <SubmitButton
+                      size="sm"
+                      disabled={!warehouses.length}
+                      confirm={`Potvrditi da je paket ${unitNo}/${item.qty} pregledan, vratiti jedan komad na stanje i pokrenuti fiskalnu refundaciju?`}
+                    >
+                      Primi paket
+                    </SubmitButton>
+                  </AdminActionForm>
+                ) : (
+                  <p key={unitNo} className="text-xs text-warning">
+                    Paket nema vezan artikal lagera.
+                  </p>
+                );
+              })}
+            </div>
+          ))}
+          {(order.paymentRefunds ?? [])
+            .filter((refund) => refund.status !== "COMPLETED")
+            .map((refund, index) => (
+              <p key={index} className="text-xs text-warning">
+                {refund.error || "Povraćaj novca čeka obradu."}
+              </p>
+            ))}
+          {paymentJobs
+            .filter(
+              (job) =>
+                job.payload &&
+                typeof job.payload === "object" &&
+                !Array.isArray(job.payload) &&
+                job.payload.orderId === order.id,
+            )
+            .map((job, index) => (
+              <p key={index} className="text-xs text-warning">
+                {job.lastError || "Povraćaj novca čeka proveru/obradu."}
+              </p>
+            ))}
+        </>
+      ),
+    });
+  }
+  for (const reclamation of reclamations) {
+    const key = `reclamation:${reclamation.id}`;
+    const shipment = reclamation.shipments[0];
+    const receipt = receiptByKey.get(`reclamation-return:${reclamation.id}`);
+    rows.push({
+      key,
+      kind: "reclamation",
+      id: reclamation.id,
+      orderId: reclamation.orderId,
+      number: reclamation.order.number,
+      type: "Reklamacioni povrat",
+      received: Boolean(receipt),
+      date: reclamation.createdAt?.getTime() ?? 0,
+      shipment: (
+        <>
+          {shipment?.provider ?? "Kurir"} ·{" "}
+          {shipment?.trackingNo ?? "Bez broja za praćenje"} ·{" "}
+          {shipment
+            ? (myGlsReturnStatusLabel(shipment) ?? shipment.status)
+            : "—"}
+        </>
+      ),
+      details: (
+        <>
+          <Link
+            className="text-sm underline"
+            href={`/admin/erp/reklamacije-dnevnik/${reclamation.id}`}
+          >
+            {reclamation.number}
+          </Link>
+          <p className="text-sm">
+            {reclamation.sku} · {reclamation.orderItem?.name ?? "—"} ·{" "}
+            {reclamation.quantity} kom
+          </p>
+          {receipt ? (
+            <p className="text-sm text-success">
+              Proknjiženo {formatDate(receipt.createdAt)} ·{" "}
+              {receipt.warehouse.code} · {receipt.warehouse.name}
+            </p>
+          ) : lostByKey.has(key) ? null : canReceiveReclamationShipment(
+              shipment,
+            ) ? (
+            <AdminActionForm
+              action={receiveReturnAction}
+              refreshOnSuccess
+              className="flex flex-wrap items-end gap-2"
+            >
+              <input
+                type="hidden"
+                name="reclamationId"
+                value={reclamation.id}
+              />
+              {warehouseSelect}
+              <SubmitButton
+                size="sm"
+                disabled={!warehouses.length}
+                confirm={`Magacioner je pregledao paket. Primiti ${reclamation.quantity} kom i proknjižiti u izabrani magacin?`}
+              >
+                Primi i proknjiži
+              </SubmitButton>
+            </AdminActionForm>
+          ) : (
+            <p className="text-xs text-ink-500">Čeka potvrdu kurira</p>
+          )}
+        </>
+      ),
+    });
+  }
+  const completed = (row: Row) => row.received || lostByKey.has(row.key);
+  const activeCount = rows.filter((row) => !completed(row)).length;
+  const visible = rows
+    .filter((row) => completed(row) === (view === "completed"))
+    .sort((a, b) => b.date - a.date || a.key.localeCompare(b.key));
   return (
     <>
       <PageHeader
         title="Povrati za prijem"
-        description="Poseban picking tok za pregled vraćenih paketa, izbor magacina i bezbedno knjiženje robe na stanje."
+        description="Svi povrati u jednom pregledu. Primljeni i izgubljeni povrati prelaze u završene."
         crumbs={[
           { href: "/admin", label: "Admin" },
-          { href: "/admin/erp", label: "ERP" },
           { href: "/admin/erp/preuzimanja", label: "Picking i preuzimanja" },
           { label: "Povrati za prijem" },
         ]}
         actions={
-          <div className="flex flex-wrap gap-2">
-            <Link
-              href="/admin/erp/preuzimanja"
-              className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted"
-            >
-              Odlazni picking
-            </Link>
-            <Link
-              href="/admin/erp/reklamacije-dnevnik"
-              className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted"
-            >
-              Reklamacije
-            </Link>
-          </div>
+          <Link href="/admin/erp/preuzimanja" className="text-sm underline">
+            Odlazni picking
+          </Link>
         }
       />
       <main className="space-y-6 px-4 py-6 md:px-8">
-        <Card>
-          <CardTitle description="Kupcu se šalje nova roba. Stara pošiljka ostaje ovde do fizičkog prijema i pregleda. Prijem vraća samo robu na lager, bez refundacije kupcu.">Povrati prethodnih pošiljki nakon ponovnog slanja</CardTitle>
-          <div className="space-y-4">
-            {reshipments.length === 0 ? <p className="text-sm text-ink-500">Nema očekivanih povrata po ponovnom slanju.</p> : null}
-            {reshipments.map(retry => <div key={retry.id} className="space-y-3 rounded-lg border border-border p-4">
-              <p><Link className="font-medium underline" href={`/admin/erp/prodajni-nalozi/${retry.orderId}`}>{retry.order.number}</Link> · Stara pošiljka: {retry.sourceShipment.provider} / {retry.sourceShipment.trackingNo ?? retry.sourceShipmentId} · {retry.sourceShipment.status}</p>
-              <p className="text-sm">Razlog: {retry.reason} · Nova roba: {retry.batch ? <Link className="underline" href={`/admin/erp/preuzimanja/${retry.batchId}`}>{retry.batch.number}</Link> : "dostupna za učitavanje u picking"}</p>
-              {retry.items.map(item => <div key={item.id} className="rounded-lg bg-muted p-3 text-sm">
-                <p>{item.sku} · {item.name} · Primljeno {item.receivedQty}/{item.quantity} kom</p>
-                {item.receivedQty < item.quantity ? <AdminActionForm action={receiveReshipmentReturnAction} refreshOnSuccess className="mt-2 flex flex-wrap items-end gap-3">
-                  <input type="hidden" name="itemId" value={item.id} />
-                  <input type="hidden" name="unitNo" value={item.receivedQty + 1} />
-                  <Field label="Magacin prijema"><select name="warehouseId" required className="h-9 rounded-lg border border-input px-2"><option value="">Izaberite magacin</option>{warehouses.map(w => <option key={w.id} value={w.id}>{w.code} · {w.name}</option>)}</select></Field>
-                  <SubmitButton size="sm" confirm="Potvrđujete da je 1 komad stare robe fizički primljen, pregledan i spreman za lager? Novac kupcu neće biti refundiran.">Primi 1 kom na lager</SubmitButton>
-                </AdminActionForm> : <p className="text-success">Povrat primljen.</p>}
-              </div>)}
-            </div>)}
-          </div>
-        </Card>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="Vraćene porudžbine" value={String(returnedOrders.total)} />
-          <StatCard label="Reklamacioni povrati" value={String(reclamations.length)} />
-          <StatCard label="Reklamacije za prijem" value={String(readyForReceipt.filter((row) => !receiptByReclamation.has(row.id)).length)} tone="warning" />
-          <StatCard label="Proknjižene reklamacije" value={String(posted.length)} tone="success" />
+        <div className="grid gap-4 sm:grid-cols-3">
+          <StatCard
+            label="Aktivni povrati"
+            value={String(activeCount)}
+            tone="warning"
+          />
+          <StatCard
+            label="Primljeni povrati"
+            value={String(rows.filter((row) => row.received).length)}
+            tone="success"
+          />
+          <StatCard
+            label="Izgubljene pošiljke"
+            value={String(rows.filter((row) => lostByKey.has(row.key)).length)}
+          />
         </div>
         <Card>
-          <CardTitle description="Porudžbine označene kao vraćene i redovne pošiljke koje je kurir vratio, uključujući povrate bez reklamacije. Status povrata nije potvrda prijema ili knjiženja na lager. Prikazane količine su iz porudžbine; stvarno vraćenu robu treba proveriti.">
-            Povrati porudžbina
+          <CardTitle description="Povrati porudžbina, reklamacija i prethodnih pošiljki nakon ponovnog slanja. Završeni prikaz zadržava evidenciju i obradu refundacije.">
+            Svi povrati
           </CardTitle>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[800px] text-sm">
-              <thead className="border-b border-border text-left text-xs uppercase tracking-wide text-ink-500">
-                <tr>
-                  <th className="px-3 py-3">Porudžbina</th>
-                  <th className="px-3 py-3">Artikli iz porudžbine / količina</th>
-                  <th className="px-3 py-3">Kurir / povratna pošiljka</th>
-                  <th className="px-3 py-3">Pregled</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/60">
-                {returnedOrders.orders.map((order) => (
-                  <tr key={order.id}>
-                    <td className="px-3 py-3 align-top">
-                      <Link href={`/admin/erp/prodajni-nalozi/${order.id}`} className="font-mono font-medium text-walnut hover:underline">
-                        {order.number}
-                      </Link>
-                      <p className="mt-1 text-xs text-ink-500">Evidentiran povrat</p>
-                    </td>
-                    <td className="space-y-2 px-3 py-3 align-top">
-                      {order.items.map((item) => (
-                        <div key={item.id}>
-                          <span className="font-mono">{item.sku}</span> · {item.qty} kom
-                          <p className="text-xs text-ink-500">{item.name}</p>
-                          <div className="mt-2 space-y-2">
-                            {Array.from({ length: item.qty }, (_, index) => {
-                              const unitNo = index + 1;
-                              const receipt = orderReceiptByKey.get(
-                                `order-return:${order.number}:${item.id}:${unitNo}`,
-                              );
-                              const job = receipt ? jobByReceipt.get(`return-fiscal:${receipt.id}`) : null;
-                              const receivedQty = [...orderReceiptByKey.keys()].filter(key => key?.startsWith(`order-return:${order.number}:${item.id}:`)).length;
-                              const fiscalDone = receivedQty > 0 && (item.fiscalLines ?? []).reduce((sum, line) => sum + line.refundedQty, 0) >= receivedQty;
-                              return receipt ? (
-                                <div key={unitNo} className="space-y-2 rounded-lg border border-border p-2">
-                                  <p className="text-xs text-success">Paket {unitNo}/{item.qty} primljen {formatDate(receipt.createdAt)} · {receipt.warehouse.code}</p>
-                                  <p className="text-xs">{(job?.status === "COMPLETED" || fiscalDone)
-                                    ? "Fiskalna refundacija obrađena."
-                                    : job?.lastError || "Fiskalna refundacija čeka obradu."}</p>
-                                  {(order.paymentRefunds ?? []).filter(refund => refund.status !== "COMPLETED").map((refund, index) => (
-                                    <p key={index} className="text-xs text-warning">{refund.error || "Povraćaj novca čeka obradu."}</p>
-                                  ))}
-                                  {paymentJobs.filter(job => job.payload && typeof job.payload === "object" && !Array.isArray(job.payload) && job.payload.orderId === order.id).map((job, index) => (
-                                    <p key={`payment-${index}`} className="text-xs text-warning">{job.lastError || "Povraćaj novca čeka proveru/obradu."}</p>
-                                  ))}
-                                  {job?.status !== "COMPLETED" && !fiscalDone && (
-                                    <AdminActionForm action={receiveOrderUnitAction} className="flex flex-wrap items-end gap-2">
-                                      <input type="hidden" name="orderId" value={order.id} />
-                                      <input type="hidden" name="orderItemId" value={item.id} />
-                                      <input type="hidden" name="unitNo" value={unitNo} />
-                                      <input type="hidden" name="warehouseId" value={receipt.warehouseId} />
-                                      <Field label="Identifikacija kupca (ako nedostaje)">
-                                        <input name="buyerId" maxLength={100} placeholder="10:PIB ili drugi važeći ID" className="h-8 rounded-lg border border-input px-2 text-sm" />
-                                      </Field>
-                                      <SubmitButton size="sm">Dopuni / ponovi refundaciju</SubmitButton>
-                                    </AdminActionForm>
-                                  )}
-                                </div>
-                              ) : item.productId ? (
-                                <AdminActionForm key={unitNo} action={receiveOrderUnitAction} className="flex flex-wrap items-end gap-2 rounded-lg border border-border p-2">
-                                  <input type="hidden" name="orderId" value={order.id} />
-                                  <input type="hidden" name="orderItemId" value={item.id} />
-                                  <input type="hidden" name="unitNo" value={unitNo} />
-                                  <Field label={`Paket ${unitNo}/${item.qty}`}>
-                                    <select name="warehouseId" required className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm" defaultValue={warehouses[0]?.id ?? ""}>
-                                      <option value="" disabled>Magacin prijema</option>
-                                      {warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.code} · {warehouse.name}</option>)}
-                                    </select>
-                                  </Field>
-                                  <Field label="Identifikacija kupca (ako nije na računu)">
-                                    <input name="buyerId" maxLength={100} placeholder="10:PIB ili drugi važeći ID" className="h-8 rounded-lg border border-input px-2 text-sm" />
-                                  </Field>
-                                  <SubmitButton size="sm" disabled={!warehouses.length} confirm={`Potvrditi da je paket ${unitNo}/${item.qty} pregledan, vratiti jedan komad na stanje i pokrenuti fiskalnu refundaciju?`}>
-                                    Primi paket
-                                  </SubmitButton>
-                                </AdminActionForm>
-                              ) : (
-                                <p key={unitNo} className="text-xs text-warning">Paket nema vezan artikal lagera.</p>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ))}
-                    </td>
-                    <td className="space-y-2 px-3 py-3 align-top">
-                      {order.shipments.length ? order.shipments.map((shipment) => (
-                        <div key={shipment.id}>
-                          {shipment.provider ?? "Kurir"} · Vraćeno
-                          <p className="font-mono text-xs text-ink-500">{shipment.trackingNo ?? "Bez broja za praćenje"}</p>
-                          {shipment.lastStatusEventAt ? <p className="text-xs text-ink-500">{formatDate(shipment.lastStatusEventAt)}</p> : null}
-                        </div>
-                      )) : <span className="text-xs text-ink-500">Povrat evidentiran na porudžbini, bez kurirske potvrde.</span>}
-                    </td>
-                    <td className="px-3 py-3 align-top">
-                      <Link href={`/admin/erp/prodajni-nalozi/${order.id}`} className="text-walnut hover:underline">
-                        Otvori porudžbinu
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {!returnedOrders.total ? <p className="py-8 text-center text-sm text-ink-500">Nema evidentiranih povrata porudžbina.</p> : null}
-          {returnedOrders.total > returnedOrders.orders.length ? <p className="mt-4 text-xs text-ink-500">Prikazano poslednjih {returnedOrders.orders.length} od {returnedOrders.total} vraćenih porudžbina.</p> : null}
-        </Card>
-        {!warehouses.length ? (
-          <Card>
-            <p className="text-sm text-warning">
-              Nema aktivnog magacina u koji pregledana vraćena roba može da se primi.
+          <nav aria-label="Prikaz povrata" className="mb-5 flex gap-2">
+            {(
+              [
+                ["active", "Aktivni", activeCount],
+                ["completed", "Završeni", rows.length - activeCount],
+              ] as const
+            ).map(([value, label, count]) => (
+              <Link
+                key={value}
+                href={`/admin/erp/povrati?view=${value}`}
+                aria-current={view === value ? "page" : undefined}
+                className={`rounded-lg border px-4 py-2 text-sm ${view === value ? "bg-foreground text-background" : "border-border"}`}
+              >
+                {label} ({count})
+              </Link>
+            ))}
+          </nav>
+          {!warehouses.length && view === "active" ? (
+            <p className="mb-4 text-sm text-warning">
+              Nema aktivnog magacina za prijem povrata.
             </p>
-          </Card>
-        ) : null}
-        <Card>
-          <CardTitle description="Dugme za prijem je dostupno tek kada kurir označi povrat kao isporučen/vraćen. Knjiženje je idempotentno i isti povrat ne može dva puta povećati lager.">
-            Reklamacioni povrati
-          </CardTitle>
-          <div className="overflow-x-auto">
-            <table className="min-w-[1050px] w-full text-sm">
-              <thead className="border-b border-border text-left text-xs uppercase tracking-wide text-ink-500">
-                <tr>
-                  <th className="px-3 py-3">Reklamacija</th>
-                  <th className="px-3 py-3">Porudžbina</th>
-                  <th className="px-3 py-3">Artikal</th>
-                  <th className="px-3 py-3 text-right">Kol.</th>
-                  <th className="px-3 py-3">Kurir / status</th>
-                  <th className="px-3 py-3">Prijem</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/60">
-                {reclamations.map((reclamation) => {
-                  const shipment = reclamation.shipments[0];
-                  const receipt = receiptByReclamation.get(reclamation.id);
-                  const canReceive = canReceiveReclamationShipment(shipment) && !receipt;
-                  return (
-                    <tr key={reclamation.id}>
-                      <td className="px-3 py-3">
-                        <Link href={`/admin/erp/reklamacije-dnevnik/${reclamation.id}`} className="font-mono font-medium text-walnut hover:underline">
-                          {reclamation.number}
-                        </Link>
-                      </td>
-                      <td className="px-3 py-3">{reclamation.order.number}</td>
-                      <td className="px-3 py-3"><span className="font-mono">{reclamation.sku}</span><br /><span className="text-xs text-ink-500">{reclamation.orderItem?.name ?? "—"}</span></td>
-                      <td className="px-3 py-3 text-right font-semibold">{reclamation.quantity}</td>
-                      <td className="px-3 py-3">{shipment?.provider ?? "—"} · {shipment ? (myGlsReturnStatusLabel(shipment) ?? shipment.status) : "—"}<br /><span className="text-xs text-ink-500">{shipment?.trackingNo ?? "bez broja za praćenje"}</span></td>
-                      <td className="px-3 py-3">
-                        {receipt ? (
-                          <p className="text-success">Proknjiženo {formatDate(receipt.createdAt)}<br /><span className="text-xs">{receipt.warehouse.code} · {receipt.warehouse.name}</span></p>
-                        ) : canReceive ? (
-                          <AdminActionForm action={receiveReturnAction} className="flex items-end gap-2">
-                            <input type="hidden" name="reclamationId" value={reclamation.id} />
-                            <Field label="Magacin prijema">
-                              <select name="warehouseId" required className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm" defaultValue={warehouses[0]?.id ?? ""}>
-                                <option value="" disabled>Izaberite</option>
-                                {warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.code} · {warehouse.name}</option>)}
-                              </select>
-                            </Field>
-                            <SubmitButton size="sm" confirm={`Magacioner je pregledao paket. Primiti ${reclamation.quantity} kom i proknjižiti u izabrani magacin?`}>
-                              Primi i proknjiži
-                            </SubmitButton>
-                          </AdminActionForm>
-                        ) : (
-                          <span className="text-xs text-ink-500">Čeka potvrdu kurira</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          ) : null}
+          <div className="space-y-4">
+            {visible.map((row) => {
+              const lost = lostByKey.get(row.key);
+              return (
+                <article
+                  key={row.key}
+                  data-return-key={row.key}
+                  className="space-y-3 rounded-xl border border-border p-4"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Link
+                      className="font-mono font-medium underline"
+                      href={`/admin/erp/prodajni-nalozi/${row.orderId}`}
+                    >
+                      {row.number}
+                    </Link>
+                    <span className="text-xs text-ink-500">
+                      {row.type} ·{" "}
+                      {lost
+                        ? "Izgubljena pošiljka"
+                        : row.received
+                          ? "Primljeno"
+                          : "Čeka prijem"}
+                    </span>
+                  </div>
+                  <div className="break-words text-sm">{row.shipment}</div>
+                  {row.details}
+                  {lost ? (
+                    <p className="text-sm text-warning">
+                      Izgubljeno {formatDate(lost.createdAt)} · {lost.reason}.
+                      Neprimljena roba nije vraćena na lager.
+                    </p>
+                  ) : !row.received ? (
+                    <details className="border-t border-border pt-3">
+                      <summary className="cursor-pointer text-sm text-warning">
+                        Pošiljka izgubljena kod kurira
+                      </summary>
+                      <AdminActionForm
+                        action={markLostAction}
+                        refreshOnSuccess
+                        className="mt-3 flex flex-wrap items-end gap-3"
+                      >
+                        <input type="hidden" name="kind" value={row.kind} />
+                        <input type="hidden" name="id" value={row.id} />
+                        <Field
+                          label="Razlog / referenca prijave kuriru"
+                          className="min-w-0 flex-1"
+                        >
+                          <input
+                            name="reason"
+                            required
+                            minLength={5}
+                            maxLength={500}
+                            className="h-9 w-full rounded-lg border border-input px-2"
+                          />
+                        </Field>
+                        <SubmitButton
+                          size="sm"
+                          variant="destructive"
+                          confirm="Potvrditi da je neprimljena roba izgubljena kod kurira? Povrat prelazi u završene, bez povećanja lagera i bez automatske refundacije."
+                        >
+                          Označi kao izgubljenu
+                        </SubmitButton>
+                      </AdminActionForm>
+                    </details>
+                  ) : null}
+                </article>
+              );
+            })}
           </div>
-          {!reclamations.length ? <p className="py-8 text-center text-sm text-ink-500">Nema kreiranih reklamacionih povrata.</p> : null}
+          {!visible.length ? (
+            <p className="py-8 text-center text-sm text-ink-500">
+              {view === "active"
+                ? "Nema aktivnih povrata za prijem."
+                : "Nema završenih povrata."}
+            </p>
+          ) : null}
+          {returnedOrders.total > returnedOrders.orders.length ? (
+            <p className="mt-4 text-xs text-ink-500">
+              Prikazano poslednjih {returnedOrders.orders.length} od{" "}
+              {returnedOrders.total} vraćenih porudžbina.
+            </p>
+          ) : null}
+          {reshipments.length === 500 || reclamations.length === 500 ? (
+            <p className="mt-4 text-xs text-ink-500">
+              Pregled obuhvata do 500 najnovijih povrata po vrsti.
+            </p>
+          ) : null}
         </Card>
       </main>
     </>
   );
 }
 
-async function receiveReshipmentReturnAction(_state: AdminActionState, formData: FormData) {
+async function markLostAction(_state: AdminActionState, formData: FormData) {
   "use server";
-  return withAdminState({ allowed: ["OPS"], action: "order.reshipment.return.receive", entity: "OrderReshipmentItem" }, async (actorId, data: FormData) => {
-    const itemId = String(data.get("itemId") ?? "");
-    const warehouseId = String(data.get("warehouseId") ?? "");
-    const unitNo = Number(data.get("unitNo"));
-    await receiveReshipmentReturn({ itemId, warehouseId, unitNo, actorId });
-    revalidatePath("/admin/erp/povrati");
-    revalidatePath("/admin/erp/preuzimanja/povrati");
-    revalidatePath("/admin/erp/stanje-po-magacinima");
-    return { ok: true as const, entityId: itemId, diff: { warehouseId, unitNo }, message: "Stara roba je primljena na lager. Refundacija nije pokrenuta." };
-  })(formData);
+  return withAdminState(
+    { allowed: ["OPS"], action: "return.lost", entity: "ReturnResolution" },
+    async (actorId, data: FormData) => {
+      const result = await markReturnLost({
+        kind: String(data.get("kind") ?? ""),
+        id: String(data.get("id") ?? ""),
+        reason: String(data.get("reason") ?? ""),
+        actorId,
+      });
+      revalidatePath("/admin/erp/povrati");
+      revalidatePath("/admin/erp/preuzimanja/povrati");
+      revalidatePath(`/admin/erp/prodajni-nalozi/${result.orderId}`);
+      return {
+        ok: true as const,
+        entityId: result.key,
+        message:
+          "Pošiljka je označena kao izgubljena i prebačena u završene povrate. Lager nije uvećan.",
+      };
+    },
+  )(formData);
+}
+
+async function receiveReshipmentReturnAction(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+  return withAdminState(
+    {
+      allowed: ["OPS"],
+      action: "order.reshipment.return.receive",
+      entity: "OrderReshipmentItem",
+    },
+    async (actorId, data: FormData) => {
+      const itemId = String(data.get("itemId") ?? "");
+      const warehouseId = String(data.get("warehouseId") ?? "");
+      const unitNo = Number(data.get("unitNo"));
+      await receiveReshipmentReturn({ itemId, warehouseId, unitNo, actorId });
+      revalidatePath("/admin/erp/povrati");
+      revalidatePath("/admin/erp/preuzimanja/povrati");
+      revalidatePath("/admin/erp/stanje-po-magacinima");
+      return {
+        ok: true as const,
+        entityId: itemId,
+        diff: { warehouseId, unitNo },
+        message:
+          "Stara roba je primljena na lager. Refundacija nije pokrenuta.",
+      };
+    },
+  )(formData);
 }
 
 function formatDate(value: Date) {

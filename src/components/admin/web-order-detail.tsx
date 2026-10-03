@@ -1717,8 +1717,7 @@ export async function WebOrderDetail({ id }: { id: string }) {
                   subtotal: formatRsd(num(it.unitPriceSale) * it.qty),
                   ...(canOfferWebItemEdit
                     ? {
-                        edit:
-                          order.items.length > 1 || it.qty > 1 ? (
+                        edit: (
                             <AdminActionForm
                               action={updateWebOrderItemQuantityAction}
                               preserveValues
@@ -1731,10 +1730,10 @@ export async function WebOrderDetail({ id }: { id: string }) {
                                 <input
                                   type="number"
                                   name="newQty"
-                                  min={0}
-                                  max={it.qty - 1}
+                                  min={order.items.length === 1 ? 1 : 0}
+                                  max={999}
                                   step={1}
-                                  defaultValue={it.qty > 1 ? it.qty - 1 : 0}
+                                  defaultValue={it.qty}
                                   required
                                   aria-label={`Nova količina za ${it.sku}`}
                                   className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-right text-sm"
@@ -1746,28 +1745,6 @@ export async function WebOrderDetail({ id }: { id: string }) {
                                 confirm={`Promeniti ${it.sku} sa ${it.qty} na unetu količinu? Iznosi, rezervacije i predračun biće preračunati; kupcu dokument neće biti automatski poslat.`}
                               >
                                 Sačuvaj
-                              </SubmitButton>
-                            </AdminActionForm>
-                          ) : (
-                            <AdminActionForm
-                              action={updateStatus}
-                              refreshOnSuccess
-                              className="flex justify-end"
-                            >
-                              <input type="hidden" name="id" value={order.id} />
-                              <input type="hidden" name="status" value="OTKAZANO" />
-                              <input
-                                type="hidden"
-                                name="note"
-                                value="Cela WEB porudžbina je otkazana umesto uklanjanja poslednje stavke."
-                              />
-                              <SubmitButton
-                                size="xs"
-                                variant="destructive"
-                                pendingLabel="Otkazivanje…"
-                                confirm={`Otkazati celu porudžbinu ${order.number}? Rezervisana roba biće vraćena na lager i kupac će dobiti obaveštenje.`}
-                              >
-                                Otkaži nalog
                               </SubmitButton>
                             </AdminActionForm>
                           ),

@@ -1,3 +1,4 @@
+import { assertReturnNotLost } from "./return-resolution.server";
 import { assertMyGlsReturnAccepted, canReceiveReclamationShipment } from "@/lib/mygls/return-booking";
 import "server-only";
 import type { XExpressPickupCoordinates } from "@/lib/x-express/return";
@@ -412,6 +413,7 @@ export async function receiveReclamationReturn(args: {
       throw new Error("Izaberite aktivan magacin za prijem pregledane robe.");
     }
     await lockOrderReturn(tx, reclamation.orderId);
+    await assertReturnNotLost(tx, `reclamation:${reclamation.id}`);
     const existingReceipt = await tx.stockMovement.findUnique({
       where: { idempotencyKey: `reclamation-return:${reclamation.id}` },
     });

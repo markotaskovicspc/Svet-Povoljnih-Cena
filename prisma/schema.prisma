@@ -3979,3 +3979,14 @@ model PickingScanEvent {
   batch PickupBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
   @@index([batchId, planHash])
 }
+
+// Manual operational closure, separate from courier-reported shipment status.
+model ReturnResolution {
+  key       String   @id
+  orderId   String
+  actorId   String
+  reason    String
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+}

@@ -1028,9 +1028,9 @@ export default async function PickupBatchPage({
                                     ) : null}
                                   </div>
                                 )}
-                                {row.weightKg == null || row.weightKg <= 0 ? (
+                                {!row.measurementsComplete ? (
                                   <p className="mt-2 text-xs font-medium text-warning">
-                                    Artikal {row.sku || row.shortName}: nedostaje težina paketa. Paket je u picking nalogu; unesite stvarnu težinu pre potvrde spremnosti i kreiranja adresnice.
+                                    Artikal {row.sku || row.shortName} · {row.packedQuantity} kom u paketu: {row.weightKg == null || row.weightKg <= 0 ? "nedostaje težina paketa. " : ""}Proverite stvarne mere ovog paketa. Paket je uključen u picking. Pre potvrde spremnosti i kreiranja adresnice dopunite polja u nalogu.
                                   </p>
                                 ) : null}
                                 {!row.deferredAt && (editable || row.warehouseReadyAt) ? (
