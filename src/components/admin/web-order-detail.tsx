@@ -1653,6 +1653,34 @@ export async function WebOrderDetail({ id }: { id: string }) {
           { href: "/admin/erp/prodajni-nalozi", label: "Prodajni nalozi" },
           { label: order.number },
         ]}
+        actions={
+          !["OTKAZANO", "ISPORUCENO", "VRACENO"].includes(order.status) &&
+          !order.cancelledAt &&
+          !order.stockRestoredAt ? (
+            <AdminActionForm
+              action={updateStatus}
+              refreshOnSuccess
+              testId="web-order-cancel-form"
+              className="max-w-md"
+            >
+              <input type="hidden" name="id" value={order.id} />
+              <input type="hidden" name="status" value="OTKAZANO" />
+              <input
+                type="hidden"
+                name="note"
+                value="Cela WEB porudžbina je otkazana iz detalja porudžbine."
+              />
+              <SubmitButton
+                size="sm"
+                variant="destructive"
+                pendingLabel="Otkazivanje…"
+                confirm={`Otkazati celu porudžbinu ${order.number}? Rezervacije će biti oslobođene i kupac će dobiti obaveštenje. Već kreiran kurirski nalog se ne otkazuje automatski.`}
+              >
+                Otkaži porudžbinu
+              </SubmitButton>
+            </AdminActionForm>
+          ) : null
+        }
       />
       <div className="grid grid-cols-1 gap-6 px-8 py-6 xl:grid-cols-[1fr_360px]">
         <div className="space-y-6">

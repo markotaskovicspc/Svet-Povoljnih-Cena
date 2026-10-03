@@ -248,6 +248,13 @@ test.describe("bezbedna izmena WEB porudžbine", () => {
       waitUntil: "domcontentloaded",
     });
 
+    // Cancelling the whole order must remain visible independently of item edits.
+    await expect(
+      page.getByTestId("web-order-cancel-form").getByRole("button", {
+        name: "Otkaži porudžbinu",
+      }),
+    ).toBeInViewport();
+
     await page.getByText("Izmeni adresu", { exact: true }).click();
     const addressForm = page.getByTestId("shipping-address-edit-form");
     await addressForm.getByLabel("Ulica i broj").fill("Test ulica 22");
@@ -269,7 +276,7 @@ test.describe("bezbedna izmena WEB porudžbine", () => {
         });
         return `${row.shipStreet}|${row.shipPostalCode}|${row.shipCity}`;
       })
-      .toBe("Test ulica 22|21000|Novi Sad");
+      .toBe("Test ulica (22)|21000|Novi Sad");
 
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.getByText("Izmeni broj telefona", { exact: true }).click();
@@ -556,6 +563,9 @@ test.describe("bezbedna izmena WEB porudžbine", () => {
     const remainingRow = page.locator("tr").filter({ hasText: skus[0] });
     await expect(remainingRow.getByRole("button", { name: "Sačuvaj" })).toBeVisible();
     await expect(remainingRow.getByLabel(`Nova količina za ${skus[0]}`)).toHaveAttribute("min", "1");
+    await expect(
+      page.getByRole("button", { name: "Otkaži porudžbinu" }),
+    ).toBeVisible();
 
     const events = await db.orderStatusEvent.findMany({
       where: { orderId, note: { contains: "WEB stavka" } },
@@ -597,6 +607,54 @@ test.describe("bezbedna izmena WEB porudžbine", () => {
     await expect(itemSelect).not.toContainText(skus[1]);
     await itemSelect.selectOption(skus[0]);
     await expect(itemSelect).toHaveValue(skus[0]);
+  });
+
+  test("otkazuje celu porudžbinu iz zaglavlja i kad je izmena stavki zaključana", async ({ page }) => {
+    await db.order.update({
+      where: { id: orderId },
+      data: { status: "SPREMNO_ZA_ISPORUKU" },
+    });
+    await login(page);
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await page.goto(`/admin/erp/prodajni-nalozi/${orderId}`, {
+      waitUntil: "domcontentloaded",
+    });
+    const cancel = page.getByRole("button", { name: "Otkaži porudžbinu" });
+    await expect(cancel).toBeInViewport();
+    await expect(page.getByTestId("web-order-item-add-form")).toHaveCount(0);
+
+    const dialogPromise = page.waitForEvent("dialog");
+    const clickPromise = cancel.click();
+    const dialog = await dialogPromise;
+    expect(dialog.message()).toContain(orderNumber);
+    await dialog.dismiss();
+    await clickPromise;
+    expect((await db.order.findUniqueOrThrow({ where: { id: orderId } })).status)
+      .toBe("SPREMNO_ZA_ISPORUKU");
+
+    await clickConfirmation(page, cancel);
+    await expect.poll(async () => {
+      const order = await db.order.findUniqueOrThrow({
+        where: { id: orderId },
+        include: { items: true, events: { where: { status: "OTKAZANO" } } },
+      });
+      return {
+        status: order.status,
+        cancelled: Boolean(order.cancelledAt),
+        restored: Boolean(order.stockRestoredAt),
+        reservations: order.items.map((item) => item.warehouseReservedQty),
+        actors: order.events.map((event) => event.actorId),
+      };
+    }, { timeout: 30_000 }).toEqual({
+      status: "OTKAZANO", cancelled: true, restored: true,
+      reservations: [0], actors: [adminId],
+    });
+    await expect(cancel).toHaveCount(0);
+    await expect.poll(() => db.backgroundJob.count({
+      where: { idempotencyKey: `order-status-email:${orderId}:OTKAZANO` },
+    })).toBe(1);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(cancel).toHaveCount(0);
   });
 
   async function readState() {
