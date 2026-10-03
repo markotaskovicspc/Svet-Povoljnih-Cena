@@ -21,8 +21,18 @@ export async function POST(req:Request){
   const entry={...row,sourceHash:input.sourceHash};
   if(input.dryRun){const {decision}=await inspectBankEntry(entry);results.push({orderNumber:entry.orderNumber,decision});continue;}
   const key=bankEntryKey(entry);
-  const existing=await db.backgroundJob.findUnique({where:{idempotencyKey:key},select:{payload:true}});
-  if(existing){const saved=bankEntrySchema.safeParse(existing.payload);if(!saved.success||saved.data.amountMinor!==entry.amountMinor||saved.data.orderNumber!==entry.orderNumber||saved.data.date!==entry.date)return NextResponse.json({ok:false,error:'BANK_REFERENCE_CONFLICT'},{status:409});}
+  const existing=await db.backgroundJob.findUnique({where:{idempotencyKey:key},select:{payload:true,status:true}});
+  if(existing){
+   const saved=bankEntrySchema.safeParse(existing.payload);
+   // Earlier worker versions cleared completed payloads. Verify those replays
+   // against the durable payment receipt rather than treating them as new money.
+   if(!saved.success&&existing.status==='COMPLETED'){
+    const receipt=await db.payment.findFirst({where:{provider:'MANUAL',providerRef:entry.bankReference,order:{number:entry.orderNumber},rawResponse:{path:['bankAccount'],equals:entry.account}},select:{amount:true,rawResponse:true}});
+    const metadata=receipt?.rawResponse as {statementDate?:string}|null;
+    if(receipt?.amount.mul(100).equals(entry.amountMinor)&&metadata?.statementDate===entry.date){results.push({orderNumber:entry.orderNumber,status:'COMPLETED'});continue;}
+   }
+   if(!saved.success||saved.data.amountMinor!==entry.amountMinor||saved.data.orderNumber!==entry.orderNumber||saved.data.date!==entry.date)return NextResponse.json({ok:false,error:'BANK_REFERENCE_CONFLICT'},{status:409});
+  }
   const job=await enqueueBackgroundJob({kind:'BANK_TRANSFER_RECONCILE',payload:entry,idempotencyKey:key});jobIds.push(job.id);
   results.push({orderNumber:entry.orderNumber,status:job.status});
  }

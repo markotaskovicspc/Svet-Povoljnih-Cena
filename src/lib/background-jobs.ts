@@ -278,7 +278,9 @@ export async function processBackgroundJob(id: string) {
       where: { id: job.id },
       data: {
         status: "COMPLETED",
-        payload: {},
+        // Keep the immutable bank reference/amount ledger for replay validation.
+        // Other completed jobs continue to discard their potentially personal payloads.
+        payload: job.kind==='BANK_TRANSFER_RECONCILE' ? job.payload as Prisma.InputJsonValue : {},
         lockedAt: null,
         completedAt: new Date(),
         lastError: null,
