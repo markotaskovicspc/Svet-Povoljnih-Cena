@@ -11,7 +11,7 @@ export async function inspectBankEntry(entry:BankEntry){
 
 export async function reconcileBankEntry(entry:BankEntry){
  return db.$transaction(async tx=>{
-  await tx.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${bankEntryKey(entry)},0))`);
+  await tx.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${bankEntryKey(entry)},0))::text`);
   await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Order" WHERE "number"=${entry.orderNumber} FOR UPDATE`);
   const order=await tx.order.findUnique({where:{number:entry.orderNumber},include:{payments:true,supplierFulfillments:{where:{supplier:{integrationKey:'RABALUX',enabled:true},status:{notIn:['CANCELLED','COMPLETED']}},select:{id:true}}}});
   const previouslyRecorded=await tx.payment.findFirst({where:{provider:'MANUAL',providerRef:entry.bankReference,rawResponse:{path:['bankAccount'],equals:entry.account}}});
