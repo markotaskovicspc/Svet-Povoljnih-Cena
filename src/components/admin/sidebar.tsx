@@ -66,7 +66,12 @@ function AdminNavContent({
 
   return (
     <nav className="flex flex-col gap-6 px-4 py-6 text-sm">
-      <div className="flex items-center justify-between gap-2">
+      <div
+        className={cn(
+          "flex items-center justify-between gap-2",
+          onNavigate && "pr-8",
+        )}
+      >
         <Link
           href="/admin"
           prefetch={false}
