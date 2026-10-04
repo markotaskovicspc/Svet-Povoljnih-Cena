@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { findMany } = vi.hoisted(() => ({
+const { findMany, queryRaw } = vi.hoisted(() => ({
   findMany: vi.fn(),
+  queryRaw: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => ({
   db: {
     xExpressTown: { findMany },
+    $queryRaw: queryRaw,
   },
 }));
 
@@ -15,6 +17,7 @@ import { GET } from "@/app/api/x-express/locations/route";
 describe("X Express location search", () => {
   beforeEach(() => {
     findMany.mockReset();
+    queryRaw.mockReset().mockResolvedValue([]);
   });
 
   it.each(['Batajnica','11273','Батајница'])('resolves %s to active Zemun routing while preserving locality', async q => {
@@ -98,4 +101,19 @@ describe("X Express location search", () => {
       },
     });
   });
+});
+
+describe('entire courier dictionary without Serbian diacritics',()=>{
+ beforeEach(()=>{findMany.mockReset().mockResolvedValue([]);queryRaw.mockReset();});
+ it.each([['Cicevac','Ćićevac'],['Mala Mostanica','Mala Moštanica'],['Arandelovac','Aranđelovac'],['Arandjelovac','Aranđelovac'],['Врачар','Beograd (Vračar)']])('finds %s in the provider dictionary',async(q,name)=>{
+  queryRaw.mockResolvedValue([{id:50,name,postalCode:'12345',municipalityId:1,displayName:name}]);
+  const result=await(await GET(new Request('http://localhost/api/x-express/locations?q='+encodeURIComponent(q)))).json();
+  expect(result.items[0]).toMatchObject({townId:50,name});
+  const sql=queryRaw.mock.calls[0][0];expect(sql.text).toContain('WHERE active = true');expect(sql.values).toContain(8);
+ });
+ it('binds hostile text and does not use it as a SQL wildcard',async()=>{
+  queryRaw.mockResolvedValue([]);
+  await GET(new Request('http://localhost/api/x-express/locations?q='+encodeURIComponent("%_' OR 1=1 --")));
+  const sql=queryRaw.mock.calls[0][0];expect(sql.text).toContain('position(');expect(sql.text).not.toContain("OR 1=1 --");expect(sql.values).toContain("%_' or 1=1 --");
+ });
 });

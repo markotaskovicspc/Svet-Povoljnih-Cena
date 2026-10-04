@@ -67,3 +67,8 @@ test('staff quote resolves optional postcode and omits null email while preservi
   assert.equal(sent.action,'staff_quote');assert.deepEqual(sent.staffPricing,staffPricing);assert(!('guestEmail' in sent.input));assert.equal(sent.input.shipping.postalCode,'37000');assert.equal(sent.input.shipping.xExpressTownId,123);
  }finally{globalThis.fetch=original;}
 });
+
+test('omitted diacritics and both d/dj spellings resolve only unique exact courier towns',()=>{
+ for(const [name,city] of [['Ćuprija','Cuprija'],['Čačak','Cacak'],['Šabac','Sabac'],['Žitište','Zitiste'],['Aranđelovac','Arandelovac'],['Aranđelovac','Arandjelovac']])assert.equal(selectTown([{townId:2,name,postalCode:'12345'}],{city}).townId,2);
+ assert.equal(selectTown([{townId:1,name:'Ćelije'},{townId:2,name:'Čelije'}],{city:'Celije'}),null);
+});

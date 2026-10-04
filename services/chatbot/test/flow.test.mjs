@@ -568,3 +568,35 @@ test('complaint before delivery acknowledges existing order instead of denying c
   assert.equal(state.orders.length,1);assert(!state.reclamation);assert(!state.claimStatusNotice);
  }finally{await store.close();}
 });
+
+test('failed photo processing asks for a name, notifies support once and keeps later chat active',async()=>{
+ const {store,worker,event}=await setup();const notices=[];
+ try{
+  await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
+  await store.withConversation(event.conversation,async(row,state,c)=>{delete state.pending;state.historyVersion=2;await store.save(c,row.id,state);});
+  worker.answerFn=async()=>{throw Error('model timeout');};worker.visionFn=async()=>{throw Error('image timeout');};
+  worker.spc=async p=>{notices.push(p);return {ok:true};};
+  const photo={...event,id:'failed-image',text:'',attachments:[{type:'image',url:'https://fbcdn.net/photo.jpg'}]};await store.accept(photo);
+  for(let i=0;i<3;i++){await store.pool.query('UPDATE spc_chat_events SET next_at=now() WHERE id=$1',[photo.id]);await worker.tick();}
+  const row=(await store.pool.query('SELECT * FROM spc_chat_conversations')).rows[0];assert.equal(row.paused,false);
+  assert.equal(notices.length,1);assert.equal(notices[0].action,'support_handoff');
+  const out=(await store.pool.query('SELECT * FROM spc_chat_outbox')).rows;assert.equal(out.length,1);assert.match(store.decode(out[0].payload).text,/Kako se zove proizvod/);
+  worker.answerFn=async()=>({text:'Kuvalo je 1,8 L.'});worker.orderReplyCheckFn=async()=>false;
+  await store.accept({...event,id:'after-image-failure',text:'Kuvalo HEAT'});await worker.tick();
+  assert.equal((await store.pool.query('SELECT * FROM spc_chat_outbox')).rows.length,2);
+ }finally{await store.close();}
+});
+
+test('repeated same support request sends one notice but another problem can still escalate',async()=>{
+ const {store,worker,event}=await setup();const notices=[];
+ try{
+  await store.withConversation(event.conversation,async(row,state,c)=>{delete state.pending;state.historyVersion=2;await store.save(c,row.id,state);});
+  worker.orderReplyCheckFn=async()=>false;
+  worker.answerFn=async({state,event})=>{state.supportRequest={reason:event.text==='Drugi problem'?'Provera uplate':'Montaža nogara'};return {text:'Prosledio sam Vaš upit korisničkoj podršci.'};};
+  worker.spc=async p=>{notices.push(p);return {ok:true};};
+  await worker.tick();await store.accept({...event,id:'repeat-support',text:'Pitajte pa mi javite'});await worker.tick();
+  assert.equal(notices.length,1);
+  const row=(await store.pool.query('SELECT * FROM spc_chat_conversations')).rows[0];assert.equal(row.paused,false);assert.match(store.decode(row.state).history.at(-1).content,/sačekajmo odgovor/);
+  await store.accept({...event,id:'different-support',text:'Drugi problem'});await worker.tick();assert.equal(notices.length,2);
+ }finally{await store.close();}
+});

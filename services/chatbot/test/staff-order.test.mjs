@@ -109,3 +109,13 @@ test('seller command honors agreed loyalty prices without email, membership or f
  plan.unitPrices=[{sku:'IRON',price:600,evidence:'Cena je 600 din.'}];context.history.push({role:'assistant',content:'Cena je 600 din.'});
  assert(!(await prepareStaffOrder(params)).ok);assert(!calls.some(p=>p.action==='staff_quote'));
 });
+
+test('staff order preserves explicitly supplied Vracar even if model extracts only Beograd',async()=>{
+ const context={history:[{role:'user',content:'Jedna pegla IRON. Petar Petrović, 0601234567, Test 12, Beograd, Vračar.'}],orders:[]};let sent;
+ const i={...input,guestEmail:null,shipping:{...input.shipping,city:'Beograd',postalCode:null}};
+ const r=await prepareStaffOrder({event,state:context,model:'test',extractFn:async()=>({input:i,reason:'',agreedTotal:null,priceEvidence:null,unitPrices:[],deliveryNotes:[]}),cartCheckFn:async()=>({ok:true}),spc:async p=>{
+ if(p.action==='search')return {ok:true,items:[{sku:'IRON',name:'Pegla',price:1000,available:true}]};
+ if(p.action==='quote'){sent=p.input;return {ok:true,quoteToken:'q',totals:{total:1000}};}return {ok:true};
+ }});
+ assert.equal(r.ok,true);assert.equal(sent.shipping.city,'Beograd (Vračar)');assert.equal(sent.guestEmail,null);
+});

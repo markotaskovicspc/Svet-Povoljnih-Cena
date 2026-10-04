@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { xExpressTownSearchTerms } from "@/lib/x-express/location-search";
+import { xExpressTownSearchTerms, normalizedTownQuery } from "@/lib/x-express/location-search";
 import { searchTownAliases } from "@/lib/x-express/town-aliases";
 
 export const runtime = "nodejs";
@@ -25,7 +26,12 @@ export async function GET(req: Request) {
   } as const;
   const orderBy = [{ priority: "asc" as const }, { name: "asc" as const }];
 
-  const [exactNameItems, exactPostalItems, startsWithItems, containsItems] =
+  const key = normalizedTownQuery(q);
+  // Match the entire active courier dictionary, not just the curated list of
+  // cities. Parameterized SQL keeps customer text out of SQL syntax; position
+  // also treats percent/underscore as literal characters, not wildcards.
+  const foldedName = Prisma.sql`replace(replace(translate(lower(name), 'čćšž', 'ccsz'), 'đ', 'd'), 'dj', 'd')`;
+  const [exactNameItems, foldedItems, exactPostalItems, startsWithItems, containsItems] =
     await Promise.all([
       db.xExpressTown.findMany({
         where: {
@@ -36,6 +42,14 @@ export async function GET(req: Request) {
         take: limit,
         select,
       }),
+      db.$queryRaw<Array<{id:number;name:string;displayName:string|null;postalCode:string|null;municipalityId:number|null}>>(Prisma.sql`
+        SELECT id, name, "displayName", "postalCode", "municipalityId"
+        FROM "XExpressTown"
+        WHERE active = true AND position(${key} in ${foldedName}) > 0
+        ORDER BY (${foldedName} = ${key}) DESC,
+          (position(${key} in ${foldedName}) = 1) DESC, priority ASC NULLS LAST, name ASC
+        LIMIT ${limit}
+      `),
       /^\d{5}$/.test(q)
         ? db.xExpressTown.findMany({
             where: {
@@ -79,8 +93,9 @@ export async function GET(req: Request) {
 
   // Some postal localities are routed under a municipality in the courier
   // dictionary. Prefer an actual exact record if the provider adds one later.
+  const normalizedExactItems = foldedItems.filter(item => normalizedTownQuery(item.name) === key);
   const aliases = searchTownAliases(q);
-  if (!exactNameItems.length && !exactPostalItems.length && aliases.length) {
+  if (!exactNameItems.length && !normalizedExactItems.length && !exactPostalItems.length && aliases.length) {
     const parents = await db.xExpressTown.findMany({
       where: {active: true, OR: aliases.map(a => ({id: a.townId, name: a.townName}))},
       select,
@@ -93,7 +108,7 @@ export async function GET(req: Request) {
     });
     if (aliasItems.length) return NextResponse.json({items: aliasItems});
   }
-  const rankedItems = [...startsWithItems, ...containsItems];
+  const rankedItems = [...foldedItems, ...startsWithItems, ...containsItems];
   const items = rankedItems
     .filter(
       (item, index) =>
@@ -105,6 +120,8 @@ export async function GET(req: Request) {
   return NextResponse.json({
     items: (exactNameItems.length
       ? exactNameItems
+      : normalizedExactItems.length
+        ? normalizedExactItems
       : exactPostalItems.length
         ? exactPostalItems
         : items
