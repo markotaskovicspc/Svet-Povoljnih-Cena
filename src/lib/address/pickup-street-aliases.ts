@@ -2,7 +2,7 @@ import { splitStreetAndHouseNumber } from "./house-number";
 
 function key(value: string) {
   return value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/g, "dj").replace(/[^a-z0-9]/g, "");
+    .replace(/đ/g, "dj").replace(/[^\p{L}\p{N}]/gu, "");
 }
 // Verified equivalent street names, scoped to the town. Never fuzzy-match a
 // different street or change the customer's house number/order snapshot.
