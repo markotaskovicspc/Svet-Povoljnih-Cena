@@ -104,6 +104,7 @@ export const adminNav: AdminNavGroup[] = [
         allowed: O,
       },
       { href: "/admin/erp/dnevni-promet", label: "Dnevni promet", allowed: O },
+      { href: "/admin/razgovori", label: "Razgovori kupaca", allowed: O },
     ],
   },
   {

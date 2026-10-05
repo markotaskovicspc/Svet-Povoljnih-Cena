@@ -1,3 +1,4 @@
+import {operatorConversations,operatorConversation} from './operator-reader.mjs';
 import http from 'node:http';
 import {webchat} from './webchat.mjs';
 import { readFile } from 'node:fs/promises';
@@ -24,7 +25,9 @@ const server=http.createServer(async(req,res)=>{
     }
     if(req.method==='GET'&&url.pathname==='/'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'"});return res.end(page);}
     const isWebhook=req.method==='POST'&&url.pathname==='/webhooks/meta';
-    if(!isWebhook&&!equal(req.headers.authorization,`Bearer ${adminToken}`))return reply(401,{error:'Unauthorized'});
+    const operatorRead=req.method==='GET'&&['/operator/conversations','/operator/conversation'].includes(url.pathname);
+    if(!isWebhook&&((operatorRead&&!websiteSecret)||!equal(req.headers.authorization,`Bearer ${operatorRead?websiteSecret:adminToken}`)))return reply(401,{error:'Unauthorized'});
+    if(operatorRead){try{const data=url.pathname==='/operator/conversations'?await operatorConversations(store,url):await operatorConversation(store,url);return reply(data?200:404,data??{error:'Not found'});}catch{return reply(400,{error:'Invalid query'});}}
     let bytes=0;const chunks=[];
     for await(const chunk of req){bytes+=chunk.length;if(bytes>256*1024)return reply(413,{error:'Too large'});chunks.push(chunk);}
     const raw=Buffer.concat(chunks);

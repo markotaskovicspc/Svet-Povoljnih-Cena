@@ -354,15 +354,19 @@ export class Worker {
       const result=await c.query("SELECT * FROM spc_chat_support WHERE conversation=$1 AND status='pending' AND next_at<=now() ORDER BY created_at LIMIT 1",[item.conversation]);
       const job=result.rows[0];if(!job)return;
       try {
+        const previous=await c.query("SELECT id FROM spc_chat_support WHERE conversation=$1 AND status='sent' LIMIT 1",[row.id]);
+        if(previous.rows.length){await c.query("UPDATE spc_chat_support SET status='recorded' WHERE conversation=$1 AND status='pending'",[row.id]);return;}
         const payload=this.store.decode(job.payload);
         // Ignore and remove every legacy Graph-derived cache entry.
         delete state.inboxLink;
         const account=this.accounts.find(a=>a.channel===row.channel&&a.id===row.account);
         const context=await supportInboxContext({account,sender:row.sender,graphVersion:this.graphVersion});
+        if(context.customerName)state.supportCustomerName=context.customerName;
         await this.store.save(c,row.id,state);
         const sent=await this.spc({...payload,...context,conversationLink:verifiedConversationLink(state.verifiedInboxLink,row.account)||undefined});
         if(!sent.ok)throw Error('SUPPORT_EMAIL_FAILED');
         await c.query("UPDATE spc_chat_support SET status='sent' WHERE id=$1",[job.id]);
+        await c.query("UPDATE spc_chat_support SET status='recorded' WHERE conversation=$1 AND status='pending'",[row.id]);
       } catch {
         await c.query("UPDATE spc_chat_support SET attempts=attempts+1,next_at=now()+interval '5 minutes' WHERE id=$1",[job.id]);
         console.error('chat.support_email_pending');
@@ -465,3 +469,4 @@ export class Worker {
   }
   async stop() {clearInterval(this.timer);if(this.listener){await this.listener.query('UNLISTEN *');this.listener.release();}while(this.busy)await new Promise(r=>setTimeout(r,100));}
 }
+

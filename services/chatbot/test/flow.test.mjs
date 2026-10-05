@@ -587,7 +587,7 @@ test('failed photo processing asks for a name, notifies support once and keeps l
  }finally{await store.close();}
 });
 
-test('repeated same support request sends one notice but another problem can still escalate',async()=>{
+test('support sends one email per conversation while later problems remain recorded',async()=>{
  const {store,worker,event}=await setup();const notices=[];
  try{
   await store.withConversation(event.conversation,async(row,state,c)=>{delete state.pending;state.historyVersion=2;await store.save(c,row.id,state);});
@@ -597,7 +597,7 @@ test('repeated same support request sends one notice but another problem can sti
   await worker.tick();await store.accept({...event,id:'repeat-support',text:'Pitajte pa mi javite'});await worker.tick();
   assert.equal(notices.length,1);
   const row=(await store.pool.query('SELECT * FROM spc_chat_conversations')).rows[0];assert.equal(row.paused,false);assert.match(store.decode(row.state).history.at(-1).content,/sačekajmo odgovor/);
-  await store.accept({...event,id:'different-support',text:'Drugi problem'});await worker.tick();assert.equal(notices.length,2);
+  await store.accept({...event,id:'different-support',text:'Drugi problem'});await worker.tick();assert.equal(notices.length,1);assert.equal((await store.pool.query("SELECT count(*)::int AS n FROM spc_chat_support WHERE status='recorded'")).rows[0].n,1);
  }finally{await store.close();}
 });
 
