@@ -7,7 +7,7 @@ import {channelLoyalty} from '@/lib/loyalty/channel.server';
 export const socialDeliveryRequest=z.object({
  action:z.literal('delivery_quote'),
  channel:z.enum(['facebook','instagram']),conversationId:z.string().min(3).max(200),
- city:z.string().trim().min(2).max(120),
+ city:z.string().trim().min(2).max(120).optional(),
  lines:z.array(z.object({sku:z.string().trim().min(1).max(80),qty:z.number().int().positive().max(99)})).min(1).max(50),
  shippingMethod:z.enum(['KURIR','KAMION']),
  email:z.email().optional(),loyaltyProof:z.string().max(5000).optional(),
@@ -25,7 +25,10 @@ export async function socialDeliveryQuote(body:z.infer<typeof socialDeliveryRequ
  if(missing!==-1)return {ok:false,error:{code:'PRODUCT_NOT_FOUND',sku:lines[missing].sku}};
  const loyalty=await channelLoyalty(body.loyaltyProof,{channel:body.channel,conversationId:body.conversationId,email:body.email??''},secret);
  if(body.loyaltyProof&&!loyalty)return {ok:false,error:{code:'LOYALTY_CONSENT_REQUIRED'}};
- const quote=await resolveDeliveryQuote({city:body.city,lines,loggedIn:Boolean(loyalty)});
+ if(body.shippingMethod==='KAMION'&&!body.city)return {ok:false,error:{code:'DELIVERY_CITY_REQUIRED'}};
+ // Courier tariffs are nationwide. Do not apply city-specific legacy rules or
+ // invent an address just to answer a postage question.
+ const quote=await resolveDeliveryQuote({city:body.shippingMethod==='KAMION'?body.city:undefined,lines,loggedIn:Boolean(loyalty)});
  const price=body.shippingMethod==='KURIR'?quote.prices.kurir:quote.prices.kamion;
  if(quote.pricingIssue||(body.shippingMethod==='KAMION'&&!quote.truckAvailable)||price==null||!Number.isFinite(price)||price<0)
   return {ok:false,error:{code:'DELIVERY_PRICE_UNAVAILABLE'}};

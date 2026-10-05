@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readDeliveryQuote} from '../src/delivery-quote.mjs';
-const input={city:'Beograd',shippingMethod:'KURIR',lines:[{sku:'CHAIR',qty:4}]};
+const input={city:'Beograd',shippingMethod:'KAMION',lines:[{sku:'CHAIR',qty:4}]};
 test('buyer confirmation preserves corrected Kragujevac and Badovinci without inventing a city',async()=>{
  for(const [raw,city] of [['Kragujevc','Kragujevac'],['Badovici','Badovinci']]){
   const history=[{role:'user',content:raw},{role:'assistant',content:`Da li je mesto dostave ${city}?`},{role:'user',content:'Da'}];
@@ -34,4 +34,9 @@ test('invented city never reaches ERP; supplied and previously saved cities are 
 test('unknown quantity asks for clarification without calling ERP',async()=>{
  const result=await readDeliveryQuote({input:{...input,lines:[{sku:'CHAIR',qty:null}]},event:{text:'Beograd'},spc:async()=>{throw Error('Must not call ERP');}});
  assert.equal(result.error.code,'DELIVERY_QUANTITY_REQUIRED');
+});
+test('courier quote needs only product and quantity, no invented city',async()=>{
+ const calls=[];
+ assert.equal((await readDeliveryQuote({input:{...input,shippingMethod:'KURIR',city:null},event:{channel:'facebook',conversation:'fb:test',text:'Koliko je dostava?'},spc:async p=>{calls.push(p);return {ok:true,shipping:599};}})).shipping,599);
+ assert.equal(calls[0].city,undefined);
 });

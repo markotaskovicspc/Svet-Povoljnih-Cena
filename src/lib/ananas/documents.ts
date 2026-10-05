@@ -38,7 +38,8 @@ export function normalizeAnanasDocument(input: unknown, kind: "SALE" | "REFUND",
     const price = record.parse(item.grandTotalPrice);
     const quantity = Number(item.quantity);
     if (!Number.isFinite(quantity) || quantity === 0) throw new Error("Neispravna količina Ananas stavke.");
-    return { sku: text(product.sku), name: text(product.name).slice(0, 500), quantity: Math.abs(quantity), gross: amount(price.basePrice) };
+    return { sku: text(product.sku), name: text(product.name).slice(0, 500), quantity: Math.abs(quantity), gross: amount(price.basePrice),
+      ...(price.basePriceWithoutVat != null ? {net:amount(price.basePriceWithoutVat)} : {}) };
   });
   const fiscalNumber = required(fiscal.invoiceNumber, "broj fiskalnog računa");
   const externalId = required(order.invoiceId ?? order.invoiceid ?? order.invoiceNumber ?? fiscalNumber, "ID dokumenta");

@@ -4,6 +4,7 @@ import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { NewsletterBand } from "@/components/layout/newsletter-band";
 import { FirstPurchaseCta } from "@/components/layout/first-purchase-cta";
+import { MessengerContact } from "@/components/layout/messenger-contact";
 import { ExitIntentOffer } from "@/components/marketing/exit-intent-offer";
 import { CookieConsent } from "@/components/privacy/cookie-consent";
 import { FirstPartyAnalytics } from "@/components/analytics/first-party-analytics";
@@ -70,6 +71,7 @@ export async function StorefrontShell({ children }: { children: ReactNode }) {
       </StorefrontStickyHeader>
       <main className="flex-1">{children}</main>
       <FirstPurchaseCta />
+      <MessengerContact />
       <ExitIntentOffer />
       <NewsletterBand />
       <Footer cmsFooter={cmsFooter} />
