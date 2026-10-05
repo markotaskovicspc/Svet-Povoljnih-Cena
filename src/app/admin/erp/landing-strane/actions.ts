@@ -120,12 +120,6 @@ function snapshotData(snapshot: LandingPageSnapshot) {
 async function validateReferencesForPublish(snapshot: LandingPageSnapshot) {
   const issues = validateLandingBlocksForPublish(snapshot.blocks);
   if (snapshot.template === "SIMPLE_PRODUCT_LIST") {
-    if (!snapshot.heroImageUrl) {
-      issues.push("Jednostavna landing strana mora imati desktop sliku banera.");
-    }
-    if (!snapshot.heroCtaLabel || !snapshot.heroCtaHref) {
-      issues.push("Jednostavna landing strana mora imati naziv i link CTA dugmeta.");
-    }
     if (!snapshot.productSkus.length) {
       issues.push("Jednostavna landing strana mora imati najmanje jedan proizvod.");
     }
@@ -136,10 +130,12 @@ async function validateReferencesForPublish(snapshot: LandingPageSnapshot) {
   if (snapshot.startsAt && snapshot.endsAt && snapshot.startsAt >= snapshot.endsAt) {
     issues.push("Kraj objave mora biti posle početka objave.");
   }
-  if (snapshot.heroCtaLabel && !snapshot.heroCtaHref) {
+  const showsHero = snapshot.template !== "SIMPLE_PRODUCT_LIST" ||
+    Boolean(snapshot.heroImageUrl || snapshot.heroMobileImageUrl);
+  if (showsHero && snapshot.heroCtaLabel && !snapshot.heroCtaHref) {
     issues.push("Hero dugme mora imati link.");
   }
-  if (snapshot.heroCtaHref && !snapshot.heroCtaLabel) {
+  if (showsHero && snapshot.heroCtaHref && !snapshot.heroCtaLabel) {
     issues.push("Hero link mora imati naziv dugmeta.");
   }
   if (snapshot.canonicalUrl && !/^https:\/\//.test(snapshot.canonicalUrl) && !snapshot.canonicalUrl.startsWith("/")) {

@@ -137,7 +137,11 @@ export default async function LandingPageRoute({ params, searchParams }: RoutePr
             Admin pregled nacrta — ova verzija nije nužno javno objavljena.
           </div>
         ) : null}
-        <h1 className="sr-only">{page.snapshot.title}</h1>
+        <h1 className={page.snapshot.heroImageUrl || page.snapshot.heroMobileImageUrl
+          ? "sr-only"
+          : "mx-auto w-full max-w-[var(--container-page)] px-4 pt-8 font-display text-3xl font-bold text-ink-900 md:px-6 md:text-4xl"}>
+          {page.snapshot.title}
+        </h1>
         <SimpleLandingHero snapshot={page.snapshot} />
         {preview && page.snapshot.productSkus.length > products.length ? (
           <p className="mx-auto mt-4 w-full max-w-[var(--container-page)] px-4 text-sm text-warning md:px-6">

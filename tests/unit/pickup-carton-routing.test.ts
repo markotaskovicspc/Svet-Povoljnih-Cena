@@ -11,12 +11,12 @@ const route = (items: PackageSourceItem[]) => resolveCourierProvider({
   shippingMethod: "KURIR", items: derivePhysicalPackages(items).map(physicalPackageRouteItem),
 });
 
-describe("picking of cartons awaiting outer measurements", () => {
-  it("includes CITY LINE's 16 units in eight cartons without declaring unit measurements as box measurements", () => {
+describe("picking of grouped packages", () => {
+  it("includes CITY LINE's 16 units in eight packages with individual packaging dimensions and missing weight", () => {
     const packages = derivePhysicalPackages([chair]);
     expect(route([chair])).toEqual({ kind: "single", provider: "X_EXPRESS" });
     expect(packages).toHaveLength(8);
-    expect(packages.every(pkg => pkg.widthCm === null && pkg.heightCm === null && pkg.depthCm === null && pkg.weightKg === null)).toBe(true);
+    expect(packages.every(pkg => pkg.widthCm === 53 && pkg.heightCm === 51 && pkg.depthCm === 45 && pkg.weightKg === null)).toBe(true);
     expect(buildPickupPrintRows(packages.map(pkg => ({
       ...pkg, id: `parcel-${pkg.packageNo}`, lineGroupKey: "order:1", quantity: 16,
       orderItem: { id: chair.id, sku: chair.sku!, name: chair.name, qty: chair.qty },
@@ -35,7 +35,7 @@ describe("picking of cartons awaiting outer measurements", () => {
   });
 
   it.each([
-    { unitPackHeightCm: 80 }, { grossWeightKg: 16 }, { packWidthCm: 90 },
+    { unitPackHeightCm: 80 }, { grossWeightKg: 16 },
   ])("keeps known bulky or heavy cartons on MyGLS: %j", dimensions => {
     expect(route([{ ...chair, product: { ...chair.product, ...dimensions } }])).toEqual({ kind: "single", provider: "MYGLS" });
   });

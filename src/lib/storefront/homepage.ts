@@ -426,7 +426,9 @@ async function resolveSlot(slot: HomeSlotForRender) {
     slotKey: slot.slotKey,
     title: slot.titleOverride?.trim() || page.snapshot.title,
     href: `/ponuda/${encodeURIComponent(page.slug)}`,
-    products: uniqueFamilyCards(products, limit),
+    // A manual landing selection includes individual SKUs, including colors
+    // from the same family. Keep that selection and its order on the homepage.
+    products: products.slice(0, limit),
   };
 }
 
@@ -504,7 +506,7 @@ async function loadHomeLayout(): Promise<HomeLayout> {
 
 const getHomeLayoutAcrossRequests = unstable_cache(
   loadHomeLayout,
-  ["storefront-home-layout-v2-family"],
+  ["storefront-home-layout-v3-manual-skus"],
   {
     revalidate: 60,
     tags: ["storefront-home"],

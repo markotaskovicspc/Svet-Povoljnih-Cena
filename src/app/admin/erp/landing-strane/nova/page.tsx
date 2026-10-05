@@ -13,7 +13,7 @@ export default async function NewLandingPage() {
   return <>
     <PageHeader
       title="Nova landing strana"
-      description="Napravite nacrt, zatim dodajte slike i proverite javni pregled pre objave."
+      description="Izaberite proizvode, po želji dodajte baner i proverite javni pregled pre objave."
       crumbs={[{ href: "/admin", label: "Admin" }, { href: "/admin/erp/landing-strane", label: "Landing strane" }, { label: "Nova" }]}
       actions={<Link href="/admin/erp/landing-strane" className={buttonVariants({ variant: "outline" })}>Nazad na listu</Link>}
     />
@@ -24,7 +24,7 @@ export default async function NewLandingPage() {
         values={{
           slug: "", title: "",
           heroImageUrl: null, heroMobileImageUrl: null, heroImageAlt: null,
-          heroCtaLabel: null, heroCtaHref: "#proizvodi",
+          heroCtaLabel: null, heroCtaHref: null,
           productSkus: [], seoTitle: null, seoDescription: null, ogImageUrl: null,
           canonicalUrl: null, robotsIndex: true, startsAt: null, endsAt: null,
           lockedSlug: false,

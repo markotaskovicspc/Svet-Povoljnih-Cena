@@ -4,7 +4,7 @@ import { loadEligibleOrders, setPickupPackageReady } from "@/lib/admin/pickup-ba
 import { buildPickupPrintRows } from "@/lib/admin/pickup-print";
 import { getPickingSession } from "@/lib/admin/picking.server";
 
-it("loads CITY LINE into picking once, preserves 16 units, and requires measured boxes before readiness", async () => {
+it("loads CITY LINE individual dimensions once, preserves 16 units, and requires package weight before readiness", async () => {
   const prefix = `CARTON-${Date.now()}`;
   const warehouse = await db.warehouse.create({ data: { code: `${prefix}-DC`, name: prefix, active: true, isDefault: true } });
   const actor = await db.adminUser.create({ data: { email: `${prefix}@example.invalid`, passwordHash: "unused", role: "OPS" } });
@@ -26,7 +26,7 @@ it("loads CITY LINE into picking once, preserves 16 units, and requires measured
   expect(await loadEligibleOrders(batch.id, actor.id, [order.id])).toMatchObject({ orderCount: 0, lineCount: 0 });
   const lines = await db.pickupBatchLine.findMany({ where: { batchId: batch.id }, include: { orderItem: true } });
   expect(lines).toHaveLength(8);
-  expect(lines.every(line => line.widthCm === null && line.weightKg === null && line.warehouseReadyAt === null)).toBe(true);
+  expect(lines.every(line => Number(line.widthCm) === 53 && Number(line.depthCm) === 45 && Number(line.heightCm) === 51 && line.weightKg === null && line.warehouseReadyAt === null)).toBe(true);
   expect(buildPickupPrintRows(lines)).toMatchObject([{ sku: "110174", quantity: 16, packageCount: 8 }]);
   expect((await getPickingSession(batch.id)).rows).toMatchObject([{ sku: "110174", quantity: 16 }]);
   await expect(setPickupPackageReady(batch.id, lines[0].id, true, actor.id)).rejects.toThrow();

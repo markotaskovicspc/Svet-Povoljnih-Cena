@@ -90,6 +90,15 @@ export function courierUnitWeightKg(
   );
 }
 
+/** Catalogue dimensions always describe the individual article packaging. */
+export function courierUnitDimensionsCm(product: PackageSourceItem["product"]) {
+  return {
+    widthCm: positiveNumber(product?.unitPackWidthCm),
+    depthCm: positiveNumber(product?.unitPackDepthCm),
+    heightCm: positiveNumber(product?.unitPackHeightCm),
+  };
+}
+
 /**
  * Weight above 40 kg and a side above 200 cm are hard MyGLS limits. The
  * 300 cm volumetric boundary is handled separately because the published
@@ -139,7 +148,9 @@ export function hasKnownMyGlsOversizeSurcharge(pkg: PhysicalPackage) {
 
 /**
  * Expands order lines into full courier cartons and a separate remainder.
- * Full cartons use transport measurements; a single remainder uses unit measurements.
+ * Package count follows courierUnitsPerBox, but catalogue dimensions always
+ * come from individual article packaging, independently of the packed quantity.
+ * A grouped package's weight still requires an exact matching carton weight.
  * Missing values intentionally remain null so an operator must enter real
  * measurements before a provider request can be sent.
  */
@@ -165,9 +176,7 @@ export function derivePhysicalPackages(
       const matchingCarton = item.product?.packQty === packedQuantity;
       const measurements = {
         weightKg: multiple ? (matchingCarton ? positiveNumber(item.product?.packGrossWeightKg) : null) : courierUnitWeightKg(item.product),
-        widthCm: positiveNumber(multiple ? item.product?.packWidthCm : item.product?.unitPackWidthCm),
-        depthCm: positiveNumber(multiple ? item.product?.packDepthCm : item.product?.unitPackDepthCm),
-        heightCm: positiveNumber(multiple ? item.product?.packHeightCm : item.product?.unitPackHeightCm),
+        ...courierUnitDimensionsCm(item.product),
       };
       const unitWeight = courierUnitWeightKg(item.product);
       packages.push({
@@ -176,9 +185,8 @@ export function derivePhysicalPackages(
         orderItemId: item.id,
         content: item.name,
         ...measurements,
-        // Keep grouped articles visible in picking even before their outer box
-        // is measured. Unit measurements only guide the preliminary courier;
-        // they must never become the declared dimensions of a multi-unit box.
+        // Estimated aggregate weight only guides routing. It must never replace
+        // a measured grouped-package weight for readiness or a courier label.
         ...(multiple ? { routingMeasurements: {
           weightKg: measurements.weightKg ?? (unitWeight == null ? null : unitWeight * packedQuantity),
           widthCm: measurements.widthCm ?? positiveNumber(item.product?.unitPackWidthCm),
