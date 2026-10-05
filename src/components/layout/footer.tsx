@@ -119,6 +119,7 @@ export function Footer({ cmsFooter }: { cmsFooter: CmsFooterState | null }) {
                 </ul>
               </div>
             </div>
+            <p className="mt-5 max-w-sm text-sm leading-relaxed text-ink-700">{BRAND.legalName}</p>
           </div>
 
           {/*
