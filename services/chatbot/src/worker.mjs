@@ -435,7 +435,7 @@ export class Worker {
       const out=rows.rows[0]; if(!out) return;
       if(out.status==='sending') {await this.store.pause(row.id,'Nepotvrđen ishod slanja odgovora; proveriti Meta inbox');await c.query(`UPDATE spc_chat_outbox SET status='uncertain' WHERE id=$1`,[out.id]);return;}
       const message=this.store.decode(out.payload);
-      if(!inWindow(Number(row.last_customer)) || (!this.allowed(row.sender) && !message.human) || (row.paused&&!message.allowPaused&&!message.human)) {
+      if((row.channel!=='web'&&!inWindow(Number(row.last_customer))) || (!this.allowed(row.sender) && !message.human) || (row.paused&&!message.allowPaused&&!message.human)) {
         await c.query(`UPDATE spc_chat_outbox SET status='suppressed' WHERE id=$1`,[out.id]); return;
       }
       if(row.channel==='web'){await c.query("UPDATE spc_chat_outbox SET status='sent' WHERE id=$1",[out.id]);return;}

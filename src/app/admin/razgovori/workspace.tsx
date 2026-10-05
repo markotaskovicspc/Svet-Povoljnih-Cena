@@ -1,15 +1,16 @@
 'use client';
 import Link from 'next/link';
+import {actOnConversation} from './actions';
 import {useEffect,useRef,useState,useTransition} from 'react';
 import {useRouter} from 'next/navigation';
-import {ArrowDown,ArrowLeft,ArrowRight,Bot,CheckCheck,ChevronDown,ExternalLink,Globe,Inbox,Info,Camera,LoaderCircle,MessageCircle,Package,RefreshCw,Search,ShieldCheck,UserRound,X,AlertCircle} from 'lucide-react';
+import {ArrowDown,ArrowLeft,ArrowRight,Bot,CheckCheck,ChevronDown,ExternalLink,Globe,Inbox,Info,Camera,LoaderCircle,MessageCircle,Package,RefreshCw,Search,ShieldCheck,UserRound,X,AlertCircle,Send} from 'lucide-react';
 export type Message={id:string,source:string,status:string,timestamp:number,text:string,attachments:{url:string}[]};
 export type Conversation={id:string,channel:string,paused:boolean,reason:string|null,name:string|null,preview:string,needsSupport:boolean};
 export type Detail=Conversation&{history:Message[],context:{role:string,content:string,timestamp?:number}[],orders:{number:string}[],support:{id:string,status:string,reason:string}[],nextOffset:number|null};
 type Props={list:{items:Conversation[],nextOffset:number|null}|null,detail:Detail|null,error:boolean,selected:string,channel:string,listOffset:number,messageOffset:number};
 const channels=[['','Svi'],['facebook','Facebook'],['instagram','Instagram'],['web','Sajt']];
 const label=(c:string)=>c==='web'?'Sajt':c==='instagram'?'Instagram':'Facebook';
-const names:Record<string,string>={sent:'Poslato',done:'Obrađeno',pending:'Na čekanju',failed:'Neuspešno',skipped:'Preskočeno',recorded:'Zabeleženo bez novog mejla',superseded:'Rešeno / zamenjeno'};
+const names:Record<string,string>={sent:'Poslato',done:'Obrađeno',pending:'Na čekanju',failed:'Neuspešno',skipped:'Preskočeno',suppressed:'Nije poslato',uncertain:'Ishod slanja nije potvrđen',sending:'Slanje u toku',recorded:'Zabeleženo bez novog mejla',superseded:'Rešeno / zamenjeno'};
 const date=(t:number)=>new Date(t).toLocaleDateString('sr-Latn-RS',{timeZone:'Europe/Belgrade',day:'numeric',month:'long',year:'numeric'});
 const time=(t:number)=>new Date(t).toLocaleTimeString('sr-Latn-RS',{timeZone:'Europe/Belgrade',hour:'2-digit',minute:'2-digit'});
 const name=(c:Conversation)=>c.name||label(c.channel)+' kupac '+c.id.split(':').at(-1)?.slice(-8);
@@ -19,6 +20,30 @@ function Attachment({url}:{url:string}){const [failed,setFailed]=useState(false)
 export function ConversationWorkspace({list,detail,error,selected,channel,listOffset,messageOffset}:Props){
  const router=useRouter(),[refreshing,startRefresh]=useTransition(),[query,setQuery]=useState(''),[details,setDetails]=useState(false),[atBottom,setAtBottom]=useState(true);
  const feed=useRef<HTMLDivElement>(null);
+ const [draft,setDraft]=useState(''),[acting,setActing]=useState(false),[notice,setNotice]=useState<{ok:boolean,message:string}|null>(null);
+ const activeId=useRef(detail?.id);activeId.current=detail?.id;
+ const attempt=useRef<{id:string,text:string,requestId:string}|null>(null),busy=useRef(false);
+ async function operate(action:'pause'|'resume'|'reply'){
+  if(!detail||busy.current)return;busy.current=true;setActing(true);setNotice(null);
+  const id=detail.id;
+  try{
+   let payload:{id:string,action:'pause'|'resume'|'reply',text?:string,requestId?:string}={id,action};
+   if(action==='reply'){
+    const text=attempt.current?.id===id?attempt.current.text:draft.trim();
+    if(!text)return;
+    if(!attempt.current||attempt.current.id!==id)attempt.current={id,text,requestId:crypto.randomUUID()};
+    payload={...payload,...attempt.current};
+   }
+   const result=await actOnConversation(payload);if(activeId.current!==id)return;setNotice(result);
+   if(!result.ok&&!result.retrySame)attempt.current=null;
+   if(result.ok&&action==='reply'){setDraft('');attempt.current=null;}
+   startRefresh(()=>router.refresh());
+  }catch{if(activeId.current!==id)return;setNotice({ok:false,message:'Ishod nije potvrđen. Osvežite prepisku; ponovni klik koristi isti pokušaj slanja.'});}
+  finally{busy.current=false;setActing(false);}
+ }
+ useEffect(()=>{setDraft('');setNotice(null);attempt.current=null;},[detail?.id]);
+ useEffect(()=>{if(!detail?.paused)return;const timer=setInterval(()=>{if(!busy.current&&document.visibilityState==='visible')startRefresh(()=>router.refresh());},10000);return ()=>clearInterval(timer);},[detail?.id,detail?.paused,router]);
+ useEffect(()=>{if(atBottom&&messageOffset===0&&feed.current)feed.current.scrollTop=feed.current.scrollHeight;},[detail?.history.length,atBottom,messageOffset]);
  const href=(extra:Record<string,string|number>)=>'/admin/razgovori?'+new URLSearchParams({...(channel?{channel}:{}),offset:String(listOffset),...(selected?{conversation:selected}:{}),...Object.fromEntries(Object.entries(extra).map(([k,v])=>[k,String(v)]))}).toString();
  const back='/admin/razgovori?'+new URLSearchParams({...(channel?{channel}:{}),offset:String(listOffset)}).toString();
  useEffect(()=>{if(feed.current)feed.current.scrollTop=messageOffset===0?feed.current.scrollHeight:0;setAtBottom(messageOffset===0);},[detail?.id,messageOffset]);
@@ -40,6 +65,7 @@ export function ConversationWorkspace({list,detail,error,selected,channel,listOf
  <section aria-label="Prepiska" className="relative flex min-w-0 flex-1 flex-col">
  {detail?<>
   <div className="flex items-center gap-3 border-b border-slate-100 bg-white px-4 py-4 md:px-6"><Link href={back} aria-label="Nazad na razgovore" className="rounded-xl p-2 text-slate-500 lg:hidden"><ArrowLeft size={18}/></Link><Avatar title={name(detail)} channel={detail.channel}/><div className="min-w-0 flex-1"><h2 className="truncate text-sm font-semibold text-slate-900 md:text-base">{name(detail)}</h2><p className="mt-1 flex items-center gap-2 text-xs text-slate-500"><ChannelIcon channel={detail.channel}/>{label(detail.channel)}<span className={'size-1.5 rounded-full '+(detail.paused?'bg-amber-400':'bg-emerald-500')}/>{detail.paused?'Bot pauziran':'Bot aktivan'}</p></div><button type="button" aria-label="Detalji razgovora" aria-expanded={details} onClick={()=>setDetails(!details)} className={'flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition '+(details?'bg-blue-50 text-blue-700':'bg-slate-50 text-slate-600 hover:bg-slate-100')}><Info size={16}/><span className="hidden sm:inline">Detalji</span>{detail.support.length>0&&<span className="rounded-md bg-amber-100 px-1.5 py-0.5 text-amber-800">{detail.support.length}</span>}</button><button type="button" disabled={refreshing} aria-label="Osveži prepisku" onClick={()=>startRefresh(()=>router.refresh())} className="rounded-xl p-2 text-slate-400 hover:bg-slate-50">{refreshing?<LoaderCircle size={17} className="animate-spin"/>:<RefreshCw size={17}/>}</button></div>
+  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-2 md:px-6"><p className="text-xs text-slate-500">{detail.paused?'Vi vodite razgovor. Bot ne odgovara.':'Preuzmite razgovor da odgovorite kupcu.'}</p><button type="button" disabled={acting||refreshing} onClick={()=>operate(detail.paused?'resume':'pause')} className="rounded-xl bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 disabled:opacity-50">{acting?'Obrađujem…':detail.paused?'Vrati botu':'Preuzmi razgovor'}</button></div>
   {details&&<div className="max-h-64 shrink-0 space-y-3 overflow-y-auto border-b border-slate-200 bg-slate-50 px-5 py-4 text-sm">{detail.paused&&<p className="text-amber-800">Razlog pauze: {detail.reason||'Ručno pauzirano'}</p>}{detail.orders.length>0&&<div className="flex flex-wrap items-center gap-2"><Package size={16} className="text-slate-400"/>{detail.orders.map(o=><span key={o.number} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium">{o.number}</span>)}</div>}{detail.support.length>0&&<details><summary className="cursor-pointer font-medium">Zahtevi korisničkoj podršci ({detail.support.length})</summary><div className="mt-2 space-y-2">{detail.support.map(s=><div key={s.id} className="rounded-xl border border-amber-100 bg-white p-3"><p>{s.reason}</p><p className="mt-1 text-xs text-slate-500">{names[s.status]||s.status}</p></div>)}</div></details>}{detail.context.length>0&&<details><summary className="cursor-pointer font-medium">Uvezene poruke i sačuvani kontekst</summary>{detail.context.map((m,i)=><p className="mt-3 whitespace-pre-wrap break-words text-xs leading-5" key={i}><strong>{m.role==='user'?'Kupac':'SPC iz konteksta'}: </strong>{m.content}</p>)}</details>}<p className="text-xs text-slate-500">Prikazane su poruke koje je SPC servis primio ili uvezao.</p></div>}
   <div ref={feed} onScroll={()=>{const el=feed.current;if(el)setAtBottom(el.scrollHeight-el.scrollTop-el.clientHeight<80);}} className="min-h-0 flex-1 overflow-y-auto bg-slate-50/70 px-4 py-5 md:px-8">
   {detail.nextOffset!=null&&<div className="mb-6 text-center"><Link prefetch={false} href={href({historyOffset:detail.nextOffset})} className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-600 hover:border-blue-300"><ChevronDown size={14} className="rotate-180"/>Starije poruke</Link></div>}
@@ -48,7 +74,13 @@ export function ConversationWorkspace({list,detail,error,selected,channel,listOf
   {messageOffset>0&&<div className="mt-5 text-center"><Link prefetch={false} href={href({historyOffset:Math.max(0,messageOffset-100)})} className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">Novije poruke<ArrowDown size={14}/></Link></div>}
   </div>
   {!atBottom&&messageOffset===0&&<button type="button" aria-label="Idi na najnovije poruke" onClick={()=>feed.current?.scrollTo({top:feed.current.scrollHeight,behavior:'smooth'})} className="absolute bottom-20 right-6 rounded-full border border-slate-200 bg-white p-3 text-blue-600 shadow-lg"><ArrowDown size={18}/></button>}
-  <div className="flex items-center gap-2 border-t border-slate-100 bg-white px-5 py-3 text-[11px] text-slate-400"><ShieldCheck size={15} className="shrink-0 text-emerald-600"/><span>Pregled prepiske. Odgovore šaljete iz Business Suite-a ili operaterskog panela.</span></div>
+  <div className="shrink-0 border-t border-slate-100 bg-white p-4">
+   {notice&&<p role={notice.ok?'status':'alert'} className={'mb-3 text-xs '+(notice.ok?'text-emerald-700':'text-amber-800')}>{notice.message}</p>}
+   <form onSubmit={e=>{e.preventDefault();void operate('reply');}} className="flex items-end gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100">
+    <textarea aria-label="Odgovor kupcu" rows={2} maxLength={1800} value={draft} onChange={e=>setDraft(e.target.value)} disabled={!detail.paused||acting||!!attempt.current} placeholder={detail.paused?'Napišite odgovor kupcu…':'Kliknite „Preuzmi razgovor“ da pošaljete odgovor'} className="max-h-36 min-h-14 flex-1 resize-y bg-transparent px-2 py-1 text-sm outline-none disabled:opacity-60"/>
+    <button type="submit" disabled={!detail.paused||acting||refreshing||!draft.trim()} aria-label="Pošalji odgovor" className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white transition hover:bg-blue-700 disabled:opacity-40">{acting?<LoaderCircle size={18} className="animate-spin"/>:<Send size={18}/>}</button>
+   </form><p className="mt-2 text-[10px] text-slate-400">Odgovor šaljete kupcu kao Svet Povoljnih Cena. Bot ostaje pauziran do klika „Vrati botu“.</p>
+  </div>
  </>:<div className="flex h-full flex-col items-center justify-center px-8 text-center"><div className="mb-6 flex size-20 items-center justify-center rounded-3xl bg-blue-50 text-blue-600"><MessageCircle size={36} strokeWidth={1.4}/></div><h2 className="text-xl font-semibold tracking-tight text-slate-900">Svaki razgovor na svom mestu</h2><p className="mt-3 max-w-xs text-sm leading-6 text-slate-500">Izaberite kupca i pogledajte prepisku, slike, porudžbine i zahteve podršci.</p><span className="mt-6 flex items-center gap-2 rounded-full border border-slate-200 px-3 py-2 text-xs text-slate-400"><ShieldCheck size={14}/>Pristup samo zaposlenima</span></div>}
  </section></div></div>;
 }
