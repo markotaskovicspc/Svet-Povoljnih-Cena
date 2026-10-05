@@ -83,8 +83,28 @@ export async function geocodePickupAddress(address: PickupAddress): Promise<XExp
   }
   const results = body.results;
   if (!Array.isArray(results) || !results.length) throw addressError("Google Maps nije vratio lokaciju adrese.", "Proverite ulicu, broj i mesto, pa pokušajte ponovo.");
-  if (results.length !== 1) throw addressError("Google Maps je pronašao više mogućih lokacija.", "Dopunite naziv ulice, broj i mesto da bi adresa bila jednoznačna.");
-  const result = results[0];
+  if (results.length === 1) return validatePickupResult(results[0], street, lookupStreet, houseNumber, city);
+  const accepted = new Map<string, XExpressPickupCoordinates>();
+  const reasons: string[] = [];
+  for (const candidate of results) {
+    try {
+      const point = validatePickupResult(candidate, street, lookupStreet, houseNumber, city);
+      accepted.set(`${point.latitude},${point.longitude}`, point);
+    } catch (error) {
+      if (!(error instanceof PickupGeocodingError)) throw error;
+      reasons.push(error.message.replace(/^Lokacija preuzimanja nije pouzdano pronađena\. /, "").replace(/ Nalog nije poslat kuriru\.$/, ""));
+    }
+  }
+  // Extra Google suggestions are harmless when exactly one complete, precise
+  // building matches. Duplicate results at the identical point are one location.
+  if (accepted.size === 1) return [...accepted.values()][0];
+  throw addressError(
+    `Google Maps je pronašao više mogućih lokacija, ali ${accepted.size ? "više objekata odgovara istoj adresi" : "nijedan rezultat nije potpuno potvrdio objekat"}.${!accepted.size && reasons.length ? ` ${[...new Set(reasons)].slice(0, 2).join(" ")}` : ""}`,
+    "Proverite ulicu, broj i mesto ili unesite tačnu lokaciju objekta potvrđenu sa kupcem u polje „Potvrđena lokacija kupca“ na reklamaciji.",
+  );
+}
+
+function validatePickupResult(result: Result, street: string, lookupStreet: string, houseNumber: string, city: string): XExpressPickupCoordinates {
   const components = result?.address_components;
   const location = result?.geometry?.location;
   if (!Array.isArray(components) || !components.every((c) => c && Array.isArray(c.types) && typeof c.long_name === "string" && typeof c.short_name === "string")) {

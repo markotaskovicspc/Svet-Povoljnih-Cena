@@ -61,7 +61,7 @@ describe("automatic customer pickup geocoding", () => {
   it("rejects partial matches and multiple candidates", async () => {
     respond([{ ...result(), partial_match: true }]);
     await expect(geocodePickupAddress(address)).rejects.toThrow(/nije pouzdano/);
-    respond([result(), result()]);
+    respond([result(), { ...result(), geometry: { ...result().geometry, location: { lat: 44.82, lng: 20.47 } } }]);
     await expect(geocodePickupAddress(address)).rejects.toThrow(/nije pouzdano/);
   });
 
@@ -128,7 +128,7 @@ describe("pickup error explanations", () => {
     await expect(geocodePickupAddress(address)).rejects.toThrow("nije potvrdio tačnu lokaciju objekta");
   });
   it("explains ambiguity and absent Google results separately", async () => {
-    respond([result(), result()]);
+    respond([result(), { ...result(), geometry: { ...result().geometry, location: { lat: 44.82, lng: 20.47 } } }]);
     await expect(geocodePickupAddress(address)).rejects.toThrow("više mogućih lokacija");
     respond([], "ZERO_RESULTS");
     await expect(geocodePickupAddress(address)).rejects.toThrow("nije pronašao adresu „Vladetina 5, Beograd“");
@@ -155,5 +155,24 @@ describe("pickup error explanations", () => {
   it.each([senta("Ištvana Berte", "60"), senta("Ištvana Berte", "59", "Subotica"), senta("Druga ulica")])("still rejects another house, town or street", async (item) => {
     respond([item]);
     await expect(geocodePickupAddress({ shipStreet: "Berta Istvan (59)", shipHouseNumber: "59", shipCity: "Senta" })).rejects.toThrow(/nije pouzdano/);
+  });
+});
+
+ describe("multiple Google suggestions", () => {
+  beforeEach(() => { vi.stubEnv("GOOGLE_MAPS_API_KEY", "private-test-key"); vi.stubGlobal("fetch", fetchMock); fetchMock.mockReset(); });
+  afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
+  it("accepts the uniquely confirmed building while rejecting a different house suggestion", async () => {
+    const wrong = result(); wrong.address_components[1].long_name = "6";
+    respond([wrong, result()]);
+    await expect(geocodePickupAddress(address)).resolves.toEqual({ latitude: 44.81, longitude: 20.46 });
+  });
+  it("treats duplicate exact coordinates as one building", async () => {
+    respond([result(), result()]);
+    await expect(geocodePickupAddress(address)).resolves.toEqual({ latitude: 44.81, longitude: 20.46 });
+  });
+  it("explains why none of the suggestions confirms the building", async () => {
+    const approximate = result(); approximate.geometry.location_type = "RANGE_INTERPOLATED";
+    respond([approximate, approximate]);
+    await expect(geocodePickupAddress(address)).rejects.toThrow("nije potvrdio tačnu lokaciju objekta");
   });
 });
