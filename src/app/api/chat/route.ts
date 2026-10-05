@@ -11,7 +11,7 @@ async function handle(req:NextRequest){
  if(!secret)return NextResponse.json({error:'Chat trenutno nije dostupan.'},{status:503});
  const origin=req.headers.get('origin');
  if((origin&&origin!==req.nextUrl.origin)||req.headers.get('sec-fetch-site')==='cross-site')return new NextResponse(null,{status:403});
- const limited=await checkRateLimitForRequest(req,'website-chat',{limit:req.method==='POST'?15:120,windowMs:60000});
+ const limited=await checkRateLimitForRequest(req,`website-chat-${req.method}`,{limit:req.method==='POST'?15:120,windowMs:60000});
  if(!limited.ok)return rateLimitJson(limited);
  const [saved,proof]= (req.cookies.get(cookieName)?.value??'').split('.');
  const expected=sign(saved??'',secret);
