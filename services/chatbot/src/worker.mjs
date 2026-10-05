@@ -73,6 +73,10 @@ export class Worker {
             return;
           }
         }
+        // Recover ordinary service pauses only when no ERP write may be in flight.
+        if(!event.echo&&row.paused&&/^(?:Greška|Greska) servisa; potreban odgovor zaposlenog$/.test(row.reason??'')&&!state.confirming&&!state.cancelling&&!state.submittingReclamation&&!state.reclamationInFlight&&!state.operatorOrder){
+          await c.query('UPDATE spc_chat_conversations SET paused=false,reason=NULL WHERE id=$1',[row.id]);row.paused=false;
+        }
         // Recover only legacy bot handoffs. Operator and safety pauses stay intact.
         if(!event.echo && row.paused && state.handedOff && !state.reclamationInFlight &&
           !/Ručna pauza|Razgovor preuzeo zaposleni|Odgovor zaposlenog|Previše poruka|Greška|Nepotvrđen|Proveriti|Reklamacija zahteva proveru/i.test(row.reason??'')) {
@@ -317,11 +321,26 @@ export class Worker {
             await c.query("UPDATE spc_chat_events SET status='done',attempts=attempts+1 WHERE id=$1",[job.id]);
             await c.query('COMMIT');return;
           }
-          // A complaint write may have committed before a timeout. Escalate for reconciliation.
-          if(state.reclamationInFlight || job.attempts>=2) {
-            await this.store.pause(row.id,state.reclamationInFlight?'Proveriti ishod slanja reklamacije':'Greška servisa; potreban odgovor zaposlenog');
-            await c.query(`UPDATE spc_chat_events SET status='failed',attempts=attempts+1 WHERE id=$1`,[job.id]);
-          } else await c.query(`UPDATE spc_chat_events SET attempts=attempts+1,next_at=now()+interval '10 seconds' WHERE id=$1`,[job.id]);
+          // Persisted write markers must never be treated as a failed ordinary reply.
+          const uncertain=Boolean(state.confirming||state.cancelling||state.submittingReclamation||state.reclamationInFlight||state.operatorOrder);
+          if(state.reclamationInFlight||job.attempts>=2){
+            const reason=uncertain?'Ishod upisa u ERP nije potvrđen. Proverite ERP pre ponovnog upisa da ne nastane duplikat.':'Obrada obične poruke nije uspela posle tri pokušaja. Kupac čeka nastavak razgovora; proverite dogovor i pomozite oko porudžbine.';
+            await c.query('BEGIN');
+            const payload={action:'support_handoff',id:`processing-error:${job.id}`,channel:row.channel,conversationId:row.id,reason:reason.slice(0,200),transcript:('RAZLOG: '+reason+'\n\n'+staffSummary(state)+'\n\n'+state.history.slice(-15).map(m=>`${m.role==='user'?'Kupac':'SPC'}: ${m.content}`).join('\n')+'\nKupac: '+event.text).slice(-10000)};
+            await c.query('INSERT INTO spc_chat_support(id,conversation,payload) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[payload.id,row.id,this.store.encode(payload)]);
+            if(uncertain){
+              await c.query('UPDATE spc_chat_conversations SET paused=true,reason=$2 WHERE id=$1',[row.id,'Proveriti neizvestan ishod upisa u ERP']);
+            }else{
+              const saved=(await c.query('SELECT state FROM spc_chat_conversations WHERE id=$1',[row.id])).rows[0];
+              const clean=this.store.decode(saved.state);
+              const message='Izvinite na zastoju. Proslediću razgovor korisničkoj podršci. Možete nastaviti da pišete ovde.';
+              clean.history.push({role:'user',content:event.text,timestamp:event.timestamp},{role:'assistant',content:message,timestamp:Date.now()});clean.history=clean.history.slice(-HISTORY_LIMIT);
+              await this.store.save(c,row.id,clean);
+              await this.store.enqueue(c,`reply:${job.id}`,row.id,{text:message});
+            }
+            await c.query("UPDATE spc_chat_events SET status='failed',attempts=attempts+1 WHERE id=$1",[job.id]);
+            await c.query('COMMIT');
+          }else await c.query("UPDATE spc_chat_events SET attempts=attempts+1,next_at=now()+interval '10 seconds' WHERE id=$1",[job.id]);
           console.error('chat.processing_failed');
         }
       })));

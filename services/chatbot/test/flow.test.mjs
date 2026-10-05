@@ -610,3 +610,29 @@ test('repeated same support request sends one notice but another problem can sti
    const replies=(await store.pool.query('SELECT * FROM spc_chat_outbox')).rows;assert.equal(replies.length,1);assert.equal(replies[0].status,'sent');assert.match(store.decode(replies[0].payload).text,/SPC-TEST-1/);
   }finally{globalThis.fetch=original;await store.close();}
  });
+
+test('ordinary model failure notifies support once and keeps next customer message usable',async()=>{
+ const {store,worker,event,calls}=await setup();
+ try{
+  await store.withConversation(event.conversation,async(row,state,c)=>{delete state.pending;state.historyVersion=2;await store.save(c,row.id,state);});
+  worker.answerFn=async()=>{throw Error('MODEL_TEMPORARY_FAILURE');};
+  for(let n=0;n<3;n++){await store.pool.query('UPDATE spc_chat_events SET next_at=now() WHERE id=$1',[event.id]);await worker.tick();}
+  let row=(await store.pool.query('SELECT * FROM spc_chat_conversations')).rows[0];assert.equal(row.paused,false);assert.equal(store.decode(row.state).orders.length,0);
+  assert.equal(calls.filter(c=>c.action==='support_handoff').length,1);assert.equal(calls.filter(c=>c.action==='create_order').length,0);
+  const replies=(await store.pool.query('SELECT payload FROM spc_chat_outbox')).rows;assert.equal(replies.length,1);assert.match(store.decode(replies[0].payload).text,/Možete nastaviti/);
+  worker.answerFn=async()=>({text:'Nastavljamo razgovor.',images:[]});worker.orderReplyCheckFn=async()=>null;
+  await store.accept({...event,id:'facebook:after-error',text:'Moja adresa je...',timestamp:Date.now()});await worker.tick();
+  row=(await store.pool.query('SELECT * FROM spc_chat_conversations')).rows[0];assert.equal(row.paused,false);
+  assert.equal((await store.pool.query("SELECT status FROM spc_chat_events WHERE id='facebook:after-error'")).rows[0].status,'done');
+ }finally{await store.close();}
+});
+
+test('exhausted uncertain order write pauses for reconciliation and emails support without a false receipt',async()=>{
+ const {store,worker,event}=await setup();const notices=[];
+ try{
+  worker.spc=async p=>{if(p.action==='support_handoff'){notices.push(p);return {ok:true};}throw Error('WRITE_TIMEOUT');};
+  for(let n=0;n<3;n++){await store.pool.query('UPDATE spc_chat_events SET next_at=now() WHERE id=$1',[event.id]);await worker.tick();}
+  const row=(await store.pool.query('SELECT * FROM spc_chat_conversations')).rows[0];assert.equal(row.paused,true);assert(store.decode(row.state).confirming);assert.equal(notices.length,1);assert.match(notices[0].reason,/ERP/);assert.equal((await store.pool.query('SELECT * FROM spc_chat_outbox')).rows.length,0);
+  await store.accept({...event,id:'facebook:after-write-error',text:'Da',timestamp:Date.now()});await worker.tick();assert.equal((await store.pool.query('SELECT paused FROM spc_chat_conversations')).rows[0].paused,true);
+ }finally{await store.close();}
+});
