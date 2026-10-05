@@ -40,6 +40,18 @@ type Result = {
 /** One server-side lookup per new pickup; never log the URL/key or cache the
  * Google response across customers. Only the courier request retains the point. */
 export async function geocodePickupAddress(address: PickupAddress): Promise<XExpressPickupCoordinates> {
+  try { return await lookupPickupAddress(address, false); }
+  catch (error) {
+    const { street } = splitStreetAndHouseNumber(address.shipStreet, address.shipHouseNumber);
+    const city = address.shipCity.replace(/\s*\([^)]*\)\s*/g, " ").trim();
+    if (!(error instanceof PickupGeocodingError) || !error.message.startsWith("Lokacija preuzimanja") || canonicalPickupStreet(street, city) === street) throw error;
+    // Google and the courier may index different verified names for the same
+    // street. Try the order's original spelling first, then its confirmed alias.
+    return lookupPickupAddress(address, true);
+  }
+}
+
+async function lookupPickupAddress(address: PickupAddress, useCanonical: boolean): Promise<XExpressPickupCoordinates> {
   const key = process.env.GOOGLE_MAPS_API_KEY?.trim();
   if (!key || key.startsWith("GET_FROM_")) {
     throw new PickupGeocodingError("Automatsko pronalaženje adrese nije podešeno. Administrator treba da podesi Google Maps API ključ.");
@@ -56,7 +68,7 @@ export async function geocodePickupAddress(address: PickupAddress): Promise<XExp
   const lookupStreet = canonicalPickupStreet(street, city);
   const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
   url.search = new URLSearchParams({
-    address: `${lookupStreet} ${houseNumber}, ${city}, Srbija`,
+    address: `${useCanonical ? lookupStreet : street} ${houseNumber}, ${city}, Srbija`,
     components: "country:RS", language: "sr", key,
   }).toString();
   let body: { status?: string; results?: Result[] };

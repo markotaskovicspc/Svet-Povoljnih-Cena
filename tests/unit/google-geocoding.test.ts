@@ -16,7 +16,7 @@ function result() {
 }
 const fetchMock = vi.fn();
 function respond(results: unknown[] = [result()], status = "OK") {
-  fetchMock.mockResolvedValue(new Response(JSON.stringify({ status, results })));
+  fetchMock.mockImplementation(async () => new Response(JSON.stringify({ status, results })));
 }
 
 describe("automatic customer pickup geocoding", () => {
@@ -149,8 +149,14 @@ describe("pickup error explanations", () => {
     const input = { shipStreet: "Berta Istvan (59)", shipHouseNumber: "59", shipCity: "Senta" };
     respond([senta(route)]);
     await expect(geocodePickupAddress(input)).resolves.toEqual({ latitude: 44.81, longitude: 20.46 });
-    expect(fetchMock.mock.calls[0][0].searchParams.get("address")).toBe("Ištvana Berte 59, Senta, Srbija");
+    expect(fetchMock.mock.calls[0][0].searchParams.get("address")).toBe("Berta Istvan 59, Senta, Srbija");
     expect(input.shipStreet).toBe("Berta Istvan (59)");
+  });
+  it("retries the confirmed courier name when Google does not index the original", async () => {
+    respond([senta()]);
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ status: "ZERO_RESULTS", results: [] })));
+    await expect(geocodePickupAddress({ shipStreet: "Berta Istvan (59)", shipHouseNumber: "59", shipCity: "Senta" })).resolves.toEqual({ latitude: 44.81, longitude: 20.46 });
+    expect(fetchMock.mock.calls.map(([url]) => url.searchParams.get("address"))).toEqual(["Berta Istvan 59, Senta, Srbija", "Ištvana Berte 59, Senta, Srbija"]);
   });
   it.each([senta("Ištvana Berte", "60"), senta("Ištvana Berte", "59", "Subotica"), senta("Druga ulica")])("still rejects another house, town or street", async (item) => {
     respond([item]);

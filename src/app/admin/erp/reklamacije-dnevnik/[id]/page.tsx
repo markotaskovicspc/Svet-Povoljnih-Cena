@@ -524,7 +524,7 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
                         <p>Otkupnina: 0 RSD. Za GLS se šalje P&R zahtev za naredni radni dan; kurir donosi adresnicu.</p>
                       </div>
                       {pickupAddressLabel(reclamation.order) !== formatStreetAddress(reclamation.order.shipStreet, reclamation.order.shipHouseNumber ?? "") ? <p className="w-full text-sm">Kurirski naziv iste adrese: <strong>{pickupAddressLabel(reclamation.order)}, {reclamation.order.shipCity}</strong>. Originalna adresa porudžbine ostaje sačuvana.</p> : null}
-                      <p className="w-full text-xs text-ink-500">Za X Express lokacija preuzimanja se automatski pronalazi iz adrese kupca preko <span translate="no">Google Maps</span>. Ako adresa nije dovoljno precizna, nalog se neće poslati i dobićete poruku da proverite ulicu, broj i mesto.</p>
+                      <p className="w-full text-xs text-ink-500">Za X Express lokacija preuzimanja se automatski pronalazi iz adrese kupca preko <span translate="no">Google Maps</span>. Adresa može biti ispravna za kurira i kada Google Maps nema označen objekat. Ako automatska provera ne prođe, prikazaće se tačan razlog; ispod možete uneti lokaciju potvrđenu sa kupcem.</p>
                       <p className="w-full text-xs text-ink-500">Broj i mere GLS paketa preuzimaju se iz artikla i količine reklamacije.</p>
                       <Field label="Broj paketa za X Express">
                         <input name="packageCount" type="number" min={1} max={99} defaultValue={1} className="h-9 w-24 rounded-lg border border-input bg-transparent px-2" />
