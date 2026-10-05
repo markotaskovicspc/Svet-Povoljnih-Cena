@@ -1,8 +1,6 @@
-import { pickupAddressLabel } from "@/lib/address/pickup-street-aliases";
 import { isCancelledDelivery } from "@/lib/courier/cancelled-delivery";
 import "server-only";
 import { courierAddressParts } from "@/lib/address/house-number";
-import { geocodePickupAddress } from "@/lib/address/google-geocoding";
 import { requireReturnPickupCoordinates, type XExpressPickupCoordinates, type XExpressReturnDestination } from "./return";
 
 import { randomUUID } from "node:crypto";
@@ -192,13 +190,10 @@ export async function createXExpressShipmentForOrder(
   const returnDestination = reverse
     ? await resolveXExpressReturnDestination(reclamation!.warehouseId, cfg)
     : undefined;
-  // Resolve before allocating a tracking number or saving a shipment. A weak
-  // address match must never create a courier request with guessed coordinates.
-  const returnPickupCoordinates = reverse
-    ? options.returnPickupCoordinates
-      ? requireReturnPickupCoordinates(options.returnPickupCoordinates)
-      : await geocodePickupAddress(order)
-    : undefined;
+  // Use the order's courier address directly, just as for delivery. Optional
+  // existing coordinates may be retained, but Google must not block a return.
+  const returnPickupCoordinates = reverse && options.returnPickupCoordinates
+    ? requireReturnPickupCoordinates(options.returnPickupCoordinates) : undefined;
 
   const reusableCodes = readParcelNumbers(existing?.providerParcelNumbers);
   const allocated =
@@ -251,7 +246,7 @@ export async function createXExpressShipmentForOrder(
     const addressCheckPayload = buildXExpressAddressCheckPayload({
       recipientName,
       townId,
-      street: reverse ? pickupAddressLabel(order) : order.shipStreet,
+      street: order.shipStreet,
       houseNumber: order.shipHouseNumber,
       officialStreetName: officialStreet?.name,
     });
@@ -267,7 +262,7 @@ export async function createXExpressShipmentForOrder(
       purpose,
       returnPickupCoordinates,
       returnDestination,
-      order: { ...order, shipStreet: reverse ? pickupAddressLabel(order) : order.shipStreet, total: codAmount, items: shipmentItems },
+      order: { ...order, total: codAmount, items: shipmentItems },
       townId,
       officialStreetName: officialStreet?.name,
       packageMasses:

@@ -137,7 +137,8 @@ export function buildXExpressCreateOrderPayload(args: {
   const { cfg, order } = args;
   const purpose = args.purpose ?? "ORDER_DELIVERY";
   const reverse = purpose === "RECLAMATION_RETURN";
-  const coordinates = reverse ? requireReturnPickupCoordinates(args.returnPickupCoordinates) : null;
+  const coordinates = reverse && args.returnPickupCoordinates
+    ? requireReturnPickupCoordinates(args.returnPickupCoordinates) : undefined;
   if (reverse && !args.returnDestination) {
     throw new XExpressConfigError("Adresa magacina za povrat nije potvrđena.");
   }
@@ -313,7 +314,7 @@ export function buildXExpressCreateOrderPayload(args: {
         WaypointType: "PICKUP",
         Address: {
           ...deliveryAddress,
-          Latitude: coordinates!.latitude, Longitude: coordinates!.longitude,
+          ...(coordinates ? { Latitude: coordinates.latitude, Longitude: coordinates.longitude } : {}),
           Description: providerDescription(`Preuzimanje - kućni broj (${deliveryStreet.originalHouseNumber})`, 50, "Preuzimanje povrata"),
         },
         Contact: customerContact,

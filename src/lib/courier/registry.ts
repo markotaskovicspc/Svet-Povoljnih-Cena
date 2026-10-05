@@ -3,7 +3,6 @@ import { ensureMyGlsReturnDocument } from "@/lib/mygls/shipments";
 import { parcelOrderItemIds } from "@/lib/courier/parcel-contents";
 import "server-only";
 import { requireReturnPickupCoordinates, type XExpressPickupCoordinates } from "@/lib/x-express/return";
-import { geocodePickupAddress } from "@/lib/address/google-geocoding";
 
 import {
   Prisma,
@@ -353,7 +352,6 @@ async function processShipmentForOrder(
     if (mode === "preflight") {
       if (purpose === "RECLAMATION_RETURN") {
         if (options.returnPickupCoordinates) requireReturnPickupCoordinates(options.returnPickupCoordinates);
-        else await geocodePickupAddress(order);
       }
       return;
     }

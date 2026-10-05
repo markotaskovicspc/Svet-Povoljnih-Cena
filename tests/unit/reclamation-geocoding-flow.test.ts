@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   order: vi.fn(), reclamation: vi.fn(), warehouse: vi.fn(), town: vi.fn(), towns: vi.fn(),
   create: vi.fn(), findShipment: vi.fn(), updateShipment: vi.fn(), claim: vi.fn(),
   updateReclamation: vi.fn(), allocate: vi.fn(), checkAddress: vi.fn(), announce: vi.fn(),
-  fetch: vi.fn(), inventory: vi.fn(), gls: vi.fn(),
+  fetch: vi.fn(), inventory: vi.fn(), gls: vi.fn(), event: vi.fn(),
 }));
 vi.mock("@/lib/db", () => {
   const db = {
@@ -12,6 +12,7 @@ vi.mock("@/lib/db", () => {
     reclamation: { findUnique: mocks.reclamation, update: mocks.updateReclamation },
     warehouse: { findFirst: mocks.warehouse },
     xExpressTown: { findUnique: mocks.town, findFirst: mocks.town, findMany: mocks.towns },
+    shipmentEvent: { create: mocks.event },
     shipment: { create: mocks.create, findUnique: mocks.findShipment, update: mocks.updateShipment, updateMany: mocks.claim },
     $transaction: async (fn: (tx: object) => unknown) => fn(db),
   };
@@ -35,7 +36,7 @@ import { createReclamationShipment, preflightReclamationShipment } from "@/lib/a
 
 const options = { reclamationId: "r1", purpose: "RECLAMATION_RETURN" as const, packageCount: 2 };
 
-describe("refund pickup with automatic geocoding through the real courier registry", () => {
+describe("address-only refund pickup through the real courier registry", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.stubEnv("GOOGLE_MAPS_API_KEY", "test-secret");
@@ -83,10 +84,10 @@ describe("refund pickup with automatic geocoding through the real courier regist
   it("finds the customer, prepares two zero-COD parcels, announces once and updates the reclamation", async () => {
     const shipment = await createReclamationShipment(options);
     expect(shipment.providerShipmentId).toBe("test-provider-id");
-    expect(mocks.fetch).toHaveBeenCalledTimes(1);
+    expect(mocks.fetch).not.toHaveBeenCalled();
     expect(mocks.announce).toHaveBeenCalledTimes(1);
     const payload = mocks.announce.mock.calls[0][0];
-    expect(payload.Waypoints.find((w: { WaypointType: string }) => w.WaypointType === "PICKUP").Address).toMatchObject({ TownId: 100, Latitude: 44.81, Longitude: 20.46 });
+    expect(payload.Waypoints.find((w: { WaypointType: string }) => w.WaypointType === "PICKUP").Address).toMatchObject({ TownId: 100, StreetName: "Vladetina", StreetNumber: "5" });
     expect(payload.Waypoints.find((w: { WaypointType: string }) => w.WaypointType === "DELIVERY").Address.TownId).toBe(200);
     expect(payload.Options).toBeUndefined();
     expect(payload.Packages).toHaveLength(2);
@@ -98,18 +99,26 @@ describe("refund pickup with automatic geocoding through the real courier regist
 
   it("preflight verifies the address without allocating, saving or announcing any shipment", async () => {
     await preflightReclamationShipment(options);
-    expect(mocks.fetch).toHaveBeenCalledTimes(1);
+    expect(mocks.fetch).not.toHaveBeenCalled();
     expect(mocks.allocate).not.toHaveBeenCalled();
     expect(mocks.create).not.toHaveBeenCalled();
     expect(mocks.announce).not.toHaveBeenCalled();
   });
 
-  it("stops the full workflow on an unresolved address without changing reclamation state", async () => {
-    mocks.fetch.mockResolvedValue(new Response(JSON.stringify({ status: "ZERO_RESULTS", results: [] })));
-    await expect(createReclamationShipment(options)).rejects.toThrow(/Proverite ulicu/);
-    expect(mocks.allocate).not.toHaveBeenCalled();
-    expect(mocks.create).not.toHaveBeenCalled();
-    expect(mocks.announce).not.toHaveBeenCalled();
+  it("does not let absent Google data block a return using the saved order address", async () => {
+    vi.stubEnv("GOOGLE_MAPS_API_KEY", "");
+    mocks.fetch.mockRejectedValue(new Error("Google unavailable"));
+    await expect(createReclamationShipment(options)).resolves.toMatchObject({ providerShipmentId: "test-provider-id" });
+    expect(mocks.fetch).not.toHaveBeenCalled();
+    const pickup = mocks.announce.mock.calls[0][0].Waypoints[0].Address;
+    expect(pickup).toMatchObject({ StreetName: "Vladetina", StreetNumber: "5" });
+    expect(pickup).not.toHaveProperty("Latitude");
+    expect(pickup).not.toHaveProperty("Longitude");
+  });
+
+  it("propagates an actual courier rejection and leaves reclamation unrequested", async () => {
+    mocks.announce.mockRejectedValue(new Error("X Express: adresa odbijena"));
+    await expect(createReclamationShipment(options)).rejects.toThrow("X Express: adresa odbijena");
     expect(mocks.updateReclamation).not.toHaveBeenCalled();
   });
 });

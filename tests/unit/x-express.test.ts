@@ -300,20 +300,6 @@ describe("X Express official API contract", () => {
     ]);
   });
 
-  it("blocks reclamation pickup until exact customer coordinates are available", () => {
-    expect(() =>
-      buildXExpressCreateOrderPayload({
-        cfg: config,
-        reference: "reclamation-return-1",
-        trackingCodes: ["AAA0850300001"],
-        order,
-        townId: 791113,
-        officialStreetName: "Bulevar oslobođenja",
-        purpose: "RECLAMATION_RETURN",
-      }),
-    ).toThrow(/Lokacija kupca/);
-  });
-
   it("returns the customer's parcel to the selected warehouse without charging the customer", () => {
     const payload = buildXExpressCreateOrderPayload({
       cfg: { ...config, servicePayerId: 2 },

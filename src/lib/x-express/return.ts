@@ -1,8 +1,8 @@
 import { XExpressConfigError } from "./config";
 
 // Provider contract: https://www.x-express.rs/devportal/addshipment.php
-// Coordinates are required at PICKUP; never reuse the merchant's coordinates
-// for a customer's collection address. Saved shipment payloads retain them.
+// Optional coordinates belong to the customer collection address; never reuse
+// the merchant coordinates. Address-only returns use the order address.
 export type XExpressPickupCoordinates = { latitude: number; longitude: number };
 
 export type XExpressReturnDestination = {
