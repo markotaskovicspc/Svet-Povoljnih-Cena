@@ -1,3 +1,4 @@
+import { ReclamationCustomerLink } from "@/components/admin/reclamation-customer-link";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -225,6 +226,7 @@ export default async function ReclamationsPage({
         actions={<div className="flex flex-wrap gap-2"><Link href="/admin/erp/preuzimanja/povrati" className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Povrati za prijem</Link><Link href="/admin/erp/reklamacije-izvestaji" className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Reklamacije – izveštaji</Link><a href="/api/admin/erp/reklamacije-dnevnik/export" download className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Preuzmi XLSX</a></div>}
       />
       <div className="space-y-10 px-8 py-6">
+        <ReclamationCustomerLink />
         <details className="group rounded-xl border border-border bg-surface">
           <summary className="cursor-pointer list-none px-5 py-4 font-semibold text-ink-900 marker:hidden">
             + Ručno evidentiraj reklamaciju

@@ -55,6 +55,8 @@ export function ReclamationForm({
   const [orderNumber, setOrderNumber] = useState(orders[0]?.number ?? "");
   const [sku, setSku] = useState(orders[0]?.items[0]?.sku ?? "");
   const [quantity, setQuantity] = useState(1);
+  const [type, setType] = useState("");
+  const [request, setRequest] = useState("");
   const [description, setDescription] = useState("");
   const [photos, setPhotos] = useState<PendingPhoto[]>([]);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -71,6 +73,7 @@ export function ReclamationForm({
 
   function resetForm() {
     setDescription("");
+    setType(""); setRequest("");
     setQuantity(1);
     clearPhotos();
     setFieldErrors({});
@@ -239,6 +242,8 @@ export function ReclamationForm({
           sku,
           quantity,
           description,
+          ...(type ? { type } : {}),
+          ...(request ? { request } : {}),
           photos: photos
             .filter((p) => p.status === "done" && p.publicUrl)
             .map((p) => ({
@@ -309,7 +314,7 @@ export function ReclamationForm({
         </p>
         <p className="mt-2 text-sm text-ink-600">
           {guest
-            ? "Potvrda je poslata na e-poštu iz porudžbine. O promenama statusa obavestićemo vas mejlom."
+            ? "Sačuvajte broj reklamacije. Ako je e-pošta navedena u porudžbini, potvrda i obaveštenja stižu i mejlom."
             : "Potvrdu, tok obrade i konačan status pratite na ovoj stranici."}
         </p>
         <Button
@@ -408,6 +413,22 @@ export function ReclamationForm({
         ) : null}
       </div>
 
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-2">
+          <Label htmlFor="reclamation-type">Vrsta problema (opciono)</Label>
+          <select id="reclamation-type" value={type} onChange={event => setType(event.target.value)} className="h-11 w-full rounded-lg border border-input bg-white px-2.5 text-sm">
+            <option value="">Izaberite ili opišite ispod</option>
+            <option value="FIZICKO_OSTECENJE">Fizičko oštećenje</option><option value="KVAR">Kvar</option>
+          </select>
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="reclamation-request">Šta želite kao rešenje? (opciono)</Label>
+          <select id="reclamation-request" value={request} onChange={event => setRequest(event.target.value)} className="h-11 w-full rounded-lg border border-input bg-white px-2.5 text-sm">
+            <option value="">Izaberite</option><option value="POPRAVKA">Popravka</option><option value="ZAMENA">Zamena</option><option value="POVRACAJ_NOVCA">Povraćaj novca</option><option value="UMANJENJE_CENE">Umanjenje cene</option>
+          </select>
+        </div>
+      </div>
+
       <div className="grid min-w-0 grid-cols-1 gap-2">
         <Label htmlFor="description">Komentar / opis problema</Label>
         <Textarea
@@ -429,7 +450,7 @@ export function ReclamationForm({
 
       <div className="grid min-w-0 grid-cols-1 gap-2">
         <Label>
-          Fotografije (do {MAX_PHOTOS}, automatski optimizovane na 1600 px i do 2 MB)
+          Fotografije problema (do {MAX_PHOTOS})
         </Label>
         <div className="flex flex-wrap gap-3">
           {photos.map((photo) => (
@@ -467,6 +488,7 @@ export function ReclamationForm({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
+              aria-label="Dodaj fotografije problema"
               className="grid size-20 place-items-center rounded-md border border-dashed border-border text-ink-400 transition hover:border-walnut/50 hover:text-walnut"
             >
               <ImagePlus className="size-5" aria-hidden />

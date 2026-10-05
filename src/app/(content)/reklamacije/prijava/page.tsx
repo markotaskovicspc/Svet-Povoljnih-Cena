@@ -8,7 +8,8 @@ import { GuestReclamationLinkRequestForm } from "../guest-link-request-form";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Prijava reklamacije",
-  description: "Prijavite reklamaciju za kupovinu obavljenu bez naloga.",
+  description: "Popunite prijavu reklamacije za svoju porudžbinu.",
+  referrer: "no-referrer",
   robots: { index: false, follow: false },
 };
 
@@ -31,13 +32,13 @@ export default async function GuestReclamationPage({
         </span>
         <div>
           <p className="text-xs font-medium uppercase tracking-[0.16em] text-ink-500">
-            Kupovina bez naloga
+            Prijava putem linka
           </p>
           <h1 className="font-display mt-2 text-4xl text-ink-900">
             Prijava reklamacije
           </h1>
           <p className="mt-3 text-sm leading-relaxed text-ink-600">
-            Bezbedni link iz potvrde porudžbine omogućava prijavu samo za
+            Popunite opis, izaberite željeno rešenje i dodajte fotografije. Link važi samo za
             artikle koji se nalaze u toj porudžbini.
           </p>
         </div>

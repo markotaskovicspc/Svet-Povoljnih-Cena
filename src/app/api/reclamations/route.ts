@@ -46,9 +46,10 @@ export async function POST(req: Request) {
   }
   let result: Awaited<ReturnType<typeof createReclamation>>;
   try {
-    result = user?.userType === "customer"
+    const token = readOrderAccessToken(req);
+    result = user?.userType === "customer" && !token
       ? await createReclamation(parsed.data, user.id)
-      : await createGuestReclamation(parsed.data, readOrderAccessToken(req));
+      : await createGuestReclamation(parsed.data, token);
   } catch (error) {
     logOperationalError("reclamation.create_failed", error);
     return NextResponse.json(
