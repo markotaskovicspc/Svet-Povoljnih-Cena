@@ -10,7 +10,7 @@ import {orderErrorMessage,normalizePlace,preserveCityDistrict} from './delivery.
 export const isOrderCommandText=text=>/^\/porud[zž]bina\s*$/i.test(String(text).trim());
 // Business Suite also supplies app_id on human Page replies. Authentication is
 // the signed Page-origin echo; worker additionally excludes our outbox IDs.
-export const isStaffOrderCommand=event=>event.channel==='facebook'&&event.echo===true&&!event.botEcho&&isOrderCommandText(event.text);
+export const isStaffOrderCommand=event=>(event.channel==='facebook'||event.operatorCommand===true)&&event.echo===true&&!event.botEcho&&isOrderCommandText(event.text);
 const address=z.object({firstName:z.string(),lastName:z.string(),phone:z.string(),street:z.string(),houseNumber:z.string(),city:z.string(),postalCode:z.string().nullable()});
 const inputSchema=z.object({guestEmail:z.email().nullable(),shipping:address,lines:z.array(z.object({sku:z.string(),qty:z.number().int().positive().max(1000)})).min(1).max(30),paymentMethod:z.literal('POUZECE_GOTOVINA'),shippingMethod:z.enum(['KURIR','KAMION'])});
 const priceConflictSchema=z.object({sku:z.string(),basis:z.enum(['unit','total']),earlierPrice:z.number().nonnegative(),latestPrice:z.number().nonnegative(),earlierEvidence:z.string(),latestEvidence:z.string()});

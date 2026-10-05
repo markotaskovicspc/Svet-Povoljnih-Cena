@@ -82,3 +82,13 @@ it("imports a bounded image into private storage scoped to the purchased item; r
   expect(await handle(action, secret)).toMatchObject({ error: { code: "PHOTO_UNAVAILABLE" } }); expect(m.upload).not.toHaveBeenCalled();
   fetcher.mockClear(); expect(await handle({ ...action, sku: "BED" }, secret)).toMatchObject({ ok: false }); expect(fetcher).not.toHaveBeenCalled();
 });
+
+it('creates a reclamation-only link only for owned delivered orders',async()=>{
+ vi.stubEnv('ORDER_ACCESS_TOKEN_SECRET','synthetic-reclamation-link-secret');
+ const body={action:'reclamation_link' as const,...identity,number:order.number,accessToken:'private'};
+ const r=await handle(body,secret);expect(r).toMatchObject({ok:true,number:order.number});
+ if(!('url' in r))throw Error('Missing link');expect(new URL(r.url).searchParams.get('token')).toMatch(/^rcl1\./);
+ expect(m.create).not.toHaveBeenCalled();m.token.mockReturnValue(false);expect(await handle(body,secret)).toMatchObject({ok:false});
+ m.token.mockReturnValue(true);m.order.mockResolvedValue({...order,status:'U_ISPORUCI'});expect(await handle(body,secret)).toMatchObject({error:{code:'ORDER_NOT_DELIVERED'}});
+ vi.unstubAllEnvs();
+});

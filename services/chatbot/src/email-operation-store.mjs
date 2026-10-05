@@ -51,6 +51,7 @@ export class EmailOperations {
  }
  async prepare(id,message,input){
   if(!message.messageId)return {ok:false,error:{code:'MISSING_REPLY_ID'}};
+  if(input.action==='reclamation_link')return this.call({...input,sender:message.sender,requestId:id},this.env);
   const existing=await this.existing(id);if(existing)return existing;
   const loyalty=input.action==='prepare_purchase'?await this.loyalty(message.sender):null;
   const result=await this.call({...input,...(loyalty?{loyaltyProof:loyalty.proof}:{}),sender:message.sender,requestId:id},this.env);

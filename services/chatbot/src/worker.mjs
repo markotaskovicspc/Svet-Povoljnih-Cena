@@ -46,7 +46,7 @@ export class Worker {
           if(inWindow(event.timestamp))await receiveAdContext({state,event,account:this.accounts.find(a=>a.channel===row.channel&&a.id===row.account),graphVersion:this.graphVersion,model:this.model});
           await this.store.save(c,row.id,state);await c.query("UPDATE spc_chat_events SET status='done' WHERE id=$1",[job.id]);return;
         }
-        if(isStaffOrderCommand(event)&&this.allowed(row.sender)&&inWindow(event.timestamp)&&inWindow(Number(row.last_customer))){
+        if(isStaffOrderCommand(event)&&this.allowed(row.sender)&&inWindow(event.timestamp)&&(row.channel==='web'||inWindow(Number(row.last_customer)))){
           const ours=await c.query('SELECT id FROM spc_chat_outbox WHERE meta_id=$1',[event.id.substring(event.channel.length+1)]);
           if(!ours.rowCount){
             try{await this.staffOrder({event,row,state,c,job});}
@@ -355,8 +355,12 @@ export class Worker {
       const job=result.rows[0];if(!job)return;
       try {
         const previous=await c.query("SELECT id FROM spc_chat_support WHERE conversation=$1 AND status='sent' LIMIT 1",[row.id]);
-        if(previous.rows.length){await c.query("UPDATE spc_chat_support SET status='recorded' WHERE conversation=$1 AND status='pending'",[row.id]);return;}
         const payload=this.store.decode(job.payload);
+        // A new failed order command needs attention even after an unrelated handoff.
+        // Repeated identical failures remain recorded without another email.
+        if(previous.rows.length&&(!job.id.startsWith('staff-order:')||state.lastStaffAttentionReason===payload.reason)){
+          await c.query("UPDATE spc_chat_support SET status='recorded' WHERE id=$1",[job.id]);return;
+        }
         // Ignore and remove every legacy Graph-derived cache entry.
         delete state.inboxLink;
         const account=this.accounts.find(a=>a.channel===row.channel&&a.id===row.account);
@@ -366,7 +370,7 @@ export class Worker {
         const sent=await this.spc({...payload,...context,conversationLink:verifiedConversationLink(state.verifiedInboxLink,row.account)||undefined});
         if(!sent.ok)throw Error('SUPPORT_EMAIL_FAILED');
         await c.query("UPDATE spc_chat_support SET status='sent' WHERE id=$1",[job.id]);
-        await c.query("UPDATE spc_chat_support SET status='recorded' WHERE conversation=$1 AND status='pending'",[row.id]);
+        if(job.id.startsWith('staff-order:')){state.lastStaffAttentionReason=payload.reason;await this.store.save(c,row.id,state);}
       } catch {
         await c.query("UPDATE spc_chat_support SET attempts=attempts+1,next_at=now()+interval '5 minutes' WHERE id=$1",[job.id]);
         console.error('chat.support_email_pending');

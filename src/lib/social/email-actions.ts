@@ -5,6 +5,7 @@ import {db} from "@/lib/db";
 import {createOrder,createOrderSchema} from "@/lib/api/checkout";
 import {getProductBySku} from "@/lib/api/catalog";
 import {createReclamationSchema,createSocialReclamation} from "@/lib/api/reclamations";
+import {createReclamationLinkToken} from '@/lib/api/reclamation-link-token';
 import {cancelWebOrderByCustomer} from "@/lib/orders/cancellation.server";
 import {canCustomerCancelStatus,OrderCancellationError} from "@/lib/orders/cancellation";
 import {signSocialQuote,readSocialQuote} from "./security";
@@ -15,6 +16,7 @@ const base=z.object({sender:z.email(),requestId:id});
 const claim=createReclamationSchema.extend({category:z.enum(['KVAR','FIZICKO_OSTECENJE','NEDOSTAJE_ARTIKAL','POGRESAN_ARTIKAL']),request:z.enum(['POPRAVKA','ZAMENA','POVRACAJ_NOVCA','UMANJENJE_CENE']).nullable()});
 export const emailActionSchema=z.discriminatedUnion('action',[
  base.extend({action:z.literal('prepare_cancel'),number:z.string().max(80)}),
+ base.extend({action:z.literal('reclamation_link'),number:z.string().max(80)}),
  base.extend({action:z.literal('prepare_loyalty')}),
  base.extend({action:z.literal('prepare_purchase'),input:createOrderSchema,loyaltyProof:z.string().max(5000).optional()}),
  base.extend({action:z.literal('prepare_claim'),input:claim}),
@@ -88,7 +90,7 @@ export async function handleEmailAction(body:z.infer<typeof emailActionSchema>,s
   ].join('\n\n');
   return {ok:true,kind:'purchase',summary,expiresAt,token:signSocialQuote({...common,kind:'purchase',input,total:result.data.total,loyaltyProof:body.loyaltyProof,loyalty},secret)};
  }
- const number=body.action==='prepare_cancel'?body.number:body.input.orderNumberOrFiscal;
+ const number=body.action==='prepare_cancel'||body.action==='reclamation_link'?body.number:body.input.orderNumberOrFiscal;
  const order=await db.order.findFirst({where:{number,...owner(body.sender)},select:{id:true,number:true,status:true,channel:true,items:{select:{sku:true,name:true,qty:true}},fiscal:{select:{id:true}},fiscalDocuments:{where:{kind:'SALE'},select:{id:true}},reshipments:{select:{id:true}}}});
  if(!order)return failure('ORDER_NOT_MATCHED_TO_SENDER');
  if(body.action==='prepare_cancel'){
@@ -98,6 +100,10 @@ export async function handleEmailAction(body:z.infer<typeof emailActionSchema>,s
   return {ok:true,kind:'cancel',summary,expiresAt,token:signSocialQuote({...common,kind:'cancel',orderId:order.id,number:order.number},secret)};
  }
  if(order.status!=='ISPORUCENO')return failure('ORDER_NOT_DELIVERED');
+ if(body.action==='reclamation_link'){
+  const link=createReclamationLinkToken(order.number);
+  return {ok:true,number:order.number,expiresAt:link.expiresAt,url:`https://www.svetpovoljnihcena.rs/reklamacije/prijava?${new URLSearchParams({order:order.number,token:link.token})}`};
+ }
  const item=order.items.find(i=>i.sku===body.input.sku);if(!item||body.input.quantity>item.qty)return failure('ITEM_OR_QUANTITY_MISMATCH');
  if(body.input.photos.length)return failure('EMAIL_PHOTOS_REQUIRE_STAFF');
  const claimId=`email_${digest(body.requestId+JSON.stringify(body.input))}`;
