@@ -415,6 +415,7 @@ export class Worker {
       if(!inWindow(Number(row.last_customer)) || (!this.allowed(row.sender) && !message.human) || (row.paused&&!message.allowPaused&&!message.human)) {
         await c.query(`UPDATE spc_chat_outbox SET status='suppressed' WHERE id=$1`,[out.id]); return;
       }
+      if(row.channel==='web'){await c.query("UPDATE spc_chat_outbox SET status='sent' WHERE id=$1",[out.id]);return;}
       const account=this.accounts.find(a=>a.channel===row.channel&&a.id===row.account);
       if(!account) return;
       await c.query(`UPDATE spc_chat_outbox SET status='sending' WHERE id=$1`,[out.id]);

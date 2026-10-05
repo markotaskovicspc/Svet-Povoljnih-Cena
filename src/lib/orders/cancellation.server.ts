@@ -14,7 +14,7 @@ const TRANSACTION_OPTIONS = { maxWait: 10_000, timeout: 30_000 } as const;
 export async function cancelWebOrderByCustomer(input: {
   orderId: string;
   requestedByUserId?: string | null;
-  requestedViaSocial?: "facebook" | "instagram" | "email";
+  requestedViaSocial?: "facebook" | "instagram" | "email" | "web";
   customerReplyDraftOnly?: boolean;
 }) {
   const result = await db.$transaction(async (tx) => {

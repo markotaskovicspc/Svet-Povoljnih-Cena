@@ -10,7 +10,7 @@ import {unverifiedOrderReply} from '../src/order-reply-guard.mjs';
 
 // Real embedded PostgreSQL for persistence and transaction tests. Advisory locks
 // are represented by a single test executor (cross-process locks need staging).
-async function setup() {
+async function setup(channel='facebook') {
   const db=new PGlite();const store=new Store(undefined,randomBytes(32).toString('hex'));
   await store.pool.end();
   const query=async(sql,args)=>{
@@ -21,7 +21,7 @@ async function setup() {
   };
   store.pool={query,connect:async()=>({query,release(){}}),end:()=>db.close()};await store.init();
   const calls=[];const worker=new Worker({store,spc:async request=>{calls.push(request);return {ok:true,data:{number:'SPC-TEST-1',accessToken:'test-private',total:2000}};},accounts:[],enabled:true,model:'test',graphVersion:'v25.0',intentFn:async({text,pending})=>isOrderConfirmation(text,pending?.code)?'confirm':text.includes('Promeni')?'change':'question'});
-  const event={id:'facebook:mid-1',conversation:'facebook:123:456',channel:'facebook',account:'123',sender:'456',timestamp:Date.now(),text:'Moze potvrdjujem',attachments:[],echo:false};
+  const event={id:`${channel}:mid-1`,conversation:`${channel}:123:456`,channel,account:'123',sender:'456',timestamp:Date.now(),text:'Moze potvrdjujem',attachments:[],echo:false};
   await store.accept(event);
   await store.withConversation(event.conversation,async(row,state,c)=>{state.pending={code:'ABC123',quoteToken:'signed_quote'};await store.save(c,row.id,state);});
   return {store,worker,calls,event};
@@ -600,3 +600,13 @@ test('repeated same support request sends one notice but another problem can sti
   await store.accept({...event,id:'different-support',text:'Drugi problem'});await worker.tick();assert.equal(notices.length,2);
  }finally{await store.close();}
 });
+
+ test('website confirmation persists one order and delivers its receipt without any Meta send',async()=>{
+  const {store,worker,calls,event}=await setup('web');const original=globalThis.fetch;
+  globalThis.fetch=async()=>{throw new Error('Website must never call Meta');};
+  try{
+   await store.accept(event);await worker.tick();await worker.tick();
+   assert.equal(calls.length,1);assert.equal(calls[0].channel,'web');assert.equal(calls[0].action,'create_order');
+   const replies=(await store.pool.query('SELECT * FROM spc_chat_outbox')).rows;assert.equal(replies.length,1);assert.equal(replies[0].status,'sent');assert.match(store.decode(replies[0].payload).text,/SPC-TEST-1/);
+  }finally{globalThis.fetch=original;await store.close();}
+ });

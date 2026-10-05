@@ -6,7 +6,7 @@ import {channelLoyalty} from '@/lib/loyalty/channel.server';
 
 export const socialDeliveryRequest=z.object({
  action:z.literal('delivery_quote'),
- channel:z.enum(['facebook','instagram']),conversationId:z.string().min(3).max(200),
+ channel:z.enum(['facebook','instagram','web']),conversationId:z.string().min(3).max(200),
  city:z.string().trim().min(2).max(120).optional(),
  lines:z.array(z.object({sku:z.string().trim().min(1).max(80),qty:z.number().int().positive().max(99)})).min(1).max(50),
  shippingMethod:z.enum(['KURIR','KAMION']),

@@ -22,7 +22,7 @@ import {socialDeliveryRequest,socialDeliveryQuote} from '@/lib/social/delivery';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-const identity = z.object({ channel: z.enum(["facebook", "instagram"]), conversationId: z.string().min(3).max(200) });
+const identity = z.object({ channel: z.enum(["facebook", "instagram", "web"]), conversationId: z.string().min(3).max(200) });
 const loyaltyContext=z.object({email:z.email(),consentVersion:z.string(),consentAt:z.string()}).nullable().optional();
 const staffPricingSchema=z.object({commandId:z.string().min(1).max(300),prices:z.array(z.object({sku:z.string().min(1).max(100),price:z.number().positive()})).min(1).max(30)});
 const quotePayload = identity.extend({ input: createOrderSchema, total: z.number().nonnegative(), expiresAt: z.number(),loyaltyProof:z.string().optional(),loyalty:loyaltyContext,staffPricing:staffPricingSchema.optional() });

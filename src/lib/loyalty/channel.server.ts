@@ -6,7 +6,7 @@ import {db} from "@/lib/db";
 import {signSocialQuote,readSocialQuote} from "@/lib/social/security";
 import {LOYALTY_CONSENT_VERSION, isSupportedLoyaltyConsentVersion} from "./shared";
 
-const scopeSchema=z.object({channel:z.enum(['facebook','instagram','email']),conversationId:z.string().min(3).max(200),email:z.email()});
+const scopeSchema=z.object({channel:z.enum(['facebook','instagram','web','email']),conversationId:z.string().min(3).max(200),email:z.email()});
 type Scope=z.infer<typeof scopeSchema>;
 const tokenSchema=scopeSchema.extend({purpose:z.enum(['loyalty_invitation','loyalty_access','loyalty_existing']),version:z.string(),nonce:z.string(),expiresAt:z.number(),consentAt:z.string().optional()});
 const digest=(value:string)=>createHash('sha256').update(value).digest('hex');

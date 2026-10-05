@@ -10,7 +10,7 @@ import { checkRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
 import { constantEqual, readSocialQuote, signSocialQuote } from "./security";
 import sharp from "sharp";
 
-const identity = z.object({ channel: z.enum(["facebook", "instagram"]), conversationId: z.string().min(3).max(200) });
+const identity = z.object({ channel: z.enum(["facebook", "instagram", "web"]), conversationId: z.string().min(3).max(200) });
 const owner = identity.extend({ number: z.string().trim().min(3).max(80), accessToken: z.string().max(200).optional(), proof: z.string().max(3000).optional() });
 const category = z.enum(["KVAR", "FIZICKO_OSTECENJE", "NEDOSTAJE_ARTIKAL", "POGRESAN_ARTIKAL"]);
 const remedy = z.enum(["POPRAVKA", "ZAMENA", "POVRACAJ_NOVCA", "UMANJENJE_CENE"]);

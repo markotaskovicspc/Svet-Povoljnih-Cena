@@ -1,4 +1,5 @@
 import http from 'node:http';
+import {webchat} from './webchat.mjs';
 import { readFile } from 'node:fs/promises';
 import { equal, verifyMeta, parseEvents } from './security.mjs';
 import {parseComments} from './comments.mjs';
@@ -7,7 +8,7 @@ import {auditWindow,conversationAuditPage} from './conversation-audit.mjs';
 import {verifiedConversationLink} from './inbox-link.mjs';
 import {suppliedContact} from './staff-order.mjs';
 
-export async function createHttpServer({store,worker,emailWorker,commentWorker,accounts,adminToken,appSecret,verifyToken}) {
+export async function createHttpServer({store,worker,emailWorker,commentWorker,accounts,adminToken,appSecret,verifyToken,websiteSecret}) {
 const page=await readFile(new URL('../public/index.html',import.meta.url));
 const server=http.createServer(async(req,res)=>{
   res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');
@@ -15,6 +16,7 @@ const server=http.createServer(async(req,res)=>{
   try {
     const url=new URL(req.url,'http://localhost');
     if(url.pathname==='/webhooks/meta'&&!appSecret)return reply(503,{error:'Meta connection is not configured'});
+    if(url.pathname==='/webchat')return await webchat({req,url,reply,store,worker,secret:websiteSecret});
     if(url.pathname==='/health'){await store.pool.query('SELECT 1');return reply(200,{ok:true,botEnabled:worker.enabled,accounts:accounts.length});}
     if(req.method==='GET'&&url.pathname==='/webhooks/meta'){
       if(url.searchParams.get('hub.mode')==='subscribe'&&equal(url.searchParams.get('hub.verify_token'),verifyToken)) {res.writeHead(200,{'Content-Type':'text/plain'});return res.end(url.searchParams.get('hub.challenge')??'');}

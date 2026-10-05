@@ -25,6 +25,6 @@ await worker.start();
 await commentWorker.start();
 const emailWorker=new EmailDraftWorker({store,spc:createSpcClient(process.env.SPC_BASE_URL,process.env.SOCIAL_INTEGRATION_SECRET),model:process.env.OPENAI_MODEL??DEFAULT_MODEL});
 await emailWorker.start().catch(()=>{emailWorker.status='startup_error';console.error('email.startup_failed');});
-const server=await createHttpServer({store,worker,emailWorker,commentWorker,accounts,adminToken:process.env.CHAT_ADMIN_TOKEN,appSecret:process.env.META_APP_SECRET,verifyToken:process.env.META_VERIFY_TOKEN});
+const server=await createHttpServer({store,worker,emailWorker,commentWorker,accounts,adminToken:process.env.CHAT_ADMIN_TOKEN,appSecret:process.env.META_APP_SECRET,websiteSecret:process.env.SOCIAL_INTEGRATION_SECRET,verifyToken:process.env.META_VERIFY_TOKEN});
 server.listen(Number(process.env.PORT??8080),'0.0.0.0',()=>console.log('SPC chatbot listening'));
 for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>{server.close(async()=>{await commentWorker.stop();await worker.stop();await emailWorker.stop();await store.close();process.exit(0);});});
