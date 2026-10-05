@@ -87,9 +87,13 @@ describe("automatic customer pickup geocoding", () => {
     await expect(geocodePickupAddress(address)).rejects.toThrow(/Proverite ulicu/);
   });
 
-  it.each(["REQUEST_DENIED", "OVER_QUERY_LIMIT", "UNKNOWN_ERROR"])("handles provider status %s without exposing the response", async (status) => {
+  it.each([
+    ["REQUEST_DENIED", "proveri API ključ, dozvole i naplatu"],
+    ["OVER_QUERY_LIMIT", "proveri kvotu i naplatu"],
+    ["UNKNOWN_ERROR", "Pokušajte ponovo"],
+  ])("handles provider status %s without exposing the response", async (status, explanation) => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ status, error_message: "private-test-key" })));
-    await expect(geocodePickupAddress(address)).rejects.toThrow(/proveri API ključ, naplatu i kvotu/);
+    await expect(geocodePickupAddress(address)).rejects.toThrow(explanation);
   });
 
   it("sanitizes network/timeout failures, HTTP errors and invalid JSON", async () => {
@@ -102,5 +106,54 @@ describe("automatic customer pickup geocoding", () => {
         expect((error as Error).message).not.toContain("private-test-key");
       }
     }
+  });
+});
+
+
+describe("pickup error explanations", () => {
+  beforeEach(() => { vi.stubEnv("GOOGLE_MAPS_API_KEY", "private-test-key"); vi.stubGlobal("fetch", fetchMock); fetchMock.mockReset(); });
+  afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
+  it("shows the entered and returned street and the corrective action", async () => {
+    const item = result(); item.address_components[0].long_name = "Ištvana Berte";
+    respond([item]);
+    await expect(geocodePickupAddress({...address, shipStreet: "Berta Istvan (5)"})).rejects.toThrow(
+      "U porudžbini je ulica „Berta Istvan“, a Google Maps je pronašao „Ištvana Berte“.");
+  });
+  it("distinguishes a mismatched house number from a street error", async () => {
+    const item = result(); item.address_components[1].long_name = "6"; respond([item]);
+    await expect(geocodePickupAddress(address)).rejects.toThrow("Unet je kućni broj „5“, a Google Maps je pronašao „6“.");
+  });
+  it("explains insufficient precision even when every address field matches", async () => {
+    const item = result(); item.geometry.location_type = "RANGE_INTERPOLATED"; respond([item]);
+    await expect(geocodePickupAddress(address)).rejects.toThrow("nije potvrdio tačnu lokaciju objekta");
+  });
+  it("explains ambiguity and absent Google results separately", async () => {
+    respond([result(), result()]);
+    await expect(geocodePickupAddress(address)).rejects.toThrow("više mogućih lokacija");
+    respond([], "ZERO_RESULTS");
+    await expect(geocodePickupAddress(address)).rejects.toThrow("nije pronašao adresu „Vladetina 5, Beograd“");
+  });
+});
+
+ describe("verified Senta street aliases", () => {
+  beforeEach(() => { vi.stubEnv("GOOGLE_MAPS_API_KEY", "private-test-key"); vi.stubGlobal("fetch", fetchMock); fetchMock.mockReset(); });
+  afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
+  function senta(route = "Ištvana Berte", number = "59", city = "Senta") {
+    const item = result();
+    for (const [index, name] of [[0, route], [1, number], [2, city]] as const) {
+      item.address_components[index].long_name = name; item.address_components[index].short_name = name;
+    }
+    return item;
+  }
+  it.each(["Berta Istvan", "Berta Ištvana", "Ištvana Berte", "Ištvana Berta"])("accepts the same street as %s without changing the order", async (route) => {
+    const input = { shipStreet: "Berta Istvan (59)", shipHouseNumber: "59", shipCity: "Senta" };
+    respond([senta(route)]);
+    await expect(geocodePickupAddress(input)).resolves.toEqual({ latitude: 44.81, longitude: 20.46 });
+    expect(fetchMock.mock.calls[0][0].searchParams.get("address")).toBe("Ištvana Berte 59, Senta, Srbija");
+    expect(input.shipStreet).toBe("Berta Istvan (59)");
+  });
+  it.each([senta("Ištvana Berte", "60"), senta("Ištvana Berte", "59", "Subotica"), senta("Druga ulica")])("still rejects another house, town or street", async (item) => {
+    respond([item]);
+    await expect(geocodePickupAddress({ shipStreet: "Berta Istvan (59)", shipHouseNumber: "59", shipCity: "Senta" })).rejects.toThrow(/nije pouzdano/);
   });
 });

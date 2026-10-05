@@ -425,3 +425,34 @@ describe("GLS customer pickup service", () => {
     }
   });
 });
+
+
+describe("MyGLS postal code preflight", () => {
+  it.each(["", "1100", "110000", "11000 Beograd", "GET_FROM_POSTAL_CODE"])(
+    "rejects invalid domestic recipient postal code %j with order identity",
+    (shipPostalCode) => {
+      expect(() => buildMyGlsParcelsForOrder({cfg: config, order: {...order, shipPostalCode}, packages}))
+        .toThrow(`Adresa primaoca za porudžbinu ${order.number}: neispravan poštanski broj`);
+    },
+  );
+  it("trims recipient and pickup postal codes without changing their inputs", () => {
+    const input = {...order, shipPostalCode: " 21000 "};
+    const cfg = {...config, pickup: {...config.pickup, postalCode: " 22300 "}};
+    const [parcel] = buildMyGlsParcelsForOrder({cfg, order: input, packages});
+    expect(parcel.DeliveryAddress.ZipCode).toBe("21000");
+    expect(parcel.PickupAddress.ZipCode).toBe("22300");
+    expect(input.shipPostalCode).toBe(" 21000 ");
+  });
+  it("validates the selected delivery point instead of the customer's home zip", () => {
+    expect(() => buildMyGlsParcelsForOrder({cfg: config, order: {...order, glsDeliveryPointPostalCode: ""}, packages}))
+      .toThrow("neispravan poštanski broj");
+  });
+  it("preserves foreign postcode formats", () => {
+    const [parcel] = buildMyGlsParcelsForOrder({cfg: config, order: {...order, shipCountry: "GB", shipPostalCode: "SW1A 1AA"}, packages});
+    expect(parcel.DeliveryAddress.ZipCode).toBe("SW1A 1AA");
+  });
+  it("rejects invalid warehouse postcode before booking a return", () => {
+    expect(() => buildMyGlsParcelsForOrder({cfg: {...config, pickup: {...config.pickup, postalCode: ""}}, order, packages, purpose: "RECLAMATION_RETURN"}))
+      .toThrow("Adresa magacina: neispravan poštanski broj");
+  });
+});

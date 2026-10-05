@@ -1,3 +1,4 @@
+import { pickupAddressLabel } from "@/lib/address/pickup-street-aliases";
 import { isCancelledDelivery } from "@/lib/courier/cancelled-delivery";
 import "server-only";
 import { courierAddressParts } from "@/lib/address/house-number";
@@ -250,7 +251,7 @@ export async function createXExpressShipmentForOrder(
     const addressCheckPayload = buildXExpressAddressCheckPayload({
       recipientName,
       townId,
-      street: order.shipStreet,
+      street: reverse ? pickupAddressLabel(order) : order.shipStreet,
       houseNumber: order.shipHouseNumber,
       officialStreetName: officialStreet?.name,
     });
@@ -266,7 +267,7 @@ export async function createXExpressShipmentForOrder(
       purpose,
       returnPickupCoordinates,
       returnDestination,
-      order: { ...order, total: codAmount, items: shipmentItems },
+      order: { ...order, shipStreet: reverse ? pickupAddressLabel(order) : order.shipStreet, total: codAmount, items: shipmentItems },
       townId,
       officialStreetName: officialStreet?.name,
       packageMasses:

@@ -1,3 +1,5 @@
+import { pickupAddressLabel } from "@/lib/address/pickup-street-aliases";
+import { parseReturnPickupCoordinates } from "@/lib/x-express/return";
 import { isMyGlsReturn, myGlsReturnBooking, myGlsReturnStatusLabel } from "@/lib/mygls/return-booking";
 import { formatStreetAddress } from "@/lib/address/house-number";
 import Image from "next/image";
@@ -16,6 +18,7 @@ import { requireAdminAction, withAdminState, type AdminActionState } from "@/lib
 import {
   cancelReclamationShipment,
   createReclamationShipment,
+  preflightReclamationShipment,
   saveReclamationWarehouse,
 } from "@/lib/admin/reclamation-fulfillment.server";
 import { removeReclamationReplacementFromPicking } from "@/lib/admin/pickup-batch.server";
@@ -252,7 +255,17 @@ async function createShipmentAction(_state: AdminActionState, formData: FormData
         return { ok: false as const, error: "Kurirski zahtev nije ispravan." };
       }
       try {
-        const shipment = await createReclamationShipment({ reclamationId: id, purpose, packageCount, actorId });
+        const returnPickupCoordinates = purpose === "RECLAMATION_RETURN"
+          ? parseReturnPickupCoordinates(String(formData.get("pickupCoordinates") ?? "")) : undefined;
+        if (returnPickupCoordinates && formData.get("pickupLocationConfirmed") !== "on") {
+          return { ok: false as const, error: "Potvrdite da ste proverili lokaciju objekta sa kupcem. Ne unosite približnu lokaciju ulice ili centra mesta." };
+        }
+        const options = { reclamationId: id, purpose, packageCount, actorId, returnPickupCoordinates };
+        if (formData.get("intent") === "verify") {
+          await preflightReclamationShipment(options);
+          return { ok: true as const, entityId: id, message: "Adresa i uslovi preuzimanja su provereni. Sada možete zatražiti preuzimanje kod kupca. Provera nije kreirala pošiljku niti poslala nalog kuriru." };
+        }
+        const shipment = await createReclamationShipment(options);
         return {
           ok: true as const,
           entityId: id,
@@ -501,7 +514,7 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
                       </p>
                     )
                   ) : (
-                    <AdminActionForm action={createShipmentAction} className="mt-3 flex flex-wrap items-end gap-2">
+                    <AdminActionForm action={createShipmentAction} preserveValues className="mt-3 flex flex-wrap items-end gap-2">
                       <input type="hidden" name="id" value={reclamation.id} />
                       <input type="hidden" name="purpose" value={purpose} />
                       {previous?.syncError ? <p className="w-full text-destructive">{previous.syncError}</p> : null}
@@ -510,11 +523,19 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
                         <p>Odredište: {reclamation.warehouse ? `${reclamation.warehouse.name} · ${reclamation.warehouse.address ?? "Adresa nije uneta"}, ${reclamation.warehouse.city ?? ""}` : "Izaberite magacin"}</p>
                         <p>Otkupnina: 0 RSD. Za GLS se šalje P&R zahtev za naredni radni dan; kurir donosi adresnicu.</p>
                       </div>
+                      {pickupAddressLabel(reclamation.order) !== formatStreetAddress(reclamation.order.shipStreet, reclamation.order.shipHouseNumber ?? "") ? <p className="w-full text-sm">Kurirski naziv iste adrese: <strong>{pickupAddressLabel(reclamation.order)}, {reclamation.order.shipCity}</strong>. Originalna adresa porudžbine ostaje sačuvana.</p> : null}
                       <p className="w-full text-xs text-ink-500">Za X Express lokacija preuzimanja se automatski pronalazi iz adrese kupca preko <span translate="no">Google Maps</span>. Ako adresa nije dovoljno precizna, nalog se neće poslati i dobićete poruku da proverite ulicu, broj i mesto.</p>
                       <p className="w-full text-xs text-ink-500">Broj i mere GLS paketa preuzimaju se iz artikla i količine reklamacije.</p>
                       <Field label="Broj paketa za X Express">
                         <input name="packageCount" type="number" min={1} max={99} defaultValue={1} className="h-9 w-24 rounded-lg border border-input bg-transparent px-2" />
                       </Field>
+                      <details className="w-full rounded-lg border border-border p-3">
+                        <summary className="cursor-pointer text-sm font-medium">Google Maps ne potvrđuje adresu? Unesite potvrđenu lokaciju kupca</summary>
+                        <p className="mt-2 text-xs text-ink-500">Za X Express možete uneti koordinate tačnog objekta sa Google Maps, potvrđene sa kupcem. Broj i adresa ostaju isti. Lokacija ulice ili centra mesta nije dovoljna.</p>
+                        <Field label="Potvrđena lokacija kupca (opciono)"><input name="pickupCoordinates" placeholder="npr. 44.812345, 20.461234" className="mt-2 h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm" /></Field>
+                        <label className="mt-2 flex items-start gap-2 text-xs"><input name="pickupLocationConfirmed" type="checkbox" />Potvrđujem da je ovo tačan objekat kupca i da sam proverio lokaciju sa kupcem.</label>
+                      </details>
+                      <SubmitButton size="sm" variant="outline" name="intent" value="verify" pendingLabel="Proveravam…">Proveri adresu pre slanja</SubmitButton>
                       <SubmitButton size="sm" confirm="Poslati zahtev za preuzimanje kod kupca? Za GLS se šalje P&R nalog za naredni radni dan, bez otkupnine.">
                         Zatraži preuzimanje kod kupca
                       </SubmitButton>

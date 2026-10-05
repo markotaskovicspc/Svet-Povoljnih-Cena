@@ -1,4 +1,5 @@
 import "server-only";
+import { canonicalPickupStreet, samePickupStreet } from "./pickup-street-aliases";
 import { splitStreetAndHouseNumber } from "./house-number";
 import type { XExpressPickupCoordinates } from "@/lib/x-express/return";
 
@@ -10,7 +11,12 @@ export type PickupAddress = {
 
 export class PickupGeocodingError extends Error {}
 
-const ADDRESS_ERROR = "Lokacija preuzimanja nije pouzdano pronađena. Proverite ulicu, kućni broj i mesto u adresi porudžbine, pa pokušajte ponovo. Nalog nije poslat kuriru.";
+function addressError(reason: string, instruction: string) {
+  return new PickupGeocodingError(
+    `Lokacija preuzimanja nije pouzdano pronađena. ${reason} ${instruction} Nalog nije poslat kuriru.`,
+  );
+}
+function quoted(value: string) { return `„${value.slice(0, 120)}“`; }
 const CYRILLIC: Record<string, string> = Object.fromEntries(
   [..."абвгдђежзијклљмнњопрстћуфхцчџш"].map((letter, index) => [
     letter, ["a", "b", "v", "g", "d", "dj", "e", "z", "z", "i", "j", "k", "l", "lj", "m", "n", "nj", "o", "p", "r", "s", "t", "c", "u", "f", "h", "c", "c", "dz", "s"][index],
@@ -43,12 +49,14 @@ export async function geocodePickupAddress(address: PickupAddress): Promise<XExp
   // Google uses the locality component for the city. Postal codes refer to
   // delivery offices and are not a reliable building-location discriminator.
   const city = address.shipCity.replace(/\s*\([^)]*\)\s*/g, " ").trim();
-  if (!street || !houseNumber || houseNumber === "bb" || !city) {
-    throw new PickupGeocodingError(ADDRESS_ERROR);
-  }
+  if (!street) throw addressError("Nedostaje naziv ulice.", "Proverite ulicu u adresi porudžbine.");
+  if (!houseNumber) throw addressError("Nedostaje važeći kućni broj.", "Proverite ulicu i unesite ceo kućni broj u adresi porudžbine.");
+  if (houseNumber === "bb") throw addressError("Adresa je bez kućnog broja (bb), pa objekat ne može automatski da se potvrdi.", "Proverite ulicu i unesite tačan broj ako postoji; ako ne postoji, unesite lokaciju objekta potvrđenu sa kupcem u polje „Potvrđena lokacija kupca“ na reklamaciji.");
+  if (!city) throw addressError("Nedostaje mesto preuzimanja.", "Proverite ulicu i izaberite mesto u adresi porudžbine.");
+  const lookupStreet = canonicalPickupStreet(street, city);
   const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
   url.search = new URLSearchParams({
-    address: `${street} ${houseNumber}, ${city}, Srbija`,
+    address: `${lookupStreet} ${houseNumber}, ${city}, Srbija`,
     components: "country:RS", language: "sr", key,
   }).toString();
   let body: { status?: string; results?: Result[] };
@@ -60,27 +68,62 @@ export async function geocodePickupAddress(address: PickupAddress): Promise<XExp
     // Fetch errors can contain the credential-bearing URL. Never propagate it.
     throw new PickupGeocodingError("Servis za pronalaženje adrese trenutno nije dostupan. Pokušajte ponovo. Nalog nije poslat kuriru.");
   }
-  if (body?.status === "ZERO_RESULTS") throw new PickupGeocodingError(ADDRESS_ERROR);
+  if (body?.status === "ZERO_RESULTS") throw addressError(
+    `Google Maps nije pronašao adresu ${quoted(`${street} ${houseNumber}, ${city}`)}.`,
+    "Proverite ulicu, kućni broj i mesto u adresi porudžbine.",
+  );
+  if (["OVER_QUERY_LIMIT", "OVER_DAILY_LIMIT"].includes(body?.status ?? "")) {
+    throw new PickupGeocodingError("Google Maps ne dozvoljava novu proveru zbog ograničenja kvote ili naplate. Administrator treba da proveri kvotu i naplatu Google Maps naloga. Nalog nije poslat kuriru.");
+  }
+  if (body?.status === "REQUEST_DENIED") {
+    throw new PickupGeocodingError("Google Maps je odbio pristup servisu za proveru adrese. Administrator treba da proveri API ključ, dozvole i naplatu. Nalog nije poslat kuriru.");
+  }
   if (body?.status !== "OK") {
-    throw new PickupGeocodingError("Google Maps nije odobrio proveru adrese. Administrator treba da proveri API ključ, naplatu i kvotu. Nalog nije poslat kuriru.");
+    throw new PickupGeocodingError("Google Maps trenutno nije uspeo da proveri adresu. Pokušajte ponovo; ako se greška ponavlja, obratite se administratoru. Nalog nije poslat kuriru.");
   }
   const results = body.results;
-  if (!Array.isArray(results) || results.length !== 1) throw new PickupGeocodingError(ADDRESS_ERROR);
+  if (!Array.isArray(results) || !results.length) throw addressError("Google Maps nije vratio lokaciju adrese.", "Proverite ulicu, broj i mesto, pa pokušajte ponovo.");
+  if (results.length !== 1) throw addressError("Google Maps je pronašao više mogućih lokacija.", "Dopunite naziv ulice, broj i mesto da bi adresa bila jednoznačna.");
   const result = results[0];
   const components = result?.address_components;
   const location = result?.geometry?.location;
   if (!Array.isArray(components) || !components.every((c) => c && Array.isArray(c.types) && typeof c.long_name === "string" && typeof c.short_name === "string")) {
-    throw new PickupGeocodingError(ADDRESS_ERROR);
+    throw addressError("Google Maps je vratio nepotpune podatke adrese.", "Pokušajte ponovo; ako se greška ponavlja, obratite se administratoru.");
   }
   const has = (type: string, expected: string) => components.some((c) => c.types.includes(type) && normalize(c.long_name) === normalize(expected));
-  if (result.partial_match || result.geometry?.location_type !== "ROOFTOP" ||
-      !Array.isArray(result.types) || !result.types.some((t) => ["street_address", "premise", "subpremise"].includes(t)) ||
-      !components.some((c) => c.types.includes("country") && c.short_name === "RS") ||
-      !has("route", street) || !has("street_number", houseNumber) ||
-      !["locality", "postal_town", "sublocality", "administrative_area_level_3"].some((type) => has(type, city)) ||
-      !location || !Number.isFinite(location.lat) || !Number.isFinite(location.lng) ||
+  const found = (types: string[]) => components.find((c) => types.some((type) => c.types.includes(type)))?.long_name;
+  if (!components.some((c) => c.types.includes("country") && c.short_name === "RS")) {
+    throw addressError("Pronađena lokacija nije potvrđena kao adresa u Srbiji.", "Proverite mesto i ulicu u adresi porudžbine.");
+  }
+  if (!has("route", lookupStreet) && !components.some(c => c.types.includes("route") &&
+      (samePickupStreet(c.long_name, lookupStreet, city) || samePickupStreet(c.short_name, lookupStreet, city)))) {
+    const route = found(["route"]);
+    throw addressError(
+      route ? `U porudžbini je ulica ${quoted(street)}, a Google Maps je pronašao ${quoted(route)}.` : `Google Maps nije potvrdio ulicu ${quoted(street)}.`,
+      "Proverite ulicu i izaberite odgovarajući naziv iz šifarnika; prikazani predlog nije automatski potvrđena adresa kupca.",
+    );
+  }
+  if (!has("street_number", houseNumber)) {
+    const number = found(["street_number"]);
+    throw addressError(number ? `Unet je kućni broj ${quoted(houseNumber)}, a Google Maps je pronašao ${quoted(number)}.` : `Google Maps nije potvrdio kućni broj ${quoted(houseNumber)}.`,
+      "Proverite tačan broj kod kupca i ispravite adresu porudžbine.");
+  }
+  const cityTypes = ["locality", "postal_town", "sublocality", "administrative_area_level_3"];
+  if (!cityTypes.some((type) => has(type, city))) {
+    const locality = found(cityTypes);
+    throw addressError(locality ? `Uneto je mesto ${quoted(city)}, a Google Maps je pronašao ${quoted(locality)}.` : `Google Maps nije potvrdio mesto ${quoted(city)}.`,
+      "Proverite mesto i ulicu u adresi porudžbine.");
+  }
+  if (result.partial_match) throw addressError("Google Maps je samo delimično prepoznao adresu.", "Proverite pun naziv ulice i kućni broj kod kupca.");
+  if (!Array.isArray(result.types) || !result.types.some((t) => ["street_address", "premise", "subpremise"].includes(t))) {
+    throw addressError("Google Maps je pronašao područje ili ulicu, ali nije potvrdio objekat za preuzimanje.", "Proverite kućni broj; ako objekat nije označen na mapi, unesite lokaciju objekta potvrđenu sa kupcem u polje „Potvrđena lokacija kupca“ na reklamaciji.");
+  }
+  if (result.geometry?.location_type !== "ROOFTOP") {
+    throw addressError("Google Maps je prepoznao adresu, ali nije potvrdio tačnu lokaciju objekta.", "Proverite ulicu i broj; ako su tačni, unesite lokaciju objekta potvrđenu sa kupcem u polje „Potvrđena lokacija kupca“ na reklamaciji jer automatska provera nema dovoljnu preciznost.");
+  }
+  if (!location || !Number.isFinite(location.lat) || !Number.isFinite(location.lng) ||
       location.lat < 41.8 || location.lat > 46.3 || location.lng < 18.8 || location.lng > 23.1) {
-    throw new PickupGeocodingError(ADDRESS_ERROR);
+    throw addressError("Google Maps je vratio nevažeću lokaciju ili lokaciju izvan podržanog područja Srbije.", "Proverite adresu; ako je tačna, obratite se administratoru.");
   }
   return { latitude: location.lat, longitude: location.lng };
 }

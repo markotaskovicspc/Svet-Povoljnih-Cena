@@ -229,7 +229,7 @@ function addressFromPickup(
     HouseNumber: cfg.pickup.houseNumber,
     HouseNumberInfo: cfg.pickup.houseNumberInfo || null,
     City: cfg.pickup.city,
-    ZipCode: cfg.pickup.postalCode,
+    ZipCode: myGlsPostalCode(cfg.pickup.postalCode, cfg.pickup.country, "Adresa magacina"),
     CountryIsoCode: cfg.pickup.country,
     // Normal DC labels keep personal data off the printed sender block. A
     // supplier pickup explicitly includes its operational contact so the
@@ -265,7 +265,11 @@ function addressFromOrder(
     HouseNumber: street.providerHouseNumber,
     HouseNumberInfo: `(${street.originalHouseNumber})`,
     City: order.glsDeliveryPointCity ?? order.shipCity,
-    ZipCode: order.glsDeliveryPointPostalCode ?? order.shipPostalCode,
+    ZipCode: myGlsPostalCode(
+      order.glsDeliveryPointPostalCode ?? order.shipPostalCode,
+      order.shipCountry || "RS",
+      `Adresa primaoca za porudžbinu ${order.number}`,
+    ),
     CountryIsoCode: order.shipCountry || "RS",
     ContactName: recipientName,
     ContactPhone: normalizePhone(order.shipPhone),
@@ -322,4 +326,15 @@ function nextBusinessDay() {
   if (day === 0) date.setDate(date.getDate() + 1);
   if (day === 6) date.setDate(date.getDate() + 2);
   return date;
+}
+
+/** Validate before any group in a pickup batch is booked with the provider. */
+function myGlsPostalCode(value: string, country: string, address: string) {
+  const postalCode = value.trim();
+  if (!postalCode || (country.trim().toUpperCase() === "RS" && !/^\d{5}$/.test(postalCode))) {
+    throw new MyGlsConfigError(
+      `${address}: neispravan poštanski broj ${JSON.stringify(postalCode)}. Unesite poštanski broj od 5 cifara za adresu u Srbiji.`,
+    );
+  }
+  return postalCode;
 }
