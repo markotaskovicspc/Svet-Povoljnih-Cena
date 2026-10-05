@@ -162,8 +162,7 @@ export function CookieSettingsPanel({
             className="mt-1 size-4"
           />
           <span className="text-sm text-ink-700">
-            <strong>Analitika</strong> — Google Analytics i interna statistika.
-            Sistem je {gaConfigured ? "tehnički konfigurisan" : "trenutno nekonfigurisan"}.
+            <strong>Analitika</strong> — Microsoft Clarity (toplotne mape i snimci interakcija), interna statistika{gaConfigured ? " i Google Analytics" : ""}.
           </span>
         </label>
         <label className="flex items-start gap-3 rounded-lg border border-border bg-white p-3">
