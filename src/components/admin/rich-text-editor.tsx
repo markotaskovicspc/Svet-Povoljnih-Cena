@@ -56,8 +56,27 @@ export function RichTextEditor({
 
   const run = (command: string, argument?: string) => {
     editorRef.current?.focus();
+    // Semantic tags survive the product HTML sanitizer; CSS-only overrides do not.
+    document.execCommand("styleWithCSS", false, "false");
     document.execCommand(command, false, argument);
     syncValue();
+  };
+
+  const clearFormat = () => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.focus();
+    const selection = window.getSelection();
+    if (!selection) return;
+    // With no selection, this button clears the whole description.
+    if (selection.isCollapsed || !editor.contains(selection.anchorNode) || !editor.contains(selection.focusNode)) {
+      const range = document.createRange();
+      range.selectNodeContents(editor);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+    run("removeFormat");
+    run("formatBlock", "p");
   };
 
   const importDocx = async (file: File) => {
@@ -119,6 +138,7 @@ export function RichTextEditor({
           <button
             key={command}
             type="button"
+            onMouseDown={(event) => event.preventDefault()}
             onClick={() => run(command)}
             className="h-7 rounded-md border border-border bg-surface px-2 text-xs font-medium text-ink-700 hover:bg-muted-bg"
           >
@@ -127,6 +147,7 @@ export function RichTextEditor({
         ))}
         <button
           type="button"
+          onMouseDown={(event) => event.preventDefault()}
           onClick={() => run("formatBlock", "h2")}
           className="h-7 rounded-md border border-border bg-surface px-2 text-xs font-medium text-ink-700 hover:bg-muted-bg"
         >
@@ -134,6 +155,7 @@ export function RichTextEditor({
         </button>
         <button
           type="button"
+          onMouseDown={(event) => event.preventDefault()}
           onClick={() => run("formatBlock", "p")}
           className="h-7 rounded-md border border-border bg-surface px-2 text-xs font-medium text-ink-700 hover:bg-muted-bg"
         >
@@ -141,7 +163,8 @@ export function RichTextEditor({
         </button>
         <button
           type="button"
-          onClick={() => run("removeFormat")}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={clearFormat}
           className="h-7 rounded-md border border-border bg-surface px-2 text-xs font-medium text-ink-700 hover:bg-muted-bg"
         >
           Očisti format
@@ -169,7 +192,7 @@ export function RichTextEditor({
         suppressContentEditableWarning
         onInput={syncValue}
         onBlur={syncValue}
-        className="prose prose-sm min-h-40 max-w-none px-3 py-2 text-sm text-ink-800 outline-none"
+        className="prose prose-sm min-h-40 max-w-none px-3 py-2 text-sm font-normal text-ink-800 outline-none"
         role="textbox"
         aria-label="Formatirani opis za sajt"
         aria-multiline="true"
