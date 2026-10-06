@@ -242,6 +242,7 @@ export function PdpAddToCart({
   // Mobile sticky bar
   return (
     <div
+      data-mobile-purchase-bar
       className="bg-surface/95 ring-border/60 fixed inset-x-0 bottom-0 z-40 rounded-t-xl px-4 pt-2.5 pb-[calc(env(safe-area-inset-bottom)+0.625rem)] shadow-soft-3 ring-1 backdrop-blur md:hidden"
     >
       <div className="mx-auto flex max-w-[520px] items-center gap-2.5">

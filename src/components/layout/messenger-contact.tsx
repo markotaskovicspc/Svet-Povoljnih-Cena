@@ -1,8 +1,28 @@
 "use client";
 import { useEffect, useRef, useState } from 'react';
 import { MessageCircle, X, Send } from 'lucide-react';
+import { usePathname } from 'next/navigation';
 type Message={id:string;role:'user'|'assistant';text:string;imageUrl?:string|null;status:string};
 export function MessengerContact(){
+ const pathname=usePathname();
+ const [purchaseBarHeight,setPurchaseBarHeight]=useState(0);
+ useEffect(()=>{
+  let bars:HTMLElement[]=[];
+  const update=()=>setPurchaseBarHeight(Math.max(0,...bars.map(bar=>bar.getBoundingClientRect().height)));
+  const observer=new ResizeObserver(update);
+  const bind=()=>{
+   observer.disconnect();
+   bars=Array.from(document.querySelectorAll<HTMLElement>('[data-mobile-purchase-bar]'));
+   bars.forEach(bar=>observer.observe(bar));
+   update();
+  };
+  const mutations=new MutationObserver(records=>{
+   if(records.some(record=>[...record.addedNodes,...record.removedNodes].some(node=>node instanceof Element&&(node.matches('[data-mobile-purchase-bar]')||node.querySelector('[data-mobile-purchase-bar]')))))bind();
+  });
+  mutations.observe(document.body,{childList:true,subtree:true});
+  bind();
+  return()=>{observer.disconnect();mutations.disconnect();};
+ },[pathname]);
  const [open,setOpen]=useState(false),[messages,setMessages]=useState<Message[]>([]),[text,setText]=useState(''),[ready,setReady]=useState(false),[sending,setSending]=useState(false),[error,setError]=useState(''),[support,setSupport]=useState(false);
  const retry=useRef<{id:string;text:string}|null>(null),bottom=useRef<HTMLDivElement>(null);
  const waiting=messages.some(m=>m.role==='user'&&m.status==='pending');
@@ -19,8 +39,8 @@ export function MessengerContact(){
   catch{setError('Slanje nije potvrđeno. Pokušajte ponovo istom porukom.');}
   finally{setSending(false);}
  }
- return <div className="fixed right-[max(1rem,env(safe-area-inset-right))] bottom-[max(1rem,env(safe-area-inset-bottom))] z-40">
-  {open&&<section aria-label="Razgovor sa Svetom Povoljnih Cena" className="mb-3 flex max-h-[calc(100dvh-6rem)] w-[min(360px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-border bg-white shadow-soft-5">
+ return <div className="fixed right-[max(1rem,env(safe-area-inset-right))] z-40" style={{bottom:`max(1rem,env(safe-area-inset-bottom),${purchaseBarHeight+16}px)`}}>
+  {open&&<section aria-label="Razgovor sa Svetom Povoljnih Cena" className="mb-3 flex w-[min(360px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-border bg-white shadow-soft-5" style={{maxHeight:`calc(100dvh - ${purchaseBarHeight+104}px)`}}>
    <div className="flex items-center justify-between border-b p-4"><div><p className="font-semibold">Svet Povoljnih Cena</p><p className="text-xs text-ink-500">Korisnička podrška · chat na sajtu</p></div><button onClick={()=>setOpen(false)} aria-label="Zatvori chat"><X className="size-5"/></button></div>
    <div aria-live="polite" role="log" className="min-h-40 flex-1 space-y-3 overflow-y-auto p-4 text-sm" style={{maxHeight:400}}>
     {!messages.length&&<p>Dobro došli! Šta Vas zanima? Ovde možete pitati za proizvode i napraviti porudžbinu.</p>}

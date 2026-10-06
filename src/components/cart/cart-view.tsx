@@ -95,6 +95,7 @@ export function CartView() {
 
       <div
         data-testid="mobile-cart-checkout-bar"
+        data-mobile-purchase-bar
         className="border-border/60 fixed inset-x-0 bottom-0 z-50 border-t bg-white/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(36,30,25,0.10)] backdrop-blur md:hidden"
       >
         <Link
