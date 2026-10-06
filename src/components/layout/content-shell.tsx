@@ -96,7 +96,7 @@ export function HubCard({
   description: string;
 }) {
   return (
-    <Link
+    <Link prefetch={false}
       href={href}
       className={cn(
         "bg-surface ring-border/60 group relative flex flex-col gap-2 rounded-2xl p-6 ring-1 transition",

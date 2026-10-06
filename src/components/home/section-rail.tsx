@@ -145,7 +145,7 @@ export function SectionRail({
                 <LucideIcon className="size-6 text-walnut md:size-8" aria-hidden />
               </span>
             ) : null}
-            <Link
+            <Link prefetch={false}
               href={href}
               className="group/title min-w-0 rounded-sm focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none"
             >
@@ -172,7 +172,7 @@ export function SectionRail({
             </p>
           ) : null}
         </motion.div>
-        <Link
+        <Link prefetch={false}
           href={href}
           className={cn(
             "hover:text-walnut focus-visible:ring-walnut/40 ml-auto inline-flex shrink-0 items-center gap-1 font-semibold text-ink-900 transition focus-visible:rounded-full focus-visible:ring-2 focus-visible:outline-none",
@@ -251,7 +251,7 @@ function SectionBanner({ banner, href }: { banner: Banner; href: string }) {
   const target = banner.ctaHref ?? href;
 
   return (
-    <Link
+    <Link prefetch={false}
       href={target}
       className="group/banner block overflow-hidden rounded-2xl bg-ink-900 text-canvas shadow-soft-2 focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none md:rounded-3xl"
     >

@@ -48,7 +48,7 @@ export function CategoryMenuGrid({
                   {tileContent}
                 </button>
               ) : (
-                <Link
+                <Link prefetch={false}
                   href={node.href}
                   onClick={onNavigate}
                   className="group flex w-full flex-col rounded-md text-left focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"

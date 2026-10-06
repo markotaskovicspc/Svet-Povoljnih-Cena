@@ -287,7 +287,7 @@ export function ProductCard({
       )}
     >
       <div className="relative aspect-square overflow-hidden bg-white">
-        <Link
+        <Link prefetch={false}
           href={`/p/${product.slug}`}
           aria-label={`${product.name} — pregled proizvoda`}
           onClick={(event) => {
@@ -437,7 +437,7 @@ export function ProductCard({
             compactOnDesktop && "md:text-[11px]",
           )}
         >
-          <Link
+          <Link prefetch={false}
             href={`/p/${product.slug}`}
             className="hover:text-walnut transition focus-visible:underline focus-visible:outline-none"
           >
@@ -445,7 +445,7 @@ export function ProductCard({
           </Link>
         </h3>
         {dimensions ? (
-          <Link
+          <Link prefetch={false}
             href={`/p/${product.slug}`}
             className={cn(
               "truncate text-[10px] leading-tight text-ink-500 transition hover:text-walnut focus-visible:underline focus-visible:outline-none md:text-[11px]",
@@ -467,7 +467,7 @@ export function ProductCard({
 
         <div className="mt-auto pt-0">
           <div className="flex flex-col items-stretch gap-1.5">
-            <Link
+            <Link prefetch={false}
               href={`/p/${product.slug}`}
               aria-label={`${product.name} — cena i detalji`}
               className="min-w-0 rounded-sm transition focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none"

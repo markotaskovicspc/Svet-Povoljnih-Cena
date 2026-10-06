@@ -55,7 +55,7 @@ export function TabsStrip({ tabs }: TabsStripProps) {
                 delay: i * 0.05,
               }}
             >
-              <Link
+              <Link prefetch={false}
                 href={promoTab.href}
                 className="group bg-surface ring-border/60 hover:ring-walnut/40 focus-visible:ring-walnut/40 relative flex h-full items-center justify-between gap-3 rounded-lg px-4 py-4 ring-1 shadow-soft-1 transition hover:shadow-soft-3 focus-visible:ring-2 focus-visible:outline-none md:px-5 md:py-5 xl:flex-col xl:items-start"
               >

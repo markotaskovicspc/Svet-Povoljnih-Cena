@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { resolveReportPeriod, type ReportPeriod } from "./report-period";
+import { getReportDayPeriods, resolveReportPeriod, type ReportPeriod } from "./report-period";
 
 type WarehouseStockRow = {
   id: string;
@@ -102,6 +102,7 @@ export function buildDashboardDataQuery(input: DashboardDataInput, section: "all
   const { now, warehouseId, todayPeriod, ordersPeriod, fiscalPeriod,
     reclamationsPeriod, topProductsPeriod, analyticsPeriod } = input;
   const visitsPeriod = resolveReportPeriod({ range: "30d" }, now);
+  const visitDays = getReportDayPeriods(visitsPeriod);
   const orderWarehouseSql = warehouseId
     ? Prisma.sql`AND EXISTS (SELECT 1 FROM "OrderItem" oi WHERE oi."orderId" = o.id AND oi."warehouseId" = ${warehouseId})`
     : Prisma.empty;
@@ -298,15 +299,19 @@ export function buildDashboardDataQuery(input: DashboardDataInput, section: "all
   `;
   const analytics = Prisma.sql`
     (SELECT COALESCE(json_agg(result), '[]'::json) FROM (
-      WITH daily AS (
+      WITH day_bounds(day, start_at, end_at) AS (
+        VALUES ${Prisma.join(visitDays.map((day) => Prisma.sql`(
+          ${day.fromInput}::date, ${day.start}::timestamp, ${day.endExclusive}::timestamp
+        )`))}
+      ), daily AS (
         SELECT
-          (a."occurredAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Belgrade')::date AS day,
-          COUNT(DISTINCT COALESCE(a."sessionId", a."anonymousId"))::double precision AS visits
-        FROM "AnalyticsEvent" a
-        WHERE a.type = 'PAGE_VIEW'
-          AND a."occurredAt" >= ${visitsPeriod.start}
-          AND a."occurredAt" < ${visitsPeriod.endExclusive}
-        GROUP BY 1
+          bounds.day,
+          (SELECT COUNT(DISTINCT COALESCE(a."sessionId", a."anonymousId"))
+           FROM "AnalyticsEvent" a
+           WHERE a.type = 'PAGE_VIEW'
+             AND a."occurredAt" >= bounds.start_at
+             AND a."occurredAt" < bounds.end_at)::double precision AS visits
+        FROM day_bounds bounds
       )
       SELECT
         (SELECT COUNT(DISTINCT COALESCE("sessionId", "anonymousId"))

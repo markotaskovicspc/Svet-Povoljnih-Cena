@@ -68,7 +68,7 @@ export function PromoShortcutTile({
     : undefined;
 
   return (
-    <Link
+    <Link prefetch={false}
       href={presentation.href}
       target={
         isExternalMobileShortcutHref(presentation.href) ? "_blank" : undefined
@@ -139,7 +139,7 @@ export function AccountShortcutTile({
   onClick?: () => void;
 }) {
   return (
-    <Link
+    <Link prefetch={false}
       href={href}
       onClick={onClick}
       className={cn(
