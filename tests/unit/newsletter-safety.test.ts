@@ -138,9 +138,9 @@ describe("newsletter audience and send safeguards", () => {
     await sendNewsletterCampaign("campaign1");
     expect(mocks.bulk).toHaveBeenCalledOnce();
   });
-  it("stops at the revised five percent bounce threshold", async () => {
+  it("stops at the revised nine percent bounce threshold", async () => {
     mocks.recipientCount.mockImplementation(async ({ where }) =>
-      where.status === "COMPLAINED" ? 0 : where.status === "BOUNCED" ? 50 : where.status === "QUEUED" ? 0 : 1000);
+      where.status === "COMPLAINED" ? 0 : where.status === "BOUNCED" ? 90 : where.status === "QUEUED" ? 0 : 1000);
     await expect(sendNewsletterCampaign("campaign1")).rejects.toThrow("Zaštita reputacije");
     expect(mocks.bulk).not.toHaveBeenCalled();
   });
@@ -151,9 +151,16 @@ describe("newsletter audience and send safeguards", () => {
     await sendNewsletterCampaign("campaign1");
     expect(mocks.bulk).toHaveBeenCalledOnce();
   });
-  it("stops at the revised 0.1 percent complaint threshold", async () => {
+  it("continues below the revised complaint and bounce thresholds", async () => {
     mocks.recipientCount.mockImplementation(async ({ where }) =>
-      where.status === "COMPLAINED" ? 2 : where.status === "BOUNCED" || where.status === "QUEUED" ? 0 : 2000);
+      where.status === "COMPLAINED" ? 3 : where.status === "BOUNCED" ? 89 : where.status === "QUEUED" ? 0 : 1000);
+    mocks.behavior.mockResolvedValue([{ id: "r1" }]);
+    await sendNewsletterCampaign("campaign1");
+    expect(mocks.bulk).toHaveBeenCalledOnce();
+  });
+  it("stops at the revised 0.4 percent complaint threshold", async () => {
+    mocks.recipientCount.mockImplementation(async ({ where }) =>
+      where.status === "COMPLAINED" ? 4 : where.status === "BOUNCED" || where.status === "QUEUED" ? 0 : 1000);
     await expect(sendNewsletterCampaign("campaign1")).rejects.toThrow("Zaštita reputacije");
     expect(mocks.bulk).not.toHaveBeenCalled();
   });

@@ -948,7 +948,7 @@ async function sendSesNewsletterBatch(args: {
   ]);
   // Campaign-level rate over accepted messages; SES account reputation uses
   // its own feedback-eligible denominator and must be monitored separately.
-  if (complaints / Math.max(sent, 1) >= 0.001 || (bounces >= 3 && bounces / Math.max(sent, 1) >= 0.05)) {
+  if (complaints / Math.max(sent, 1) >= 0.004 || (bounces >= 3 && bounces / Math.max(sent, 1) >= 0.09)) {
     throw new Error("Zaštita reputacije: slanje je zaustavljeno zbog prijave spama ili visokog broja odbijenih poruka. Proverite publiku pre nastavka.");
   }
   // Persist an ambiguity marker BEFORE the network request. A worker crash or lost
