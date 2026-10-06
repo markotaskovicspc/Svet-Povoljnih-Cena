@@ -6,12 +6,19 @@ import { PermanentBackgroundJobError } from "@/lib/background-jobs";
 
 export async function refundReceivedOrder(input: { movementId: string; buyerId?: string; actorId?: string }) {
   const receipt = await db.stockMovement.findUnique({ where: { id: input.movementId } });
-  if (!receipt?.orderId || !receipt.orderItemId || !receipt.idempotencyKey?.startsWith("order-return:")) {
+  if (!receipt?.orderId) {
     throw new PermanentBackgroundJobError("Prijem vraćenog paketa nije pronađen.");
   }
   const orderId = receipt.orderId;
-  const orderItemId = receipt.orderItemId;
   return withOrderReturnLock(orderId, async () => {
+    // A reshipment can claim a physical receipt while this worker is waiting.
+    // Re-read under the same lock before making any external fiscal request.
+    const current = await db.stockMovement.findUnique({ where: { id: input.movementId } });
+    if (current?.idempotencyKey?.startsWith("reshipment-return:")) return;
+    if (!current?.orderItemId || !current.idempotencyKey?.startsWith("order-return:")) {
+      throw new PermanentBackgroundJobError("Prijem vraćenog paketa nije pronađen.");
+    }
+    const orderItemId = current.orderItemId;
     const [receipts, lines] = await Promise.all([
       db.stockMovement.count({ where: { orderItemId, idempotencyKey: { startsWith: "order-return:" } } }),
       db.fiscalDocumentLine.findMany({
@@ -37,8 +44,8 @@ export async function refundReceivedOrder(input: { movementId: string; buyerId?:
       if (!method) throw new Error("Originalni fiskalni račun nema način plaćanja; potrebna je provera.");
       const result = await issueFiscalRefundUnderLock({
         fiscalLineIds: [line.id], quantities: { [line.id]: qty },
-        paymentReturnMethod: method, buyerId, warehouseId: receipt.warehouseId,
-        actorId: input.actorId ?? receipt.actorId,
+        paymentReturnMethod: method, buyerId, warehouseId: current.warehouseId,
+        actorId: input.actorId ?? current.actorId,
       });
       if (!result.ok) throw new Error(result.error);
       // Financial follow-up has its own durable PAYMENT_REFUND job and status.
