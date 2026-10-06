@@ -428,6 +428,78 @@ describe("GLS customer pickup service", () => {
 
 
 describe("MyGLS postal code preflight", () => {
+  it.each([
+    ["Beograd", "11070"],
+    ["Beograd (Vračar)", "11104"],
+    ["Beograd — Zemun", "11080"],
+    ["  NOVI   BEOGRAD  ", " 11073 "],
+    ["Београд (Звездара)", "11050"],
+    ["Нови Београд", "11070"],
+    ["Belgrade", "11010"],
+    ["BG", "11030"],
+    ["bgd", "11040"],
+    ["Zemun", "11080"],
+    ["Врачар", "11118"],
+    ["Čukarica", "11030"],
+    ["Batajnica", "11273"],
+    ["Palilula", "11060"],
+    ["Rakovica", "11090"],
+    ["Stari grad", "11158"],
+    ["Beograd", "11000"],
+  ])("sends 11000 for %s (%s) on every GLS parcel without changing the order", (shipCity, shipPostalCode) => {
+    const input = { ...order, shipCity, shipPostalCode };
+    const parcels = buildMyGlsParcelsForOrder({ cfg: config, order: input, packages });
+    expect(parcels).toHaveLength(2);
+    for (const parcel of parcels) {
+      expect(parcel.DeliveryAddress).toMatchObject({ City: shipCity, ZipCode: "11000" });
+      expect(parcel.PickupAddress.ZipCode).toBe("22300");
+    }
+    expect(input.shipPostalCode).toBe(shipPostalCode);
+  });
+  it.each([
+    ["Novi Sad", "21000"],
+    ["Palilula", "18000"],
+    ["Smederevo", "11300"],
+    ["Smederevska Palanka", "11420"],
+  ])("preserves the postal code for %s", (shipCity, shipPostalCode) => {
+    const [parcel] = buildMyGlsParcelsForOrder({ cfg: config, order: { ...order, shipCity, shipPostalCode }, packages });
+    expect(parcel.DeliveryAddress.ZipCode).toBe(shipPostalCode);
+  });
+  it("normalizes the selected Belgrade delivery point and final delivery address", () => {
+    const [parcel] = buildMyGlsParcelsForOrder({ cfg: config, order: {
+      ...order, glsDeliveryPointId: "shop-1", glsDeliveryPointAddress: "Prodavnica 99",
+      glsDeliveryPointCity: "Beograd (Zemun)", glsDeliveryPointPostalCode: "11080",
+    }, packages });
+    expect(parcel.DeliveryAddress.ZipCode).toBe("11000");
+    expect(parcel.FinalDeliveryAddress?.ZipCode).toBe("11000");
+  });
+  it("uses the selected non-Belgrade delivery point's postcode for a Belgrade customer", () => {
+    const [parcel] = buildMyGlsParcelsForOrder({ cfg: config, order: {
+      ...order, shipCity: "Beograd", shipPostalCode: "11070",
+      glsDeliveryPointId: "shop-1", glsDeliveryPointAddress: "Prodavnica 99",
+      glsDeliveryPointCity: "Novi Sad", glsDeliveryPointPostalCode: "21000",
+    }, packages });
+    expect(parcel.DeliveryAddress.ZipCode).toBe("21000");
+    expect(parcel.FinalDeliveryAddress?.ZipCode).toBe("21000");
+  });
+  it.each(["RECLAMATION_RETURN", "RECLAMATION_REPLACEMENT"] as const)("normalizes Belgrade addresses for %s", (purpose) => {
+    const cfg = { ...config, pickup: { ...config.pickup, city: "Beograd (Zemun)", postalCode: "11080" } };
+    const parcels = buildMyGlsParcelsForOrder({ cfg, order: {
+      ...order, shipCity: "Beograd (Vračar)", shipPostalCode: "11104",
+      glsDeliveryPointCity: "Novi Sad", glsDeliveryPointPostalCode: "21000",
+    }, packages, purpose });
+    for (const parcel of parcels) {
+      expect(parcel.PickupAddress.ZipCode).toBe("11000");
+      expect(parcel.DeliveryAddress.ZipCode).toBe(purpose === "RECLAMATION_RETURN" ? "11000" : "21000");
+    }
+    expect(cfg.pickup.postalCode).toBe("11080");
+  });
+  it("does not apply the Belgrade rule outside Serbia", () => {
+    const [parcel] = buildMyGlsParcelsForOrder({ cfg: config, order: {
+      ...order, shipCity: "Belgrade", shipCountry: "US", shipPostalCode: "59714",
+    }, packages });
+    expect(parcel.DeliveryAddress.ZipCode).toBe("59714");
+  });
   it.each(["", "1100", "110000", "11000 Beograd", "GET_FROM_POSTAL_CODE"])(
     "rejects invalid domestic recipient postal code %j with order identity",
     (shipPostalCode) => {
