@@ -126,7 +126,7 @@ describe("newsletter audience and send safeguards", () => {
     await sendNewsletterCampaign("campaign1");
     expect(mocks.bulk).not.toHaveBeenCalled();
   });
-  it("stops remaining batches when a complaint is received", async () => {
+  it("stops remaining batches when the complaint rate exceeds the threshold", async () => {
     mocks.recipientCount.mockResolvedValue(1);
     await expect(sendNewsletterCampaign("campaign1")).rejects.toThrow("Zaštita reputacije");
     expect(mocks.bulk).not.toHaveBeenCalled();
@@ -141,6 +141,19 @@ describe("newsletter audience and send safeguards", () => {
   it("stops at the revised five percent bounce threshold", async () => {
     mocks.recipientCount.mockImplementation(async ({ where }) =>
       where.status === "COMPLAINED" ? 0 : where.status === "BOUNCED" ? 50 : where.status === "QUEUED" ? 0 : 1000);
+    await expect(sendNewsletterCampaign("campaign1")).rejects.toThrow("Zaštita reputacije");
+    expect(mocks.bulk).not.toHaveBeenCalled();
+  });
+  it("continues the reported campaign with two complaints and 103 bounces out of 2200 accepted messages", async () => {
+    mocks.recipientCount.mockImplementation(async ({ where }) =>
+      where.status === "COMPLAINED" ? 2 : where.status === "BOUNCED" ? 103 : where.status === "QUEUED" ? 0 : 2200);
+    mocks.behavior.mockResolvedValue([{ id: "r1" }]);
+    await sendNewsletterCampaign("campaign1");
+    expect(mocks.bulk).toHaveBeenCalledOnce();
+  });
+  it("stops at the revised 0.1 percent complaint threshold", async () => {
+    mocks.recipientCount.mockImplementation(async ({ where }) =>
+      where.status === "COMPLAINED" ? 2 : where.status === "BOUNCED" || where.status === "QUEUED" ? 0 : 2000);
     await expect(sendNewsletterCampaign("campaign1")).rejects.toThrow("Zaštita reputacije");
     expect(mocks.bulk).not.toHaveBeenCalled();
   });
