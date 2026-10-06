@@ -248,7 +248,10 @@ export async function GET(
   );
   let html: string;
   try {
-    html = renderXExpressBatchLabelsHtml(shipments, {
+    html = renderXExpressBatchLabelsHtml(shipments.map(shipment => ({
+      ...shipment,
+      pickupBatchLines: batch.lines.filter(line => shipmentMatchesLine(shipment, line)),
+    })), {
       title: batch.number,
       autoPrint: false,
       packageContentsByShipmentId,

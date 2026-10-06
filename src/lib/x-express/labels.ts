@@ -1,6 +1,7 @@
 import "server-only";
 
 import { Prisma, type PaymentMethod, type ShipmentPurpose } from "@prisma/client";
+import { readPackedItems, type PackedItem } from "@/lib/courier/parcel-contents";
 import JsBarcode from "jsbarcode";
 import { num } from "@/lib/api/_helpers";
 import { formatDateTime, formatRsd } from "@/lib/format";
@@ -40,6 +41,7 @@ export type XExpressLabelShipment = {
   providerRouteName: string | null;
   rawCreateResponse: Prisma.JsonValue | null;
   createdAt: Date;
+  pickupBatchLines?: readonly { providerParcelNumber: string | null; packedItems?: unknown }[];
   order: {
     number: string;
     total: Prisma.Decimal | number | bigint;
@@ -193,6 +195,20 @@ export function renderXExpressBatchLabelsHtml(
     .label:has(.article) .route-code, .label:has(.article) .pkg { font-size: 24px; }
     .label:has(.article) .meta { margin-top: 1.5mm; font-size: 8px; }
     .label:has(.article) .note { margin-top: 1mm; font-size: 8px; }
+    .label:has(.packing-list) .sender { min-height: 10mm; }
+    .label:has(.packing-list) .recipient { min-height: 24mm; font-size: 12px; padding: 1.5mm; }
+    .label:has(.packing-list) .recipient strong { font-size: 14px; }
+    .label:has(.packing-list) .route-code, .label:has(.packing-list) .pkg { font-size: 24px; }
+    .label:has(.packing-list) .meta { margin-top: 1mm; font-size: 8px; }
+    .label:has(.packing-list) .note { margin-top: 1mm; }
+    .packing-list { margin-top: 1.5mm; border-top: 1px solid #000; padding-top: 1mm; font-size: 10px; line-height: 1.2; overflow-wrap: anywhere; }
+    .packing-item { display: grid; grid-template-columns: 12mm 1fr; gap: 1mm; margin-top: 1mm; }
+    .packing-item small { font-size: 9px; }
+    .sheet.packing-sheet { grid-template-columns: 190mm; grid-template-rows: 276mm; }
+    .packing-sheet .label { width: 190mm; height: 276mm; }
+    .packing-sheet .packing-list { font-size: 12px; display: grid; grid-template-columns: 1fr 1fr; column-gap: 6mm; }
+    .packing-sheet .packing-list > strong { grid-column: 1 / -1; }
+    .packing-sheet .packing-item small { font-size: 11px; }
     .article { display: grid; grid-template-columns: 1fr 46mm; gap: 2mm; align-items: center; min-height: 16mm; margin-top: 1.5mm; padding-top: 1mm; border-top: 1px solid #000; font-size: 9px; line-height: 1.15; }
     .article-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; font-weight: 700; }
     .article-sku { margin-top: 1mm; overflow-wrap: anywhere; }
@@ -324,7 +340,12 @@ function renderLabel(
     raw: shipment.rawCreateResponse, code: trackingCode, items: order.items,
     content, orderItemId, purpose: shipment.purpose,
   });
-  const quantity = article?.packedQuantity ?? packedQuantity;
+  // Existing labels retain the old summary snapshot. Recover their exact
+  // contents by courier code, never from all items in a mixed order.
+  const savedLines = shipment.pickupBatchLines?.filter(line => line.providerParcelNumber === trackingCode && line.packedItems != null) ?? [];
+  if (savedLines.length > 1) throw new Error("Više paketa je povezano sa istom adresnicom.");
+  const packedItems = savedLines.length ? readPackedItems(savedLines[0]!.packedItems) : article?.packedItems ?? [];
+  const quantity = packedItems.length ? packedItems.reduce((sum, item) => sum + item.quantity, 0) : article?.packedQuantity ?? packedQuantity;
   const sender = labelData?.sender;
   const recipient = labelData?.recipient;
   const senderAddress = sender
@@ -349,14 +370,20 @@ function renderLabel(
     <div class="code">${escapeHtml(trackingCode)}</div>
     <div class="recipient">Primalac:<strong>${escapeHtml(recipientName)}<br />${escapeHtml(recipientAddress)}<br />${escapeHtml(recipientPostalCity)}<br />${escapeHtml(recipient?.phone ?? order.shipPhone)}</strong></div>
     <div class="route"><span class="route-code">${escapeHtml(route)}</span>${quantity != null ? `<span class="box-quantity">U kutiji: ${quantity} kom</span>` : ""}<span class="pkg">${index}/${count}</span></div>
-    ${article && (article.sku || article.barcode) ? renderArticle(article) : ""}
+    ${packedItems.length ? renderPackingList(packedItems) : article && (article.sku || article.barcode) ? renderArticle(article) : ""}
     <div class="meta">
-      <div><strong>API referenca:</strong> ${escapeHtml(reference)}<br /><strong>Porudžbina:</strong> ${escapeHtml(order.number)}${article && (article.sku || article.barcode) ? "" : `<br /><strong>Sadržaj:</strong> ${escapeHtml(article?.name || content)}`}</div>
+      <div><strong>API referenca:</strong> ${escapeHtml(reference)}<br /><strong>Porudžbina:</strong> ${escapeHtml(order.number)}${packedItems.length || article && (article.sku || article.barcode) ? "" : `<br /><strong>Sadržaj:</strong> ${escapeHtml(article?.name || content)}`}</div>
       <div><strong>Uslugu plaća:</strong> ${escapeHtml(payer)}<br /><strong>Vrsta usluge:</strong> ${escapeHtml(serviceType)}<br /><strong>Otkupnina:</strong> ${escapeHtml(formatRsd(codAmount))}<br /><strong>Masa:</strong> ${escapeHtml(formatMass(packageData?.mass))}</div>
     </div>
     <div class="note"><strong>Napomena:</strong><br />${escapeHtml(note)}</div>
     <div class="stamp"><span>X Express specifikacija v1.5</span><span>štampa: ${escapeHtml(formatDateTime(new Date()))}</span></div>
   </section>`;
+}
+
+function renderPackingList(items: readonly PackedItem[]) {
+  return `<div class="packing-list"><strong>Artikli za pakovanje</strong>${items.map(item =>
+    `<div class="packing-item"><strong>${item.quantity} ×</strong><div>${escapeHtml(item.name)}${item.sku ? `<br /><small>Šifra: ${escapeHtml(item.sku)}</small>` : ""}</div></div>`
+  ).join("")}</div>`;
 }
 
 function renderArticle(article: XExpressArticleLabel) {

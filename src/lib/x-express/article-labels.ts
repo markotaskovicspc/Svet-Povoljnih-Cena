@@ -1,5 +1,5 @@
 import { boxQuantity } from "@/lib/courier/label-quantity";
-import { packedItemsLabel } from "@/lib/courier/parcel-contents";
+import { packedItemsLabel, readPackedItems, type PackedItem } from "@/lib/courier/parcel-contents";
 import type { ShipmentPurpose } from "@prisma/client";
 import type { PhysicalPackage } from "@/lib/courier/packages";
 import { readShipmentAssignment } from "@/lib/courier/shipment-assignment";
@@ -18,7 +18,7 @@ export type XExpressArticleItem = {
   product?: { barcode: string | null } | null;
 };
 
-export type XExpressArticleLabel = { name: string; sku: string | null; barcode: string | null; packedQuantity?: number };
+export type XExpressArticleLabel = { name: string; sku: string | null; barcode: string | null; packedQuantity?: number; packedItems?: PackedItem[] };
 
 function article(item: XExpressArticleItem): XExpressArticleLabel {
   return { name: item.name, sku: item.sku?.trim() || null, barcode: item.product?.barcode?.replace(/\s/g, "") || null };
@@ -34,7 +34,7 @@ export function buildXExpressArticleLabels(args: {
   return args.codes.flatMap((Code, index) => {
     const pkg = args.packages?.[index];
     if (pkg?.packedItems?.length) {
-      return [{ Code, name: packedItemsLabel(pkg.packedItems)!, sku: null, barcode: null, packedQuantity: boxQuantity(pkg) }];
+      return [{ Code, name: packedItemsLabel(pkg.packedItems)!, packedItems: readPackedItems(pkg.packedItems), sku: null, barcode: null, packedQuantity: boxQuantity(pkg) }];
     }
     const item = pkg?.orderItemId
       ? args.items.find((item) => item.id === pkg.orderItemId)
@@ -67,6 +67,7 @@ export function resolveXExpressArticleLabel(args: {
         (entry.sku === null || typeof entry.sku === "string") &&
         (entry.barcode === null || typeof entry.barcode === "string")) {
       return { name: entry.name, sku: entry.sku, barcode: entry.barcode,
+        ...(entry.packedItems != null ? { packedItems: readPackedItems(entry.packedItems) } : {}),
         ...(Number.isSafeInteger(entry.packedQuantity) && entry.packedQuantity > 0 ? { packedQuantity: entry.packedQuantity } : {}),
       };
     }
