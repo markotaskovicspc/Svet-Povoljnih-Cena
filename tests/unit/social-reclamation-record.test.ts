@@ -4,7 +4,7 @@ vi.mock("@/lib/db", () => ({ db: { order: { findUnique: m.order }, reclamation: 
 vi.mock("@/lib/api/uploads", () => ({ isAllowedReclamationPhotoUrl: () => true, verifyReclamationUploads: m.verify }));
 vi.mock("@/lib/background-jobs", () => ({ enqueueBackgroundJob: m.enqueue }));
 vi.mock("@/lib/api/order-access", () => ({ verifyOrderAccessToken: () => false }));
-import { createGuestReclamation, createSocialReclamation } from "@/lib/api/reclamations";
+import { createGuestReclamation, createReclamationSchema, createSocialReclamation } from "@/lib/api/reclamations";
 import { createReclamationLinkToken } from "@/lib/api/reclamation-link-token";
 const order = { id: "o1", number: "SPC-TEST", status: "ISPORUCENO", userId: null, guestEmail: "test@example.test", shipFirstName: "Test", shipLastName: "Kupac", shipPhone: "synthetic", items: [{ id: "item", sku: "IRON", supplierExternalSku: null }] };
 const input = { orderNumberOrFiscal: order.number, sku: "IRON", quantity: 1, description: "Pegla ne greje", photos: [] };
@@ -17,10 +17,11 @@ beforeEach(() => {
   m.tx.mockImplementation(async fn => fn({ $queryRaw: m.raw, reclamation: { findUnique: m.lockedExisting, findFirst: m.open, findMany: async () => [], create: m.create } }));
 });
 afterEach(() => vi.unstubAllEnvs());
-it("saves a buyer's requested remedy and problem type through a staff link", async () => {
+it.each(["KVAR", "FIZICKO_OSTECENJE", "POGRESNO_ISPORUCENO", "NIJE_ISPORUCENO"] as const)("validates and saves problem type %s and the requested remedy through a staff link", async (type) => {
   const { token } = createReclamationLinkToken(order.number);
-  expect(await createGuestReclamation({ ...input, type: "KVAR", request: "ZAMENA" }, token)).toMatchObject({ ok: true });
-  expect(m.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ orderId: order.id, description: input.description, quantity: 1, type: "KVAR", request: "ZAMENA" }) }));
+  const parsed = createReclamationSchema.parse({ ...input, type, request: "ZAMENA" });
+  expect(await createGuestReclamation(parsed, token)).toMatchObject({ ok: true });
+  expect(m.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ orderId: order.id, description: input.description, quantity: 1, type, request: "ZAMENA" }) }));
 });
 it("rejects another order's link before verifying uploads or writing a record", async () => {
   const { token } = createReclamationLinkToken("SPC-OTHER");
