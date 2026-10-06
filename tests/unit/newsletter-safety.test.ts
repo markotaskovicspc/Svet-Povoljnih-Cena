@@ -131,6 +131,19 @@ describe("newsletter audience and send safeguards", () => {
     await expect(sendNewsletterCampaign("campaign1")).rejects.toThrow("Zaštita reputacije");
     expect(mocks.bulk).not.toHaveBeenCalled();
   });
+  it("continues the reported campaign with 31 bounces out of 1030 accepted messages", async () => {
+    mocks.recipientCount.mockImplementation(async ({ where }) =>
+      where.status === "COMPLAINED" ? 0 : where.status === "BOUNCED" ? 31 : where.status === "QUEUED" ? 0 : 1030);
+    mocks.behavior.mockResolvedValue([{ id: "r1" }]);
+    await sendNewsletterCampaign("campaign1");
+    expect(mocks.bulk).toHaveBeenCalledOnce();
+  });
+  it("stops at the revised five percent bounce threshold", async () => {
+    mocks.recipientCount.mockImplementation(async ({ where }) =>
+      where.status === "COMPLAINED" ? 0 : where.status === "BOUNCED" ? 50 : where.status === "QUEUED" ? 0 : 1000);
+    await expect(sendNewsletterCampaign("campaign1")).rejects.toThrow("Zaštita reputacije");
+    expect(mocks.bulk).not.toHaveBeenCalled();
+  });
   it("recovers an ambiguous send from a signed SES delivery event without resending", async () => {
     mocks.eventRecipient.mockResolvedValue({ ...recipient, status: "FAILED", failureReason: "ses:delivery_unknown", sentAt: null });
     await recordSesNewsletterEvent("email.delivered", "ses1", { destination: [contact.email], tags: { recipient: ["r1"], campaign: ["campaign1"] } });

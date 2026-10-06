@@ -946,7 +946,7 @@ async function sendSesNewsletterBatch(args: {
     db.newsletterCampaignRecipient.count({ where: { campaignId: args.campaign.id, status: "BOUNCED" } }),
     db.newsletterCampaignRecipient.count({ where: { campaignId: args.campaign.id, sentAt: { not: null } } }),
   ]);
-  if (complaints > 0 || (bounces >= 3 && bounces / Math.max(sent, 1) >= 0.03)) {
+  if (complaints > 0 || (bounces >= 3 && bounces / Math.max(sent, 1) >= 0.05)) {
     throw new Error("Zaštita reputacije: slanje je zaustavljeno zbog prijave spama ili visokog broja odbijenih poruka. Proverite publiku pre nastavka.");
   }
   // Persist an ambiguity marker BEFORE the network request. A worker crash or lost
