@@ -47,6 +47,33 @@ describe("Pompea packing list on one buyer label", () => {
     expect(html).not.toContain("2 stavki");
   });
 
+  it("restores legacy batch labels with no direct tracking links using the original package order", () => {
+    const html = renderXExpressLabelsHtml({ ...shipment,
+      rawCreateResponse: { articleLabels: [{ Code: code, name: "POMPEA · 2 stavki · 5 kom", sku: null, barcode: null }] },
+      pickupBatchLines: [{ providerParcelNumber: null, packageNo: 1, packedItems: packages[0].packedItems }],
+    });
+    expect(html).toContain(items[0].name);
+    expect(html).toContain(items[1].name);
+    expect(html).toContain("U kutiji: 5 kom");
+  });
+
+  it("keeps legacy mixed-order contents on the matching parcel when picking rows arrive out of order", () => {
+    const html = renderXExpressLabelsHtml({ ...shipment, packageCount: 3,
+      providerParcelNumbers: [code, "AAA0850300002", "AAA0850300003"],
+      pickupBatchLines: [
+        { providerParcelNumber: null, packageNo: 3, packedItems: null },
+        { providerParcelNumber: null, packageNo: 1, packedItems: packages[0].packedItems },
+        { providerParcelNumber: null, packageNo: 2, packedItems: null },
+      ],
+    });
+    const labels = [...html.matchAll(/<section class="label">([\s\S]*?)<\/section>/g)].map(match => match[1]);
+    expect(labels).toHaveLength(3);
+    expect(labels[0]).toContain('class="packing-list"');
+    expect(labels[0]).toContain(items[1].name);
+    expect(labels[1]).not.toContain('class="packing-list"');
+    expect(labels[2]).not.toContain('class="packing-list"');
+  });
+
   it("preserves a long list and escapes names and SKUs without adding labels", () => {
     const packedItems = Array.from({ length: 24 }, (_, i) => ({ ...packages[0].packedItems![0], orderItemId: `item-${i}`, sku: `<${i}>`, name: `POMPEA <artikl & ${i}> dug naziv veličina XL boja crna` }));
     const html = renderXExpressLabelsHtml({ ...shipment, pickupBatchLines: [{ providerParcelNumber: code, packedItems }] });

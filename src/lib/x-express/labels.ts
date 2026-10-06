@@ -41,7 +41,7 @@ export type XExpressLabelShipment = {
   providerRouteName: string | null;
   rawCreateResponse: Prisma.JsonValue | null;
   createdAt: Date;
-  pickupBatchLines?: readonly { providerParcelNumber: string | null; packedItems?: unknown }[];
+  pickupBatchLines?: readonly { providerParcelNumber: string | null; packedItems?: unknown; packageNo?: number }[];
   order: {
     number: string;
     total: Prisma.Decimal | number | bigint;
@@ -286,6 +286,11 @@ function renderShipmentLabels(
   if (packageQuantities && (packageQuantities.length !== count || packageQuantities.some(q => !Number.isSafeInteger(q) || q < 1))) {
     throw new Error(`X Express pošiljka ${shipment.id} nema broj komada za svih ${count} kutija.`);
   }
+  // Legacy X Express picking has no parcel IDs. Its packageNo order is the
+  // same order used to allocate tracking codes and the existing quantity map.
+  const legacyLines = shipment.pickupBatchLines?.length === count &&
+    shipment.pickupBatchLines.every(line => !line.providerParcelNumber && Number.isSafeInteger(line.packageNo))
+    ? [...shipment.pickupBatchLines].sort((a, b) => a.packageNo! - b.packageNo!) : undefined;
   return trackingCodes.map((code, index) =>
     renderLabel(
       shipment,
@@ -295,6 +300,7 @@ function renderShipmentLabels(
       packageContents?.[index],
       packageOrderItemIds?.[index],
       packageQuantities?.[index],
+      legacyLines?.[index]?.packedItems,
     ),
   );
 }
@@ -307,6 +313,7 @@ function renderLabel(
   packageContentOverride?: string,
   orderItemId?: string | null,
   packedQuantity?: number,
+  legacyPackedItems?: unknown,
 ) {
   const order = shipment.order;
   const labelData = readLabelData(shipment.rawCreateResponse);
@@ -344,7 +351,7 @@ function renderLabel(
   // contents by courier code, never from all items in a mixed order.
   const savedLines = shipment.pickupBatchLines?.filter(line => line.providerParcelNumber === trackingCode && line.packedItems != null) ?? [];
   if (savedLines.length > 1) throw new Error("Više paketa je povezano sa istom adresnicom.");
-  const packedItems = savedLines.length ? readPackedItems(savedLines[0]!.packedItems) : article?.packedItems ?? [];
+  const packedItems = savedLines.length ? readPackedItems(savedLines[0]!.packedItems) : legacyPackedItems != null ? readPackedItems(legacyPackedItems) : article?.packedItems ?? [];
   const quantity = packedItems.length ? packedItems.reduce((sum, item) => sum + item.quantity, 0) : article?.packedQuantity ?? packedQuantity;
   const sender = labelData?.sender;
   const recipient = labelData?.recipient;
