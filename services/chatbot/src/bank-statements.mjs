@@ -4,6 +4,8 @@ import {signRequest} from './security.mjs';
 import {dkimVerify} from 'mailauth/lib/dkim/verify.js';
 
 const ACCOUNT='340000100028300451';
+// Banks preserve either the printed order number or its compact payment reference.
+const orderNumbers=text=>[...new Set([...text.matchAll(/\bSPC(?:-(\d{4})-(\d{6})|(\d{4})(\d{6}))\b/g)].map(m=>`SPC-${m[1]??m[3]}-${m[2]??m[4]}`))];
 export function rsdMinor(value){
   if(!/^\d{1,3}(?:\.\d{3})*,\d{2}$|^\d+,\d{2}$/.test(value))throw Error('BANK_AMOUNT_INVALID');
   const minor=Number(value.replaceAll('.','').replace(',',''));
@@ -41,12 +43,15 @@ export async function parseErsteStatement(buffer){
         if(!amounts.length)continue;
         const amountMinor=rsdMinor(amounts[0].text);totalCredit+=amountMinor;
         const referenceItems=row.filter(x=>x.x>0.63&&x.x<0.78);
-        if(referenceItems.some(x=>/SPC-|\bFT[A-Z0-9]/.test(x.text)&&Math.abs(x.y-anchor.y)>30))throw Error('BANK_REFERENCE_AMBIGUOUS');
+        if(referenceItems.some(x=>/\bSPC(?:-|\d)|\bFT[A-Z0-9]/.test(x.text)&&Math.abs(x.y-anchor.y)>30))throw Error('BANK_REFERENCE_AMBIGUOUS');
         const refs=referenceItems.sort((a,b)=>b.y-a.y||a.x-b.x).map(x=>x.text).join(' ');
-        const orders=[...refs.matchAll(/SPC-\d{4}-\d{6}/g)].map(x=>x[0]);
+        const orders=orderNumbers(refs);
         if(!orders.length)continue;
+        const pbo=refs.match(/\bPBO:\s*(.*?)(?=\bPBZ:|\bFT[A-Z0-9]|$)/)?.[1]??'';
+        const pboOrders=orderNumbers(pbo);
         const bankRefs=[...refs.matchAll(/\bFT[A-Z0-9]{8,30}\b/g)].map(x=>x[0]);
-        if(orders.length!==1||bankRefs.length!==1||!refs.includes('PBO:'))throw Error('BANK_REFERENCE_AMBIGUOUS');
+        // Repeated PBO/PBZ values are one order; conflicting values still reject the PDF.
+        if(orders.length!==1||pboOrders.length!==1||pboOrders[0]!==orders[0]||bankRefs.length!==1)throw Error('BANK_REFERENCE_AMBIGUOUS');
         entries.push({account:ACCOUNT,statement,date,bankReference:bankRefs[0],orderNumber:orders[0],amountMinor,currency:'RSD'});
       }
     }
