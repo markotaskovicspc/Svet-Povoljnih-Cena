@@ -46,7 +46,7 @@ type ReclamationShipmentOptions = {
 export async function saveReclamationWarehouse(args: {
   reclamationId: string;
   warehouseId: string;
-  status: ReclamationWarehouseStatus;
+  status?: ReclamationWarehouseStatus;
   packages?: unknown;
   actorId?: string;
 }) {
@@ -67,7 +67,8 @@ export async function saveReclamationWarehouse(args: {
     });
     if (!warehouse) throw new Error("Izabrani magacin nije aktivan.");
     const isReplacement = ["ZAMENA_ARTIKLA", "ZAMENA_DELA"].includes(reclamation.resolution ?? "");
-    const ready = isReplacement && args.status === "READY";
+    const status = args.status ?? "READY";
+    const ready = isReplacement && status === "READY";
     if (ready && reclamation.decision !== "PRIHVACENA") {
       throw new Error("Pre potvrde spremnosti sačuvajte prihvaćenu odluku o zameni.");
     }
@@ -81,8 +82,8 @@ export async function saveReclamationWarehouse(args: {
       where: { id: args.reclamationId },
       data: {
         warehouseId: warehouse.id,
-        warehouseStatus: args.status,
-        warehouseRequestedAt: args.status === "NOT_REQUESTED" ? null : new Date(),
+        warehouseStatus: status,
+        warehouseRequestedAt: status === "NOT_REQUESTED" ? null : new Date(),
         replacementPackages: packages,
         replacementReadyAt: ready ? new Date() : null,
         replacementReadyById: ready ? args.actorId ?? null : null,
