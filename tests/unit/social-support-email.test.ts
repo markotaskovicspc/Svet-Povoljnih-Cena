@@ -14,3 +14,9 @@ it('links every valid channel to its exact protected ERP conversation without em
  }
  const invalid=supportEmail({conversationId:'facebook:bad?x=<script>',reason:'Pomoć',transcript:'Test'});expect(invalid.html).not.toContain('conversation=');expect(invalid.html).toContain('/admin/razgovori');
 });
+
+it('makes a captured callback address visible and lets support reply directly',()=>{
+ const result=supportEmail({channel:'web',conversationId:'web:spc:synthetic',reason:'Kupac traži čoveka',transcript:'Kupac: Ne uspevam da dobijem pomoć',callbackEmail:'buyer@example.com'});
+ expect(result.replyTo).toBe('buyer@example.com');expect(result.text).toContain('Mejl za odgovor kupcu: buyer@example.com');
+ expect(result.text).toContain('Javite se kupcu na navedeni mejl');expect(result.html).toContain('buyer@example.com');expect(result.text).not.toContain('Business Suite');
+});

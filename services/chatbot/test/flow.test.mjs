@@ -636,3 +636,20 @@ test('exhausted uncertain order write pauses for reconciliation and emails suppo
   await store.accept({...event,id:'facebook:after-write-error',text:'Da',timestamp:Date.now()});await worker.tick();assert.equal((await store.pool.query('SELECT paused FROM spc_chat_conversations')).rows[0].paused,true);
  }finally{await store.close();}
 });
+
+test('web human handoff captures email and sends a contact update after the first support email',async()=>{
+ const {store,worker,event}=await setup('web');const notices=[];
+ try{
+  await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
+  worker.spc=async p=>{notices.push(p);return {ok:true};};
+  worker.answerFn=async()=>{throw Error('Human request must bypass model');};
+  await store.accept({...event,id:'human-request',text:'Potrebna mi je pomoć prave osobe'});await worker.tick();
+  assert.equal(notices.length,1);
+  let row=(await store.pool.query('SELECT * FROM spc_chat_conversations')).rows[0];
+  assert.match(store.decode(row.state).history.at(-1).content,/Na koju mejl/);assert.equal(row.paused,false);
+  await store.accept({...event,id:'callback',text:'buyer@example.com'});await worker.tick();await worker.tick();
+  assert.equal(notices.length,2);assert.equal(notices[1].callbackEmail,'buyer@example.com');assert.equal(notices[1].contactUpdate,true);
+  row=(await store.pool.query('SELECT * FROM spc_chat_conversations')).rows[0];assert.equal(store.decode(row.state).supportContact.email,'buyer@example.com');
+  assert.equal((await store.pool.query("SELECT count(*)::int AS n FROM spc_chat_support WHERE status='sent'")).rows[0].n,2);
+ }finally{await store.close();}
+});

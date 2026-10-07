@@ -92,7 +92,7 @@ agreedTotal je poslednji DOGOVORENI konačni iznos sa dostavom, samo ako je izri
  const selection=await cartCheckFn({state,event:{...event,text:''},items:products,model,requireVisualPresentation:false});
  if(!selection.ok)return {ok:false,code:selection.code==='CART_EVIDENCE_INVALID'||selection.code==='CART_CHECK_UNAVAILABLE'?'STAFF_CART_CHECK_FAILED':undefined,message:selection.code==='CART_EVIDENCE_INVALID'||selection.code==='CART_CHECK_UNAVAILABLE'?'Porudžbina nije kreirana zbog greške provere prepiske. Ne morate ponavljati podatke kupca; ponovite /porudzbina.':'Porudžbina nije kreirana: potrebno je razjasniti izbor artikla, varijante ili količine u dogovoru. Dopunite samo nejasan podatak pa ponovite /porudzbina.'};
  onProgress('loyalty');
- let loyalty=input.guestEmail?activeLoyalty(state,input.guestEmail):null;
+ let loyalty=activeLoyalty(state,input.guestEmail);
  const needsLoyalty=plan.unitPrices.some(a=>products.some(p=>p.sku===a.sku&&p.loyaltyPrice!=null&&Math.abs(p.loyaltyPrice-a.price)<0.01&&Math.abs(p.price-a.price)>0.01));
  if(!loyalty&&needsLoyalty&&input.guestEmail){
   const existing=await spc({action:'existing_loyalty',channel:event.channel,conversationId:event.conversation,email:input.guestEmail});

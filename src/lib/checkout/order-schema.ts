@@ -49,7 +49,7 @@ const addressSchema = z
     }
   });
 
-export const createOrderSchema = z
+export const channelOrderSchema = z
   .object({
     checkoutSessionId: z
       .string()
@@ -99,9 +99,6 @@ export const createOrderSchema = z
       .optional(),
   })
   .superRefine((input, context) => {
-    if (input.guestLoyalty && !input.guestEmail) {
-      context.addIssue({ code: "custom", path: ["guestEmail"], message: "Mejl je obavezan za loyalty pogodnosti." });
-    }
     const seen = new Set<string>();
     input.lines.forEach((line, index) => {
       if (seen.has(line.sku)) {
@@ -114,5 +111,13 @@ export const createOrderSchema = z
       seen.add(line.sku);
     });
   });
+
+// Public browser checkout continues to require email for guest membership.
+// The signed social bridge validates conversation consent separately.
+export const createOrderSchema = channelOrderSchema.superRefine((input, context) => {
+  if (input.guestLoyalty && !input.guestEmail) {
+    context.addIssue({ code: "custom", path: ["guestEmail"], message: "Mejl je obavezan za loyalty pogodnosti." });
+  }
+});
 
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
