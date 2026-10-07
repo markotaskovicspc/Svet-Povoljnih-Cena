@@ -1,12 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHmac } from 'node:crypto';
 import { createOrderSchema } from '../../src/lib/checkout/order-schema';
-const mocks=vi.hoisted(()=>({create:vi.fn(),session:vi.fn(),search:vi.fn(),reclamation:vi.fn(),order:vi.fn(),token:vi.fn(),cancel:vi.fn(),product:vi.fn(),mail:vi.fn()}));
+const mocks=vi.hoisted(()=>({create:vi.fn(),session:vi.fn(),search:vi.fn(),reclamation:vi.fn(),order:vi.fn(),token:vi.fn(),cancel:vi.fn(),product:vi.fn(),mail:vi.fn(),consents:new Map<string,{token:string;identifier:string;expires:Date}>()}));
 vi.mock('next/server',()=>({NextResponse:{json:(data:unknown,init?:ResponseInit)=>Response.json(data,init)},after:vi.fn()}));
 vi.mock('@/lib/api/checkout',async()=>({createOrder:mocks.create,createOrderSchema:(await import('../../src/lib/checkout/order-schema')).createOrderSchema}));
 vi.mock('@/lib/api/catalog',()=>({getProductBySku:mocks.product,listProducts:mocks.search}));
 vi.mock('@/lib/pricing',()=>({resolveProductPriceQuote:()=>({payable:{effective:1499}})}));
-vi.mock('@/lib/db',()=>({hasDatabaseConnection:()=>true,db:{checkoutSession:{findUnique:mocks.session},order:{findUnique:mocks.order}}}));
+vi.mock('@/lib/db',()=>{
+ const verificationToken={findUnique:async({where}:{where:{token:string}})=>mocks.consents.get(where.token),upsert:async({create}:{create:{token:string;identifier:string;expires:Date}})=>{mocks.consents.set(create.token,create);return create;}};
+ return {hasDatabaseConnection:()=>true,db:{verificationToken,$transaction:async(fn:(tx:{verificationToken:typeof verificationToken})=>unknown)=>fn({verificationToken}),checkoutSession:{findUnique:mocks.session},order:{findUnique:mocks.order}}};
+});
 vi.mock('@/lib/api/order-access',()=>({verifyOrderAccessToken:mocks.token}));
 vi.mock('@/lib/api/reclamations',()=>({createGuestReclamation:mocks.reclamation,createReclamationSchema:createOrderSchema}));
 vi.mock('@/lib/checkout/outbox',()=>({checkoutFollowUpKey:vi.fn()}));
@@ -20,7 +23,7 @@ import { POST } from '../../src/app/api/integrations/social/route';
 const secret='test-secret-'.repeat(5);
 const input={guestEmail:'buyer@example.com',lines:[{sku:'210.025',qty:1}],shipping:{firstName:'Test',lastName:'Kupac',phone:'0600000000',street:'Test ulica',houseNumber:'12',city:'Beograd',postalCode:'11000'},shippingMethod:'KURIR',paymentMethod:'POUZECE_GOTOVINA',consent:true};
 function request(data:unknown,signed=true){const body=JSON.stringify(data),ts=String(Date.now());return new Request('https://spc.test/api/integrations/social',{method:'POST',body,headers:{'x-spc-timestamp':ts,'x-spc-signature':signed?createHmac('sha256',secret).update(`${ts}.${body}`).digest('hex'):'invalid'}});}
-beforeEach(()=>{vi.clearAllMocks();process.env.SOCIAL_INTEGRATION_SECRET=secret;mocks.session.mockResolvedValue(null);mocks.create.mockResolvedValue({ok:true,data:{id:'',number:'',accessToken:'',total:2000,subtotal:1010,savings:0,shipping:990,assemblyTotal:0,paymentMethod:'POUZECE_GOTOVINA',shippingMethod:'KURIR',voucherDiscount:0,firstPurchaseDiscount:0,savedCardDiscount:0}});});
+beforeEach(()=>{vi.clearAllMocks();mocks.consents.clear();process.env.SOCIAL_INTEGRATION_SECRET=secret;mocks.session.mockResolvedValue(null);mocks.create.mockResolvedValue({ok:true,data:{id:'',number:'',accessToken:'',total:2000,subtotal:1010,savings:0,shipping:990,assemblyTotal:0,paymentMethod:'POUZECE_GOTOVINA',shippingMethod:'KURIR',voucherDiscount:0,firstPurchaseDiscount:0,savedCardDiscount:0}});});
 describe('SPC social order bridge',()=>{
   it('exposes authenticated read-only delivery without customer contacts or order preparation',async()=>{
     const payload={action:'delivery_quote',channel:'facebook',conversationId:'fb:123:456',lines:[{sku:'CHAIR',qty:4}],city:'Beograd',shippingMethod:'KURIR'};
@@ -101,14 +104,14 @@ describe('social cancellation and current availability',()=>{
 
 it('signed social checkout accepts no email and suppresses nonexistent buyer email, while missing address is rejected',async()=>{const noEmail={...input,guestEmail:undefined};const identity={channel:'facebook',conversationId:'fb:test:noemail'};const q=await(await POST(request({action:'quote',...identity,input:noEmail}))).json();expect(q.ok).toBe(true);mocks.create.mockClear();await POST(request({action:'create_order',...identity,quoteToken:q.quoteToken}));expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({shipping:expect.objectContaining(noEmail.shipping)}),null,null,{expectedTotal:2000,allowGuestWithoutEmail:true,customerReplyDraftOnly:true});expect((await POST(request({action:'quote',...identity,input:{...noEmail,shipping:{...input.shipping,phone:''}}}))).status).toBe(400);});
 
-it('support notification has a clickable verified conversation link and rejects foreign destinations',async()=>{mocks.mail.mockResolvedValue({ok:true,provider:'test'});const payload={action:'support_handoff',channel:'facebook',conversationId:'facebook:123:456',id:'event',reason:'Test',transcript:'Sintetička poruka',conversationLink:'https://business.facebook.com/latest/inbox/all/?asset_id=123&selected_item_id=789'};expect((await(await POST(request(payload))).json()).ok).toBe(true);expect(mocks.mail.mock.calls.at(-1)[0].html).toContain('selected_item_id=789');expect(mocks.mail.mock.calls.at(-1)[0].html).toContain('Otvori razgovor u Business Suite-u');expect((await POST(request({...payload,conversationLink:'https://evil.test/latest/inbox/all/'}))).status).toBe(400);});
+it('support notification links to the ERP conversation and rejects foreign Meta destinations',async()=>{mocks.mail.mockResolvedValue({ok:true,provider:'test'});const payload={action:'support_handoff',channel:'facebook',conversationId:'facebook:123:456',id:'event',reason:'Test',transcript:'Sintetička poruka',conversationLink:'https://business.facebook.com/latest/inbox/all/?asset_id=123&selected_item_id=789'};expect((await(await POST(request(payload))).json()).ok).toBe(true);expect(mocks.mail.mock.calls.at(-1)[0].html).toContain('/admin/razgovori?conversation=facebook%3A123%3A456');expect(mocks.mail.mock.calls.at(-1)[0].html).not.toContain('selected_item_id=789');expect((await POST(request({...payload,conversationLink:'https://evil.test/latest/inbox/all/'}))).status).toBe(400);});
 
-it('support fallback identifies the buyer and Business Suite inbox without inventing a Meta thread',async()=>{
+it('support identifies the buyer and ERP inbox without inventing a Meta thread',async()=>{
  mocks.mail.mockResolvedValue({ok:true,provider:'test'});
  const payload={action:'support_handoff',channel:'facebook',conversationId:'facebook:123:456',id:'fallback',reason:'Test',transcript:'Poruka',customerName:'Buyer <script>',inboxUrl:'https://business.facebook.com/latest/inbox/all/?asset_id=123&mailbox_id=123'};
  expect((await POST(request(payload))).status).toBe(200);
  const mail=mocks.mail.mock.calls.at(-1)[0];
- expect(mail.html).not.toContain('railway.app');expect(mail.text).toContain('U pretrazi inboxa unesite: Buyer <script>');
+ expect(mail.html).not.toContain('railway.app');expect(mail.text).toContain('Kupac: Buyer <script>');expect(mail.text).toContain('/admin/razgovori?conversation=facebook%3A123%3A456');
  expect(mail.html).toContain('Buyer &lt;script&gt;');expect(mail.html).not.toContain('<script>');expect(mail.html).not.toContain('selected_item_id');expect(mail.html).not.toContain('pristupni ključ operatera');
  expect((await POST(request({...payload,inboxUrl:payload.inboxUrl+'&selected_item_id=456'}))).status).toBe(400);
  expect((await POST(request({...payload,inboxUrl:'https://evil.test/'}))).status).toBe(400);
@@ -125,4 +128,26 @@ it('binds seller-approved catalog prices to the signed quote without granting me
  expect(mocks.create).toHaveBeenCalledWith(expect.anything(),null,null,expect.objectContaining({staffLoyaltyPrices:staffPricing.prices,customerReplyDraftOnly:true}));
  mocks.create.mockClear();expect((await POST(request({action:'create_order',...identity,conversationId:'fb:other',quoteToken:q.quoteToken}))).status).toBe(403);expect(mocks.create).not.toHaveBeenCalled();
  await POST(request({...payload,action:'quote'}));expect(mocks.create.mock.calls.at(-1)[3]).not.toHaveProperty('staffLoyaltyPrices');
+});
+
+it('accepts a web callback handoff with a reply-to contact but rejects an invalid email',async()=>{
+ mocks.mail.mockResolvedValue({ok:true,provider:'test'});
+ const payload={action:'support_handoff',channel:'web',conversationId:'web:spc:test',id:'callback',reason:'Kupac traži čoveka',transcript:'Pomoć',callbackEmail:'buyer@example.com',contactUpdate:true};
+ expect(await(await POST(request(payload))).json()).toEqual({ok:true});
+ expect(mocks.mail.mock.calls.at(-1)[0]).toMatchObject({replyTo:'buyer@example.com'});
+ expect((await POST(request({...payload,callbackEmail:'broken'}))).status).toBe(400);
+});
+
+it('conversation consent flows through signed quote and confirmed order without an email',async()=>{
+ const identity={channel:'web',conversationId:'web:spc:anonymous'};
+ const invitation=await(await POST(request({action:'prepare_loyalty',...identity,email:null}))).json();
+ expect(invitation.ok).toBe(true);expect(invitation.summary).not.toContain('mejl');
+ const accepted=await(await POST(request({action:'accept_loyalty',...identity,email:null,challenge:invitation.challenge}))).json();
+ expect(accepted.ok).toBe(true);
+ const quote=await(await POST(request({action:'quote',...identity,input:{...input,guestEmail:undefined},loyaltyProof:accepted.proof}))).json();
+ expect(quote).toMatchObject({ok:true,loyaltyApplied:true,input:{guestLoyalty:true}});
+ mocks.create.mockClear();
+ expect(await(await POST(request({action:'create_order',...identity,quoteToken:quote.quoteToken}))).json()).toMatchObject({ok:true});
+ expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({guestLoyalty:true}),null,expect.objectContaining({email:null}),expect.objectContaining({allowGuestWithoutEmail:true,customerReplyDraftOnly:true}));
+ expect(await(await POST(request({action:'quote',...identity,conversationId:'web:spc:other',input:{...input,guestEmail:undefined},loyaltyProof:accepted.proof}))).json()).toMatchObject({ok:false,error:{code:'LOYALTY_CONSENT_REQUIRED'}});
 });

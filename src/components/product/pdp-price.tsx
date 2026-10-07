@@ -81,7 +81,7 @@ export function PdpPriceContent({
       {loyaltyOffer && !loyaltyEligible ? (
         <p className="mt-1 text-xs text-ink-500">
           Loyalty cena važi uz prijavljen nalog.{" "}
-          <Link
+          <Link prefetch={false}
             href={`/nalog/prijava?callbackUrl=${encodeURIComponent(`/p/${product.slug}`)}`}
             className="font-semibold text-walnut hover:underline"
           >

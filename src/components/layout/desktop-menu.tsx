@@ -86,7 +86,7 @@ export function DesktopMenu({
       >
         <SheetHeader className="shrink-0 border-b border-border bg-white px-5 py-4 sm:px-6">
           <div className="flex min-h-10 items-center pr-12">
-            <Link
+            <Link prefetch={false}
               href="/"
               aria-label={`${BRAND.name} - početna`}
               onClick={close}
@@ -106,7 +106,7 @@ export function DesktopMenu({
           ) : null}
 
           {current.href ? (
-            <Link
+            <Link prefetch={false}
               href={current.href}
               onClick={close}
               aria-label={`Pogledaj sve iz kategorije ${current.label}`}
@@ -162,7 +162,7 @@ export function DesktopMenu({
                         />
                       </button>
                     ) : (
-                      <Link
+                      <Link prefetch={false}
                         href={node.href}
                         onClick={close}
                         className={cn(
@@ -209,7 +209,7 @@ export function DesktopMenu({
                   : undefined;
                 return (
                   <li key={tab.id} className="border-b border-border">
-                    <Link
+                    <Link prefetch={false}
                       href={promoTab.href}
                       onClick={close}
                       className={cn(

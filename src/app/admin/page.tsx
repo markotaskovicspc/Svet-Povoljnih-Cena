@@ -110,7 +110,12 @@ async function DashboardBody({ adminId, sp, canViewAnanas }: { adminId: string; 
     reclamationsPeriod, topProductsPeriod, analyticsPeriod,
   };
   const operations = getDashboardOperations(input);
-  const analytics = getDashboardAnalytics(input);
+  // Handle rejection as soon as the independent read starts. Keep the fallback
+  // outside the cached loader so a transient failure cannot become cached zeros.
+  const analytics = getDashboardAnalytics(input).catch((error: unknown) => {
+    console.error("[dashboard] Analytics unavailable.", error);
+    return null;
+  });
   const sectionKey = JSON.stringify(context);
   const exportWarehouse = warehouseId
     ? `&warehouseId=${encodeURIComponent(warehouseId)}`
@@ -250,10 +255,16 @@ async function OperationalCards({ data, input, warehouseLabel }: OperationalSect
 }
 
 async function AnalyticsCards({ data, periodLabel }: {
-  data: ReturnType<typeof getDashboardAnalytics>;
+  data: Promise<Awaited<ReturnType<typeof getDashboardAnalytics>> | null>;
   periodLabel: string;
 }) {
-  const { visitRows, conversionRows, checkedAt } = await data;
+  const result = await data;
+  if (!result) {
+    return <div role="status" className="rounded-xl border border-warning/40 bg-warning/10 p-6 text-sm text-ink-700">
+      Analitika trenutno nije dostupna. Pokušajte ponovo osvežavanjem stranice.
+    </div>;
+  }
+  const { visitRows, conversionRows, checkedAt } = result;
   const visits = visitRows[0] ?? {
     active_now: 0,
     today: 0,

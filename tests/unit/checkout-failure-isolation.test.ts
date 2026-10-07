@@ -154,3 +154,16 @@ it('trusted staff price creates no-email discounted order without membership or 
  mocks.transaction.mockClear();mocks.pricingRules.mockReturnValue({linearPromotions:[],loyaltyDiscountPct:20});
  expect(await createOrder(noEmail,null,null,options)).toMatchObject({ok:false,error:{code:'PRICE_CHANGED'}});expect(mocks.transaction).not.toHaveBeenCalled();
 });
+
+it('conversation loyalty prices a real no-email order and retains consent without an email membership',async()=>{
+ const {createOrder,createOrderSchema}=await import('@/lib/api/checkout');
+ mocks.product.mockResolvedValue([{...product,fullPrice:1000,priceListEntries:[{...product.priceListEntries[0],price:1000}]}]);
+ mocks.pricingRules.mockReturnValue({linearPromotions:[],loyaltyDiscountPct:30});
+ const {channelOrderSchema}=await import('@/lib/checkout/order-schema');
+ const noEmail=channelOrderSchema.parse({...input,guestEmail:undefined,guestLoyalty:true});
+ const consent={email:null,consentVersion:'synthetic-conversation-consent',consentAt:new Date()};
+ expect(await createOrder(noEmail,null,consent)).toMatchObject({ok:false,error:{code:'LOYALTY_CONSENT_REQUIRED'}});
+ const result=await createOrder(noEmail,null,consent,{allowGuestWithoutEmail:true,customerReplyDraftOnly:true});
+ expect(result).toMatchObject({ok:true,data:{total:700}});
+ expect(committed.order).toMatchObject({guestEmail:null,guestLoyaltyEmail:null,guestLoyaltyConsentVersion:consent.consentVersion});
+});

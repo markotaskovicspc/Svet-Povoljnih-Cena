@@ -1,8 +1,9 @@
+import {channelOrderSchema} from '@/lib/checkout/order-schema';
 import {supportEmail} from '@/lib/social/support-email';
 import { after, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { createOrder, createOrderSchema } from "@/lib/api/checkout";
+import { createOrder } from "@/lib/api/checkout";
 import { getProductBySku, listProducts } from "@/lib/api/catalog";
 import { resolveProductPriceQuote } from "@/lib/pricing";
 import { db } from "@/lib/db";
@@ -23,21 +24,21 @@ import {socialDeliveryRequest,socialDeliveryQuote} from '@/lib/social/delivery';
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 const identity = z.object({ channel: z.enum(["facebook", "instagram", "web"]), conversationId: z.string().min(3).max(200) });
-const loyaltyContext=z.object({email:z.email(),consentVersion:z.string(),consentAt:z.string()}).nullable().optional();
+const loyaltyContext=z.object({email:z.email().nullable(),consentVersion:z.string(),consentAt:z.string()}).nullable().optional();
 const staffPricingSchema=z.object({commandId:z.string().min(1).max(300),prices:z.array(z.object({sku:z.string().min(1).max(100),price:z.number().positive()})).min(1).max(30)});
-const quotePayload = identity.extend({ input: createOrderSchema, total: z.number().nonnegative(), expiresAt: z.number(),loyaltyProof:z.string().optional(),loyalty:loyaltyContext,staffPricing:staffPricingSchema.optional() });
+const quotePayload = identity.extend({ input: channelOrderSchema, total: z.number().nonnegative(), expiresAt: z.number(),loyaltyProof:z.string().optional(),loyalty:loyaltyContext,staffPricing:staffPricingSchema.optional() });
 const cancellationPayload = identity.extend({ purpose: z.literal("cancel_order"), number: z.string(), expiresAt: z.number() });
 const requestSchema = z.discriminatedUnion("action", [
   socialDeliveryRequest,
   ...socialReclamationActions,
-  identity.extend({ action: z.literal("support_handoff"), id: z.string().min(1).max(300), reason: z.string().max(200), transcript: z.string().max(10000), customerName:z.string().max(150).optional(), inboxUrl:z.url().max(1000).refine(value=>{const u=new URL(value);return u.origin==='https://business.facebook.com'&&u.pathname==='/latest/inbox/all/'&&!u.username&&!u.password&&!u.searchParams.has('selected_item_id');}).optional(), reclamationId: z.string().regex(/^[A-Za-z0-9_-]{1,100}$/).optional(), conversationLink: z.url().max(1000).refine(value=>{const u=new URL(value);return u.origin==='https://business.facebook.com'&&u.pathname==='/latest/inbox/all/'&&!u.username&&!u.password;}).optional() }),
+  identity.extend({ action: z.literal("support_handoff"), id: z.string().min(1).max(300), callbackEmail:z.email().optional(), contactUpdate:z.boolean().optional(), reason: z.string().max(200), transcript: z.string().max(10000), customerName:z.string().max(150).optional(), inboxUrl:z.url().max(1000).refine(value=>{const u=new URL(value);return u.origin==='https://business.facebook.com'&&u.pathname==='/latest/inbox/all/'&&!u.username&&!u.password&&!u.searchParams.has('selected_item_id');}).optional(), reclamationId: z.string().regex(/^[A-Za-z0-9_-]{1,100}$/).optional(), conversationLink: z.url().max(1000).refine(value=>{const u=new URL(value);return u.origin==='https://business.facebook.com'&&u.pathname==='/latest/inbox/all/'&&!u.username&&!u.password;}).optional() }),
   z.object({ action: z.literal("search"), query: z.string().trim().min(1).max(100), quantity: z.number().int().positive().max(1000).default(1) }),
   z.object({ action: z.literal("product_details"), sku:z.string().trim().min(1).max(100) }),
-  identity.extend({ action: z.literal("prepare_loyalty"), email:z.email() }),
+  identity.extend({ action: z.literal("prepare_loyalty"), email:z.email().nullable().default(null) }),
   identity.extend({ action: z.literal("existing_loyalty"), email:z.email() }),
-  identity.extend({ action: z.literal("accept_loyalty"), email:z.email(),challenge:z.string().max(5000) }),
-  identity.extend({ action: z.literal("quote"), input: createOrderSchema,loyaltyProof:z.string().max(5000).optional() }),
-  identity.extend({ action: z.literal("staff_quote"), input: createOrderSchema, staffPricing:staffPricingSchema }),
+  identity.extend({ action: z.literal("accept_loyalty"), email:z.email().nullable().default(null),challenge:z.string().max(5000) }),
+  identity.extend({ action: z.literal("quote"), input: channelOrderSchema,loyaltyProof:z.string().max(5000).optional() }),
+  identity.extend({ action: z.literal("staff_quote"), input: channelOrderSchema, staffPricing:staffPricingSchema }),
   identity.extend({ action: z.literal("create_order"), quoteToken: z.string().max(20000) }),
   z.object({ action: z.literal("order_status"), number: z.string().max(80), accessToken: z.string().max(200) }),
   identity.extend({ action: z.literal("prepare_cancellation"), number: z.string().max(80), accessToken: z.string().max(200) }),
@@ -91,10 +92,10 @@ export async function POST(req: Request) {
     if (body.action === "quote" || body.action === "staff_quote") {
       const staffPricing=body.action==="staff_quote"?body.staffPricing:undefined;
       const loyaltyProof=body.action==="quote"?body.loyaltyProof:undefined;
-      const loyalty=staffPricing?null:await channelLoyalty(loyaltyProof,{...body,email:body.input.guestEmail??''},secret);
+      const loyalty=staffPricing?null:await channelLoyalty(loyaltyProof,{...body,email:body.input.guestEmail??null},secret);
       if(loyaltyProof&&!loyalty)return NextResponse.json({ok:false,error:{code:'LOYALTY_CONSENT_REQUIRED'}});
       // Auth identity and discounts cannot be supplied by the model.
-      const input = createOrderSchema.parse({ ...body.input, checkoutSessionId: undefined, guestLoyalty: Boolean(loyalty), useSavedCard: false,
+      const input = channelOrderSchema.parse({ ...body.input, checkoutSessionId: undefined, guestLoyalty: Boolean(loyalty), useSavedCard: false,
         analytics: undefined, voucherCode: undefined,
         notes: `[${body.channel.toUpperCase()}] ${staffPricing?body.conversationId.slice(0,120):body.conversationId}${staffPricing ? `\nCena po nalogu prodavca #${createHash("sha256").update(staffPricing.commandId).digest("hex").slice(0,12)} (cenovnik ${createHash("sha256").update(JSON.stringify(staffPricing.prices)).digest("hex").slice(0,12)}); bez članstva.` : ""}${body.input.notes?.trim() ? `\nNapomena kupca: ${body.input.notes.trim().slice(0,250)}` : ""}`,
       });
@@ -115,7 +116,7 @@ export async function POST(req: Request) {
       // Permit recovery of a committed order after response loss, even after expiry.
       const existing = await db.checkoutSession.findUnique({ where: { id: quote.input.checkoutSessionId! }, select: { orderId: true } });
       if (quote.expiresAt < Date.now() && !existing?.orderId) return NextResponse.json({ ok: false, error: { code: "QUOTE_EXPIRED" } });
-      const loyalty=existing?.orderId&&quote.loyalty?{...quote.loyalty,consentAt:new Date(quote.loyalty.consentAt)}:await channelLoyalty(quote.loyaltyProof,{...body,email:quote.input.guestEmail??''},secret);
+      const loyalty=existing?.orderId&&quote.loyalty?{...quote.loyalty,consentAt:new Date(quote.loyalty.consentAt)}:await channelLoyalty(quote.loyaltyProof,{...body,email:quote.input.guestEmail??null},secret);
       if(quote.input.guestLoyalty&&!loyalty)return NextResponse.json({ok:false,error:{code:'LOYALTY_CONSENT_REQUIRED'}});
       const result = await createOrder(quote.input, null, loyalty, { expectedTotal: quote.total, allowGuestWithoutEmail: true, customerReplyDraftOnly: !quote.input.guestEmail, ...(quote.staffPricing?{staffLoyaltyPrices:quote.staffPricing.prices}:{}) });
       if (result.ok) {

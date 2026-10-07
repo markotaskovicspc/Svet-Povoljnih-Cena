@@ -33,6 +33,24 @@ export async function renderPrintHtmlPdf(html: string): Promise<Buffer> {
     const page = await context.newPage();
     await page.emulateMedia({ media: "print" });
     await page.setContent(html, { waitUntil: "load", timeout: 15_000 });
+    // A long consolidated packing list must remain on its buyer's label.
+    // Measure real print layout; promote overflowing labels to a full A4 sheet.
+    await page.evaluate(() => {
+      const labels = Array.from(document.querySelectorAll<HTMLElement>(".label:has(.packing-list)"));
+      for (const label of labels) {
+        if (label.scrollHeight <= label.clientHeight + 1) continue;
+        const sheet = label.closest(".sheet");
+        if (!sheet) continue;
+        const ownSheet = document.createElement("main");
+        ownSheet.className = "sheet packing-sheet";
+        sheet.after(ownSheet);
+        ownSheet.append(label);
+        if (!sheet.querySelector(".label")) sheet.remove();
+        if (label.scrollHeight > label.clientHeight + 1) {
+          throw new Error("Spisak artikala ne staje na adresnicu. Proverite paket pre štampe.");
+        }
+      }
+    });
     return await page.pdf({
       format: "A4",
       preferCSSPageSize: true,

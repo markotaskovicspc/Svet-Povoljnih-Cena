@@ -279,7 +279,7 @@ export function ProductColorOptions({
                     {content}
                   </button>
                 ) : (
-                  <Link
+                  <Link prefetch={false}
                     key={option.sku}
                     href={`/p/${option.slug}`}
                     aria-label={ariaLabel}

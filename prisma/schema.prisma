@@ -3223,6 +3223,8 @@ enum NotifyChannel {
 enum ReclamationType {
   FIZICKO_OSTECENJE
   KVAR
+  POGRESNO_ISPORUCENO
+  NIJE_ISPORUCENO
 }
 
 enum ReclamationRequest {

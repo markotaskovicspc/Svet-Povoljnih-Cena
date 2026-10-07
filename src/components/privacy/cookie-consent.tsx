@@ -91,7 +91,7 @@ export function CookieConsent({
               Nužni kolačići omogućavaju prijavu i korpu. Analitiku
               {metaConfigured ? " i Meta marketing" : ""} uključujemo samo uz
               vaš izbor. {" "}
-              <Link href="/politika-privatnosti" className="text-walnut underline">
+              <Link prefetch={false} href="/politika-privatnosti" className="text-walnut underline">
                 Detalji
               </Link>
             </p>

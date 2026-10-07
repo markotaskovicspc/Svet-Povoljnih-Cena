@@ -52,16 +52,50 @@ export async function queueOrderReshipment(input: { orderId: string; shipmentId:
       if (!item?.productId || !item.warehouseId || quantity < 1 || quantity > item.qty || item.supplierReservedQty > 0) throw new Error("Za ponovno slanje potrebna je jasna količina i magacin svakog artikla.");
       return { item, quantity };
     }).sort((a, b) => a.item.productId!.localeCompare(b.item.productId!));
-    // A returned shipment might already have entered the ordinary refund flow.
-    const receipt = await tx.stockMovement.findFirst({ where: { orderId: order.id, OR: [
+    // Physical receipt alone is not a refund. Under the shared fiscal lock we
+    // can transfer it to the reshipment without posting the stock a second time.
+    const fiscalRefund = await tx.fiscalDocument.findFirst({ where: { orderId: order.id, kind: "REFUND" } });
+    if (fiscalRefund) throw new Error("Refundacija porudžbine je već pokrenuta. Prvo usaglasite fiskalnu refundaciju pre ponovnog slanja.");
+    const receipts = await tx.stockMovement.findMany({ where: { orderId: order.id, OR: [
       { idempotencyKey: { startsWith: "order-return:" } }, { kind: "REFUND_RETURN" },
-    ] } });
-    if (receipt) throw new Error("Porudžbina već ima knjižen povrat. Prvo usaglasite postojeći povrat/refundaciju.");
+    ] }, orderBy: { idempotencyKey: "asc" } });
+    const received = new Map<string, typeof receipts>();
+    if (receipts.length) {
+      await assertReturnNotLost(tx, `order:${order.id}`);
+      // Legacy receipts identify the order and item, not the delivery. Do not
+      // guess which shipment they belong to when more than one has returned.
+      const returnedShipments = await tx.shipment.count({ where: { orderId: order.id, purpose: "ORDER_DELIVERY", status: "RETURNED", reshipment: null } });
+      if (source.status !== "RETURNED" || returnedShipments !== 1) throw new Error("Prijem povrata nije moguće jednoznačno povezati sa ovom pošiljkom. Prvo usaglasite pošiljke.");
+      for (const receipt of receipts) {
+        const entry = items.find(({ item }) => item.id === receipt.orderItemId);
+        const prefix = `order-return:${order.number}:${entry?.item.id}:`;
+        const unit = Number(receipt.idempotencyKey?.slice(prefix.length));
+        if (!entry || receipt.fiscalDocumentId || receipt.qty !== 1 || !receipt.idempotencyKey?.startsWith(prefix)
+          || !Number.isInteger(unit) || unit < 1 || unit > entry.item.qty) {
+          throw new Error("Postojeći povrat zahteva usaglašavanje pre ponovnog slanja.");
+        }
+        const previous = received.get(entry.item.id) ?? [];
+        previous.push(receipt);
+        if (previous.length > entry.quantity) throw new Error("Primljena količina povrata premašuje količinu pošiljke.");
+        received.set(entry.item.id, previous);
+      }
+    }
     const retry = await tx.orderReshipment.create({ data: {
       orderId: order.id, sourceShipmentId: source.id, reason, actorId: input.actorId,
       codAmount: isCashOnDeliveryPaymentMethod(order.paymentMethod) && !order.payments.some(payment => payment.status === "PAID") ? source.codAmount ?? assignment?.codAmount ?? order.total : 0,
-      items: { create: items.map(({ item, quantity }) => ({ orderItemId: item.id, productId: item.productId!, warehouseId: item.warehouseId!, sku: item.sku, name: item.name, quantity })) },
-    }, include: { batch: true } });
+      items: { create: items.map(({ item, quantity }) => ({ orderItemId: item.id, productId: item.productId!, warehouseId: item.warehouseId!, sku: item.sku, name: item.name, quantity, receivedQty: received.get(item.id)?.length ?? 0 })) },
+    }, include: { batch: true, items: true } });
+    for (const item of retry.items) {
+      for (const [index, receipt] of (received.get(item.orderItemId) ?? []).entries()) {
+        await tx.stockMovement.update({ where: { id: receipt.id }, data: {
+          idempotencyKey: `reshipment-return:${item.id}:${index + 1}`, kind: "ADJUSTMENT", orderItemId: null,
+          note: `${receipt.note ?? ""}\nPrijem ${receipt.idempotencyKey} povezan sa ponovnim slanjem ${retry.id}, bez refundacije i bez promene lagera.`,
+        } });
+        await tx.backgroundJob.updateMany({ where: {
+          kind: "RETURN_FISCAL_REFUND", idempotencyKey: `return-fiscal:${receipt.id}`, status: { in: ["QUEUED", "RETRY", "FAILED"] },
+        }, data: { status: "COMPLETED", completedAt: new Date(), lockedAt: null, lastError: null } });
+      }
+    }
     await tx.order.update({ where: { id: order.id }, data: { status: "U_PRIPREMI" } });
     for (const { item, quantity } of items) {
       await assertExtraStock(tx, item.productId!, item.warehouseId!, quantity);
@@ -69,7 +103,7 @@ export async function queueOrderReshipment(input: { orderId: string; shipmentId:
       // fiscalization must still debit the original sale exactly once.
       await adjustInventory(tx, { idempotencyKey: `reshipment-out:${retry.id}:${item.id}`, productId: item.productId!, warehouseId: item.warehouseId!, sku: item.sku, qtyDelta: -quantity, kind: "ADJUSTMENT", orderId: order.id, actorId: input.actorId, note: `Nova roba izdvojena za ponovno slanje ${order.number}; ${quantity} kom, stavka ${item.id}, stara pošiljka ${source.trackingNo ?? source.id}.` });
     }
-    await tx.orderStatusEvent.create({ data: { orderId: order.id, status: "U_PRIPREMI", actorId: input.actorId, note: `${unscannedPickup ? "Operater je potvrdio da je X Express preuzeo robu bez evidentiranog preuzimanja. " : ""}Nova roba je dostupna za učitavanje u picking. Stara pošiljka ${source.trackingNo ?? source.id} evidentirana je kao očekivani povrat, bez refundacije. Razlog: ${reason}` } });
+    await tx.orderStatusEvent.create({ data: { orderId: order.id, status: "U_PRIPREMI", actorId: input.actorId, note: `${unscannedPickup ? "Operater je potvrdio da je X Express preuzeo robu bez evidentiranog preuzimanja. " : ""}Nova roba je dostupna za učitavanje u picking. Stara pošiljka ${source.trackingNo ?? source.id} evidentirana je u povratima; već primljeno ${receipts.length} kom, bez refundacije. Razlog: ${reason}` } });
     return retry;
   }, transactionOptions);
 }

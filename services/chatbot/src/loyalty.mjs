@@ -1,11 +1,11 @@
 export function activeLoyalty(state,email){
  const consent=state.loyalty;
- return consent?.proof&&consent.expiresAt>Date.now()&&(!email||consent.email===email.toLowerCase())?consent:null;
+ return consent?.proof&&consent.expiresAt>Date.now()&&(!consent.email||!email||consent.email===email.toLowerCase())?consent:null;
 }
-export async function prepareLoyalty({email,event,state,spc}){
+export async function prepareLoyalty({email=null,event,state,spc}){
  const supplied=[...state.history.filter(m=>m.role==='user').map(m=>m.content),event.text,state.customer?.guestEmail??''].join('\n').match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)??[];
- if(!supplied.some(e=>e.toLowerCase()===email.toLowerCase()))return {ok:false,error:'Najpre traži stvarni mejl kupca.'};
- if(activeLoyalty(state,email))return {ok:true,message:'Loyalty je već aktivan za ovaj mejl. Pripremi ponudu.'};
+ if(email&&!supplied.some(e=>e.toLowerCase()===email.toLowerCase()))return {ok:false,error:'Koristi samo mejl koji je kupac stvarno dostavio ili null.'};
+ if(activeLoyalty(state,email))return {ok:true,message:'Loyalty je već aktivan u ovom razgovoru. Pripremi ponudu.'};
  const result=await spc({action:'prepare_loyalty',channel:event.channel,conversationId:event.conversation,email});
  if(result.ok){
   delete state.pending;delete state.confirming;delete state.cancellation;delete state.reclamation;

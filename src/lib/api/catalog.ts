@@ -973,7 +973,6 @@ export interface CategoryNode extends CategoryDTO {
 }
 
 async function loadCategoryTree(): Promise<CategoryNode[]> {
-  if (!hasDatabaseConnection()) return [];
   try {
     const rows = await db.category.findMany({
       orderBy: [{ level: "asc" }, { order: "asc" }],
@@ -1002,7 +1001,9 @@ async function loadCategoryTree(): Promise<CategoryNode[]> {
     return roots;
   } catch (error) {
     console.error("[catalog] Failed to load category tree.", error);
-    return [];
+    // A failed refresh must not replace a healthy shared tree with an empty
+    // catalog. Next retains stale cache data; cold misses reach the error UI.
+    throw error;
   }
 }
 
@@ -1012,7 +1013,12 @@ const getCategoryTreeAcrossRequests = unstable_cache(
   { revalidate: 60, tags: ["storefront-categories"] },
 );
 
-export const getCategoryTree = cache(getCategoryTreeAcrossRequests);
+export const getCategoryTree = cache(async () => {
+  // Development without a database may use an empty tree, but never persist
+  // that configuration fallback in the shared production cache.
+  if (!hasDatabaseConnection()) return [];
+  return getCategoryTreeAcrossRequests();
+});
 
 export async function getCategoryBySlug(slug: string) {
   if (!hasDatabaseConnection()) return null;

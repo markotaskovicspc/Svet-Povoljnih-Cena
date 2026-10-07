@@ -40,7 +40,7 @@ export function WishlistButton({
   const count = hydrated ? items.length : 0;
   const openWishlist = useCartUi((s) => s.openWishlist);
   return (
-    <Link
+    <Link prefetch={false}
       href="/nalog/lista-zelja"
       aria-label={`Lista želja${count ? ` (${count})` : ""}`}
       onClick={(e) => {
@@ -69,7 +69,7 @@ export function CartButton({ className }: { className?: string }) {
   const openDrawer = useCartUi((s) => s.openDrawer);
 
   return (
-    <Link
+    <Link prefetch={false}
       href="/korpa"
       aria-label={`Korpa${count ? ` (${count})` : ""}`}
       onClick={(e) => {

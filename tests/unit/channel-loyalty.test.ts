@@ -68,3 +68,17 @@ it('expired invitation cannot start a membership; expired access cannot price an
  const current=prepareChannelLoyalty(scope,secret),accepted=await acceptChannelLoyalty(current.challenge,scope,secret);
  vi.advanceTimersByTime(31*24*3600000);expect(await channelLoyalty(accepted!.proof,scope,secret)).toBeNull();
 });
+
+it.each(['facebook','instagram','web'] as const)('records conversation-only consent and binds it to %s without creating an email membership',async channel=>{
+ const anonymous={channel,conversationId:scope.conversationId,email:null};
+ const invitation=prepareChannelLoyalty(anonymous,secret);
+ expect(invitation.summary).not.toMatch(/mejl|bez mejla/);
+ expect(await channelLoyalty(invitation.challenge,anonymous,secret)).toBeNull();
+ const accepted=await acceptChannelLoyalty(invitation.challenge,anonymous,secret);
+ expect(accepted?.email).toBeNull();expect(m.members.size).toBe(0);expect(m.records.size).toBe(1);
+ expect(await acceptChannelLoyalty(invitation.challenge,anonymous,secret)).toEqual(accepted);
+ expect(await channelLoyalty(accepted!.proof,anonymous,secret)).toMatchObject({email:null,consentVersion:LOYALTY_CONSENT_VERSION});
+ expect(await channelLoyalty(accepted!.proof,{...anonymous,email:'later@example.com'},secret)).toMatchObject({email:null});
+ expect(await channelLoyalty(accepted!.proof,{...anonymous,conversationId:'other'},secret)).toBeNull();
+ m.records.clear();expect(await channelLoyalty(accepted!.proof,anonymous,secret)).toBeNull();
+});

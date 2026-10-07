@@ -1,3 +1,4 @@
+import {receiveSupportContact,requestSupportContact} from './support-contact.mjs';
 import {staffSummary} from './support-summary.mjs';
 import {receiveAdContext} from './ad-context.mjs';
 import { orderErrorMessage } from './delivery.mjs';
@@ -119,7 +120,8 @@ export class Worker {
             await this.store.save(c,row.id,state);
           }
           let reclamationIntent;
-          const loyaltyMessage=await receiveLoyalty({event,state,spc:this.spc});
+          const contactMessage=receiveSupportContact({event,state});
+          const loyaltyMessage=contactMessage?null:await receiveLoyalty({event,state,spc:this.spc});
           if(state.reclamation?.reclamationToken&&!event.attachments.length) {
             delete state.pending;delete state.confirming;delete state.cancellation;
             reclamationIntent=state.submittingReclamation?.eventId===event.id?'confirm':await this.reclamationIntentFn({text:event.text,history:state.history,pending:state.reclamation,model:this.model});
@@ -155,7 +157,9 @@ export class Worker {
           }
           let message;
           let images=[];
-          if(loyaltyMessage){
+          if(contactMessage){
+            message=contactMessage;
+          } else if(loyaltyMessage){
             message=loyaltyMessage;
           } else if (state.reclamationInFlight) {
             await this.store.pause(row.id,'Proveriti prethodno slanje reklamacije pre nastavka');
@@ -283,16 +287,20 @@ export class Worker {
               message='Za ovu ponudu potreban je zaposleni. Prosledio sam mu razgovor da proveri sve stavke i dostavu.';
             }
           }
-          if(state.supportRequest && !state.supportRequest.reclamationId && state.lastSupportRequest?.reason===state.supportRequest.reason && Date.now()-state.lastSupportRequest.at<86400000){
+          if(state.supportRequest && !state.supportRequest.contactUpdate && !state.supportRequest.reclamationId && state.lastSupportRequest?.reason===state.supportRequest.reason && Date.now()-state.lastSupportRequest.at<86400000){
             delete state.supportRequest;
             message='Razumem. Zahtev je već pripremljen za korisničku podršku; sačekajmo odgovor.';
+          }
+          if(state.supportRequest){
+            const question=requestSupportContact({state,event});
+            if(question){message=[message,question].filter(Boolean).join('\n\n');images=[];}
           }
           state.history.push({role:'user',content:/^\s*\d{6}\s*$/.test(event.text)&&Boolean(state.claimVerification||state.claimOrders)?'[Kod za proveru porudžbine]':event.text || '[Prilog kupca]',timestamp:event.timestamp},{role:'assistant',content:message,timestamp:Date.now()});
           state.history=state.history.slice(-HISTORY_LIMIT);
           await c.query('BEGIN');
           if(state.supportRequest) {
             const payload={action:'support_handoff',id:job.id,channel:event.channel,conversationId:row.id,
-              reason:state.supportRequest.reason,reclamationId:state.supportRequest.reclamationId,transcript:state.history.slice(-8).map(m=>`${m.role==='user'?'Kupac':'SPC'}: ${m.content}`).join('\n').slice(-6000)};
+              callbackEmail:state.supportContact?.email,contactUpdate:state.supportRequest.contactUpdate,reason:state.supportRequest.reason,reclamationId:state.supportRequest.reclamationId,transcript:state.history.slice(-8).map(m=>`${m.role==='user'?'Kupac':'SPC'}: ${m.content}`).join('\n').slice(-6000)};
             await c.query('INSERT INTO spc_chat_support(id,conversation,payload) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[job.id,row.id,this.store.encode(payload)]);
             state.lastSupportRequest={reason:state.supportRequest.reason,at:Date.now()};
             delete state.supportRequest;
@@ -358,7 +366,7 @@ export class Worker {
         const payload=this.store.decode(job.payload);
         // A new failed order command needs attention even after an unrelated handoff.
         // Repeated identical failures remain recorded without another email.
-        if(previous.rows.length&&(!job.id.startsWith('staff-order:')||state.lastStaffAttentionReason===payload.reason)){
+        if(previous.rows.length&&!payload.contactUpdate&&(!job.id.startsWith('staff-order:')||state.lastStaffAttentionReason===payload.reason)){
           await c.query("UPDATE spc_chat_support SET status='recorded' WHERE id=$1",[job.id]);return;
         }
         // Ignore and remove every legacy Graph-derived cache entry.

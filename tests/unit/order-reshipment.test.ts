@@ -2,11 +2,12 @@ import type { Prisma } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const { tx, adjust } = vi.hoisted(() => ({ adjust: vi.fn(), tx: {
   returnResolution: { findUnique: vi.fn() },
-  $queryRaw: vi.fn(), shipment: { findUnique: vi.fn() }, order: { update: vi.fn() },
+  $queryRaw: vi.fn(), shipment: { findUnique: vi.fn(), count: vi.fn() }, order: { update: vi.fn() },
+  fiscalDocument: { findFirst: vi.fn() }, backgroundJob: { updateMany: vi.fn() },
   pickupBatch: { findMany: vi.fn(), findFirst: vi.fn(), findUniqueOrThrow: vi.fn(), create: vi.fn() },
   pickupBatchLine: { findMany: vi.fn(), createMany: vi.fn() },
   orderReshipment: { create: vi.fn(), findMany: vi.fn(), updateMany: vi.fn() }, orderReshipmentItem: { findUniqueOrThrow: vi.fn(), update: vi.fn() },
-  stockMovement: { findFirst: vi.fn(), findUnique: vi.fn() },
+  stockMovement: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
   product: { findUniqueOrThrow: vi.fn() }, warehouse: { findUnique: vi.fn() },
   orderStatusEvent: { create: vi.fn() },
 } }));
@@ -27,10 +28,12 @@ beforeEach(() => {
   tx.pickupBatchLine.findMany.mockResolvedValue([1, 2].map(packageNo => ({ orderItemId: "i", quantity: 2, packageNo, weightKg: 4, widthCm: 30, heightCm: 30, depthCm: 30 })));
   tx.pickupBatch.findMany.mockResolvedValue([]);
   tx.pickupBatch.create.mockResolvedValue({ id: "b", number: "PRE-2026-0001" });
-  tx.orderReshipment.create.mockResolvedValue({ id: "r", batchId: null, batch: null });
+  tx.orderReshipment.create.mockResolvedValue({ id: "r", batchId: null, batch: null, items: [{ id: "ri", orderItemId: "i" }] });
   tx.orderReshipment.findMany.mockResolvedValue([]);
   tx.orderReshipment.updateMany.mockResolvedValue({ count: 1 });
-  tx.stockMovement.findFirst.mockResolvedValue(null);
+  tx.stockMovement.findMany.mockResolvedValue([]);
+  tx.fiscalDocument.findFirst.mockResolvedValue(null);
+  tx.shipment.count.mockResolvedValue(1);
   tx.stockMovement.findUnique.mockResolvedValue(null);
   tx.product.findUniqueOrThrow.mockResolvedValue({ sku: "SKU", stock: 10, warehouseStocks: [{ warehouseId: "w", qty: 10 }], orderItems: [], partnerReservations: [] });
   tx.warehouse.findUnique.mockResolvedValue({ active: true, isDefault: true });
@@ -174,10 +177,10 @@ describe("new goods for an unresolved courier delivery", () => {
     await queueOrderReshipment(input);
     expect(tx.orderReshipment.create.mock.calls[0][0].data.codAmount).toBe(0);
   });
-  it("rejects a mismatched order and an already received/refunded return", async () => {
+  it("rejects a mismatched order and an already started fiscal refund", async () => {
     await expect(queueOrderReshipment({ ...input, orderId: "different" })).rejects.toThrow("nije pronađena");
-    tx.stockMovement.findFirst.mockResolvedValue({ id: "return" });
-    await expect(queueOrderReshipment(input)).rejects.toThrow("knjižen povrat");
+    tx.fiscalDocument.findFirst.mockResolvedValue({ id: "refund", status: "PENDING" });
+    await expect(queueOrderReshipment(input)).rejects.toThrow("Refundacija porudžbine je već pokrenuta");
     expect(adjust).not.toHaveBeenCalled();
   });
   it("does not collect COD again when payment is already recorded", async () => {
@@ -185,6 +188,50 @@ describe("new goods for an unresolved courier delivery", () => {
     tx.shipment.findUnique.mockResolvedValue({ ...s, order: { ...s.order, payments: [{ status: "PAID" }] } });
     await queueOrderReshipment(input);
     expect(tx.orderReshipment.create.mock.calls[0][0].data.codAmount).toBe(0);
+  });
+});
+describe("reshipment after physical receipt without refund", () => {
+  const receipt = { id: "receipt", orderItemId: "i", idempotencyKey: "order-return:WEB-1:i:1", qty: 1, fiscalDocumentId: null, note: "Primljeno" };
+  beforeEach(() => {
+    tx.shipment.findUnique.mockResolvedValue({ ...source(), status: "RETURNED" });
+    tx.stockMovement.findMany.mockResolvedValue([receipt]);
+  });
+  it("transfers the receipt, stops pending refund work and debits only the new goods", async () => {
+    await queueOrderReshipment(input);
+    expect(tx.orderReshipment.create.mock.calls[0][0].data.items.create).toEqual([
+      expect.objectContaining({ orderItemId: "i", quantity: 2, receivedQty: 1 }),
+    ]);
+    expect(tx.stockMovement.update).toHaveBeenCalledWith({ where: { id: "receipt" }, data: {
+      idempotencyKey: "reshipment-return:ri:1", kind: "ADJUSTMENT", orderItemId: null,
+      note: expect.stringContaining("order-return:WEB-1:i:1"),
+    } });
+    expect(tx.backgroundJob.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { kind: "RETURN_FISCAL_REFUND", idempotencyKey: "return-fiscal:receipt", status: { in: ["QUEUED", "RETRY", "FAILED"] } },
+      data: expect.objectContaining({ status: "COMPLETED" }),
+    }));
+    expect(adjust).toHaveBeenCalledTimes(1);
+    expect(adjust.mock.calls[0][1]).toMatchObject({ qtyDelta: -2 });
+  });
+  it.each([
+    { qty: 0 }, { qty: 2 }, { fiscalDocumentId: "refund" },
+    { orderItemId: "other" }, { idempotencyKey: "fiscal-refund:doc:line" },
+    { idempotencyKey: "order-return:WEB-1:i:3" },
+  ])("blocks ambiguous or refunded ledger entries: %j", async fields => {
+    tx.stockMovement.findMany.mockResolvedValue([{ ...receipt, ...fields }]);
+    await expect(queueOrderReshipment(input)).rejects.toThrow("usaglašavanje");
+    expect(tx.orderReshipment.create).not.toHaveBeenCalled();
+    expect(tx.stockMovement.update).not.toHaveBeenCalled();
+    expect(adjust).not.toHaveBeenCalled();
+  });
+  it("does not assign an order-level receipt to one of multiple returned deliveries", async () => {
+    tx.shipment.count.mockResolvedValue(2);
+    await expect(queueOrderReshipment(input)).rejects.toThrow("jednoznačno");
+    expect(tx.orderReshipment.create).not.toHaveBeenCalled();
+  });
+  it("does not assign an old receipt to a shipment still in transit", async () => {
+    tx.shipment.findUnique.mockResolvedValue(source());
+    await expect(queueOrderReshipment(input)).rejects.toThrow("jednoznačno");
+    expect(adjust).not.toHaveBeenCalled();
   });
 });
 describe("physical return of the old goods", () => {

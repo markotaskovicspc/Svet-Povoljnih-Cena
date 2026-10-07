@@ -69,6 +69,16 @@ export function dateInputInTimeZone(date: Date): string {
   return `${parts.year}-${twoDigits(parts.month)}-${twoDigits(parts.day)}`;
 }
 
+// Calendar boundaries, rather than 24-hour increments, preserve 23/25-hour
+// Belgrade days when the clocks change.
+export function getReportDayPeriods(period: ReportPeriod): ReportPeriod[] {
+  const days: ReportPeriod[] = [];
+  for (let day = period.fromInput; day <= period.toInput; day = addCalendarDays(day, 1)) {
+    days.push(buildPeriod("custom", day, day));
+  }
+  return days;
+}
+
 function buildPeriod(
   preset: ReportPeriod["preset"],
   fromInput: string,

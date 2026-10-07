@@ -15,6 +15,7 @@ import type { MyGlsConfig } from "./config";
 import { MyGlsConfigError, toMyGlsDate } from "./config";
 import type { MyGlsAddress, MyGlsParcel, MyGlsService } from "./types";
 import { courierAddressParts } from "@/lib/address/house-number";
+import { normalizeSerbianPlaceSearch } from "@/data/serbian-places";
 import { myGlsArticleContent } from "./article-content";
 export { myGlsArticleContent } from "./article-content";
 
@@ -229,7 +230,7 @@ function addressFromPickup(
     HouseNumber: cfg.pickup.houseNumber,
     HouseNumberInfo: cfg.pickup.houseNumberInfo || null,
     City: cfg.pickup.city,
-    ZipCode: myGlsPostalCode(cfg.pickup.postalCode, cfg.pickup.country, "Adresa magacina"),
+    ZipCode: myGlsPostalCode(cfg.pickup.postalCode, cfg.pickup.country, cfg.pickup.city, "Adresa magacina"),
     CountryIsoCode: cfg.pickup.country,
     // Normal DC labels keep personal data off the printed sender block. A
     // supplier pickup explicitly includes its operational contact so the
@@ -268,6 +269,7 @@ function addressFromOrder(
     ZipCode: myGlsPostalCode(
       order.glsDeliveryPointPostalCode ?? order.shipPostalCode,
       order.shipCountry || "RS",
+      order.glsDeliveryPointCity ?? order.shipCity,
       `Adresa primaoca za porudžbinu ${order.number}`,
     ),
     CountryIsoCode: order.shipCountry || "RS",
@@ -329,12 +331,25 @@ function nextBusinessDay() {
 }
 
 /** Validate before any group in a pickup batch is booked with the provider. */
-function myGlsPostalCode(value: string, country: string, address: string) {
+function myGlsPostalCode(value: string, country: string, city: string, address: string) {
   const postalCode = value.trim();
-  if (!postalCode || (country.trim().toUpperCase() === "RS" && !/^\d{5}$/.test(postalCode))) {
+  const domestic = country.trim().toUpperCase() === "RS";
+  if (!postalCode || (domestic && !/^\d{5}$/.test(postalCode))) {
     throw new MyGlsConfigError(
       `${address}: neispravan poštanski broj ${JSON.stringify(postalCode)}. Unesite poštanski broj od 5 cifara za adresu u Srbiji.`,
     );
   }
-  return postalCode;
+  // GLS uses 11000 for Belgrade even when another courier's town directory
+  // supplies a district postcode. Normalize only the provider request so
+  // existing orders and return pickups receive the same correction on retry.
+  return domestic && isBelgrade(city, postalCode) ? "11000" : postalCode;
+}
+
+function isBelgrade(city: string, postalCode: string) {
+  const name = normalizeSerbianPlaceSearch(city)
+    .replace(/[^a-z0-9]+/g, " ").trim();
+  if (/(^| )(beograd|belgrade|bg|bgd)( |$)/.test(name)) return true;
+  if (["zemun", "vozdovac", "zvezdara", "cukarica", "vracar", "savski venac", "batajnica"].includes(name)) return true;
+  // These locality names also occur outside Belgrade (e.g. Palilula in Niš).
+  return ["palilula", "rakovica", "stari grad"].includes(name) && /^11[012]\d{2}$/.test(postalCode);
 }

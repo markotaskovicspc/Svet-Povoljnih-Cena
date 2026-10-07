@@ -25,7 +25,7 @@ export const emailActionSchema=z.discriminatedUnion('action',[
 const tokenSchema=z.discriminatedUnion('kind',[
  base.extend({purpose:z.literal('email_action'),kind:z.literal('cancel'),expiresAt:z.number(),orderId:z.string(),number:z.string()}),
  base.extend({purpose:z.literal('email_action'),kind:z.literal('loyalty'),expiresAt:z.number(),challenge:z.string()}),
- base.extend({purpose:z.literal('email_action'),kind:z.literal('purchase'),expiresAt:z.number(),input:createOrderSchema,total:z.number(),loyaltyProof:z.string().optional(),loyalty:z.object({email:z.email(),consentVersion:z.string(),consentAt:z.string()}).nullable().optional()}),
+ base.extend({purpose:z.literal('email_action'),kind:z.literal('purchase'),expiresAt:z.number(),input:createOrderSchema,total:z.number(),loyaltyProof:z.string().optional(),loyalty:z.object({email:z.email().nullable(),consentVersion:z.string(),consentAt:z.string()}).nullable().optional()}),
  base.extend({purpose:z.literal('email_action'),kind:z.literal('claim'),expiresAt:z.number(),orderId:z.string(),input:claim,claimId:z.string()}),
 ]);
 const owner=(sender:string)=>({OR:[{guestEmail:{equals:sender,mode:'insensitive' as const}},{user:{email:{equals:sender,mode:'insensitive' as const}}}]});

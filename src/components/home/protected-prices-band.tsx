@@ -21,7 +21,7 @@ export function ProtectedPricesBand({
         compact ? "py-4 md:py-5" : "py-5 md:py-8",
       )}
     >
-      <Link
+      <Link prefetch={false}
         href={href}
         className="group block overflow-hidden rounded-lg bg-brand-blue text-white shadow-soft-2 outline-none focus-visible:ring-2 focus-visible:ring-walnut/40"
       >

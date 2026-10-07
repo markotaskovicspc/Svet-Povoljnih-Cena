@@ -7,9 +7,12 @@ test('four advertised loyalty chairs cannot silently become a regular-price quot
  const result=await guardLoyaltyPrice({input:{guestEmail:'test@example.com'},products,state,event,spc:async p=>{calls.push(p.action);return {ok:true,email:p.email,summary:'Consent',challenge:'test'};}});
  assert(!result.ok);assert.equal(result.code,'LOYALTY_CONFIRMATION_PENDING');assert(!state.pending);assert(state.loyaltyPending);assert.deepEqual(calls,['prepare_loyalty']);
 });
-test('missing email never fabricates identity or increases the offered price',async()=>{
- const state={history:[]};const r=await guardLoyaltyPrice({input:{guestEmail:null},products,state,event,spc:()=>{throw Error('No remote call');}});
- assert(!r.ok);assert.match(state.supportRequest.reason,/110086/);assert(!state.pending);
+test('missing email prepares conversation consent without a support handoff or invented identity',async()=>{
+ const state={history:[]};const calls=[];
+ const r=await guardLoyaltyPrice({input:{guestEmail:null},products,state,event,spc:async p=>{calls.push(p);return {ok:true,email:null,summary:'Consent',challenge:'signed'};}});
+ assert(!r.ok);assert.equal(r.code,'LOYALTY_CONFIRMATION_PENDING');assert(state.loyaltyPending);assert(!state.supportRequest);
+ assert.equal(calls[0].email,null);
+ assert.deepEqual(await guardLoyaltyPrice({input:{guestEmail:null},products,state:{loyalty:{email:null,proof:'proof',expiresAt:Date.now()+60000}}}),{ok:true,required:true});
 });
 test('only valid membership or recorded refusal permits checkout; ERP must apply membership',async()=>{
  const state={loyalty:{email:'test@example.com',proof:'proof',expiresAt:Date.now()+60000}};

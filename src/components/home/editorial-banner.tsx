@@ -58,7 +58,7 @@ export function EditorialBanner({
         </div>
         <div className="pointer-events-none absolute inset-0 flex items-end px-5 pb-4 md:px-12 md:pb-10">
           {banner.ctaHref && banner.ctaLabel ? (
-            <Link
+            <Link prefetch={false}
               href={banner.ctaHref}
               className="bg-canvas text-ink-900 hover:bg-sand focus-visible:ring-sand/60 pointer-events-auto inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm shadow-soft-3 transition focus-visible:ring-2 focus-visible:outline-none md:px-6 md:py-3"
             >

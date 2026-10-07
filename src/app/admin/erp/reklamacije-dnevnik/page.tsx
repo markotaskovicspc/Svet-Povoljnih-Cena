@@ -50,6 +50,8 @@ const STATUS_LABELS: Record<ReclamationStatus, string> = {
 const TYPE_LABELS: Record<string, string> = {
   FIZICKO_OSTECENJE: "Fizičko oštećenje",
   KVAR: "Kvar",
+  POGRESNO_ISPORUCENO: "Pogrešno isporučeno",
+  NIJE_ISPORUCENO: "Nije isporučeno",
   NIJE_UNETO: "Nije uneto",
 };
 

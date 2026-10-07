@@ -106,7 +106,7 @@ export function FirstPurchaseCta() {
           </button>
         </div>
       </div>
-      <Link
+      <Link prefetch={false}
         href={`/nalog/registracija?offer=first-purchase-${firstPurchasePct}`}
         className="mt-4 inline-flex h-10 w-full items-center justify-center rounded-lg bg-ink-900 px-4 text-sm font-medium text-canvas transition hover:bg-walnut focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none"
       >

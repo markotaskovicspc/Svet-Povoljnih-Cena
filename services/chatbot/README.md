@@ -179,3 +179,19 @@ Ako status nije ISPORUCENO, nema automatskog upisa ili menjanja statusa: opis id
 
 Provera: npm test; scripts/reclamation-smoke.mjs koristi stvarni model sa izmišljenim porudžbinama i lažnim ERP klijentom, bez produkcijskih upisa. ERP testovi: social-reclamations, social-reclamation-record i social-route.
 
+
+## Conversation loyalty and support contacts
+
+Loyalty consent can be recorded against a Facebook, Instagram or web conversation
+without an email address. The signed invitation still requires a separate DA;
+that DA never confirms an order. Orders retain the consent version; the channel consent record retains its timestamp.
+No synthetic email or email membership is created for conversation-only consent.
+Deploy the SPC integration API before the worker changes for nullable loyalty email.
+
+When a customer asks for a person or an ordinary handoff is queued, the worker
+asks once for an optional callback email, reusing customer-supplied contact when
+available. A refusal does not block the handoff. The encrypted conversation state
+and support outbox hold the contact; a later supplied email triggers a contact
+update even if the initial support notification was sent already. Support receives
+the transcript, protected ERP conversation link, and callback email as Reply-To.
+This flow does not subscribe the customer to marketing or promise a response time.

@@ -48,7 +48,9 @@ describe("dashboard data snapshot", () => {
     expect(orderSummary.match(/SUM\(o.shipping\) FILTER \(WHERE o.channel <> 'ANANAS'/g)).toHaveLength(2);
     expect(text).toContain('THEN f."totalGross" ELSE -f."totalGross" END');
     expect(text).toContain("/ 30.0");
-    expect(text).toContain("AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Belgrade'");
+    expect(text).toContain('a."occurredAt" >= bounds.start_at');
+    expect(text).toContain('a."occurredAt" < bounds.end_at');
+    expect(text).not.toContain('a."occurredAt" AT TIME ZONE');
   });
   it("propagates failures instead of presenting false zero totals", async () => {
     mocks.query.mockRejectedValueOnce(new Error("Database unavailable"));

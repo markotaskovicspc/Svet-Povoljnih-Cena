@@ -10,7 +10,7 @@ export const socialDeliveryRequest=z.object({
  city:z.string().trim().min(2).max(120).optional(),
  lines:z.array(z.object({sku:z.string().trim().min(1).max(80),qty:z.number().int().positive().max(99)})).min(1).max(50),
  shippingMethod:z.enum(['KURIR','KAMION']),
- email:z.email().optional(),loyaltyProof:z.string().max(5000).optional(),
+ email:z.email().nullable().optional(),loyaltyProof:z.string().max(5000).optional(),
 });
 
 // The same read-only resolver used by checkout; never creates a checkout session or order.
@@ -23,7 +23,7 @@ export async function socialDeliveryQuote(body:z.infer<typeof socialDeliveryRequ
  const products=await Promise.all(lines.map(line=>getProductBySku(line.sku)));
  const missing=products.findIndex(p=>!p);
  if(missing!==-1)return {ok:false,error:{code:'PRODUCT_NOT_FOUND',sku:lines[missing].sku}};
- const loyalty=await channelLoyalty(body.loyaltyProof,{channel:body.channel,conversationId:body.conversationId,email:body.email??''},secret);
+ const loyalty=await channelLoyalty(body.loyaltyProof,{channel:body.channel,conversationId:body.conversationId,email:body.email??null},secret);
  if(body.loyaltyProof&&!loyalty)return {ok:false,error:{code:'LOYALTY_CONSENT_REQUIRED'}};
  if(body.shippingMethod==='KAMION'&&!body.city)return {ok:false,error:{code:'DELIVERY_CITY_REQUIRED'}};
  // Courier tariffs are nationwide. Do not apply city-specific legacy rules or

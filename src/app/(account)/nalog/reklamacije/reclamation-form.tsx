@@ -419,6 +419,8 @@ export function ReclamationForm({
           <select id="reclamation-type" value={type} onChange={event => setType(event.target.value)} className="h-11 w-full rounded-lg border border-input bg-white px-2.5 text-sm">
             <option value="">Izaberite ili opišite ispod</option>
             <option value="FIZICKO_OSTECENJE">Fizičko oštećenje</option><option value="KVAR">Kvar</option>
+            <option value="POGRESNO_ISPORUCENO">Pogrešno isporučeno</option>
+            <option value="NIJE_ISPORUCENO">Nije isporučeno</option>
           </select>
         </div>
         <div className="grid gap-2">

@@ -16,6 +16,9 @@ proveru autentičnog mejla i objavu ERP API-ja i chatbot servisa.
    Proverava ukupni zbir priliva i izdvaja samo kolonu „U korist“,
    SPC broj iz PBO i bankarsku referencu FT. Drugi prilivi i svi odlivi
    se ne povezuju sa porudžbinama.
+   Broj `SPC2026001370` normalizuje u `SPC-2026-001370`. Isti broj ponovljen
+   u PBO/PBZ poljima predstavlja jednu porudžbinu; različiti SPC brojevi,
+   SPC broj samo u PBZ ili više FT referenci i dalje zaustavljaju obradu.
 4. Potpisanim zahtevom dostavlja samo podatke izabrane uplate na
    `/api/integrations/bank-statements`. PDF, ime uplatioca i ostale
    transakcije ne šalje ERP API-ju ni dodatnim servisima.
