@@ -1,6 +1,6 @@
 import { SHIPMENT_STATUS_LABEL } from "@/lib/courier/status";
 import { confirmReturnParcelArrival } from "@/lib/admin/return-arrival.server";
-import { returnParcelNumbers, returnParcelArrived, displayReturnParcelNumber, normalizeReturnParcelNumber, type ReturnShipment } from "@/lib/admin/return-parcels";
+import { returnUnitParcelNumbers, returnItemParcelNumbers, returnParcelNumbers, returnParcelArrived, displayReturnParcelNumber, normalizeReturnParcelNumber, type ReturnShipment } from "@/lib/admin/return-parcels";
 import {
   canReceiveReclamationShipment,
   myGlsReturnStatusLabel,
@@ -367,6 +367,7 @@ export default async function ReturnsPage({
               <p>
                 {item.sku} · {item.name} · {item.qty} kom
               </p>
+              <ReturnItemCodes item={item} shipments={order.shipments} />
               {Array.from({ length: item.qty }, (_, index) => {
                 const unitNo = index + 1;
                 const receipt = receiptByKey.get(
@@ -450,6 +451,7 @@ export default async function ReturnsPage({
                     <p className="w-full text-xs">
                       Komad {unitNo}/{item.qty}
                     </p>
+                    <ReturnItemCodes item={item} shipments={order.shipments} unitNo={unitNo} />
                     {warehouseSelect}
                     <Field label="Identifikacija kupca (ako nije na računu)">
                       <input
@@ -613,6 +615,8 @@ export default async function ReturnsPage({
             </Field>
             <SubmitButton size="sm" confirm="Potvrđujete da je paket fizički stigao? Ova potvrda ne knjiži lager i ne pokreće refundaciju.">Potvrdi dolazak</SubmitButton>
           </AdminActionForm>
+          <p className="mb-4 text-xs text-ink-500">Potvrda dolaska iznad evidentira fizički pristigao paket. Pretraga ispod samo pronalazi postojeći povrat.</p>
+          <p className="mb-4 text-xs text-ink-500">Aktivni: dolazak potvrđen, prijem robe još nije završen. Za proveru: dolazak nije potvrđen. Završeni: roba primljena ili pošiljka evidentirana kao izgubljena.</p>
           <p className="mb-4 text-xs text-ink-500">Brojevi ispod označavaju kurirske pakete. Prijem robe se knjiži po komadu; jedan paket može sadržati više komada.</p>
           <nav aria-label="Prikaz povrata" className="mb-5 flex flex-wrap gap-2">
             {(
@@ -824,4 +828,18 @@ async function confirmArrivalAction(_state: AdminActionState, formData: FormData
       return { ok: true as const, entityId: result.arrival.id, message: "Dolazak paketa je potvrđen. Lager i refundacija čekaju pregled i prijem robe.", diff: { orderId: result.orderId, parcelNumber: result.arrival.parcelNumber } };
     },
   )(formData);
+}
+
+function ReturnItemCodes({ item, shipments, unitNo }: {
+  item: { id: string; sku: string; qty: number };
+  unitNo?: number;
+  shipments: readonly ReturnShipment[];
+}) {
+  const match = unitNo ? returnUnitParcelNumbers(item, shipments, unitNo) : null;
+  const parcels = match?.parcels ?? returnItemParcelNumbers(item, shipments);
+  return <p className="w-full text-xs text-ink-500">
+    {parcels.length ? <>{match?.exact ? "Paket: " : "Paketi artikla: "}{parcels.map(({ shipment, code }) =>
+      `${displayReturnParcelNumber(code, shipment.provider)} (${returnParcelArrived(shipment, code) ? "dolazak potvrđen" : "dolazak nije potvrđen"})`
+    ).join(" · ")}</> : "Broj paketa za artikal nije povezan — proverite sadržaj i adresnicu."}
+  </p>;
 }
