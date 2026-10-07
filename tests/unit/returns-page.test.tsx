@@ -24,6 +24,7 @@ import ReturnsPage from "@/app/admin/erp/povrati/page";
 const returnedOrder = (id: string, shipments = [{
   id: `shipment-${id}`, provider: "X_EXPRESS", trackingNo: `TRACK-${id}`,
   lastStatusEventAt: new Date("2026-09-10T10:00:00Z"),
+  returnArrivals: [{ parcelNumber: `TRACK-${id}` }],
 }]) => ({
   id, number: `SPC-${id}`,
   items: [{ id: `item-${id}`, sku: `SKU-${id}`, name: "Vraćeni artikal", qty: 2 }],
@@ -55,7 +56,7 @@ describe("ERP returns page", () => {
   });
   it("shows an expected return before its new goods are loaded into picking", async () => {
     mocks.reshipments.mockResolvedValue([{ id: "r", orderId: "o", batchId: null, batch: null, reason: "Ponovno slanje", order: { number: "SPC-RETRY" }, sourceShipmentId: "s", sourceShipment: { provider: "X_EXPRESS", trackingNo: "OLD", status: "IN_TRANSIT" }, items: [{ id: "ri", sku: "SKU", name: "Sto", quantity: 2, receivedQty: 0 }] }]);
-    const html = renderToStaticMarkup(await ReturnsPage());
+    const html = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ view: "verification" }) }));
     expect(html).toContain("dostupna za učitavanje u picking");
     expect(html).toContain("Primi 1 kom na lager");
     expect(html).not.toContain("/admin/erp/preuzimanja/null");
@@ -100,7 +101,7 @@ describe("ERP returns page", () => {
     // eligible, without counting failed deliveries or replacement shipments.
     const where = { OR: [
       { status: "VRACENO", shipments: { none: { reshipment: { isNot: null } } } },
-      { shipments: { some: { purpose: "ORDER_DELIVERY", status: "RETURNED", reshipment: null } } },
+      { shipments: { some: { purpose: "ORDER_DELIVERY", reshipment: null, OR: [{ status: "RETURNED" }, { returnArrivals: { some: {} } }] } } },
     ] };
     expect(mocks.orders).toHaveBeenCalledWith(expect.objectContaining({ where }));
     expect(mocks.count).toHaveBeenCalledWith({ where });
@@ -109,7 +110,7 @@ describe("ERP returns page", () => {
   it("shows manually recorded returns without inventing a courier confirmation", async () => {
     mocks.orders.mockResolvedValue([returnedOrder("manual", [])]);
     mocks.count.mockResolvedValue(1);
-    const html = renderToStaticMarkup(await ReturnsPage());
+    const html = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ view: "verification" }) }));
     expect(html).toContain("SPC-manual");
     expect(html).toContain("bez kurirske potvrde");
     expect(html).not.toContain("Primi i proknjiži");
@@ -156,7 +157,7 @@ it("moves lost returns out of the active queue and preserves their reason in com
   const completed = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ view: "completed" }) }));
   expect(completed).toContain("SPC-lost");
   expect(completed).toContain("Kurir potvrdio gubitak");
-  expect(completed).not.toContain("Primi paket");
+  expect(completed).not.toContain("Primi komad");
   expect(completed).not.toContain("Označi kao izgubljenu");
 });
 it("removes fully received reshipment returns but keeps partial receipts active", async () => {
@@ -168,4 +169,34 @@ it("removes fully received reshipment returns but keeps partial receipts active"
   expect(completed).not.toContain("Primi 1 kom");
   mocks.reshipments.mockResolvedValue([{ ...retry, items: [{ ...retry.items[0], receivedQty: 1 }] }]);
   expect(renderToStaticMarkup(await ReturnsPage())).toContain("Primi 1 kom");
+});
+
+it("separates unconfirmed courier returns without hiding or completing them", async () => {
+  const order = returnedOrder("unconfirmed");
+  order.shipments[0].returnArrivals = [];
+  mocks.orders.mockResolvedValue([order]);
+  const active = renderToStaticMarkup(await ReturnsPage());
+  expect(active).not.toContain("SPC-unconfirmed");
+  expect(active).toContain("Za proveru (1)");
+  const verification = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ view: "verification" }) }));
+  expect(verification).toContain("SPC-unconfirmed");
+  expect(verification).toContain("Dolazak nije potvrđen");
+  expect(verification).toContain("Završeni (0)");
+});
+it("shows all four parcel codes and finds a non-primary GLS code with a leading zero", async () => {
+  const order = returnedOrder("four");
+  mocks.orders.mockResolvedValue([{ ...order, shipments: [{ ...order.shipments[0], provider: "MYGLS", trackingNo: "9002829867", packageCount: 4,
+    providerParcelNumbers: [9002829867, 9002829868, 9002829869, 9002829870], returnArrivals: [{ parcelNumber: "9002829869" }] }],
+    items: [{ ...order.items[0], qty: 7, productId: "product" }] }]);
+  const html = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ q: "09002829869" }) }));
+  for (const code of ["09002829867", "09002829868", "09002829869", "09002829870"]) expect(html).toContain(code);
+  expect(html).toContain("Broj paketa: 4");
+  expect(html).toContain("Komad 7/7");
+  expect(html).not.toContain("Paket 7/7");
+  expect(html).toContain("SPC-four");
+});
+it("keeps unrelated delivered supplier items out of the returned goods", async () => {
+  const order = returnedOrder("mixed");
+  mocks.orders.mockResolvedValue([{ ...order, shipments: [{ ...order.shipments[0], rawCreateResponse: { assignment: { orderItemIds: ["item-mixed"] } } }], items: [...order.items, { id: "other", sku: "UNRELATED-DELIVERED", name: "Other", qty: 1 }] }]);
+  expect(renderToStaticMarkup(await ReturnsPage())).not.toContain("UNRELATED-DELIVERED");
 });

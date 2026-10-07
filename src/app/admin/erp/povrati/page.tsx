@@ -1,3 +1,6 @@
+import { SHIPMENT_STATUS_LABEL } from "@/lib/courier/status";
+import { confirmReturnParcelArrival } from "@/lib/admin/return-arrival.server";
+import { returnParcelNumbers, returnParcelArrived, displayReturnParcelNumber, normalizeReturnParcelNumber, type ReturnShipment } from "@/lib/admin/return-parcels";
 import {
   canReceiveReclamationShipment,
   myGlsReturnStatusLabel,
@@ -109,7 +112,7 @@ async function receiveOrderUnitAction(
       if (!parsed.success) {
         return {
           ok: false as const,
-          error: "Izaberite vraćeni paket i magacin prijema.",
+          error: "Izaberite vraćeni komad i magacin prijema.",
         };
       }
       const result = await receiveReturnedOrderUnit({
@@ -125,7 +128,7 @@ async function receiveOrderUnitAction(
       return {
         ok: true as const,
         entityId: parsed.data.orderItemId,
-        message: `Paket je primljen u ${result.warehouse.code} · ${result.warehouse.name}. Automatska fiskalna refundacija je zakazana; osvežite pregled za rezultat.`,
+        message: `Komad robe je primljen u ${result.warehouse.code} · ${result.warehouse.name}. Automatska fiskalna refundacija je zakazana; osvežite pregled za rezultat.`,
       };
     },
   )(formData);
@@ -133,10 +136,11 @@ async function receiveOrderUnitAction(
 
 export default async function ReturnsPage({
   searchParams,
-}: { searchParams?: Promise<{ view?: string }> } = {}) {
+}: { searchParams?: Promise<{ view?: string; q?: string }> } = {}) {
   await requireAdminAction(["OPS"]);
-  const view =
-    (await searchParams)?.view === "completed" ? "completed" : "active";
+  const params = await searchParams;
+  const view = params?.view === "completed" ? "completed" : params?.view === "verification" ? "verification" : "active";
+  const query = normalizeReturnParcelNumber(params?.q ?? "");
   const [
     reshipments,
     returnedOrders,
@@ -151,7 +155,7 @@ export default async function ReturnsPage({
       include: {
         items: true,
         order: { select: { number: true } },
-        sourceShipment: true,
+        sourceShipment: { include: { returnArrivals: true } },
         batch: true,
       },
     }),
@@ -167,6 +171,7 @@ export default async function ReturnsPage({
           where: { purpose: "RECLAMATION_RETURN" },
           orderBy: { createdAt: "desc" },
           take: 1,
+          include: { returnArrivals: true },
         },
       },
     }),
@@ -248,6 +253,8 @@ export default async function ReturnsPage({
     shipment: ReactNode;
     details: ReactNode;
     received: boolean;
+    arrived: boolean;
+    codes: string[];
     date: number;
   };
   const rows: Row[] = [];
@@ -257,19 +264,15 @@ export default async function ReturnsPage({
     rows.push({
       key,
       kind: "reshipment",
+      arrived: Boolean(retry.sourceShipment.returnArrivals?.length) || retry.items.some((item) => item.receivedQty > 0),
+      codes: returnParcelNumbers(retry.sourceShipment),
       id: retry.id,
       orderId: retry.orderId,
       number: retry.order.number,
       type: "Ponovno slanje",
       date: retry.createdAt?.getTime() ?? 0,
       received: retry.items.every((item) => item.receivedQty >= item.quantity),
-      shipment: (
-        <>
-          {retry.sourceShipment.provider} ·{" "}
-          {retry.sourceShipment.trackingNo ?? retry.sourceShipmentId} ·{" "}
-          {retry.sourceShipment.status}
-        </>
-      ),
+      shipment: <ReturnShipmentCodes shipment={retry.sourceShipment} received={retry.items.every((item) => item.receivedQty >= item.quantity)} />,
       details: (
         <>
           <p className="text-sm text-ink-500">
@@ -335,6 +338,9 @@ export default async function ReturnsPage({
     rows.push({
       key,
       kind: "order",
+      arrived: order.shipments.some((shipment) => shipment.returnArrivals?.length) || order.items.some((item) =>
+        Array.from({ length: item.qty }, (_, i) => receiptByKey.has(`order-return:${order.number}:${item.id}:${i + 1}`)).some(Boolean)),
+      codes: order.shipments.flatMap(returnParcelNumbers),
       id: order.id,
       orderId: order.id,
       number: order.number,
@@ -343,10 +349,7 @@ export default async function ReturnsPage({
       date: order.updatedAt?.getTime() ?? 0,
       shipment: order.shipments.length ? (
         order.shipments.map((shipment) => (
-          <p key={shipment.id}>
-            {shipment.provider ?? "Kurir"} ·{" "}
-            {shipment.trackingNo ?? "Bez broja za praćenje"} · Vraćeno
-          </p>
+          <ReturnShipmentCodes key={shipment.id} shipment={shipment} received={received} />
         ))
       ) : (
         <>Povrat evidentiran na porudžbini, bez kurirske potvrde.</>
@@ -389,7 +392,7 @@ export default async function ReturnsPage({
                     className="space-y-2 rounded-lg border border-border p-2"
                   >
                     <p className="text-xs text-success">
-                      Paket {unitNo}/{item.qty} primljen{" "}
+                      Komad {unitNo}/{item.qty} primljen{" "}
                       {formatDate(receipt.createdAt)} · {receipt.warehouse.code}
                     </p>
                     <p className="text-xs">
@@ -431,7 +434,7 @@ export default async function ReturnsPage({
                   </div>
                 ) : lost ? (
                   <p key={unitNo} className="text-xs text-warning">
-                    Paket {unitNo}/{item.qty}: izgubljen, nije primljen na
+                    Komad {unitNo}/{item.qty}: izgubljen, nije primljen na
                     lager.
                   </p>
                 ) : item.productId ? (
@@ -445,7 +448,7 @@ export default async function ReturnsPage({
                     <input type="hidden" name="orderItemId" value={item.id} />
                     <input type="hidden" name="unitNo" value={unitNo} />
                     <p className="w-full text-xs">
-                      Paket {unitNo}/{item.qty}
+                      Komad {unitNo}/{item.qty}
                     </p>
                     {warehouseSelect}
                     <Field label="Identifikacija kupca (ako nije na računu)">
@@ -459,14 +462,14 @@ export default async function ReturnsPage({
                     <SubmitButton
                       size="sm"
                       disabled={!warehouses.length}
-                      confirm={`Potvrditi da je paket ${unitNo}/${item.qty} pregledan, vratiti jedan komad na stanje i pokrenuti fiskalnu refundaciju?`}
+                      confirm={`Potvrditi da je komad ${unitNo}/${item.qty} pregledan, vratiti jedan komad na stanje i pokrenuti fiskalnu refundaciju?`}
                     >
-                      Primi paket
+                      Primi komad
                     </SubmitButton>
                   </AdminActionForm>
                 ) : (
                   <p key={unitNo} className="text-xs text-warning">
-                    Paket nema vezan artikal lagera.
+                    Komad nema vezan artikal lagera.
                   </p>
                 );
               })}
@@ -503,21 +506,15 @@ export default async function ReturnsPage({
     rows.push({
       key,
       kind: "reclamation",
+      arrived: Boolean(receipt) || Boolean(shipment?.returnArrivals?.length) || canReceiveReclamationShipment(shipment),
+      codes: shipment ? returnParcelNumbers(shipment) : [],
       id: reclamation.id,
       orderId: reclamation.orderId,
       number: reclamation.order.number,
       type: "Reklamacioni povrat",
       received: Boolean(receipt),
       date: reclamation.createdAt?.getTime() ?? 0,
-      shipment: (
-        <>
-          {shipment?.provider ?? "Kurir"} ·{" "}
-          {shipment?.trackingNo ?? "Bez broja za praćenje"} ·{" "}
-          {shipment
-            ? (myGlsReturnStatusLabel(shipment) ?? shipment.status)
-            : "—"}
-        </>
-      ),
+      shipment: shipment ? <><ReturnShipmentCodes shipment={shipment} received={Boolean(receipt)} /><p>{myGlsReturnStatusLabel(shipment)}</p></> : <>Bez povratne pošiljke</>,
       details: (
         <>
           <Link
@@ -565,15 +562,18 @@ export default async function ReturnsPage({
     });
   }
   const completed = (row: Row) => row.received || lostByKey.has(row.key);
-  const activeCount = rows.filter((row) => !completed(row)).length;
+  const activeCount = rows.filter((row) => !completed(row) && row.arrived).length;
+  const verificationCount = rows.filter((row) => !completed(row) && !row.arrived).length;
+  const completedCount = rows.filter(completed).length;
   const visible = rows
-    .filter((row) => completed(row) === (view === "completed"))
+    .filter((row) => view === "completed" ? completed(row) : !completed(row) && row.arrived === (view === "active"))
+    .filter((row) => !query || normalizeReturnParcelNumber(row.number).includes(query) || row.codes.some((code) => code.includes(query)))
     .sort((a, b) => b.date - a.date || a.key.localeCompare(b.key));
   return (
     <>
       <PageHeader
         title="Povrati za prijem"
-        description="Svi povrati u jednom pregledu. Primljeni i izgubljeni povrati prelaze u završene."
+        description="Fizički pristigli paketi su u aktivnim povratima. Kurirski povrati bez potvrde dolaska ostaju u pregledu Za proveru."
         crumbs={[
           { href: "/admin", label: "Admin" },
           { href: "/admin/erp/preuzimanja", label: "Picking i preuzimanja" },
@@ -586,12 +586,13 @@ export default async function ReturnsPage({
         }
       />
       <main className="space-y-6 px-4 py-6 md:px-8">
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-4">
           <StatCard
-            label="Aktivni povrati"
+            label="Pristigli povrati"
             value={String(activeCount)}
             tone="warning"
           />
+          <StatCard label="Za proveru" value={String(verificationCount)} tone="warning" />
           <StatCard
             label="Primljeni povrati"
             value={String(rows.filter((row) => row.received).length)}
@@ -606,16 +607,24 @@ export default async function ReturnsPage({
           <CardTitle description="Povrati porudžbina, reklamacija i prethodnih pošiljki nakon ponovnog slanja. Završeni prikaz zadržava evidenciju i obradu refundacije.">
             Svi povrati
           </CardTitle>
-          <nav aria-label="Prikaz povrata" className="mb-5 flex gap-2">
+          <AdminActionForm action={confirmArrivalAction} refreshOnSuccess className="mb-5 flex flex-wrap items-end gap-3">
+            <Field label="Kod fizički pristiglog paketa">
+              <input name="code" required maxLength={40} placeholder="Skenirajte ili unesite kod sa adresnice" className="h-9 w-80 max-w-full rounded-lg border border-input px-2" />
+            </Field>
+            <SubmitButton size="sm" confirm="Potvrđujete da je paket fizički stigao? Ova potvrda ne knjiži lager i ne pokreće refundaciju.">Potvrdi dolazak</SubmitButton>
+          </AdminActionForm>
+          <p className="mb-4 text-xs text-ink-500">Brojevi ispod označavaju kurirske pakete. Prijem robe se knjiži po komadu; jedan paket može sadržati više komada.</p>
+          <nav aria-label="Prikaz povrata" className="mb-5 flex flex-wrap gap-2">
             {(
               [
                 ["active", "Aktivni", activeCount],
-                ["completed", "Završeni", rows.length - activeCount],
+                ["verification", "Za proveru", verificationCount],
+                ["completed", "Završeni", completedCount],
               ] as const
             ).map(([value, label, count]) => (
               <Link
                 key={value}
-                href={`/admin/erp/povrati?view=${value}`}
+                href={`/admin/erp/povrati?view=${value}${query ? `&q=${encodeURIComponent(query)}` : ""}`}
                 aria-current={view === value ? "page" : undefined}
                 className={`rounded-lg border px-4 py-2 text-sm ${view === value ? "bg-foreground text-background" : "border-border"}`}
               >
@@ -623,7 +632,16 @@ export default async function ReturnsPage({
               </Link>
             ))}
           </nav>
-          {!warehouses.length && view === "active" ? (
+          <form className="mb-5 flex flex-wrap items-end gap-3">
+            <input type="hidden" name="view" value={view} />
+            <Field label="Pretraga po porudžbini ili kodu bilo kog paketa">
+              <input name="q" defaultValue={params?.q ?? ""} className="h-9 w-80 max-w-full rounded-lg border border-input px-2" />
+            </Field>
+            <button className="rounded-lg border border-border px-3 py-2 text-sm">Pretraži</button>
+            {query ? <Link href={`/admin/erp/povrati?view=${view}`} className="text-sm underline">Poništi pretragu</Link> : null}
+          </form>
+          {view === "verification" ? <p className="mb-4 text-sm text-warning">Dolazak ovih povrata nije potvrđen. Proverite kodove i fizičko stanje; nemojte ih zatvarati ili knjižiti samo na osnovu kurirskog statusa.</p> : null}
+          {!warehouses.length && view !== "completed" ? (
             <p className="mb-4 text-sm text-warning">
               Nema aktivnog magacina za prijem povrata.
             </p>
@@ -650,7 +668,7 @@ export default async function ReturnsPage({
                         ? "Izgubljena pošiljka"
                         : row.received
                           ? "Primljeno"
-                          : "Čeka prijem"}
+                          : row.arrived ? "Stiglo · čeka pregled i prijem" : "Dolazak nije potvrđen"}
                     </span>
                   </div>
                   <div className="break-words text-sm">{row.shipment}</div>
@@ -700,9 +718,9 @@ export default async function ReturnsPage({
           </div>
           {!visible.length ? (
             <p className="py-8 text-center text-sm text-ink-500">
-              {view === "active"
+              {query ? "Nema povrata za uneti kod u ovom pregledu. Proverite i ostale kartice." : view === "active"
                 ? "Nema aktivnih povrata za prijem."
-                : "Nema završenih povrata."}
+                : view === "verification" ? "Nema povrata za proveru." : "Nema završenih povrata."}
             </p>
           ) : null}
           {returnedOrders.total > returnedOrders.orders.length ? (
@@ -782,4 +800,28 @@ function formatDate(value: Date) {
     dateStyle: "short",
     timeStyle: "short",
   });
+}
+
+function ReturnShipmentCodes({ shipment, received = false }: { shipment: ReturnShipment & { status?: string }; received?: boolean }) {
+  const codes = returnParcelNumbers(shipment);
+  return <div className="space-y-1 rounded-lg border border-border p-2">
+    <p>{shipment.provider ?? "Kurir"} · Broj paketa: {shipment.packageCount ?? codes.length} · Status kurira: {SHIPMENT_STATUS_LABEL[(shipment.status ?? "RETURNED") as keyof typeof SHIPMENT_STATUS_LABEL] ?? shipment.status}</p>
+    {codes.map((code, index) => <p key={code} className="break-all font-mono text-xs">
+      Paket {index + 1}/{shipment.packageCount ?? codes.length} · {displayReturnParcelNumber(code, shipment.provider)} · {received ? "Roba primljena" : returnParcelArrived(shipment, code) ? "Dolazak potvrđen" : "Dolazak nije potvrđen"}
+    </p>)}
+    {codes.length < (shipment.packageCount ?? 1) ? <p className="text-xs text-warning">Nedostaju kodovi za deo paketa — proverite adresnice.</p> : null}
+  </div>;
+}
+
+async function confirmArrivalAction(_state: AdminActionState, formData: FormData) {
+  "use server";
+  return withAdminState(
+    { allowed: ["OPS"], action: "return.parcel.arrival", entity: "ReturnParcelArrival" },
+    async (actorId, data: FormData) => {
+      const result = await confirmReturnParcelArrival({ code: String(data.get("code") ?? ""), actorId });
+      revalidatePath("/admin/erp/povrati");
+      revalidatePath("/admin/erp/preuzimanja/povrati");
+      return { ok: true as const, entityId: result.arrival.id, message: "Dolazak paketa je potvrđen. Lager i refundacija čekaju pregled i prijem robe.", diff: { orderId: result.orderId, parcelNumber: result.arrival.parcelNumber } };
+    },
+  )(formData);
 }

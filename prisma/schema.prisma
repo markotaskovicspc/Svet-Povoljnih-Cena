@@ -1575,6 +1575,7 @@ model Shipment {
   order            Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
   reclamation      Reclamation?      @relation(fields: [reclamationId], references: [id], onDelete: SetNull)
   warehouse        Warehouse?        @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  returnArrivals   ReturnParcelArrival[]
   events           ShipmentEvent[]
   pickupBatchLines PickupBatchLine[]
 
@@ -1589,6 +1590,19 @@ model Shipment {
   @@index([providerOrderId])
   @@index([providerShipmentId])
   @@index([trackingNo])
+}
+
+/// Physical arrival is separate from courier status and from stock/fiscal receipt.
+model ReturnParcelArrival {
+  id           String   @id @default(cuid())
+  shipmentId   String
+  parcelNumber String
+  actorId      String?
+  note         String?
+  arrivedAt    DateTime @default(now())
+  shipment     Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@unique([shipmentId, parcelNumber])
 }
 
 model ShipmentEvent {
