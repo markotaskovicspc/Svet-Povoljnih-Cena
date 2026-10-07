@@ -7,14 +7,18 @@ describe("product navigation", () => {
     expect(existsSync(resolve(process.cwd(), "src/app/template.tsx"))).toBe(false);
   });
 
-  it("keeps product and colour links eligible for native Next.js prefetch", () => {
+  it("keeps product and colour links clickable without eagerly prefetching the catalog", () => {
     const sources = [
       "src/components/product/product-card.tsx",
       "src/components/product/color-options.tsx",
     ].map((file) => readFileSync(resolve(process.cwd(), file), "utf8"));
 
     for (const source of sources) {
-      expect(source).not.toContain("prefetch={false}");
+      // Catalog links disabled eager prefetch in mzvlqprk to avoid background product reads.
+      const links = source.match(/<Link\b[^>]*>/gs) ?? [];
+      expect(links.length).toBeGreaterThan(0);
+      for (const link of links) expect(link).toContain("prefetch={false}");
+      expect(source).toContain("href={`/p/${");
     }
   });
 });

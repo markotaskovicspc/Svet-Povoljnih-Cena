@@ -3,7 +3,7 @@ import {Prisma} from '@prisma/client';
 import {bankEntrySchema,bankPaymentDecision} from '@/lib/payments/bank-statements';
 const mocks=vi.hoisted(()=>({order:vi.fn(),previous:vi.fn(),update:vi.fn(),create:vi.fn(),orderUpdate:vi.fn(),event:vi.fn(),enqueue:vi.fn(),lock:vi.fn()}));
 vi.mock('@/lib/background-jobs',()=>({enqueueBackgroundJob:mocks.enqueue}));
-vi.mock('@/lib/db',()=>({db:{$transaction:async(fn:any)=>fn({$queryRaw:mocks.lock,order:{findUnique:mocks.order,update:mocks.orderUpdate},payment:{findFirst:mocks.previous,update:mocks.update,create:mocks.create},orderStatusEvent:{create:mocks.event}})}}));
+vi.mock('@/lib/db',()=>({db:{$transaction:async(fn:(tx:unknown)=>Promise<unknown>)=>fn({$queryRaw:mocks.lock,order:{findUnique:mocks.order,update:mocks.orderUpdate},payment:{findFirst:mocks.previous,update:mocks.update,create:mocks.create},orderStatusEvent:{create:mocks.event}})}}));
 import {reconcileBankEntry} from '@/lib/payments/bank-statements.server';
 const entry=bankEntrySchema.parse({account:'340000100028300451',statement:'225',date:'2026-09-30',bankReference:'FT26273LJRRX',orderNumber:'SPC-2026-001139',amountMinor:365200,currency:'RSD',sourceHash:'a'.repeat(64)});
 const order=()=>({id:'order-id',number:entry.orderNumber,total:new Prisma.Decimal('3652'),status:'KREIRANO',paymentMethod:'UPLATA_NA_RACUN',stockRestoredAt:null,cancelledAt:null,payments:[{id:'payment-id',status:'PENDING',method:'UPLATA_NA_RACUN',provider:'MANUAL'}],supplierFulfillments:[]});

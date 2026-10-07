@@ -38,7 +38,7 @@ it("loads both zero-weight units into X Express without inventing weight or mark
     expect(line).toMatchObject({ orderId: "order", orderItemId: "item", weightKg: null, widthCm: 17, depthCm: 17, heightCm: 25 });
     expect(line).not.toHaveProperty("warehouseReadyAt");
   }
-  expect(mocks.update).toHaveBeenCalledWith({ where: { id: { in: ["order"] }, status: "KREIRANO" }, data: { status: "U_PRIPREMI" } });
+  expect(mocks.update).toHaveBeenCalledWith({ where: { id: { in: ["order"] }, status: { in: ["KREIRANO", "POTVRDJENO"] } }, data: { status: "U_PRIPREMI" } });
   const query = mocks.query.mock.calls[1][0];
   expect(query.text).toContain('orders."id" IN (');
   expect(query.values).toContain("order");
@@ -84,4 +84,13 @@ it("keeps two buyers' Pompea goods in separate packages when loading the same pi
     expect(parcel.packedQuantity).toBe(5);
     expect(parcel.packedItems.map((item: { orderItemId: string }) => item.orderItemId)).toEqual([`${parcel.orderId}-0`, `${parcel.orderId}-1`]);
   }
+});
+
+
+it("loads a bank-confirmed paid order and advances it into preparation", async () => {
+  mocks.query.mockReset().mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: "order", number: "SPC-2026-001276", paymentMethod: "UPLATA_NA_RACUN" }]);
+  mocks.payments.mockResolvedValue([{ orderId: "order", status: "PAID" }]);
+  expect(await loadEligibleOrders("batch", "actor", ["order"])).toMatchObject({ orderCount: 1, lineCount: 2, skippedPaymentCount: 0 });
+  expect(mocks.query.mock.calls[1][0].text).toContain(`orders."status" IN ('KREIRANO', 'POTVRDJENO')`);
+  expect(mocks.update).toHaveBeenCalledWith({ where: { id: { in: ["order"] }, status: { in: ["KREIRANO", "POTVRDJENO"] } }, data: { status: "U_PRIPREMI" } });
 });

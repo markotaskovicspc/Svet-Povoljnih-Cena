@@ -1,7 +1,8 @@
 import {beforeEach,expect,it,vi} from 'vitest';
 vi.mock('server-only',()=>({}));
-const mocks=vi.hoisted(()=>({tx:null as any,enqueue:vi.fn()}));
-vi.mock('@/lib/db',()=>({db:{$transaction:async(fn:any)=>fn(mocks.tx)}}));
+type TestTransaction={ $queryRaw:ReturnType<typeof vi.fn>,order:{findUnique:ReturnType<typeof vi.fn>,update:ReturnType<typeof vi.fn>},payment:{findFirst:ReturnType<typeof vi.fn>,create:ReturnType<typeof vi.fn>,update:ReturnType<typeof vi.fn>},orderStatusEvent:{create:ReturnType<typeof vi.fn>} };
+const mocks=vi.hoisted(()=>({tx:{} as TestTransaction,enqueue:vi.fn()}));
+vi.mock('@/lib/db',()=>({db:{$transaction:async(fn:(tx:TestTransaction)=>Promise<unknown>)=>fn(mocks.tx)}}));
 vi.mock('@/lib/background-jobs',()=>({enqueueBackgroundJob:mocks.enqueue}));
 import {Prisma} from '@prisma/client';
 import {reconcileBankEntry} from '@/lib/payments/bank-statements.server';
@@ -9,7 +10,7 @@ const entry={account:'340000100028300451' as const,bankReference:'FT26273LJRRX',
 beforeEach(()=>{
  vi.clearAllMocks();mocks.enqueue.mockResolvedValue({id:'email-job'});
  const order={id:'order',paymentMethod:'UPLATA_NA_RACUN',status:'KREIRANO',total:new Prisma.Decimal(3652),payments:[],supplierFulfillments:[]};
- mocks.tx={$queryRaw:vi.fn(async(sql:any)=>{if(sql.sql.includes('pg_advisory_xact_lock')&&!sql.sql.includes('::text'))throw Error('Failed to deserialize void');return [];}),order:{findUnique:vi.fn(async()=>order),update:vi.fn()},payment:{findFirst:vi.fn(async()=>null),create:vi.fn(),update:vi.fn()},orderStatusEvent:{create:vi.fn()}};
+ mocks.tx={$queryRaw:vi.fn(async(sql:Prisma.Sql)=>{if(sql.sql.includes('pg_advisory_xact_lock')&&!sql.sql.includes('::text'))throw Error('Failed to deserialize void');return [];}),order:{findUnique:vi.fn(async()=>order),update:vi.fn()},payment:{findFirst:vi.fn(async()=>null),create:vi.fn(),update:vi.fn()},orderStatusEvent:{create:vi.fn()}};
 });
 it('full matching payment records payment and confirmation once, duplicate reference cannot resend',async()=>{
  expect(await reconcileBankEntry(entry)).toEqual(['email-job']);

@@ -11,9 +11,13 @@ import { lockOrderReturn } from "@/lib/fiscal/return-lock";
 
 // Courier returns belong to the original order. They do not require a
 // reclamation or a separately created RECLAMATION_RETURN shipment.
-const returnShipmentWhere = {
+export const returnShipmentWhere = {
   purpose: "ORDER_DELIVERY", reshipment: null,
-  OR: [{ status: "RETURNED" }, { returnArrivals: { some: {} } }],
+  OR: [
+    { status: "RETURNED" },
+    { returnArrivals: { some: {} } },
+    { provider: "X_EXPRESS", status: "IN_TRANSIT", providerStatusCode: { in: ["RETURNING", "RET_ASSIGNED", "REVERSE_RETURN", "REVERSE_RETURNING"] } },
+  ],
 } satisfies Prisma.ShipmentWhereInput;
 
 const returnedOrdersWhere = {

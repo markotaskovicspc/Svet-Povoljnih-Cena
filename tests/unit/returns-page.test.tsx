@@ -101,7 +101,7 @@ describe("ERP returns page", () => {
     // eligible, without counting failed deliveries or replacement shipments.
     const where = { OR: [
       { status: "VRACENO", shipments: { none: { reshipment: { isNot: null } } } },
-      { shipments: { some: { purpose: "ORDER_DELIVERY", reshipment: null, OR: [{ status: "RETURNED" }, { returnArrivals: { some: {} } }] } } },
+      { shipments: { some: { purpose: "ORDER_DELIVERY", reshipment: null, OR: [{ status: "RETURNED" }, { returnArrivals: { some: {} } }, { provider: "X_EXPRESS", status: "IN_TRANSIT", providerStatusCode: { in: ["RETURNING", "RET_ASSIGNED", "REVERSE_RETURN", "REVERSE_RETURNING"] } }] } } },
     ] };
     expect(mocks.orders).toHaveBeenCalledWith(expect.objectContaining({ where }));
     expect(mocks.count).toHaveBeenCalledWith({ where });
