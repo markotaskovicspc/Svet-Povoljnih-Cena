@@ -325,6 +325,11 @@ async function createReclamationRecord(
         },
         select: { id: true, number: true },
       });
+      await enqueueBackgroundJob({
+        kind: "RECLAMATION_NOTIFICATION",
+        payload: { reclamationId: created.id },
+        idempotencyKey: `reclamation-notification:${created.id}`,
+      }, tx);
       if (options.social) {
         // A lost HTTP response can recover the case without losing its receipt.
         if (!options.customerReplyDraftOnly && (account?.email || order.guestEmail)) await enqueueBackgroundJob({ kind: "RECLAMATION_RECEIPT", payload: { reclamationId: created.id }, idempotencyKey: `reclamation-receipt:${created.id}` }, tx);

@@ -36,6 +36,14 @@ it("email workflow records the case without sending an automatic customer receip
   expect(await createSocialReclamation(input, { ...context, customerReplyDraftOnly: true })).toMatchObject({ ok: true });
   expect(m.create).toHaveBeenCalled();
   expect(m.enqueue.mock.calls.some(([job]) => job.kind === 'RECLAMATION_RECEIPT')).toBe(false);
+  expect(m.enqueue.mock.calls.some(([job]) => job.kind === 'RECLAMATION_NOTIFICATION')).toBe(true);
+});
+it("queues an internal notification atomically even when the buyer has no email", async () => {
+  m.order.mockResolvedValue({ ...order, guestEmail: null });
+  const { token } = createReclamationLinkToken(order.number);
+  expect(await createGuestReclamation(input, token)).toMatchObject({ ok: true });
+  expect(m.enqueue).toHaveBeenCalledWith(expect.objectContaining({ kind: "RECLAMATION_NOTIFICATION", payload: { reclamationId: context.id }, idempotencyKey: `reclamation-notification:${context.id}` }), expect.objectContaining({ reclamation: expect.anything() }));
+  expect(m.enqueue.mock.calls.some(([job]) => job.kind === "RECLAMATION_RECEIPT")).toBe(false);
 });
 it("rechecks idempotency under the order lock before incrementing counters or creating another case", async () => {
   m.lockedExisting.mockResolvedValue({ id: context.id, number: "R-1-SPC-TEST" });

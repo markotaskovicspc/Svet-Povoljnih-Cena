@@ -107,6 +107,7 @@ const schemas = {
     actorId: z.string().min(1).nullable().optional(),
   }),
   RECLAMATION_RECEIPT: z.object({ reclamationId: z.string().min(1) }),
+  RECLAMATION_NOTIFICATION: z.object({ reclamationId: z.string().min(1) }),
   RECLAMATION_STATUS_EMAIL: z.object({
     reclamationId: z.string().min(1),
     eventId: z.string().min(1).optional(),
@@ -152,6 +153,7 @@ const HIGH_PRIORITY_BACKGROUND_JOB_KINDS: BackgroundJobKind[] = [
   "PAYMENT_REFUND",
   "RETURN_FISCAL_REFUND",
   "RECLAMATION_RECEIPT",
+  "RECLAMATION_NOTIFICATION",
   "RECLAMATION_STATUS_EMAIL",
   "SUPPLIER_ORDER_EMAIL",
   "SUPPLIER_SHIPPING_DOCUMENTS_EMAIL",
@@ -858,6 +860,12 @@ async function dispatchJob(job: JobRow) {
         actorId: refundPayload.actorId ?? null,
       });
       if (error) throw new Error(error);
+      return;
+    }
+    case "RECLAMATION_NOTIFICATION": {
+      const { sendReclamationNotification } = await import("@/lib/email/reclamation-notification");
+      const result = await sendReclamationNotification((payload as z.infer<typeof schemas.RECLAMATION_NOTIFICATION>).reclamationId);
+      if (!result.ok) throw new Error(result.error);
       return;
     }
     case "RECLAMATION_RECEIPT": {
