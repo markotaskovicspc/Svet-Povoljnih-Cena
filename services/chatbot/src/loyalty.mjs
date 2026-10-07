@@ -30,5 +30,5 @@ export async function receiveLoyalty({event,state,spc}){
  delete state.loyaltyPending;
  if(!result.ok)return 'Saglasnost je istekla ili nije prihvaćena. Potrebna je nova loyalty potvrda pre obračuna pogodnosti.';
  state.loyalty={email:result.email,proof:result.proof,expiresAt:result.expiresAt};
- return 'Loyalty pogodnosti su aktivirane. Porudžbina još nije kreirana. Napišite „pripremi ponudu“ da proverimo konačan iznos za izabrane artikle.';
+ return 'Loyalty je aktiviran. Da pripremim ponudu? Odgovorite DA. Porudžbina još nije kreirana.';
 }

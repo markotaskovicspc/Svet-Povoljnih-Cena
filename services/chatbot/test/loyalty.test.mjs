@@ -7,7 +7,7 @@ test('consent DA cannot confirm an old order and a changed or quoted consent can
  const calls=[],spc=async input=>{calls.push(input);return input.action==='prepare_loyalty'?{ok:true,email:'buyer@example.com',summary:'Terms DA',challenge:'signed'}:{ok:true,email:'buyer@example.com',proof:'proof',expiresAt:Date.now()+60000};};
  const state={history:[],pending:{quoteToken:'old'}};
  await prepareLoyalty({email:'buyer@example.com',state,event,spc});assert.equal(state.pending,undefined);
- assert.match(await receiveLoyalty({state,event:{...event,text:'DA'},spc}),/Porudžbina još nije kreirana/);
+ const reply=await receiveLoyalty({state,event:{...event,text:'DA'},spc});assert.match(reply,/Porudžbina još nije kreirana/);assert.match(reply,/Da pripremim ponudu\? Odgovorite DA/);assert(!reply.includes('pripremi ponudu'));
  assert.deepEqual(calls.map(c=>c.action),['prepare_loyalty','accept_loyalty']);
  assert(activeLoyalty(state,'buyer@example.com'));assert.equal(activeLoyalty(state,'other@example.com'),null);
  for(const text of ['Da, ali promeni mejl','> DA','ne']){

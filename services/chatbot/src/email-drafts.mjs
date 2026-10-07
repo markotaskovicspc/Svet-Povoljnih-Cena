@@ -30,7 +30,7 @@ export async function composeDraft(message,body,key,messageId=draftMessageId(key
     subject:/^re:/i.test(message.subject)?message.subject:'Re: '+message.subject,
     messageId,inReplyTo:message.messageId||undefined,
     references:[...message.references,...(message.messageId?[message.messageId]:[])],
-    headers:{'X-SPC-Draft':'human-review-required'},
+    headers:{'X-SPC-Draft':'human-review-required','X-Unsent':'1'},
     text:body+'\n\n--- Prethodna poruka ---\n'+original,
     disableFileAccess:true,disableUrlAccess:true}).compile().build();
 }
@@ -171,6 +171,9 @@ export class EmailDraftWorker {
       await c.query("UPDATE spc_email_drafts SET status='prepared',draft=$2,updated_at=now() WHERE id=$1",[row.id,draft]);
     }
     await c.query("UPDATE spc_email_drafts SET status='appending',updated_at=now() WHERE id=$1",[row.id]);
+    // ImapFlow filters APPEND flags using the selected mailbox's PERMANENTFLAGS.
+    // EXAMINE of INBOX/Sent exposes no writable flags, silently dropping Draft.
+    await this.client.mailboxOpen(this.drafts,{readOnly:false});
     await this.client.append(this.drafts,Buffer.from(this.store.decode(draft).mime,'base64'),['\\Draft']);
     await c.query("UPDATE spc_email_drafts SET status='drafted',draft=NULL,updated_at=now() WHERE id=$1",[row.id]);
     console.log('email.draft_saved');
