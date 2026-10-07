@@ -63,7 +63,7 @@ export function Header({
       {/* Row 1 — desktop */}
       <div className="mx-auto hidden max-w-[var(--container-page)] items-center gap-4 px-6 py-2 md:flex">
         <DesktopMenu tabs={tabs} categories={categories} />
-        <Link href="/" aria-label={`${BRAND.name} — početna`}>
+        <Link prefetch={false} href="/" aria-label={`${BRAND.name} — početna`}>
           <div className="shrink-0 rounded-lg px-2 py-0">
             <Image
               src="/logo.svg"
@@ -79,7 +79,7 @@ export function Header({
           <InstantSearch />
         </div>
         <div className="flex items-center gap-1">
-          <Link
+          <Link prefetch={false}
             href={accountHref}
             className={cn(
               "inline-flex items-center gap-2 rounded-full px-3 py-2 text-[15px] font-semibold whitespace-nowrap transition focus-visible:ring-2 focus-visible:ring-brand-blue/40 focus-visible:outline-none",
@@ -134,7 +134,7 @@ export function Header({
           tabs={tabs}
           categories={categories}
         />
-        <Link
+        <Link prefetch={false}
           href="/"
           aria-label={`${BRAND.name} — početna`}
           className="flex min-w-0 flex-1 justify-center"
@@ -151,7 +151,7 @@ export function Header({
           </div>
         </Link>
         <div className="flex shrink-0 items-center gap-0">
-          <Link
+          <Link prefetch={false}
             href={accountHref}
             aria-label="Moj nalog"
             className={cn(

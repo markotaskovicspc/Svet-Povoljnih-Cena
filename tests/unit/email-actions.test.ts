@@ -38,3 +38,13 @@ it('purchase reuses its exact checkout session and expected total',async()=>{
  expect(await execute(token)).toMatchObject({ok:true,number:'TEST-1'});
  expect(m.create).toHaveBeenCalledWith(token.input,null,null,{expectedTotal:1000,customerReplyDraftOnly:true});
 });
+
+it('email form links require sender ownership and delivered status without creating a claim',async()=>{
+ vi.stubEnv('ORDER_ACCESS_TOKEN_SECRET','synthetic-reclamation-link-secret');
+ const body={action:'reclamation_link' as const,sender:base.sender,requestId:base.requestId,number:'TEST-1'};
+ expect(await handleEmailAction(body,secret)).toMatchObject({error:{code:'ORDER_NOT_DELIVERED'}});
+ m.order.mockResolvedValue({id:'order1',number:'TEST-1',status:'ISPORUCENO'});
+ const r=await handleEmailAction(body,secret);expect(r).toMatchObject({ok:true,number:'TEST-1'});
+ expect(m.order.mock.calls.at(-1)[0].where.OR[0].guestEmail.equals).toBe(base.sender);expect(m.reclaim).not.toHaveBeenCalled();
+ m.order.mockResolvedValue(null);expect(await handleEmailAction(body,secret)).toMatchObject({error:{code:'ORDER_NOT_MATCHED_TO_SENDER'}});vi.unstubAllEnvs();
+});

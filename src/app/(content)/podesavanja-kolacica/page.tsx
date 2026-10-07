@@ -1,4 +1,5 @@
 import { ProductArCountNotice } from "@/components/privacy/product-ar-count-notice";
+import { ClarityNotice } from "@/components/privacy/clarity-notice";
 import type { Metadata } from "next";
 import { CmsFunctionalPage } from "@/components/content/cms-content-page";
 import { CookieSettingsPanel } from "@/components/privacy/cookie-consent";
@@ -29,6 +30,7 @@ export default async function CookieSettingsPage() {
           metaConfigured={Boolean(metaPixelId)}
         />
       </div>
+      <ClarityNotice />
       <ProductArCountNotice />
     </CmsFunctionalPage>
   );

@@ -18,6 +18,7 @@ import {
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { logOperationalError } from "@/lib/monitoring";
 import { formatProductDisplayName } from "@/lib/product-name";
+import { verifyReclamationLinkToken } from "@/lib/api/reclamation-link-token";
 import { verifyOrderAccessToken } from "@/lib/api/order-access";
 
 /**
@@ -46,6 +47,8 @@ export const createReclamationSchema = z.object({
   sku: z.string().min(1).max(64),
   quantity: z.int().min(1).max(999),
   description: z.string().trim().min(5).max(250),
+  type: z.enum(["FIZICKO_OSTECENJE", "KVAR", "POGRESNO_ISPORUCENO", "NIJE_ISPORUCENO"]).optional(),
+  request: z.enum(["POPRAVKA", "ZAMENA", "POVRACAJ_NOVCA", "UMANJENJE_CENE"]).optional(),
   photos: z.array(photoSchema).max(5).default([]),
 });
 
@@ -105,7 +108,7 @@ export async function createReclamation(
   userId: string,
 ): Promise<CreateReclamationResult> {
   return createReclamationRecord(input, {
-    expectedUserId: userId,
+    expectedUserId: userId, type: input.type, request: input.request,
     allowedOrderStatuses: ["ISPORUCENO"],
   });
 }
@@ -115,13 +118,13 @@ export async function createGuestReclamation(
   accessToken: string | null | undefined,
 ): Promise<CreateReclamationResult> {
   return createReclamationRecord(input, {
-    guestAccessToken: accessToken ?? null,
+    guestAccessToken: accessToken ?? null, type: input.type, request: input.request,
     allowedOrderStatuses: ["ISPORUCENO"],
   });
 }
 
 export async function createAdminReclamation(
-  input: CreateReclamationInput & {
+  input: Omit<CreateReclamationInput, "type" | "request"> & {
     type?: ReclamationType | null;
     request?: ReclamationRequest | null;
   },
@@ -140,7 +143,7 @@ export async function createAdminReclamation(
 // Only called by the authenticated social bridge after validating its signed,
 // conversation-bound draft. Never expose this function as a public form action.
 export async function createSocialReclamation(
-  input: CreateReclamationInput,
+  input: Omit<CreateReclamationInput, "type" | "request">,
   context: { orderId: string; id: string; note: string; type?: ReclamationType; request?: ReclamationRequest; customerReplyDraftOnly?: boolean },
 ): Promise<CreateReclamationResult> {
   return createReclamationRecord(input, {
@@ -151,7 +154,7 @@ export async function createSocialReclamation(
 }
 
 async function createReclamationRecord(
-  input: CreateReclamationInput,
+  input: Omit<CreateReclamationInput, "type" | "request">,
   options: {
     expectedUserId?: string;
     guestAccessToken?: string | null;
@@ -178,11 +181,7 @@ async function createReclamationRecord(
   }
   if (
     options.guestAccessToken !== undefined &&
-    (order.userId !== null ||
-      !verifyOrderAccessToken({
-        token: options.guestAccessToken,
-        tokenHash: order.publicAccessTokenHash,
-      }))
+    !canAccessReclamationOrder(order, options.guestAccessToken)
   ) {
     return { ok: false, reason: "UNAUTHORIZED" };
   }
@@ -326,6 +325,11 @@ async function createReclamationRecord(
         },
         select: { id: true, number: true },
       });
+      await enqueueBackgroundJob({
+        kind: "RECLAMATION_NOTIFICATION",
+        payload: { reclamationId: created.id },
+        idempotencyKey: `reclamation-notification:${created.id}`,
+      }, tx);
       if (options.social) {
         // A lost HTTP response can recover the case without losing its receipt.
         if (!options.customerReplyDraftOnly && (account?.email || order.guestEmail)) await enqueueBackgroundJob({ kind: "RECLAMATION_RECEIPT", payload: { reclamationId: created.id }, idempotencyKey: `reclamation-receipt:${created.id}` }, tx);
@@ -383,12 +387,8 @@ export async function getGuestOrderForReclamation(
   const order = await lookupOrderForReclamation(orderNumberOrFiscal);
   if (
     !order ||
-    order.userId !== null ||
     order.status !== "ISPORUCENO" ||
-    !verifyOrderAccessToken({
-      token: accessToken,
-      tokenHash: order.publicAccessTokenHash,
-    })
+    !canAccessReclamationOrder(order, accessToken)
   ) {
     return null;
   }
@@ -456,3 +456,8 @@ export async function listOrdersForReclamation(userId: string) {
 
 class ReclamationQuantityError extends Error {}
 class ReclamationOrderStatusError extends Error {}
+
+/** A staff link grants reclamation access only, including account orders. */
+export function canAccessReclamationOrder(order: { number: string; userId: string | null; publicAccessTokenHash: string | null }, token: string | null | undefined) {
+  return verifyReclamationLinkToken(token, order.number) || (order.userId === null && verifyOrderAccessToken({ token, tokenHash: order.publicAccessTokenHash }));
+}

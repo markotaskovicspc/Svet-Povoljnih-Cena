@@ -267,11 +267,27 @@ describe("explicit courier cartons", () => {
     expect(packages.reduce((sum, pkg) => sum + pkg.packedQuantity!, 0)).toBe(qty);
     expect(packages.map(pkg => pkg.packageNo)).toEqual(Array.from({length: count}, (_, i) => i + 1));
   });
-  it("uses the full carton measurements and individual measurements for the odd unit", () => {
+  it("uses individual dimensions for grouped packages and the odd unit", () => {
     expect(derivePhysicalPackages([{ id: "i", name: "Stolica", qty: 3, product }])).toMatchObject([
-      { packedQuantity: 2, weightKg: 12, widthCm: 50, depthCm: 45, heightCm: 55 },
+      { packedQuantity: 2, weightKg: 12, widthCm: 30, depthCm: 25, heightCm: 35 },
       { packedQuantity: 1, weightKg: 5, widthCm: 30, depthCm: 25, heightCm: 35 },
     ]);
+  });
+  it("loads DIAMOND SEAT 110088 dimensions with two units despite absent transport dimensions and packQty", () => {
+    const packages = derivePhysicalPackages([{ id: "diamond-seat", sku: "110088", name: "DIAMOND SEAT", qty: 2,
+      product: { courierUnitsPerBox: 2, packQty: null, packGrossWeightKg: 5,
+        packWidthCm: null, packDepthCm: null, packHeightCm: null,
+        unitPackWidthCm: 55, unitPackDepthCm: 45, unitPackHeightCm: 21,
+        grossWeightKg: 2.6, weightKg: 2 } }]);
+    expect(packages).toHaveLength(1);
+    expect(packages[0]).toMatchObject({ packedQuantity: 2, widthCm: 55, depthCm: 45, heightCm: 21, weightKg: null });
+    expect(() => requireCompleteXExpressPackages(packages)).toThrow("težina");
+    expect(() => requireCompleteXExpressPackages([{ ...packages[0], weightKg: 5 }])).not.toThrow();
+  });
+  it("does not substitute transport dimensions when individual dimensions are missing on a grouped package", () => {
+    const [pkg] = derivePhysicalPackages([{ id: "i", name: "Stolica", qty: 2,
+      product: { ...product, unitPackWidthCm: null, unitPackDepthCm: null, unitPackHeightCm: null } }]);
+    expect(pkg).toMatchObject({ packedQuantity: 2, weightKg: 12, widthCm: null, depthCm: null, heightCm: null });
   });
   it("does not invent a weight for a partially filled carton", () => {
     const packages = derivePhysicalPackages([{ id: "i", name: "Stolica", qty: 2,

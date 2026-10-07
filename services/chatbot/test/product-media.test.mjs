@@ -10,3 +10,8 @@ test('only public product media is attached; missing or private media retains pr
   assert.equal(result.imageUrl,null);assert.equal(result.url,'https://www.svetpovoljnihcena.rs/p/stolica');
  }
 });
+
+test('unavailable loyalty product has no purchase invitation',()=>{
+ const caption=productPresentation({sku:'FRY',name:'Friteza',price:4284,loyaltyPrice:2999,available:false}).caption;
+ assert.match(caption,/nije dostupno/);assert.match(caption,/2.999/);assert.doesNotMatch(caption,/Da li želite|možete poručiti/);
+});

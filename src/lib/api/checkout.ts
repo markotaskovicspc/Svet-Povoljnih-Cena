@@ -316,14 +316,15 @@ function paymentExpiresAt(method: PaymentMethod) {
 export async function createOrder(
   input: CreateOrderInput,
   userId: string | null,
-  guestLoyalty: { email: string; consentVersion: string; consentAt: Date } | null = null,
+  guestLoyalty: { email: string | null; consentVersion: string; consentAt: Date } | null = null,
   options: { previewOnly?: boolean; expectedTotal?: number; customerReplyDraftOnly?: boolean; allowGuestWithoutEmail?: boolean; staffLoyaltyPrices?: readonly StaffLoyaltyPrice[] } = {},
 ): Promise<
   { ok: true; data: CreateOrderResult } | { ok: false; error: CreateOrderError }
 > {
-  // The route supplies this identity only after validating the HttpOnly session.
+  // Routes supply consent only after validating a browser session or signed channel proof.
+  // Conversation-only consent is accepted exclusively by trusted chat checkout.
   if ((!userId && input.guestLoyalty && !guestLoyalty) ||
-      (guestLoyalty && (userId || guestLoyalty.email !== input.guestEmail?.trim().toLowerCase()))) {
+      (guestLoyalty && (userId || (guestLoyalty.email === null ? !options.allowGuestWithoutEmail : guestLoyalty.email !== input.guestEmail?.trim().toLowerCase())))) {
     return { ok: false, error: { code: "LOYALTY_CONSENT_REQUIRED" } };
   }
   if (!userId && !input.guestEmail && !options.allowGuestWithoutEmail) {
@@ -589,7 +590,7 @@ export async function createOrder(
   }
 
   // Resolve eligibility from the auth context (server-only).
-  const firstPurchase = options.staffLoyaltyPrices ? false : await isFirstPurchaseDiscountEligible(userId, guestLoyalty?.email);
+  const firstPurchase = options.staffLoyaltyPrices ? false : await isFirstPurchaseDiscountEligible(userId, guestLoyalty?.email??undefined);
   // A boolean supplied by the browser cannot prove which token will be
   // charged. Keep the discount disabled until the selected payment instrument
   // is server-verified and bound to the actual card authorization.
@@ -817,7 +818,7 @@ export async function createOrder(
         }
       }
 
-      if (guestLoyalty) {
+      if (guestLoyalty?.email) {
         await tx.guestLoyaltyMembership.upsert({
           where: { email: guestLoyalty.email },
           create: { email: guestLoyalty.email, consentVersion: guestLoyalty.consentVersion, consentAt: guestLoyalty.consentAt },

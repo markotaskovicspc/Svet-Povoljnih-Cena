@@ -1,4 +1,5 @@
 import "server-only";
+import { myGlsErrorMessage } from "./error-message";
 
 import { gunzipSync } from "node:zlib";
 import {
@@ -182,12 +183,12 @@ export class MyGlsClient {
           return this.request(serviceName, methodName, body, attempt + 1);
         }
         throw new MyGlsProviderError(
-          readErrorMessage(json) ?? `MyGLS zahtev nije uspeo (HTTP ${res.status}).`,
+          readErrorMessage(json, body.ParcelList as MyGlsParcel[] | undefined) ?? `MyGLS zahtev nije uspeo (HTTP ${res.status}).`,
           readErrorCode(json),
           redactMyGlsSecrets(json),
         );
       }
-      throwOnErrors(json);
+      throwOnErrors(json, body.ParcelList as MyGlsParcel[] | undefined);
       return json as T;
     } catch (err) {
       if (err instanceof MyGlsProviderError) throw err;
@@ -250,15 +251,15 @@ function allErrorLists(value: unknown): unknown[] {
     .flatMap(([, list]) => list as unknown[]);
 }
 
-function readErrorMessage(value: unknown) {
+function readErrorMessage(value: unknown, parcels?: readonly MyGlsParcel[]) {
   if (!isRecord(value)) return null;
   const error = allErrorLists(value)[0];
   if (isRecord(error)) {
     const desc = error.ErrorDescription ?? error.errorDescription ?? error.Message;
-    if (typeof desc === "string" && desc.trim()) return desc.trim();
+    if (typeof desc === "string" && desc.trim()) return myGlsErrorMessage(desc.trim(), error.ClientReferenceList, parcels);
   }
   const desc = value.ErrorDescription ?? value.error ?? value.message;
-  return typeof desc === "string" && desc.trim() ? desc.trim() : null;
+  return typeof desc === "string" && desc.trim() ? myGlsErrorMessage(desc.trim(), value.ClientReferenceList, parcels) : null;
 }
 
 function readErrorCode(value: unknown) {
@@ -272,12 +273,12 @@ function readErrorCode(value: unknown) {
   return code == null ? undefined : String(code);
 }
 
-function throwOnErrors(value: unknown) {
+function throwOnErrors(value: unknown, parcels?: readonly MyGlsParcel[]) {
   if (!isRecord(value)) return;
   const directErrorCode = value.ErrorCode;
   if (typeof directErrorCode === "number" && directErrorCode !== 0) {
     throw new MyGlsProviderError(
-      readErrorMessage(value) ?? "MyGLS odgovor sadrži grešku.",
+      readErrorMessage(value, parcels) ?? "MyGLS odgovor sadrži grešku.",
       String(directErrorCode),
       redactMyGlsSecrets(value),
       true,
@@ -290,7 +291,7 @@ function throwOnErrors(value: unknown) {
   });
   if (errors.length) {
     throw new MyGlsProviderError(
-      readErrorMessage(value) ?? "MyGLS odgovor sadrži grešku.",
+      readErrorMessage(value, parcels) ?? "MyGLS odgovor sadrži grešku.",
       readErrorCode(value),
       redactMyGlsSecrets(value),
       true,

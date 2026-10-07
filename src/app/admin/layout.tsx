@@ -10,8 +10,11 @@ import {
   adminNavPreferencesFromColumns,
   allowedNavFor,
   applyAdminNavPreferences,
-  withArticleSavedViewLinks,
+  isAuthorized,
 } from "@/lib/admin";
+import { withSavedViewLinks } from "@/lib/admin/nav";
+import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
+import { getErpModuleDefinition } from "@/lib/admin/erp";
 import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
@@ -37,24 +40,36 @@ export default async function AdminLayout({
   const savedNavigation = await db.adminSavedView.findMany({
     where: {
       adminUserId: user.id,
-      OR: [{ module: "admin-navigation", isDefault: true }, { module: "artikli" }],
+      OR: [
+        { module: "admin-navigation", isDefault: true },
+        { module: { notIn: ["admin-navigation", "dashboard"] } },
+      ],
     },
     orderBy: [{ isDefault: "desc" }, { name: "asc" }],
-    select: { id: true, name: true, module: true, columns: true, updatedAt: true },
+    select: {
+      id: true,
+      name: true,
+      module: true,
+      columns: true,
+      updatedAt: true,
+    },
   });
-  const navigationView = savedNavigation.filter((view) => view.module === "admin-navigation")
+  const navigationView = savedNavigation
+    .filter((view) => view.module === "admin-navigation")
     .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
-  const articleSavedViews = savedNavigation.filter((view) => view.module === "artikli");
-  const nav = withArticleSavedViewLinks(
-    applyAdminNavPreferences(
-      availableNav,
-      adminNavPreferencesFromColumns(navigationView?.columns),
-    ),
-    articleSavedViews,
-  );
-  const availableNavWithViews = withArticleSavedViewLinks(
-    availableNav,
-    articleSavedViews,
+  const gridViews = savedNavigation.flatMap((view) => {
+    const definition = getErpModuleDefinition(view.module);
+    const allowed = allowedRolesForErpModule(view.module);
+    return definition &&
+      !definition.redirectHref &&
+      isAuthorized(user.role, allowed)
+      ? [{ ...view, title: definition.title, allowed }]
+      : [];
+  });
+  const availableNavWithViews = withSavedViewLinks(availableNav, gridViews);
+  const nav = applyAdminNavPreferences(
+    availableNavWithViews,
+    adminNavPreferencesFromColumns(navigationView?.columns),
   );
 
   async function doSignOut() {
@@ -75,7 +90,10 @@ export default async function AdminLayout({
           <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-surface/80 px-4 py-3 backdrop-blur md:px-8 print:hidden">
             <div className="flex min-w-0 items-center gap-2">
               <div className="md:hidden">
-                <AdminMobileNav nav={nav} availableNav={availableNavWithViews} />
+                <AdminMobileNav
+                  nav={nav}
+                  availableNav={availableNavWithViews}
+                />
               </div>
               <p className="min-w-0 truncate text-xs text-ink-500">
                 Prijavljen kao{" "}

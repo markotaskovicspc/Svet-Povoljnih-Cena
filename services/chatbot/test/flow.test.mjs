@@ -10,7 +10,7 @@ import {unverifiedOrderReply} from '../src/order-reply-guard.mjs';
 
 // Real embedded PostgreSQL for persistence and transaction tests. Advisory locks
 // are represented by a single test executor (cross-process locks need staging).
-async function setup() {
+async function setup(channel='facebook') {
   const db=new PGlite();const store=new Store(undefined,randomBytes(32).toString('hex'));
   await store.pool.end();
   const query=async(sql,args)=>{
@@ -21,7 +21,7 @@ async function setup() {
   };
   store.pool={query,connect:async()=>({query,release(){}}),end:()=>db.close()};await store.init();
   const calls=[];const worker=new Worker({store,spc:async request=>{calls.push(request);return {ok:true,data:{number:'SPC-TEST-1',accessToken:'test-private',total:2000}};},accounts:[],enabled:true,model:'test',graphVersion:'v25.0',intentFn:async({text,pending})=>isOrderConfirmation(text,pending?.code)?'confirm':text.includes('Promeni')?'change':'question'});
-  const event={id:'facebook:mid-1',conversation:'facebook:123:456',channel:'facebook',account:'123',sender:'456',timestamp:Date.now(),text:'Moze potvrdjujem',attachments:[],echo:false};
+  const event={id:`${channel}:mid-1`,conversation:`${channel}:123:456`,channel,account:'123',sender:'456',timestamp:Date.now(),text:'Moze potvrdjujem',attachments:[],echo:false};
   await store.accept(event);
   await store.withConversation(event.conversation,async(row,state,c)=>{state.pending={code:'ABC123',quoteToken:'signed_quote'};await store.save(c,row.id,state);});
   return {store,worker,calls,event};
@@ -50,6 +50,21 @@ test('staff command reads manual messages, creates immediately once, and leaves 
   const row=(await store.pool.query('SELECT * FROM spc_chat_conversations')).rows[0];assert.equal(row.paused,true);
   assert.equal(store.decode(row.state).orders.length,1);
   const out=(await store.pool.query('SELECT payload FROM spc_chat_outbox')).rows;assert.equal(out.length,1);assert.equal(store.decode(out[0].payload).allowPaused,true);
+ }finally{await store.close();}
+});
+test('staff preparation timeout keeps phase diagnostics and never blames missing email or leaks raw errors',async()=>{
+ const {store,worker,event}=await setup();const notices=[];
+ try{
+  await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
+  worker.staffPrepareFn=async({onProgress})=>{onProgress('cart_check');const e=new Error('raw secret or personal data');e.name='TimeoutError';throw e;};
+  worker.spc=async p=>{assert.equal(p.action,'support_handoff');notices.push(p);return {ok:true};};
+  const command={...event,id:'facebook:phase-diagnostic',echo:true,botEcho:false,text:'/porudzbina'};
+  await store.accept(command);
+  for(let i=0;i<3;i++){await store.pool.query('UPDATE spc_chat_events SET next_at=now() WHERE id=$1',[command.id]);await worker.tick();}
+  const state=store.decode((await store.pool.query('SELECT state FROM spc_chat_conversations')).rows[0].state);
+  assert.equal(state.staffOrderDiagnostic.phase,'cart_check');assert.equal(state.staffOrderDiagnostic.errorType,'TimeoutError');assert.equal(state.staffOrderDiagnostic.attempts,3);
+  assert.equal(notices.length,1);assert.match(notices[0].reason,/cart_check/);assert(!JSON.stringify(notices).includes('raw secret'));
+  assert.equal((await store.pool.query('SELECT * FROM spc_chat_outbox')).rows.length,0);assert.equal(state.orders.length,0);
  }finally{await store.close();}
 });
 test('customer slash command cannot authorize a pending order',async()=>{
@@ -551,5 +566,90 @@ test('complaint before delivery acknowledges existing order instead of denying c
   assert.match(state.history.at(-1).content,/Tek kada isporuka bude evidentirana mogu da otvorim tiket/);
   assert.doesNotMatch(state.history.at(-1).content,/nije kreirana/);
   assert.equal(state.orders.length,1);assert(!state.reclamation);assert(!state.claimStatusNotice);
+ }finally{await store.close();}
+});
+
+test('failed photo processing asks for a name, notifies support once and keeps later chat active',async()=>{
+ const {store,worker,event}=await setup();const notices=[];
+ try{
+  await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
+  await store.withConversation(event.conversation,async(row,state,c)=>{delete state.pending;state.historyVersion=2;await store.save(c,row.id,state);});
+  worker.answerFn=async()=>{throw Error('model timeout');};worker.visionFn=async()=>{throw Error('image timeout');};
+  worker.spc=async p=>{notices.push(p);return {ok:true};};
+  const photo={...event,id:'failed-image',text:'',attachments:[{type:'image',url:'https://fbcdn.net/photo.jpg'}]};await store.accept(photo);
+  for(let i=0;i<3;i++){await store.pool.query('UPDATE spc_chat_events SET next_at=now() WHERE id=$1',[photo.id]);await worker.tick();}
+  const row=(await store.pool.query('SELECT * FROM spc_chat_conversations')).rows[0];assert.equal(row.paused,false);
+  assert.equal(notices.length,1);assert.equal(notices[0].action,'support_handoff');
+  const out=(await store.pool.query('SELECT * FROM spc_chat_outbox')).rows;assert.equal(out.length,1);assert.match(store.decode(out[0].payload).text,/Kako se zove proizvod/);
+  worker.answerFn=async()=>({text:'Kuvalo je 1,8 L.'});worker.orderReplyCheckFn=async()=>false;
+  await store.accept({...event,id:'after-image-failure',text:'Kuvalo HEAT'});await worker.tick();
+  assert.equal((await store.pool.query('SELECT * FROM spc_chat_outbox')).rows.length,2);
+ }finally{await store.close();}
+});
+
+test('support sends one email per conversation while later problems remain recorded',async()=>{
+ const {store,worker,event}=await setup();const notices=[];
+ try{
+  await store.withConversation(event.conversation,async(row,state,c)=>{delete state.pending;state.historyVersion=2;await store.save(c,row.id,state);});
+  worker.orderReplyCheckFn=async()=>false;
+  worker.answerFn=async({state,event})=>{state.supportRequest={reason:event.text==='Drugi problem'?'Provera uplate':'Montaža nogara'};return {text:'Prosledio sam Vaš upit korisničkoj podršci.'};};
+  worker.spc=async p=>{notices.push(p);return {ok:true};};
+  await worker.tick();await store.accept({...event,id:'repeat-support',text:'Pitajte pa mi javite'});await worker.tick();
+  assert.equal(notices.length,1);
+  const row=(await store.pool.query('SELECT * FROM spc_chat_conversations')).rows[0];assert.equal(row.paused,false);assert.match(store.decode(row.state).history.at(-1).content,/sačekajmo odgovor/);
+  await store.accept({...event,id:'different-support',text:'Drugi problem'});await worker.tick();assert.equal(notices.length,1);assert.equal((await store.pool.query("SELECT count(*)::int AS n FROM spc_chat_support WHERE status='recorded'")).rows[0].n,1);
+ }finally{await store.close();}
+});
+
+ test('website confirmation persists one order and delivers its receipt without any Meta send',async()=>{
+  const {store,worker,calls,event}=await setup('web');const original=globalThis.fetch;
+  globalThis.fetch=async()=>{throw new Error('Website must never call Meta');};
+  try{
+   await store.accept(event);await worker.tick();await worker.tick();
+   assert.equal(calls.length,1);assert.equal(calls[0].channel,'web');assert.equal(calls[0].action,'create_order');
+   const replies=(await store.pool.query('SELECT * FROM spc_chat_outbox')).rows;assert.equal(replies.length,1);assert.equal(replies[0].status,'sent');assert.match(store.decode(replies[0].payload).text,/SPC-TEST-1/);
+  }finally{globalThis.fetch=original;await store.close();}
+ });
+
+test('ordinary model failure notifies support once and keeps next customer message usable',async()=>{
+ const {store,worker,event,calls}=await setup();
+ try{
+  await store.withConversation(event.conversation,async(row,state,c)=>{delete state.pending;state.historyVersion=2;await store.save(c,row.id,state);});
+  worker.answerFn=async()=>{throw Error('MODEL_TEMPORARY_FAILURE');};
+  for(let n=0;n<3;n++){await store.pool.query('UPDATE spc_chat_events SET next_at=now() WHERE id=$1',[event.id]);await worker.tick();}
+  let row=(await store.pool.query('SELECT * FROM spc_chat_conversations')).rows[0];assert.equal(row.paused,false);assert.equal(store.decode(row.state).orders.length,0);
+  assert.equal(calls.filter(c=>c.action==='support_handoff').length,1);assert.equal(calls.filter(c=>c.action==='create_order').length,0);
+  const replies=(await store.pool.query('SELECT payload FROM spc_chat_outbox')).rows;assert.equal(replies.length,1);assert.match(store.decode(replies[0].payload).text,/Možete nastaviti/);
+  worker.answerFn=async()=>({text:'Nastavljamo razgovor.',images:[]});worker.orderReplyCheckFn=async()=>null;
+  await store.accept({...event,id:'facebook:after-error',text:'Moja adresa je...',timestamp:Date.now()});await worker.tick();
+  row=(await store.pool.query('SELECT * FROM spc_chat_conversations')).rows[0];assert.equal(row.paused,false);
+  assert.equal((await store.pool.query("SELECT status FROM spc_chat_events WHERE id='facebook:after-error'")).rows[0].status,'done');
+ }finally{await store.close();}
+});
+
+test('exhausted uncertain order write pauses for reconciliation and emails support without a false receipt',async()=>{
+ const {store,worker,event}=await setup();const notices=[];
+ try{
+  worker.spc=async p=>{if(p.action==='support_handoff'){notices.push(p);return {ok:true};}throw Error('WRITE_TIMEOUT');};
+  for(let n=0;n<3;n++){await store.pool.query('UPDATE spc_chat_events SET next_at=now() WHERE id=$1',[event.id]);await worker.tick();}
+  const row=(await store.pool.query('SELECT * FROM spc_chat_conversations')).rows[0];assert.equal(row.paused,true);assert(store.decode(row.state).confirming);assert.equal(notices.length,1);assert.match(notices[0].reason,/ERP/);assert.equal((await store.pool.query('SELECT * FROM spc_chat_outbox')).rows.length,0);
+  await store.accept({...event,id:'facebook:after-write-error',text:'Da',timestamp:Date.now()});await worker.tick();assert.equal((await store.pool.query('SELECT paused FROM spc_chat_conversations')).rows[0].paused,true);
+ }finally{await store.close();}
+});
+
+test('web human handoff captures email and sends a contact update after the first support email',async()=>{
+ const {store,worker,event}=await setup('web');const notices=[];
+ try{
+  await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
+  worker.spc=async p=>{notices.push(p);return {ok:true};};
+  worker.answerFn=async()=>{throw Error('Human request must bypass model');};
+  await store.accept({...event,id:'human-request',text:'Potrebna mi je pomoć prave osobe'});await worker.tick();
+  assert.equal(notices.length,1);
+  let row=(await store.pool.query('SELECT * FROM spc_chat_conversations')).rows[0];
+  assert.match(store.decode(row.state).history.at(-1).content,/Na koju mejl/);assert.equal(row.paused,false);
+  await store.accept({...event,id:'callback',text:'buyer@example.com'});await worker.tick();await worker.tick();
+  assert.equal(notices.length,2);assert.equal(notices[1].callbackEmail,'buyer@example.com');assert.equal(notices[1].contactUpdate,true);
+  row=(await store.pool.query('SELECT * FROM spc_chat_conversations')).rows[0];assert.equal(store.decode(row.state).supportContact.email,'buyer@example.com');
+  assert.equal((await store.pool.query("SELECT count(*)::int AS n FROM spc_chat_support WHERE status='sent'")).rows[0].n,2);
  }finally{await store.close();}
 });

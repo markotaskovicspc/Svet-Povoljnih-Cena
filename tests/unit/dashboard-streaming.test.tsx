@@ -7,6 +7,7 @@ vi.mock("@/lib/admin/dashboard-data", () => ({ getDashboardOperations: mocks.ope
 vi.mock("@/lib/admin/dashboard-analytics", () => ({ getDashboardAnalytics: mocks.analytics }));
 vi.mock("@/components/admin/dashboard-filters", () => ({ DashboardFilters: () => <div>FILTERS_READY</div> }));
 vi.mock("@/components/admin/page-header", () => ({ PageHeader: ({title}: {title: string}) => <h1>{title}</h1> }));
+vi.mock("@/components/admin/ananas-orders-health", () => ({ AnanasOrdersHealth: () => null }));
 import AdminDashboard from "@/app/admin/page";
 const data = { orderSummary: { today_count: 1234, today_total: 50, today_shipping: 5, period_count: 1234, period_total: 50, period_shipping: 5 }, fiscalRows: [], reclamationCount: 0, reclamationQuantity: 0, reclamationDeliveredQuantity: 0, topProducts: [], warehouseStockRows: [], incomingRows: [], lowStock: [] };
 function deferred<T>() {
@@ -57,6 +58,30 @@ it("does not start any dashboard reads when authorization fails", async () => {
   expect(mocks.warehouses).not.toHaveBeenCalled();
   expect(mocks.operations).not.toHaveBeenCalled();
   expect(mocks.analytics).not.toHaveBeenCalled();
+});
+
+it("keeps operational results visible when analytics fails without showing false zeros", async () => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  const renderError = vi.fn();
+  try {
+    mocks.operations.mockResolvedValue(data);
+    mocks.analytics.mockRejectedValueOnce(new Error("timeout exceeded when trying to connect"));
+    const stream = await renderToReadableStream(
+      await AdminDashboard({ searchParams: Promise.resolve({}) }),
+      { onError: renderError },
+    );
+    await stream.allReady;
+    const html = await new Response(stream).text();
+    expect(html).toContain("FILTERS_READY");
+    expect(html).toContain("1234");
+    expect(html).toContain("Analitika trenutno nije dostupna");
+    expect(html).not.toContain("Današnji broj poseta");
+    expect(html).not.toContain("Analitika: presek");
+    expect(renderError).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledOnce();
+  } finally {
+    log.mockRestore();
+  }
 });
 
 it.each([

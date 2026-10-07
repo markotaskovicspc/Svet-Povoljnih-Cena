@@ -1790,24 +1790,30 @@ async function createMyGlsLabelsForPickupBatch(
     for (const plan of workPlans) {
       const { group, packages, orderItemIds, codAmount } = plan;
       providerAttempted = true;
-      const shipment = group.purpose === "RECLAMATION_REPLACEMENT"
-        ? await createReclamationShipment({
-            reclamationId: requiredReclamationId(group),
-            purpose: "RECLAMATION_REPLACEMENT",
-            packages,
-            packageCount: packages.length,
-            provider: "MYGLS",
-            fromPickupBatch: true,
-            actorId,
-          })
-        : await createShipmentForOrder(group.orderId, {
-            packages,
-            packageCount: packages.length,
-            provider: "MYGLS",
-            orderItemIds,
-            codAmount,
-            assignmentKey: group.lineGroupKey,
-          });
+      const shipment = await (async () => {
+        try {
+          return group.purpose === "RECLAMATION_REPLACEMENT"
+            ? await createReclamationShipment({
+                reclamationId: requiredReclamationId(group),
+                purpose: "RECLAMATION_REPLACEMENT",
+                packages,
+                packageCount: packages.length,
+                provider: "MYGLS",
+                fromPickupBatch: true,
+                actorId,
+              })
+            : await createShipmentForOrder(group.orderId, {
+                packages,
+                packageCount: packages.length,
+                provider: "MYGLS",
+                orderItemIds,
+                codAmount,
+                assignmentKey: group.lineGroupKey,
+              });
+        } catch (error) {
+          throw pickupGroupError(group.lines[0]?.order.number, error);
+        }
+      })();
       if (shipment.provider !== MYGLS_PROVIDER || shipment.status === "FAILED") {
         throw new Error(
           `Picking grupa ${group.lineGroupKey} nema uspešno kreiranu MyGLS adresnicu.`,

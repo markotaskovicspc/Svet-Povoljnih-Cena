@@ -24,3 +24,11 @@ test('quote keeps the ERP total and makes the pending order confirmation the fir
  const text=quoteMessage({loyaltyApplied:true,totals:{shipping:500,total:1690,firstPurchaseDiscount:210},input:{lines:[{sku:'TEST',qty:1}],shipping:{},guestEmail:'buyer@example.com'}});
  assert.match(text,/^Za potvrdu porudžbine odgovorite: DA\nPorudžbina još nije kreirana\./);assert.match(text,/Ukupno: 1\.690 din/);assert.match(text,/Dostava: 500 din/);assert.match(text,/Loyalty i popust za prvu kupovinu uračunati/);assert(!/210 RSD|uslovi-kupovine/.test(text));
 });
+
+test('conversation membership activates without asking for an email, independently of purchase',async()=>{
+ const state={history:[],pending:{quoteToken:'old'}};const calls=[];
+ const spc=async p=>{calls.push(p);return p.action==='prepare_loyalty'?{ok:true,email:null,summary:'Terms DA',challenge:'signed'}:{ok:true,email:null,proof:'proof',expiresAt:Date.now()+60000};};
+ await prepareLoyalty({email:null,state,event:{...event,text:'2kom'},spc});
+ await receiveLoyalty({state,event:{...event,text:'DA'},spc});
+ assert.equal(calls[0].email,null);assert.equal(calls[1].email,null);assert(activeLoyalty(state));assert(activeLoyalty(state,'later@example.com'));assert(!state.pending);
+});

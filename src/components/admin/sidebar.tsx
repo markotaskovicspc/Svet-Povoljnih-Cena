@@ -19,7 +19,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ArrowDown, ArrowUp, LoaderCircle, MenuIcon, Settings2 } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronDown,
+  ChevronRight,
+  LoaderCircle,
+  MenuIcon,
+  Settings2,
+} from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { activeAdminNavHref } from "@/lib/admin/nav";
 
@@ -27,7 +35,15 @@ function NavigationPending() {
   const { pending } = useLinkStatus();
   return (
     <span role="status" className="ml-auto inline-flex size-4 shrink-0">
-      {pending ? <><LoaderCircle aria-hidden className="size-4 motion-safe:animate-spin" /><span className="sr-only">Učitavanje…</span></> : null}
+      {pending ? (
+        <>
+          <LoaderCircle
+            aria-hidden
+            className="size-4 motion-safe:animate-spin"
+          />
+          <span className="sr-only">Učitavanje…</span>
+        </>
+      ) : null}
     </span>
   );
 }
@@ -46,10 +62,16 @@ function AdminNavContent({
   customizer?: ReactNode;
 }) {
   const activeHref = activeAdminNavHref(nav, pathname, search);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   return (
     <nav className="flex flex-col gap-6 px-4 py-6 text-sm">
-      <div className="flex items-center justify-between gap-2">
+      <div
+        className={cn(
+          "flex items-center justify-between gap-2",
+          onNavigate && "pr-8",
+        )}
+      >
         <Link
           href="/admin"
           prefetch={false}
@@ -66,25 +88,63 @@ function AdminNavContent({
             {group.label}
           </p>
           {group.items.map((item) => {
+            if (item.parentHref && collapsed.has(item.parentHref)) return null;
+            const hasChildren = group.items.some(
+              (child) => child.parentHref === item.href,
+            );
             const active = item.href === activeHref;
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                prefetch={false}
-                onClick={onNavigate}
-                aria-current={active ? "page" : undefined}
-                className={cn(
-                  "flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors",
-                  item.nested && "ml-3 border-l border-border/70 pl-3 text-xs",
-                  active
-                    ? "bg-walnut/10 text-walnut"
-                    : "text-ink-700 hover:bg-muted-bg hover:text-ink-900",
-                )}
-              >
-                <span>{item.label}</span>
-                <NavigationPending />
-              </Link>
+              <div key={item.href} className="flex items-center gap-1">
+                <Link
+                  href={item.href}
+                  prefetch={false}
+                  onClick={() => {
+                    const id = new URL(
+                      item.href,
+                      window.location.origin,
+                    ).searchParams.get("savedView");
+                    if (id)
+                      window.dispatchEvent(
+                        new CustomEvent("spc:open-saved-view", { detail: id }),
+                      );
+                    onNavigate?.();
+                  }}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 transition-colors",
+                    item.nested &&
+                      "ml-3 border-l border-border/70 pl-3 text-xs",
+                    active
+                      ? "bg-walnut/10 text-walnut"
+                      : "text-ink-700 hover:bg-muted-bg hover:text-ink-900",
+                  )}
+                >
+                  <span className="break-words">{item.label}</span>
+                  <NavigationPending />
+                </Link>
+                {hasChildren ? (
+                  <button
+                    type="button"
+                    className="shrink-0 rounded p-1 hover:bg-muted-bg"
+                    aria-label={`${collapsed.has(item.href) ? "Proširi" : "Skupi"} poglede: ${item.label}`}
+                    aria-expanded={!collapsed.has(item.href)}
+                    onClick={() =>
+                      setCollapsed((current) => {
+                        const next = new Set(current);
+                        if (next.has(item.href)) next.delete(item.href);
+                        else next.add(item.href);
+                        return next;
+                      })
+                    }
+                  >
+                    {collapsed.has(item.href) ? (
+                      <ChevronRight className="size-4" />
+                    ) : (
+                      <ChevronDown className="size-4" />
+                    )}
+                  </button>
+                ) : null}
+              </div>
             );
           })}
         </div>
@@ -104,12 +164,11 @@ function AdminNavCustomizer({
   const availableItems = availableNav.flatMap((group) =>
     group.items.map((item) => ({ ...item, group: group.label })),
   );
-  const visibleHrefs = nav.flatMap((group) => group.items.map((item) => item.href));
+  const visibleHrefs = nav.flatMap((group) =>
+    group.items.map((item) => item.href),
+  );
   const initialOrder = Array.from(
-    new Set([
-      ...visibleHrefs,
-      ...availableItems.map((item) => item.href),
-    ]),
+    new Set([...visibleHrefs, ...availableItems.map((item) => item.href)]),
   );
   const [open, setOpen] = useState(false);
   const [order, setOrder] = useState(initialOrder);
@@ -151,9 +210,9 @@ function AdminNavCustomizer({
           isDefault: true,
         }),
       });
-      const payload = (await response.json().catch(() => null)) as
-        | { error?: string }
-        | null;
+      const payload = (await response.json().catch(() => null)) as {
+        error?: string;
+      } | null;
       if (!response.ok) {
         throw new Error(payload?.error ?? "Meni nije sačuvan.");
       }
@@ -178,6 +237,8 @@ function AdminNavCustomizer({
         size="icon-sm"
         aria-label="Prilagodi levi meni"
         onClick={() => {
+          setOrder(initialOrder);
+          setVisible(new Set(visibleHrefs));
           setMessage(null);
           setOpen(true);
         }}
@@ -189,7 +250,8 @@ function AdminNavCustomizer({
           <DialogHeader>
             <DialogTitle>Prilagodi levi meni</DialogTitle>
             <DialogDescription>
-              Izaberite i poređajte prečice. Ovlašćenja se ovim ne menjaju.
+              Izaberite i poređajte stranice i sačuvane poglede. Ovlašćenja se
+              ovim ne menjaju.
             </DialogDescription>
           </DialogHeader>
           {message ? (
@@ -231,7 +293,9 @@ function AdminNavCustomizer({
                     }}
                   />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium text-ink-900">{item.label}</p>
+                    <p className="truncate font-medium text-ink-900">
+                      {item.label}
+                    </p>
                     <p className="text-xs text-ink-500">{item.group}</p>
                   </div>
                   <Button
@@ -259,7 +323,11 @@ function AdminNavCustomizer({
             })}
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+            >
               Otkaži
             </Button>
             <Button type="button" disabled={saving} onClick={save}>

@@ -37,6 +37,7 @@ import {
   pickupPostingBlockReason,
 } from "@/lib/admin/pickup-batch";
 import {
+  courierUnitDimensionsCm,
   hasKnownMyGlsHardLimitViolation,
   hasKnownMyGlsOversizeSurcharge,
   hasKnownXExpressHardLimitViolation,
@@ -452,6 +453,9 @@ export default async function PickupBatchPage({
                   attribute4: true,
                   colorPrimary: true,
                   colorSecondary: true,
+                  unitPackWidthCm: true,
+                  unitPackDepthCm: true,
+                  unitPackHeightCm: true,
                   collection: { select: { name: true } },
                 },
               },
@@ -980,9 +984,9 @@ export default async function PickupBatchPage({
                                     <input type="hidden" name="lineId" value={row.lineId} />
                                     <span className="pb-1 text-xs font-semibold">#{row.packageNo} · {row.packedQuantity} kom</span>
                                     <PackageMeasureInput name="weightKg" label="kg" max={myGls ? 40 : 30} step="0.001" value={row.weightKg} />
-                                    <PackageMeasureInput name="widthCm" label="Š" max={myGls ? 200 : 60} value={row.widthCm} />
-                                    <PackageMeasureInput name="depthCm" label="D" max={myGls ? 200 : 60} value={row.depthCm} />
-                                    <PackageMeasureInput name="heightCm" label="V" max={myGls ? 200 : 60} value={row.heightCm} />
+                                    <PackageMeasureInput name="widthCm" label="Š" max={myGls ? 200 : 60} value={row.widthCm ?? row.catalogueDimensions?.widthCm ?? null} />
+                                    <PackageMeasureInput name="depthCm" label="D" max={myGls ? 200 : 60} value={row.depthCm ?? row.catalogueDimensions?.depthCm ?? null} />
+                                    <PackageMeasureInput name="heightCm" label="V" max={myGls ? 200 : 60} value={row.heightCm ?? row.catalogueDimensions?.heightCm ?? null} />
                                     <SubmitButton size="xs" pendingLabel="Čuvanje…">Sačuvaj</SubmitButton>
                                   </AdminActionForm>
                                 ) : (
@@ -1028,9 +1032,9 @@ export default async function PickupBatchPage({
                                     ) : null}
                                   </div>
                                 )}
-                                {row.weightKg == null || row.weightKg <= 0 ? (
+                                {!row.measurementsComplete ? (
                                   <p className="mt-2 text-xs font-medium text-warning">
-                                    Artikal {row.sku || row.shortName}: nedostaje težina paketa. Paket je u picking nalogu; unesite stvarnu težinu pre potvrde spremnosti i kreiranja adresnice.
+                                    Artikal {row.sku || row.shortName} · {row.packedQuantity} kom u paketu: {row.weightKg == null || row.weightKg <= 0 ? "nedostaje težina paketa. " : ""}Proverite stvarne mere ovog paketa. Paket je uključen u picking. Pre potvrde spremnosti i kreiranja adresnice dopunite i sačuvajte polja u nalogu.
                                   </p>
                                 ) : null}
                                 {!row.deferredAt && (editable || row.warehouseReadyAt) ? (
@@ -1240,6 +1244,9 @@ function pickupLineRow(line: {
       attribute4: string | null;
       colorPrimary: string | null;
       colorSecondary: string | null;
+      unitPackWidthCm: unknown;
+      unitPackDepthCm: unknown;
+      unitPackHeightCm: unknown;
       collection: { name: string } | null;
     } | null;
   } | null;
@@ -1324,6 +1331,12 @@ function pickupLineRow(line: {
     widthCm,
     depthCm,
     heightCm,
+    // Existing draft lines may predate the catalogue-dimension fix. Prefill
+    // only their empty inputs; Save remains required before readiness, and
+    // saved measurements and all booked shipments keep their original values.
+    catalogueDimensions: line.purpose === "ORDER_DELIVERY" && !readPackedItems(line.packedItems).length
+      ? courierUnitDimensionsCm(product)
+      : null,
     measurementsComplete: [weightKg, widthCm, depthCm, heightCm].every(
       (value) => value != null && value > 0,
     ),

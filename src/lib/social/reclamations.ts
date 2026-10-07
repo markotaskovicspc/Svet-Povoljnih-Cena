@@ -4,13 +4,14 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { verifyOrderAccessToken } from "@/lib/api/order-access";
 import { createReclamationSchema, createSocialReclamation } from "@/lib/api/reclamations";
+import {createReclamationLinkToken} from '@/lib/api/reclamation-link-token';
 import { uploadAdminReclamationPhoto } from "@/lib/api/uploads";
 import { trackedDispatch } from "@/lib/email/tracking";
 import { checkRateLimit, rateLimitKey } from "@/lib/security/rate-limit";
 import { constantEqual, readSocialQuote, signSocialQuote } from "./security";
 import sharp from "sharp";
 
-const identity = z.object({ channel: z.enum(["facebook", "instagram"]), conversationId: z.string().min(3).max(200) });
+const identity = z.object({ channel: z.enum(["facebook", "instagram", "web"]), conversationId: z.string().min(3).max(200) });
 const owner = identity.extend({ number: z.string().trim().min(3).max(80), accessToken: z.string().max(200).optional(), proof: z.string().max(3000).optional() });
 const category = z.enum(["KVAR", "FIZICKO_OSTECENJE", "NEDOSTAJE_ARTIKAL", "POGRESAN_ARTIKAL"]);
 const remedy = z.enum(["POPRAVKA", "ZAMENA", "POVRACAJ_NOVCA", "UMANJENJE_CENE"]);
@@ -19,6 +20,7 @@ export const socialReclamationActions = [
   identity.extend({ action: z.literal("reclamation_verify_start"), number: z.string().trim().min(3).max(80), email: z.email() }),
   identity.extend({ action: z.literal("reclamation_verify_finish"), challenge: z.string().max(3000), code: z.string().regex(/^\d{6}$/) }),
   owner.extend({ action: z.literal("reclamation_details") }),
+  owner.extend({ action: z.literal("reclamation_link") }),
   owner.extend({ action: z.literal("reclamation_photo"), sku: z.string().max(64), url: z.url().max(4000) }),
   owner.extend({ action: z.literal("prepare_reclamation"), requestId: z.uuid(), input: draftInput, transcript: z.string().max(10000) }),
   identity.extend({ action: z.literal("submit_reclamation"), reclamationToken: z.string().max(26000) }),
@@ -103,6 +105,10 @@ export async function handleSocialReclamation(body: Action, secret: string) {
   if (!order) return failure("RECLAMATION_UNAUTHORIZED");
   if (body.action === "reclamation_details") return { ok: true, order: publicOrder(order) };
   if (order.status !== "ISPORUCENO") return failure("ORDER_NOT_DELIVERED");
+  if(body.action==='reclamation_link'){
+    const link=createReclamationLinkToken(order.number);
+    return {ok:true,number:order.number,expiresAt:link.expiresAt,url:`https://www.svetpovoljnihcena.rs/reklamacije/prijava?${new URLSearchParams({order:order.number,token:link.token})}`};
+  }
   if (body.action === "reclamation_photo") {
     if (!order.items.some(i => i.sku === body.sku && i.qty > 0)) return failure("ITEM_NOT_FOUND");
     const limit = await checkRateLimit(rateLimitKey("social-claim-photo", body.channel, body.conversationId), { limit: 20, windowMs: 3600000 });

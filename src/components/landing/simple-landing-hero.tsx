@@ -12,7 +12,8 @@ type SimpleHeroSnapshot = Pick<
 >;
 
 export function SimpleLandingHero({ snapshot }: { snapshot: SimpleHeroSnapshot }) {
-  const image = snapshot.heroImageUrl;
+  const image = snapshot.heroImageUrl || snapshot.heroMobileImageUrl;
+  if (!image) return null;
   const external = snapshot.heroCtaHref?.startsWith("https://") ?? false;
   return (
     <section

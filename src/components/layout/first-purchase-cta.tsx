@@ -58,7 +58,7 @@ export function FirstPurchaseCta() {
       <button
         type="button"
         onClick={toggleMinimized}
-        className="md:hidden fixed right-[max(1rem,env(safe-area-inset-right))] bottom-[max(1rem,env(safe-area-inset-bottom))] z-40 inline-flex size-12 items-center justify-center rounded-full bg-ink-900 text-canvas shadow-soft-4 transition hover:bg-walnut focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none"
+        className="md:hidden fixed left-[max(1rem,env(safe-area-inset-left))] bottom-[max(1rem,env(safe-area-inset-bottom))] z-40 inline-flex size-12 items-center justify-center rounded-full bg-ink-900 text-canvas shadow-soft-4 transition hover:bg-walnut focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none"
         aria-label="Prikaži popust za prvu kupovinu"
       >
         <Gift className="size-5" aria-hidden />
@@ -69,7 +69,7 @@ export function FirstPurchaseCta() {
   return (
     <aside
       aria-label="Popust za prvu kupovinu"
-      className="md:hidden fixed right-[max(1rem,env(safe-area-inset-right))] bottom-[max(1rem,env(safe-area-inset-bottom))] left-[max(1rem,env(safe-area-inset-left))] z-40 rounded-lg border border-border/80 bg-white p-4 shadow-soft-5 sm:left-auto sm:w-[360px]"
+      className="md:hidden fixed bottom-[max(5rem,env(safe-area-inset-bottom))] left-[max(1rem,env(safe-area-inset-left))] z-40 w-[min(360px,calc(100vw-2rem))] rounded-lg border border-border/80 bg-white p-4 shadow-soft-5"
     >
       <div className="flex items-start gap-3">
         <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg bg-action text-white">
@@ -106,7 +106,7 @@ export function FirstPurchaseCta() {
           </button>
         </div>
       </div>
-      <Link
+      <Link prefetch={false}
         href={`/nalog/registracija?offer=first-purchase-${firstPurchasePct}`}
         className="mt-4 inline-flex h-10 w-full items-center justify-center rounded-lg bg-ink-900 px-4 text-sm font-medium text-canvas transition hover:bg-walnut focus-visible:ring-2 focus-visible:ring-walnut/40 focus-visible:outline-none"
       >

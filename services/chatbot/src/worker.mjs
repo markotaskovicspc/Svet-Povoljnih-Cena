@@ -1,3 +1,4 @@
+import {receiveSupportContact,requestSupportContact} from './support-contact.mjs';
 import {staffSummary} from './support-summary.mjs';
 import {receiveAdContext} from './ad-context.mjs';
 import { orderErrorMessage } from './delivery.mjs';
@@ -46,17 +47,22 @@ export class Worker {
           if(inWindow(event.timestamp))await receiveAdContext({state,event,account:this.accounts.find(a=>a.channel===row.channel&&a.id===row.account),graphVersion:this.graphVersion,model:this.model});
           await this.store.save(c,row.id,state);await c.query("UPDATE spc_chat_events SET status='done' WHERE id=$1",[job.id]);return;
         }
-        if(isStaffOrderCommand(event)&&this.allowed(row.sender)&&inWindow(event.timestamp)&&inWindow(Number(row.last_customer))){
+        if(isStaffOrderCommand(event)&&this.allowed(row.sender)&&inWindow(event.timestamp)&&(row.channel==='web'||inWindow(Number(row.last_customer)))){
           const ours=await c.query('SELECT id FROM spc_chat_outbox WHERE meta_id=$1',[event.id.substring(event.channel.length+1)]);
           if(!ours.rowCount){
             try{await this.staffOrder({event,row,state,c,job});}
-            catch{
+            catch(error){
               await c.query('ROLLBACK');
+              const diagnostic=state.staffOrderDiagnostic??{eventId:event.id,phase:'history'};
+              const errorType=['TimeoutError','AbortError','APIConnectionTimeoutError','RateLimitError','ZodError','MaxTurnsExceededError'].includes(error.name)?error.name:'ServiceError';
+              const errorCode=/^SPC_(?:HTTP_\d{3}|DELIVERY_LOOKUP_FAILED)$/.test(error.message)?error.message:undefined;
+              state.staffOrderDiagnostic={...diagnostic,errorType,errorCode,attempts:job.attempts+1,at:Date.now()};
+              await this.store.save(c,row.id,state);
               if(job.attempts>=2){
                 await this.store.pause(row.id,'Proveriti ishod komande /porudzbina');
                 await c.query('BEGIN');
                 const uncertain=state.staffOrder?.status==='creating'||Boolean(state.operatorOrder);
-                const reason=uncertain?'Ishod upisa porudžbine nije potvrđen. Proverite ERP pre ručnog kreiranja da ne nastane duplikat.':state.staffOrderCheckFailure??'Komanda /porudzbina nije završena ni posle tri pokušaja. Potrebna je provera prodavca.';
+                const reason=uncertain?'Ishod upisa porudžbine nije potvrđen. Proverite ERP pre ručnog kreiranja da ne nastane duplikat.':state.staffOrderCheckFailure??`Tehnički neuspeh komande /porudzbina u fazi ${diagnostic.phase} (${errorCode??errorType}), posle tri pokušaja. Podaci nisu proglašeni nedostajućim; proverite servis.`;
                 await this.staffOrderAttention({event,row,state,c,reason});
                 await this.store.save(c,row.id,state);
                 await c.query("UPDATE spc_chat_events SET status='failed',attempts=attempts+1 WHERE id=$1",[job.id]);
@@ -67,6 +73,10 @@ export class Worker {
             }
             return;
           }
+        }
+        // Recover ordinary service pauses only when no ERP write may be in flight.
+        if(!event.echo&&row.paused&&/^(?:Greška|Greska) servisa; potreban odgovor zaposlenog$/.test(row.reason??'')&&!state.confirming&&!state.cancelling&&!state.submittingReclamation&&!state.reclamationInFlight&&!state.operatorOrder){
+          await c.query('UPDATE spc_chat_conversations SET paused=false,reason=NULL WHERE id=$1',[row.id]);row.paused=false;
         }
         // Recover only legacy bot handoffs. Operator and safety pauses stay intact.
         if(!event.echo && row.paused && state.handedOff && !state.reclamationInFlight &&
@@ -110,7 +120,8 @@ export class Worker {
             await this.store.save(c,row.id,state);
           }
           let reclamationIntent;
-          const loyaltyMessage=await receiveLoyalty({event,state,spc:this.spc});
+          const contactMessage=receiveSupportContact({event,state});
+          const loyaltyMessage=contactMessage?null:await receiveLoyalty({event,state,spc:this.spc});
           if(state.reclamation?.reclamationToken&&!event.attachments.length) {
             delete state.pending;delete state.confirming;delete state.cancellation;
             reclamationIntent=state.submittingReclamation?.eventId===event.id?'confirm':await this.reclamationIntentFn({text:event.text,history:state.history,pending:state.reclamation,model:this.model});
@@ -146,7 +157,9 @@ export class Worker {
           }
           let message;
           let images=[];
-          if(loyaltyMessage){
+          if(contactMessage){
+            message=contactMessage;
+          } else if(loyaltyMessage){
             message=loyaltyMessage;
           } else if (state.reclamationInFlight) {
             await this.store.pause(row.id,'Proveriti prethodno slanje reklamacije pre nastavka');
@@ -274,13 +287,22 @@ export class Worker {
               message='Za ovu ponudu potreban je zaposleni. Prosledio sam mu razgovor da proveri sve stavke i dostavu.';
             }
           }
+          if(state.supportRequest && !state.supportRequest.contactUpdate && !state.supportRequest.reclamationId && state.lastSupportRequest?.reason===state.supportRequest.reason && Date.now()-state.lastSupportRequest.at<86400000){
+            delete state.supportRequest;
+            message='Razumem. Zahtev je već pripremljen za korisničku podršku; sačekajmo odgovor.';
+          }
+          if(state.supportRequest){
+            const question=requestSupportContact({state,event});
+            if(question){message=[message,question].filter(Boolean).join('\n\n');images=[];}
+          }
           state.history.push({role:'user',content:/^\s*\d{6}\s*$/.test(event.text)&&Boolean(state.claimVerification||state.claimOrders)?'[Kod za proveru porudžbine]':event.text || '[Prilog kupca]',timestamp:event.timestamp},{role:'assistant',content:message,timestamp:Date.now()});
           state.history=state.history.slice(-HISTORY_LIMIT);
           await c.query('BEGIN');
           if(state.supportRequest) {
             const payload={action:'support_handoff',id:job.id,channel:event.channel,conversationId:row.id,
-              reason:state.supportRequest.reason,reclamationId:state.supportRequest.reclamationId,transcript:state.history.slice(-8).map(m=>`${m.role==='user'?'Kupac':'SPC'}: ${m.content}`).join('\n').slice(-6000)};
+              callbackEmail:state.supportContact?.email,contactUpdate:state.supportRequest.contactUpdate,reason:state.supportRequest.reason,reclamationId:state.supportRequest.reclamationId,transcript:state.history.slice(-8).map(m=>`${m.role==='user'?'Kupac':'SPC'}: ${m.content}`).join('\n').slice(-6000)};
             await c.query('INSERT INTO spc_chat_support(id,conversation,payload) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[job.id,row.id,this.store.encode(payload)]);
+            state.lastSupportRequest={reason:state.supportRequest.reason,at:Date.now()};
             delete state.supportRequest;
           }
           await this.store.save(c,row.id,state);
@@ -290,11 +312,43 @@ export class Worker {
           await c.query('COMMIT');
         } catch {
           await c.query('ROLLBACK');
-          // A complaint write may have committed before a timeout. Escalate for reconciliation.
-          if(state.reclamationInFlight || job.attempts>=2) {
-            await this.store.pause(row.id,state.reclamationInFlight?'Proveriti ishod slanja reklamacije':'Greška servisa; potreban odgovor zaposlenog');
-            await c.query(`UPDATE spc_chat_events SET status='failed',attempts=attempts+1 WHERE id=$1`,[job.id]);
-          } else await c.query(`UPDATE spc_chat_events SET attempts=attempts+1,next_at=now()+interval '10 seconds' WHERE id=$1`,[job.id]);
+          // An unreadable photo or failed model turn is not an uncertain ERP
+          // write. Keep shopping usable and ask for one alternative identifier.
+          if(event.attachments.length && job.attempts>=2 && !state.reclamationInFlight && !state.confirming && !state.cancelling && !state.submittingReclamation){
+            const message='Nisam uspeo da obradim sliku. Kako se zove proizvod ili koji predmet sa slike želite? Možete poslati i krupniju fotografiju.';
+            state.visualContext={eventId:event.id,createdAt:Date.now(),images:[],failed:event.attachments.length};
+            const reason='Čitanje priloga kupca nije uspelo posle tri pokušaja; razgovor ostaje aktivan. Proverite sliku i pomozite da se prepozna proizvod.';
+            const payload={action:'support_handoff',id:job.id,channel:event.channel,conversationId:row.id,reason,transcript:state.history.slice(-8).map(m=>`${m.role==='user'?'Kupac':'SPC'}: ${m.content}`).join('\n').slice(-6000)};
+            state.lastSupportRequest={reason,at:Date.now()};delete state.supportRequest;
+            state.history.push({role:'user',content:event.text||'[Prilog kupca]',timestamp:event.timestamp},{role:'assistant',content:message,timestamp:Date.now()});
+            state.history=state.history.slice(-HISTORY_LIMIT);
+            await c.query('BEGIN');
+            await c.query('INSERT INTO spc_chat_support(id,conversation,payload) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[job.id,row.id,this.store.encode(payload)]);
+            await this.store.save(c,row.id,state);
+            await this.store.enqueue(c,`reply:${job.id}`,row.id,{text:message});
+            await c.query("UPDATE spc_chat_events SET status='done',attempts=attempts+1 WHERE id=$1",[job.id]);
+            await c.query('COMMIT');return;
+          }
+          // Persisted write markers must never be treated as a failed ordinary reply.
+          const uncertain=Boolean(state.confirming||state.cancelling||state.submittingReclamation||state.reclamationInFlight||state.operatorOrder);
+          if(state.reclamationInFlight||job.attempts>=2){
+            const reason=uncertain?'Ishod upisa u ERP nije potvrđen. Proverite ERP pre ponovnog upisa da ne nastane duplikat.':'Obrada obične poruke nije uspela posle tri pokušaja. Kupac čeka nastavak razgovora; proverite dogovor i pomozite oko porudžbine.';
+            await c.query('BEGIN');
+            const payload={action:'support_handoff',id:`processing-error:${job.id}`,channel:row.channel,conversationId:row.id,reason:reason.slice(0,200),transcript:('RAZLOG: '+reason+'\n\n'+staffSummary(state)+'\n\n'+state.history.slice(-15).map(m=>`${m.role==='user'?'Kupac':'SPC'}: ${m.content}`).join('\n')+'\nKupac: '+event.text).slice(-10000)};
+            await c.query('INSERT INTO spc_chat_support(id,conversation,payload) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[payload.id,row.id,this.store.encode(payload)]);
+            if(uncertain){
+              await c.query('UPDATE spc_chat_conversations SET paused=true,reason=$2 WHERE id=$1',[row.id,'Proveriti neizvestan ishod upisa u ERP']);
+            }else{
+              const saved=(await c.query('SELECT state FROM spc_chat_conversations WHERE id=$1',[row.id])).rows[0];
+              const clean=this.store.decode(saved.state);
+              const message='Izvinite na zastoju. Proslediću razgovor korisničkoj podršci. Možete nastaviti da pišete ovde.';
+              clean.history.push({role:'user',content:event.text,timestamp:event.timestamp},{role:'assistant',content:message,timestamp:Date.now()});clean.history=clean.history.slice(-HISTORY_LIMIT);
+              await this.store.save(c,row.id,clean);
+              await this.store.enqueue(c,`reply:${job.id}`,row.id,{text:message});
+            }
+            await c.query("UPDATE spc_chat_events SET status='failed',attempts=attempts+1 WHERE id=$1",[job.id]);
+            await c.query('COMMIT');
+          }else await c.query("UPDATE spc_chat_events SET attempts=attempts+1,next_at=now()+interval '10 seconds' WHERE id=$1",[job.id]);
           console.error('chat.processing_failed');
         }
       })));
@@ -308,15 +362,23 @@ export class Worker {
       const result=await c.query("SELECT * FROM spc_chat_support WHERE conversation=$1 AND status='pending' AND next_at<=now() ORDER BY created_at LIMIT 1",[item.conversation]);
       const job=result.rows[0];if(!job)return;
       try {
+        const previous=await c.query("SELECT id FROM spc_chat_support WHERE conversation=$1 AND status='sent' LIMIT 1",[row.id]);
         const payload=this.store.decode(job.payload);
+        // A new failed order command needs attention even after an unrelated handoff.
+        // Repeated identical failures remain recorded without another email.
+        if(previous.rows.length&&!payload.contactUpdate&&(!job.id.startsWith('staff-order:')||state.lastStaffAttentionReason===payload.reason)){
+          await c.query("UPDATE spc_chat_support SET status='recorded' WHERE id=$1",[job.id]);return;
+        }
         // Ignore and remove every legacy Graph-derived cache entry.
         delete state.inboxLink;
         const account=this.accounts.find(a=>a.channel===row.channel&&a.id===row.account);
         const context=await supportInboxContext({account,sender:row.sender,graphVersion:this.graphVersion});
+        if(context.customerName)state.supportCustomerName=context.customerName;
         await this.store.save(c,row.id,state);
         const sent=await this.spc({...payload,...context,conversationLink:verifiedConversationLink(state.verifiedInboxLink,row.account)||undefined});
         if(!sent.ok)throw Error('SUPPORT_EMAIL_FAILED');
         await c.query("UPDATE spc_chat_support SET status='sent' WHERE id=$1",[job.id]);
+        if(job.id.startsWith('staff-order:')){state.lastStaffAttentionReason=payload.reason;await this.store.save(c,row.id,state);}
       } catch {
         await c.query("UPDATE spc_chat_support SET attempts=attempts+1,next_at=now()+interval '5 minutes' WHERE id=$1",[job.id]);
         console.error('chat.support_email_pending');
@@ -327,6 +389,8 @@ export class Worker {
     // A staff command executes once but never resumes autonomous replies.
     await this.store.pause(row.id,'Odgovor zaposlenog u Meta inboxu');
     let message;
+    state.staffOrderDiagnostic={eventId:event.id,phase:'history',at:Date.now()};
+    delete state.staffOrderCheckFailure;
     if(state.staffOrder?.eventId!==event.id){
       const local=await this.store.history(c,row.id,event);
       const account=this.accounts.find(a=>a.channel===row.channel&&a.id===row.account);
@@ -334,14 +398,18 @@ export class Worker {
       const remote=account?await this.historyFn({account,sender:row.sender,before:event.timestamp,graphVersion:this.graphVersion,maxMessages:STAFF_HISTORY_LIMIT,onCoverage:coverage=>{state.staffHistoryIncomplete=!coverage.complete;}}):[];
       state.history=mergeStaffHistory({saved:state.history,remote,local,before:event.timestamp});
     }
-    message=await executeStaffOrder({event,state,spc:this.spc,save:()=>this.store.save(c,row.id,state),prepare:async()=>{
+    message=await executeStaffOrder({event,state,spc:async payload=>{
+      if(payload.action==='create_order')state.staffOrderDiagnostic.phase='create_order';
+      return this.spc(payload);
+    },save:()=>this.store.save(c,row.id,state),prepare:async()=>{
       if(state.staffHistoryIncomplete)return {ok:false,message:'Porudžbina nije kreirana jer nije preuzeta cela duga prepiska. Potrebna je provera istorije; ne ponavljajte podatke kupca.'};
       delete state.staffPlanSummary;
-      const prepared=await this.staffPrepareFn({event,state,spc:this.spc,model:this.model,onPlan:plan=>{state.staffPlanSummary=plan.input?{lines:plan.input.lines,agreedTotal:plan.agreedTotal,unitPrices:plan.unitPrices,shipping:plan.input.shipping,guestEmail:plan.input.guestEmail}:null;}});
+      const prepared=await this.staffPrepareFn({event,state,spc:this.spc,model:this.model,onProgress:phase=>{state.staffOrderDiagnostic.phase=phase;},onPlan:plan=>{state.staffPlanSummary=plan.input?{lines:plan.input.lines,agreedTotal:plan.agreedTotal,unitPrices:plan.unitPrices,shipping:plan.input.shipping,guestEmail:plan.input.guestEmail}:null;}});
       // A failed extraction/check is not missing customer data. Retry the read-only
       // preparation before escalating; never retry an ERP write with a new quote.
-      if(!prepared.ok&&['STAFF_PLAN_INCOMPLETE','STAFF_PRICE_EVIDENCE_INVALID','STAFF_CONTACT_EVIDENCE_INVALID','STAFF_CART_CHECK_FAILED'].includes(prepared.code)){
+      if(!prepared.ok&&['STAFF_PLAN_INCOMPLETE','STAFF_PRICE_EVIDENCE_INVALID','STAFF_CONTACT_EVIDENCE_INVALID','STAFF_DELIVERY_NOTES_EVIDENCE_INVALID','STAFF_CART_CHECK_FAILED'].includes(prepared.code)){
         state.staffOrderCheckFailure=prepared.message;
+        state.staffOrderDiagnostic.code=prepared.code;
         throw new Error('STAFF_ORDER_CHECK_RETRY');
       }
       const newer=await c.query("SELECT payload FROM spc_chat_events WHERE conversation=$1 AND id<>$2 ORDER BY created_at DESC LIMIT 30",[row.id,event.id]);
@@ -379,9 +447,10 @@ export class Worker {
       const out=rows.rows[0]; if(!out) return;
       if(out.status==='sending') {await this.store.pause(row.id,'Nepotvrđen ishod slanja odgovora; proveriti Meta inbox');await c.query(`UPDATE spc_chat_outbox SET status='uncertain' WHERE id=$1`,[out.id]);return;}
       const message=this.store.decode(out.payload);
-      if(!inWindow(Number(row.last_customer)) || (!this.allowed(row.sender) && !message.human) || (row.paused&&!message.allowPaused&&!message.human)) {
+      if((row.channel!=='web'&&!inWindow(Number(row.last_customer))) || (!this.allowed(row.sender) && !message.human) || (row.paused&&!message.allowPaused&&!message.human)) {
         await c.query(`UPDATE spc_chat_outbox SET status='suppressed' WHERE id=$1`,[out.id]); return;
       }
+      if(row.channel==='web'){await c.query("UPDATE spc_chat_outbox SET status='sent' WHERE id=$1",[out.id]);return;}
       const account=this.accounts.find(a=>a.channel===row.channel&&a.id===row.account);
       if(!account) return;
       await c.query(`UPDATE spc_chat_outbox SET status='sending' WHERE id=$1`,[out.id]);
@@ -412,3 +481,4 @@ export class Worker {
   }
   async stop() {clearInterval(this.timer);if(this.listener){await this.listener.query('UNLISTEN *');this.listener.release();}while(this.busy)await new Promise(r=>setTimeout(r,100));}
 }
+

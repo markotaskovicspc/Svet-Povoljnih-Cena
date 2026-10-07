@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { presignSchema, presignUpload } from "@/lib/api/uploads";
-import { lookupOrderForReclamation } from "@/lib/api/reclamations";
+import { canAccessReclamationOrder, lookupOrderForReclamation } from "@/lib/api/reclamations";
 import { getCurrentUser } from "@/lib/auth/session";
-import { readOrderAccessToken, verifyOrderAccessToken } from "@/lib/api/order-access";
+import { readOrderAccessToken } from "@/lib/api/order-access";
 import {
   checkRateLimitForRequest,
   rateLimitJson,
@@ -39,12 +39,7 @@ export async function POST(req: Request) {
     }
     const accountOwner =
       user?.userType === "customer" && order.userId === user.id;
-    const guestOwner =
-      order.userId === null &&
-      verifyOrderAccessToken({
-        token: readOrderAccessToken(req),
-        tokenHash: order.publicAccessTokenHash,
-      });
+    const guestOwner = canAccessReclamationOrder(order, readOrderAccessToken(req));
     if (!accountOwner && !guestOwner) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }

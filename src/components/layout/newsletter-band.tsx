@@ -131,7 +131,7 @@ export function NewsletterBand({ className }: { className?: string }) {
                 ) : (
                   <p className="mt-2 pl-4 text-xs text-ink-500">
                     Prijavom prihvatate{" "}
-                    <Link href="/politika-privatnosti" className="underline underline-offset-4">
+                    <Link prefetch={false} href="/politika-privatnosti" className="underline underline-offset-4">
                       politiku privatnosti
                     </Link>
                     .

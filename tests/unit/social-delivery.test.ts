@@ -10,12 +10,12 @@ beforeEach(()=>{vi.resetAllMocks();m.db.mockReturnValue(true);m.product.mockImpl
 it('calculates the whole cart using checkout, with no contact data or order creation',async()=>{
  const result=await socialDeliveryQuote(input,'secret');
  expect(result).toMatchObject({ok:true,shipping:799,city:'Beograd',lines:[{sku:'CHAIR',qty:4}],orderCreated:false,pricingBasis:'regular'});
- expect(m.resolve).toHaveBeenCalledWith({city:'Beograd',lines:input.lines,loggedIn:false});
+ expect(m.resolve).toHaveBeenCalledWith({city:undefined,lines:input.lines,loggedIn:false});
  expect(result).not.toHaveProperty('quoteToken');
 });
 it('recalculates changed quantities and normalizes duplicate lines',async()=>{
  await socialDeliveryQuote({...input,lines:[{sku:'CHAIR',qty:2},{sku:'CHAIR',qty:4},{sku:'IRON',qty:1}]},'secret');
- expect(m.resolve).toHaveBeenCalledWith({city:'Beograd',lines:[{sku:'CHAIR',qty:6},{sku:'IRON',qty:1}],loggedIn:false});
+ expect(m.resolve).toHaveBeenCalledWith({city:undefined,lines:[{sku:'CHAIR',qty:6},{sku:'IRON',qty:1}],loggedIn:false});
  expect((await socialDeliveryQuote({...input,lines:[{sku:'CHAIR',qty:99},{sku:'CHAIR',qty:1}]},'secret')).ok).toBe(false);
 });
 it('does not price missing products, missing DB, unsupported delivery or unknown tariffs',async()=>{
@@ -33,7 +33,14 @@ it('accepts zero shipping and only server-verified membership, rejects stale pro
  m.loyalty.mockResolvedValue({email:member.email});
  expect(await socialDeliveryQuote(member,'s')).toMatchObject({ok:true,shipping:0,pricingBasis:'loyalty'});
  expect(m.loyalty).toHaveBeenLastCalledWith('proof',{channel:input.channel,conversationId:input.conversationId,email:member.email},'s');
- expect(m.resolve).toHaveBeenLastCalledWith({city:input.city,lines:input.lines,loggedIn:true});
+ expect(m.resolve).toHaveBeenLastCalledWith({city:undefined,lines:input.lines,loggedIn:true});
+});
+it('allows courier quotes without a town, but truck delivery still requires one',async()=>{
+ const {city,...noCity}=input;
+ expect(socialDeliveryRequest.safeParse(noCity).success).toBe(true);
+ expect(await socialDeliveryQuote(noCity,'s')).toMatchObject({ok:true,shipping:799});
+ expect(m.resolve).toHaveBeenCalledWith({city:undefined,lines:input.lines,loggedIn:false});
+ expect(await socialDeliveryQuote({...noCity,shippingMethod:'KAMION'},'s')).toMatchObject({ok:false,error:{code:'DELIVERY_CITY_REQUIRED'}});
 });
 it('validates required city, nonempty items and positive bounded quantities',()=>{
  expect(socialDeliveryRequest.safeParse(input).success).toBe(true);

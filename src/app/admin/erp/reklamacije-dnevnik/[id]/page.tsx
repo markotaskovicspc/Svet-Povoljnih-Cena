@@ -9,7 +9,6 @@ import {
   ReclamationDecision,
   ReclamationResolution,
   ReclamationStatus,
-  ReclamationWarehouseStatus,
   ShipmentPurpose,
 } from "@prisma/client";
 import { requireAdminAction, withAdminState, type AdminActionState } from "@/lib/admin";
@@ -54,14 +53,6 @@ const RESOLUTION_LABELS: Record<ReclamationResolution, string> = {
   ZAMENA_ARTIKLA: "Zamena artikla",
   ZAMENA_DELA: "Zamena dela",
   POPUST: "Popust",
-};
-const WAREHOUSE_STATUS_LABELS: Record<ReclamationWarehouseStatus, string> = {
-  NOT_REQUESTED: "Nije zatraženo",
-  REQUESTED: "Zatraženo",
-  PREPARING: "U pripremi",
-  READY: "Spremno / primljeno",
-  HANDED_OVER: "Predato kuriru",
-  CANCELLED: "Otkazano",
 };
 const PURPOSE_LABELS: Record<ShipmentPurpose, string> = {
   ORDER_DELIVERY: "Isporuka porudžbine",
@@ -185,7 +176,10 @@ async function saveDetailsAction(_state: AdminActionState, formData: FormData) {
       return {
         ok: true as const,
         entityId: id,
-        message: "Odluka i način rešavanja su sačuvani. Dodavanje u picking je zaseban korak.",
+        diff: { preparationChanged, previousWarehouseStatus: reclamation.warehouseStatus },
+        message: preparationChanged
+          ? "Odluka je sačuvana. Pošto je promenjen sadržaj zamene, ponovo unesite mere paketa i sačuvajte magacin da bi zamena bila spremna za picking."
+          : "Odluka i način rešavanja su sačuvani. Dodavanje u picking je zaseban korak.",
       };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 10_000, timeout: 30_000 }),
   )(formData);
@@ -218,20 +212,20 @@ async function saveWarehouseAction(_state: AdminActionState, formData: FormData)
     async (actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
       const warehouseId = String(formData.get("warehouseId") ?? "");
-      const status = String(formData.get("warehouseStatus") ?? "") as ReclamationWarehouseStatus;
-      if (!id || !warehouseId || !Object.values(ReclamationWarehouseStatus).includes(status)) {
-        return { ok: false as const, error: "Izaberite magacin i status pripreme." };
+      if (!id || !warehouseId) {
+        return { ok: false as const, error: "Izaberite magacin." };
       }
       const rows = String(formData.get("replacementPackageRows") ?? "").split(",").filter(Boolean);
       const entered = rows.map((row) => Object.fromEntries(
         ["weightKg", "widthCm", "depthCm", "heightCm"].map((key) => [key, Number(formData.get(`replacementPackage.${row}.${key}`))]),
       ));
-      const packages = entered.length && (status === "READY" || entered.some((pkg) => Object.values(pkg).some((value) => value !== 0))) ? entered : undefined;
-      const saved = await saveReclamationWarehouse({ reclamationId: id, warehouseId, status, packages, actorId });
+      const packages = entered.length && entered.some((pkg) => Object.values(pkg).some((value) => value !== 0)) ? entered : undefined;
+      const saved = await saveReclamationWarehouse({ reclamationId: id, warehouseId, packages, actorId });
       refresh(id);
       return {
         ok: true as const,
         entityId: id,
+        diff: { warehouseId: saved.warehouseId, warehouseStatus: saved.warehouseStatus, replacementReadyAt: saved.replacementReadyAt?.toISOString() ?? null },
         message: saved.replacementReadyAt
           ? "Spremnost je sačuvana. Zamena će ući u picking tek na klik „Učitaj porudžbine“ u nalogu odgovarajućeg kurira."
           : "Magacinski zadatak je sačuvan.",
@@ -399,13 +393,13 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
                     <SubmitButton size="sm" variant="outline" pendingLabel="Uklanjam…" confirm={`Ukloniti samo zamenu za ${reclamation.number} iz naloga ${replacementPicking.number}?`}>
                       Ukloni zamenu iz picking naloga
                     </SubmitButton>
-                    <p className="mt-2 text-xs text-ink-500">Posle uklanjanja sačuvajte izmene i ponovo potvrdite spremnost sa stvarnim merama. Zatim u picking nalogu kliknite „Učitaj porudžbine“.</p>
+                    <p className="mt-2 text-xs text-ink-500">Posle uklanjanja sačuvajte izmene i ponovo sačuvajte magacin sa stvarnim merama paketa. Zatim u picking nalogu kliknite „Učitaj porudžbine“.</p>
                   </AdminActionForm>
                 ) : null}
               </div>
             ) : (
               <p className="mb-4 rounded-lg bg-muted-bg p-3 text-sm" data-testid="reclamation-picking-state">
-                Zamena nije u picking nalogu. Unesite mere paketa i potvrdite „Spremno“ u delu „Magacin i priprema“. Zatim u picking nalogu kliknite „Učitaj porudžbine“.
+                Zamena nije u picking nalogu. Unesite mere paketa i sačuvajte magacin i mere paketa u delu „Magacin i priprema“. Zatim u picking nalogu kliknite „Učitaj porudžbine“.
               </p>
             )}
             <AdminActionForm action={saveDetailsAction} preserveValues className="space-y-4">
@@ -422,12 +416,11 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
           </Card>
 
           <Card>
-            <CardTitle description="Unesite težinu i dimenzije zapakovane zamene i potvrdite „Spremno“. Zamena se učitava tek kada magacioner u picking nalogu klikne „Učitaj porudžbine“.">Magacin i priprema</CardTitle>
+            <CardTitle description="Izaberite magacin i unesite mere paketa. Čuvanjem se zamena automatski označava kao spremna. Zamena se učitava tek kada magacioner u picking nalogu klikne „Učitaj porudžbine“.">Magacin i priprema</CardTitle>
             <AdminActionForm action={saveWarehouseAction} preserveValues className="space-y-3">
               <fieldset disabled={Boolean(replacementPicking || replacementShipment)} className="grid gap-3 sm:grid-cols-2 disabled:opacity-70">
               <input type="hidden" name="id" value={reclamation.id} />
               <Field label="Magacin"><select name="warehouseId" required defaultValue={reclamation.warehouseId ?? ""} className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm"><option value="" disabled>Izaberite</option>{warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.code} · {warehouse.name}</option>)}</select></Field>
-              <Field label="Status pripreme"><select name="warehouseStatus" defaultValue={reclamation.warehouseStatus} className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm">{Object.values(ReclamationWarehouseStatus).map((value) => <option key={value} value={value}>{WAREHOUSE_STATUS_LABELS[value]}</option>)}</select></Field>
               {["ZAMENA_ARTIKLA", "ZAMENA_DELA"].includes(reclamation.resolution ?? "") ? <ReclamationPackages key={JSON.stringify(reclamation.replacementPackages)} initialPackages={readReclamationPackages(reclamation.replacementPackages)} /> : null}
               <div className="sm:col-span-2"><SubmitButton variant="outline" pendingLabel="Čuvam…">Sačuvaj magacinski zadatak</SubmitButton></div>
               </fieldset>
@@ -490,18 +483,18 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
                           </Link>.
                         </p>
                         <p className="mt-1 text-xs text-ink-500">
-                          Adresnica i izdavanje zalihe kreiraju se knjiženjem tog naloga. Status magacina pre toga mora biti „Spremno“.
+                          Adresnica i izdavanje zalihe kreiraju se knjiženjem tog naloga. Spremnost se potvrđuje automatski čuvanjem magacina i mera paketa.
                         </p>
                       </div>
                     ) : (
                       <p className="mt-3 text-sm text-ink-600">
                         {reclamation.warehouseStatus === "READY" && reclamation.replacementReadyAt
                           ? "Zamena je spremna i čeka da magacioner klikne „Učitaj porudžbine“ u picking nalogu odgovarajućeg kurira."
-                          : "Prvo unesite mere paketa i potvrdite „Spremno“ u delu „Magacin i priprema“."}
+                          : "Prvo unesite mere paketa i sačuvajte magacin i mere paketa u delu „Magacin i priprema“."}
                       </p>
                     )
                   ) : (
-                    <AdminActionForm action={createShipmentAction} className="mt-3 flex flex-wrap items-end gap-2">
+                    <AdminActionForm action={createShipmentAction} preserveValues className="mt-3 flex flex-wrap items-end gap-2">
                       <input type="hidden" name="id" value={reclamation.id} />
                       <input type="hidden" name="purpose" value={purpose} />
                       {previous?.syncError ? <p className="w-full text-destructive">{previous.syncError}</p> : null}
@@ -510,7 +503,7 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
                         <p>Odredište: {reclamation.warehouse ? `${reclamation.warehouse.name} · ${reclamation.warehouse.address ?? "Adresa nije uneta"}, ${reclamation.warehouse.city ?? ""}` : "Izaberite magacin"}</p>
                         <p>Otkupnina: 0 RSD. Za GLS se šalje P&R zahtev za naredni radni dan; kurir donosi adresnicu.</p>
                       </div>
-                      <p className="w-full text-xs text-ink-500">Za X Express lokacija preuzimanja se automatski pronalazi iz adrese kupca preko <span translate="no">Google Maps</span>. Ako adresa nije dovoljno precizna, nalog se neće poslati i dobićete poruku da proverite ulicu, broj i mesto.</p>
+                      <p className="w-full text-xs text-ink-500">Za preuzimanje se kuriru šalju adresa i kontakt kupca iz porudžbine.</p>
                       <p className="w-full text-xs text-ink-500">Broj i mere GLS paketa preuzimaju se iz artikla i količine reklamacije.</p>
                       <Field label="Broj paketa za X Express">
                         <input name="packageCount" type="number" min={1} max={99} defaultValue={1} className="h-9 w-24 rounded-lg border border-input bg-transparent px-2" />

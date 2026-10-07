@@ -276,7 +276,7 @@ function SvetAkcijaPagination({
       aria-label="Strane kataloga"
       className="mt-8 flex items-center justify-center gap-3"
     >
-      <Link
+      <Link prefetch={false}
         href={page > 1 ? pageHref(page - 1) : pageHref(1)}
         aria-disabled={page <= 1}
         className="inline-flex h-10 items-center rounded-md border border-border px-4 text-sm font-medium text-ink-700 transition hover:border-brand-blue hover:text-brand-blue aria-disabled:pointer-events-none aria-disabled:opacity-45"
@@ -286,7 +286,7 @@ function SvetAkcijaPagination({
       <span className="text-sm text-ink-500">
         Strana {page} od {pageCount}
       </span>
-      <Link
+      <Link prefetch={false}
         href={page < pageCount ? pageHref(page + 1) : pageHref(pageCount)}
         aria-disabled={page >= pageCount}
         className="inline-flex h-10 items-center rounded-md border border-border px-4 text-sm font-medium text-ink-700 transition hover:border-brand-blue hover:text-brand-blue aria-disabled:pointer-events-none aria-disabled:opacity-45"
@@ -317,7 +317,7 @@ function CatalogCard({ product }: { product: SvetAkcijaProduct }) {
 
   return (
     <article className="group flex min-h-full flex-col overflow-hidden rounded-md border border-border bg-white shadow-soft-1 transition hover:-translate-y-0.5 hover:shadow-soft-3">
-      <Link
+      <Link prefetch={false}
         href={productHref(product)}
         className="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-white text-ink-300 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
         aria-label={`${displayName} detalji`}
@@ -345,7 +345,7 @@ function CatalogCard({ product }: { product: SvetAkcijaProduct }) {
         </div>
         <div className="min-w-0">
           <h2 className="line-clamp-2 text-base font-semibold text-ink-900">
-            <Link href={productHref(product)} className="hover:text-brand-blue">
+            <Link prefetch={false} href={productHref(product)} className="hover:text-brand-blue">
               {displayName}
             </Link>
           </h2>
@@ -376,7 +376,7 @@ function CatalogCard({ product }: { product: SvetAkcijaProduct }) {
             <SpecLine label="Boja" value={[primaryColor, secondaryColor].filter(isMeaningfulSourceValue).join(" / ")} />
           ) : null}
         </dl>
-        <Link
+        <Link prefetch={false}
           href={productHref(product)}
           className="mt-1 inline-flex h-10 items-center justify-center rounded-md bg-brand-blue px-4 text-sm font-semibold text-white transition hover:bg-brand-blue-700 focus-visible:ring-2 focus-visible:ring-brand-blue/35 focus-visible:outline-none"
         >

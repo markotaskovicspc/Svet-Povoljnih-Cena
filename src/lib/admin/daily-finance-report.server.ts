@@ -4,16 +4,10 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import type { ReportPeriod } from "@/lib/admin/report-period";
 
-export type DailyFinanceReportRow = {
-  day: string;
-  proformaCount: number;
-  proformaGross: number;
-  fiscalSaleCount: number;
-  fiscalSaleGross: number;
-  fiscalRefundCount: number;
-  fiscalRefundGross: number;
-  fiscalNetGross: number;
-};
+import { combineDailyFinance, type FinanceChannel, type DailyFinanceReportRow } from './daily-finance-report';
+import { ananasMerchandiseItems } from './fiscal-merchandise';
+export { summarizeDailyFinanceReport } from './daily-finance-report';
+export type { DailyFinanceReportRow } from './daily-finance-report';
 
 type DailyFinanceDatabaseRow = {
   day: string;
@@ -27,8 +21,10 @@ type DailyFinanceDatabaseRow = {
 
 export async function getDailyFinanceReport(
   period: ReportPeriod,
+  channel: FinanceChannel = "ALL",
 ): Promise<DailyFinanceReportRow[]> {
-  const rows = await db.$queryRaw<DailyFinanceDatabaseRow[]>(Prisma.sql`
+  return db.$transaction(async tx => {
+  const rows = await tx.$queryRaw<DailyFinanceDatabaseRow[]>(Prisma.sql`
     WITH days AS (
       SELECT generate_series(
         (${period.start} AT TIME ZONE 'Europe/Belgrade')::date,
@@ -72,7 +68,7 @@ export async function getDailyFinanceReport(
     LEFT JOIN fiscal ON fiscal.day = days.day
     ORDER BY days.day DESC
   `);
-  return rows.map((row) => ({
+  const base = rows.map((row) => ({
     day: row.day,
     proformaCount: row.proforma_count,
     proformaGross: row.proforma_gross,
@@ -82,29 +78,15 @@ export async function getDailyFinanceReport(
     fiscalRefundGross: row.fiscal_refund_gross,
     fiscalNetGross: row.fiscal_sale_gross - row.fiscal_refund_gross,
   }));
-}
-
-export function summarizeDailyFinanceReport(
-  rows: readonly DailyFinanceReportRow[],
-) {
-  return rows.reduce(
-    (total, row) => ({
-      proformaCount: total.proformaCount + row.proformaCount,
-      proformaGross: total.proformaGross + row.proformaGross,
-      fiscalSaleCount: total.fiscalSaleCount + row.fiscalSaleCount,
-      fiscalSaleGross: total.fiscalSaleGross + row.fiscalSaleGross,
-      fiscalRefundCount: total.fiscalRefundCount + row.fiscalRefundCount,
-      fiscalRefundGross: total.fiscalRefundGross + row.fiscalRefundGross,
-      fiscalNetGross: total.fiscalNetGross + row.fiscalNetGross,
+  const [lines,documents] = await Promise.all([
+    channel === 'ANANAS' ? Promise.resolve([]) : tx.fiscalDocumentLine.findMany({
+      where:{fiscalDocument:{is:{status:'ISSUED',kind:{in:['SALE','REFUND']},issuedAt:{gte:period.start,lt:period.endExclusive}}}},
+      select:{sku:true,shortName:true,qty:true,unitCogs:true,product:{select:{cogs:true}},originalSaleLine:{select:{unitCogs:true}},fiscalDocument:{select:{kind:true,issuedAt:true}}},
     }),
-    {
-      proformaCount: 0,
-      proformaGross: 0,
-      fiscalSaleCount: 0,
-      fiscalSaleGross: 0,
-      fiscalRefundCount: 0,
-      fiscalRefundGross: 0,
-      fiscalNetGross: 0,
-    },
-  );
+    channel === 'SPC' ? Promise.resolve([]) : tx.ananasDocument.findMany({where:{kind:{in:['SALE','REFUND']},issuedAt:{gte:period.start,lt:period.endExclusive}},select:{kind:true,issuedAt:true,gross:true,items:true}}),
+  ]);
+  const skus=[...new Set(documents.flatMap(doc=>ananasMerchandiseItems(doc.items).map(item=>item.sku)))];
+  const products=skus.length ? await tx.product.findMany({where:{sku:{in:skus}},select:{sku:true,cogs:true}}) : [];
+  return combineDailyFinance(base,lines.map(line=>({issuedAt:line.fiscalDocument.issuedAt!,kind:line.fiscalDocument.kind,sku:line.sku,name:line.shortName,qty:line.qty,unitCogs:line.unitCogs==null?null:Number(line.unitCogs),originalUnitCogs:line.originalSaleLine?.unitCogs==null?null:Number(line.originalSaleLine.unitCogs),currentCogs:line.product?.cogs==null?null:Number(line.product.cogs)})),documents.map(doc=>({...doc,gross:Number(doc.gross)})),new Map(products.map(product=>[product.sku,product.cogs==null?null:Number(product.cogs)])),channel);
+  }, {isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, timeout: 30000});
 }

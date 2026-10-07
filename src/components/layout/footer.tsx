@@ -82,7 +82,7 @@ export function Footer({ cmsFooter }: { cmsFooter: CmsFooterState | null }) {
         <div className="grid gap-10 md:grid-cols-12 md:gap-12">
           <div className="md:col-span-4">
             <div className="flex items-center gap-3 sm:gap-4">
-              <Link href="/" aria-label={`${BRAND.name} — početna`} className="inline-block shrink-0">
+              <Link prefetch={false} href="/" aria-label={`${BRAND.name} — početna`} className="inline-block shrink-0">
                 <Image
                   src="/logo.svg"
                   alt={BRAND.name}
@@ -98,7 +98,7 @@ export function Footer({ cmsFooter }: { cmsFooter: CmsFooterState | null }) {
                     const icon = SOCIAL_ICON_SRC[s.id] ?? "/icons/facebook.svg";
                     return (
                       <li key={s.id}>
-                        <Link
+                        <Link prefetch={false}
                           href={s.href}
                           target="_blank"
                           rel="noreferrer"
@@ -119,6 +119,7 @@ export function Footer({ cmsFooter }: { cmsFooter: CmsFooterState | null }) {
                 </ul>
               </div>
             </div>
+            <p className="mt-5 max-w-sm text-sm leading-relaxed text-ink-700">{BRAND.legalName}</p>
           </div>
 
           {/*
@@ -138,7 +139,7 @@ export function Footer({ cmsFooter }: { cmsFooter: CmsFooterState | null }) {
                 <ul className="mt-3 space-y-1.5 text-sm text-ink-500 md:mt-4 md:space-y-2">
                   {col.links.map((l) => (
                     <li key={l.href}>
-                      <Link
+                      <Link prefetch={false}
                         href={l.href}
                         className="transition hover:text-brand-blue"
                       >
@@ -161,7 +162,7 @@ export function Footer({ cmsFooter }: { cmsFooter: CmsFooterState | null }) {
             </span>
             <Marquee durationSec={36} className="flex-1">
               {paymentMethods.map((p) => (
-                <Link
+                <Link prefetch={false}
                   key={p.id}
                   href={p.href}
                   aria-label={p.label}
@@ -176,7 +177,7 @@ export function Footer({ cmsFooter }: { cmsFooter: CmsFooterState | null }) {
       </div>
 
       <div className="border-t border-border/60 px-6 py-4 text-center text-xs text-ink-500">
-        <Link href="/podesavanja-kolacica" className="hover:text-brand-blue hover:underline">Podešavanja kolačića</Link>
+        <Link prefetch={false} href="/podesavanja-kolacica" className="hover:text-brand-blue hover:underline">Podešavanja kolačića</Link>
       </div>
 
     </footer>

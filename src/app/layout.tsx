@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
+import { ClarityAnalytics } from "@/components/analytics/clarity-analytics";
 import { BRAND } from "@/lib/brand";
 import { HOME_SEO_DESCRIPTION, HOME_SEO_TITLE } from "@/lib/seo";
 import { CommerceTermsProvider } from "@/components/pricing/commerce-terms-provider";
@@ -55,7 +56,7 @@ export default function RootLayout({
         className="bg-surface text-ink-900 min-h-full flex flex-col font-sans"
       >
         <CommerceTermsProvider initialAt={renderedAt}>
-          <Providers>{children}</Providers>
+          <Providers><ClarityAnalytics />{children}</Providers>
         </CommerceTermsProvider>
       </body>
     </html>

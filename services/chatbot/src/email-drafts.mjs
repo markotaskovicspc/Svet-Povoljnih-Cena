@@ -6,6 +6,7 @@ import {draftEmail,emailContext} from './email-draft-agent.mjs';
 import {seal} from './security.mjs';
 import {operationReply} from './email-actions.mjs';
 import {EmailOperations,operationTable} from './email-operation-store.mjs';
+import {isBankMail,verifyBankMail,parseErsteStatement,submitBankStatement} from './bank-statements.mjs';
 
 const ADDRESS='podrska@svetpovoljnihcena.rs';
 const hash=s=>createHash('sha256').update(s).digest('hex');
@@ -80,6 +81,16 @@ export class EmailDraftWorker {
         if(!fetched?.source)throw Error('EMAIL_FETCH_FAILED');
         const parsed=await simpleParser(fetched.source,{skipHtmlToText:false,skipTextToHtml:true});
         reason=skipMail(parsed);payload=compactMail(parsed);if(reason)status='skipped';
+        if(isBankMail(parsed,this.env)){
+          // Bank notifications are processed before no-reply/Auto-Submitted filtering.
+          status='skipped';reason='bank_statements_disabled';
+          if(this.env.BANK_STATEMENTS_ENABLED==='true'){
+            const pdfs=(parsed.attachments??[]).filter(a=>/\.pdf$/i.test(a.filename??'')&&a.content?.subarray(0,5).toString()==='%PDF-');
+            payload={bankStatements:[]};status='bank_pending';reason=null;
+            try{if(!await verifyBankMail(fetched.source,parsed,this.env))throw Error('BANK_SENDER_NOT_VERIFIED');if(!pdfs.length||pdfs.length>5)throw Error('BANK_ATTACHMENTS_INVALID');for(const pdf of pdfs)payload.bankStatements.push(await parseErsteStatement(pdf.content));}
+            catch(e){if(e.message==='BANK_VERIFICATION_UNAVAILABLE')throw e;payload={bankStatements:[],bankError:/^BANK_[A-Z_]+$/.test(e.message)?e.message:'BANK_PARSE_FAILED',sourceHash:hash(fetched.source)};}
+          }
+        }
       }
       await c.query('BEGIN');
       try{
@@ -127,6 +138,12 @@ export class EmailDraftWorker {
   async process(c,row){
     if(row.status==='appending')return this.reconcile(c,row);
     const message=this.store.decode(row.payload);
+    if(message.bankStatements){
+      await c.query('UPDATE spc_email_drafts SET attempts=attempts+1,updated_at=now() WHERE id=$1',[row.id]);
+      if(message.bankError)await submitBankStatement({sourceHash:message.sourceHash,rejectedReason:message.bankError},this.env);
+      for(const statement of message.bankStatements)await submitBankStatement(statement,this.env);
+      await c.query("UPDATE spc_email_drafts SET status='processed',reason='bank_statement_submitted',updated_at=now() WHERE id=$1",[row.id]);return;
+    }
     const operations=this.env.EMAIL_ACTIONS_ENABLED==='true'?new EmailOperations({c,encode:v=>this.encrypt(v),decode:v=>this.store.decode(v),env:this.env,model:this.model}):null;
     const recovered=!row.draft&&operations?await operations.recover(row.id,message):null;
     if(!recovered&&this.sent&&message.messageId){
@@ -165,11 +182,11 @@ export class EmailDraftWorker {
       c=await this.store.pool.connect();locked=(await c.query("SELECT pg_try_advisory_lock(hashtextextended('spc-email-drafts',0)) AS locked")).rows[0].locked;
       if(!locked)return;
       await this.connect();await this.client.mailboxOpen('INBOX',{readOnly:true});await this.ingest(c);
-      const rows=(await c.query("SELECT * FROM spc_email_drafts d WHERE (status='pending' AND attempts<3) OR status IN ('prepared','appending') OR (status IN ('pending','review') AND EXISTS (SELECT 1 FROM spc_email_operations o WHERE o.decision_id=d.id AND o.status='executing')) ORDER BY created_at LIMIT 5")).rows;
+      const rows=(await c.query("SELECT * FROM spc_email_drafts d WHERE (status='pending' AND attempts<3) OR (status='bank_pending' AND (attempts<3 OR updated_at<now()-interval '5 minutes')) OR status IN ('prepared','appending') OR (status IN ('pending','review') AND EXISTS (SELECT 1 FROM spc_email_operations o WHERE o.decision_id=d.id AND o.status='executing')) ORDER BY created_at LIMIT 5")).rows;
       for(const row of rows){try{await this.process(c,row);}catch{console.error('email.draft_processing_failed');}}
       await c.query("UPDATE spc_email_drafts SET status='review',reason='processing_failed' WHERE status='pending' AND attempts>=3");
       // Minimize stored customer text once it has been processed; IMAP retains the original.
-      await c.query("UPDATE spc_email_drafts SET payload=$1 WHERE status IN ('drafted','skipped') AND created_at < now()-interval '7 days'",[this.encrypt({})]);
+      await c.query("UPDATE spc_email_drafts SET payload=$1 WHERE status IN ('drafted','skipped','processed') AND created_at < now()-interval '7 days'",[this.encrypt({})]);
       await this.client.mailboxOpen('INBOX',{readOnly:true});this.status='connected';
     }catch(e){this.status=e.message==='EMAIL_UIDVALIDITY_CHANGED'?'uidvalidity_changed':'connection_or_storage_error';console.error('email.worker_unavailable');this.client?.close();}
     finally{if(c){if(locked)await c.query("SELECT pg_advisory_unlock(hashtextextended('spc-email-drafts',0))").catch(()=>{});c.release();}this.busy=false;}

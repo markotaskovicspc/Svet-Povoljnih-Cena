@@ -93,23 +93,29 @@ describe("X Express reclamation return preparation", () => {
     expect(mocks.geocode).not.toHaveBeenCalled();
   });
 
-  it("automatically resolves coordinates and retains the zero-COD return direction and package count", async () => {
+  it("uses the exact order address without coordinates or a Google lookup", async () => {
+    const order = { ...(await mocks.order()), shipStreet: "Berta Istvan (59)", shipHouseNumber: "59", shipCity: "Senta", shipPostalCode: "24400" };
+    mocks.order.mockResolvedValue(order);
+    mocks.geocode.mockRejectedValue(new Error("Google unavailable"));
     await createXExpressShipmentForOrder("o1", { ...options, returnPickupCoordinates: undefined });
-    expect(mocks.geocode).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ shipStreet: "Prva 10", shipCity: "Beograd" }));
+    expect(mocks.geocode).not.toHaveBeenCalled();
+    expect(mocks.checkAddress).toHaveBeenCalledWith(expect.objectContaining({ StreetName: "Berta Istvan", StreetNumber: "59" }));
     const payload = mocks.create.mock.calls[0][0].data.rawCreateResponse.createOrderPayload;
-    expect(payload.Waypoints[0].Address).toMatchObject({ Latitude: 44.82, Longitude: 20.47, TownId: 100 });
-    expect(payload.Waypoints.find((p: { WaypointType: string }) => p.WaypointType === "DELIVERY").Address.TownId).toBe(200);
+    const pickup = payload.Waypoints[0].Address;
+    expect(pickup).toMatchObject({ TownId: 100, StreetName: "Berta Istvan", StreetNumber: "59" });
+    expect(pickup).not.toHaveProperty("Latitude");
+    expect(pickup).not.toHaveProperty("Longitude");
+    expect(payload.Waypoints[1].Address.TownId).toBe(200);
     expect(payload.Options).toBeUndefined();
     expect(payload.Packages).toHaveLength(2);
-    expect(payload.ServicePayerId).toBe(1);
+    expect(order.shipStreet).toBe("Berta Istvan (59)");
   });
 
-  it("stops an unresolved address before allocating tracking codes or contacting the courier", async () => {
-    mocks.geocode.mockRejectedValue(new Error("Proverite ulicu, kućni broj i mesto."));
-    await expect(createXExpressShipmentForOrder("o1", { ...options, returnPickupCoordinates: undefined })).rejects.toThrow(/Proverite ulicu/);
-    expect(mocks.allocate).not.toHaveBeenCalled();
-    expect(mocks.create).not.toHaveBeenCalled();
-    expect(mocks.checkAddress).not.toHaveBeenCalled();
+  it("keeps actual courier address validation errors and records a failed attempt", async () => {
+    mocks.checkAddress.mockRejectedValue(new Error("Kurir ne prepoznaje adresu"));
+    await expect(createXExpressShipmentForOrder("o1", { ...options, returnPickupCoordinates: undefined })).rejects.toThrow("Kurir ne prepoznaje adresu");
+    expect(mocks.geocode).not.toHaveBeenCalled();
+    expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "FAILED", syncError: "Kurir ne prepoznaje adresu" }) }));
   });
 
   it("does not silently send the return to the configured outbound pickup address", async () => {

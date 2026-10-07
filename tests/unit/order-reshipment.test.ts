@@ -1,11 +1,13 @@
 import type { Prisma } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const { tx, adjust } = vi.hoisted(() => ({ adjust: vi.fn(), tx: {
-  $queryRaw: vi.fn(), shipment: { findUnique: vi.fn() }, order: { update: vi.fn() },
+  returnResolution: { findUnique: vi.fn() },
+  $queryRaw: vi.fn(), shipment: { findUnique: vi.fn(), count: vi.fn() }, order: { update: vi.fn() },
+  fiscalDocument: { findFirst: vi.fn() }, backgroundJob: { updateMany: vi.fn() },
   pickupBatch: { findMany: vi.fn(), findFirst: vi.fn(), findUniqueOrThrow: vi.fn(), create: vi.fn() },
   pickupBatchLine: { findMany: vi.fn(), createMany: vi.fn() },
   orderReshipment: { create: vi.fn(), findMany: vi.fn(), updateMany: vi.fn() }, orderReshipmentItem: { findUniqueOrThrow: vi.fn(), update: vi.fn() },
-  stockMovement: { findFirst: vi.fn(), findUnique: vi.fn() },
+  stockMovement: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
   product: { findUniqueOrThrow: vi.fn() }, warehouse: { findUnique: vi.fn() },
   orderStatusEvent: { create: vi.fn() },
 } }));
@@ -26,15 +28,98 @@ beforeEach(() => {
   tx.pickupBatchLine.findMany.mockResolvedValue([1, 2].map(packageNo => ({ orderItemId: "i", quantity: 2, packageNo, weightKg: 4, widthCm: 30, heightCm: 30, depthCm: 30 })));
   tx.pickupBatch.findMany.mockResolvedValue([]);
   tx.pickupBatch.create.mockResolvedValue({ id: "b", number: "PRE-2026-0001" });
-  tx.orderReshipment.create.mockResolvedValue({ id: "r", batchId: null, batch: null });
+  tx.orderReshipment.create.mockResolvedValue({ id: "r", batchId: null, batch: null, items: [{ id: "ri", orderItemId: "i" }] });
   tx.orderReshipment.findMany.mockResolvedValue([]);
   tx.orderReshipment.updateMany.mockResolvedValue({ count: 1 });
-  tx.stockMovement.findFirst.mockResolvedValue(null);
+  tx.stockMovement.findMany.mockResolvedValue([]);
+  tx.fiscalDocument.findFirst.mockResolvedValue(null);
+  tx.shipment.count.mockResolvedValue(1);
   tx.stockMovement.findUnique.mockResolvedValue(null);
   tx.product.findUniqueOrThrow.mockResolvedValue({ sku: "SKU", stock: 10, warehouseStocks: [{ warehouseId: "w", qty: 10 }], orderItems: [], partnerReservations: [] });
   tx.warehouse.findUnique.mockResolvedValue({ active: true, isDefault: true });
 });
 describe("new goods for an unresolved courier delivery", () => {
+  it.each([
+    { status: "CREATED", providerStatusCode: "CREATED" },
+    { status: "FAILED", providerStatusCode: "DELETED" },
+  ])("requires explicit confirmation when an accepted X Express shipment has no pickup scan: %j", async state => {
+    tx.shipment.findUnique.mockResolvedValue({ ...source(), ...state, providerShipmentId: "accepted-request" });
+    await expect(queueOrderReshipment(input)).rejects.toThrow("Potvrdite da je X Express preuzeo robu");
+    expect(tx.orderReshipment.create).not.toHaveBeenCalled();
+    expect(tx.order.update).not.toHaveBeenCalled();
+    expect(adjust).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { status: "CREATED", providerStatusCode: "CREATED" },
+    { status: "FAILED", providerStatusCode: "DELETED" },
+  ])("returns an unscanned legacy shipment to picking without rewriting courier evidence or debiting twice: %j", async state => {
+    const s = source();
+    const unscanned = { ...s, ...state, providerShipmentId: "accepted-request", order: { ...s.order, status: "KREIRANO" } };
+    tx.shipment.findUnique.mockResolvedValue(unscanned);
+    // Old picking records, including SPC-2026-000779, have no direct shipmentId.
+    tx.pickupBatchLine.findMany.mockResolvedValue([{ orderItemId: "i", shipmentId: null, quantity: 2, packedQuantity: 2, packageNo: 1 }]);
+    const confirmed = { ...input, confirmUnscannedPickup: true };
+    expect(await queueOrderReshipment(confirmed)).toMatchObject({ id: "r", batchId: null });
+    expect(tx.orderStatusEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      actorId: "admin", status: "U_PRIPREMI", note: expect.stringContaining("Operater je potvrdio da je X Express preuzeo robu bez evidentiranog preuzimanja"),
+    }) });
+    expect(tx.orderReshipment.create.mock.calls[0][0].data).toMatchObject({ sourceShipmentId: "s", reason: input.reason, actorId: "admin", codAmount: 4500 });
+    expect(tx.pickupBatchLine.findMany.mock.calls[0][0].where).toMatchObject({ lineGroupKey: "order:o:X_EXPRESS", batch: { provider: "X_EXPRESS", status: { in: ["BOOKED", "PICKED_UP"] } } });
+    expect(unscanned.status).toBe(state.status);
+    expect(tx.pickupBatchLine.createMany).not.toHaveBeenCalled();
+
+    tx.shipment.findUnique.mockResolvedValue({ ...unscanned, reshipment: { id: "r", batchId: null } });
+    await queueOrderReshipment(confirmed);
+    expect(tx.orderReshipment.create).toHaveBeenCalledTimes(1);
+    expect(adjust).toHaveBeenCalledTimes(1);
+
+    tx.orderReshipment.findMany.mockResolvedValue([{ id: "r", orderId: "o", sourceShipment: unscanned, order: unscanned.order, items: [{ orderItemId: "i", quantity: 2 }] }]);
+    expect(await loadPendingOrderReshipments(tx as unknown as Prisma.TransactionClient, { id: "selected", number: "PRE-selected" }, "X_EXPRESS", "admin"))
+      .toEqual({ reshipmentCount: 1, reshipmentLineCount: 1 });
+    expect(tx.pickupBatchLine.createMany.mock.calls[0][0].data).toEqual([expect.objectContaining({ batchId: "selected", lineGroupKey: "reshipment:r", quantity: 2 })]);
+    expect(adjust).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { status: "CREATED", providerShipmentId: null },
+    { status: "FAILED", providerStatusCode: "DELETED", providerShipmentId: null },
+    { status: "FAILED", providerStatusCode: "DELETED", providerShipmentId: "accepted", trackingNo: null },
+    { status: "FAILED", providerStatusCode: "PCK_FAIL_INCOMPLETE", providerShipmentId: "accepted" },
+    { status: "CREATED", providerShipmentId: " " },
+    { status: "CREATED", providerShipmentId: "accepted", trackingNo: " " },
+    { status: "CREATED", providerShipmentId: "accepted", provider: "MYGLS" },
+    { status: "FAILED", providerShipmentId: "accepted", providerStatusCode: "LOCAL_ANNOUNCEMENT_FAILED" },
+    { status: "DELIVERED", providerShipmentId: "accepted" },
+  ])("manual confirmation cannot bypass an ineligible shipment: %j", async fields => {
+    tx.shipment.findUnique.mockResolvedValue({ ...source(), ...fields });
+    await expect(queueOrderReshipment({ ...input, confirmUnscannedPickup: true })).rejects.toThrow("Ponovno slanje");
+    expect(tx.orderReshipment.create).not.toHaveBeenCalled();
+    expect(adjust).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { status: "OTKAZANO" },
+    { status: "ISPORUCENO" },
+    { cancelledAt: new Date() },
+    { stockRestoredAt: new Date() },
+    { paymentRefunds: [{ id: "refund" }] },
+  ])("manual confirmation retains order safeguards: %j", async fields => {
+    const s = source();
+    tx.shipment.findUnique.mockResolvedValue({ ...s, status: "CREATED", providerShipmentId: "accepted", order: { ...s.order, ...fields } });
+    await expect(queueOrderReshipment({ ...input, confirmUnscannedPickup: true })).rejects.toThrow("ne može ponovo");
+    expect(tx.orderReshipment.create).not.toHaveBeenCalled();
+    expect(adjust).not.toHaveBeenCalled();
+  });
+
+  it("requires the original booked picking evidence even for confirmed unscanned pickup", async () => {
+    tx.shipment.findUnique.mockResolvedValue({ ...source(), status: "CREATED", providerShipmentId: "accepted" });
+    tx.pickupBatchLine.findMany.mockResolvedValue([]);
+    await expect(queueOrderReshipment({ ...input, confirmUnscannedPickup: true })).rejects.toThrow("picking evidenciju");
+    expect(tx.orderReshipment.create).not.toHaveBeenCalled();
+    expect(adjust).not.toHaveBeenCalled();
+  });
+
   it("queues new goods and the old shipment return after X Express incomplete delivery", async () => {
     tx.shipment.findUnique.mockResolvedValue({ ...source(), status: "FAILED", providerStatusCode: "DLV_FAIL_INCOMPLETE" });
     expect(await queueOrderReshipment(input)).toMatchObject({ id: "r", batchId: null });
@@ -92,10 +177,10 @@ describe("new goods for an unresolved courier delivery", () => {
     await queueOrderReshipment(input);
     expect(tx.orderReshipment.create.mock.calls[0][0].data.codAmount).toBe(0);
   });
-  it("rejects a mismatched order and an already received/refunded return", async () => {
+  it("rejects a mismatched order and an already started fiscal refund", async () => {
     await expect(queueOrderReshipment({ ...input, orderId: "different" })).rejects.toThrow("nije pronađena");
-    tx.stockMovement.findFirst.mockResolvedValue({ id: "return" });
-    await expect(queueOrderReshipment(input)).rejects.toThrow("knjižen povrat");
+    tx.fiscalDocument.findFirst.mockResolvedValue({ id: "refund", status: "PENDING" });
+    await expect(queueOrderReshipment(input)).rejects.toThrow("Refundacija porudžbine je već pokrenuta");
     expect(adjust).not.toHaveBeenCalled();
   });
   it("does not collect COD again when payment is already recorded", async () => {
@@ -105,8 +190,52 @@ describe("new goods for an unresolved courier delivery", () => {
     expect(tx.orderReshipment.create.mock.calls[0][0].data.codAmount).toBe(0);
   });
 });
+describe("reshipment after physical receipt without refund", () => {
+  const receipt = { id: "receipt", orderItemId: "i", idempotencyKey: "order-return:WEB-1:i:1", qty: 1, fiscalDocumentId: null, note: "Primljeno" };
+  beforeEach(() => {
+    tx.shipment.findUnique.mockResolvedValue({ ...source(), status: "RETURNED" });
+    tx.stockMovement.findMany.mockResolvedValue([receipt]);
+  });
+  it("transfers the receipt, stops pending refund work and debits only the new goods", async () => {
+    await queueOrderReshipment(input);
+    expect(tx.orderReshipment.create.mock.calls[0][0].data.items.create).toEqual([
+      expect.objectContaining({ orderItemId: "i", quantity: 2, receivedQty: 1 }),
+    ]);
+    expect(tx.stockMovement.update).toHaveBeenCalledWith({ where: { id: "receipt" }, data: {
+      idempotencyKey: "reshipment-return:ri:1", kind: "ADJUSTMENT", orderItemId: null,
+      note: expect.stringContaining("order-return:WEB-1:i:1"),
+    } });
+    expect(tx.backgroundJob.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { kind: "RETURN_FISCAL_REFUND", idempotencyKey: "return-fiscal:receipt", status: { in: ["QUEUED", "RETRY", "FAILED"] } },
+      data: expect.objectContaining({ status: "COMPLETED" }),
+    }));
+    expect(adjust).toHaveBeenCalledTimes(1);
+    expect(adjust.mock.calls[0][1]).toMatchObject({ qtyDelta: -2 });
+  });
+  it.each([
+    { qty: 0 }, { qty: 2 }, { fiscalDocumentId: "refund" },
+    { orderItemId: "other" }, { idempotencyKey: "fiscal-refund:doc:line" },
+    { idempotencyKey: "order-return:WEB-1:i:3" },
+  ])("blocks ambiguous or refunded ledger entries: %j", async fields => {
+    tx.stockMovement.findMany.mockResolvedValue([{ ...receipt, ...fields }]);
+    await expect(queueOrderReshipment(input)).rejects.toThrow("usaglašavanje");
+    expect(tx.orderReshipment.create).not.toHaveBeenCalled();
+    expect(tx.stockMovement.update).not.toHaveBeenCalled();
+    expect(adjust).not.toHaveBeenCalled();
+  });
+  it("does not assign an order-level receipt to one of multiple returned deliveries", async () => {
+    tx.shipment.count.mockResolvedValue(2);
+    await expect(queueOrderReshipment(input)).rejects.toThrow("jednoznačno");
+    expect(tx.orderReshipment.create).not.toHaveBeenCalled();
+  });
+  it("does not assign an old receipt to a shipment still in transit", async () => {
+    tx.shipment.findUnique.mockResolvedValue(source());
+    await expect(queueOrderReshipment(input)).rejects.toThrow("jednoznačno");
+    expect(adjust).not.toHaveBeenCalled();
+  });
+});
 describe("physical return of the old goods", () => {
-  beforeEach(() => tx.orderReshipmentItem.findUniqueOrThrow.mockResolvedValue({ id: "ri", quantity: 2, receivedQty: 0, productId: "p", sku: "SKU", reshipment: { orderId: "o", order: { number: "WEB-1", status: "U_PRIPREMI" }, sourceShipment: { trackingNo: "OLD" } } }));
+  beforeEach(() => tx.orderReshipmentItem.findUniqueOrThrow.mockResolvedValue({ id: "ri", reshipmentId: "r", quantity: 2, receivedQty: 0, productId: "p", sku: "SKU", reshipment: { orderId: "o", order: { number: "WEB-1", status: "U_PRIPREMI" }, sourceShipment: { trackingNo: "OLD" } } }));
   const receipt = { itemId: "ri", unitNo: 1, warehouseId: "w", actorId: "admin" };
   it("receives one inspected unit without a fiscal return or changing the active order", async () => {
     await receiveReshipmentReturn(receipt);
@@ -120,6 +249,11 @@ describe("physical return of the old goods", () => {
     await receiveReshipmentReturn(receipt);
     expect(adjust).not.toHaveBeenCalled();
     expect(tx.orderReshipmentItem.update).not.toHaveBeenCalled();
+  });
+  it("blocks stock receipt after a lost closure", async () => {
+    tx.returnResolution.findUnique.mockResolvedValue({ key: "reshipment:r" });
+    await expect(receiveReshipmentReturn(receipt)).rejects.toThrow("izgubljen");
+    expect(adjust).not.toHaveBeenCalled();
   });
   it("requires an explicit receiving warehouse", async () => {
     await expect(receiveReshipmentReturn({ ...receipt, warehouseId: "" })).rejects.toThrow("magacin");

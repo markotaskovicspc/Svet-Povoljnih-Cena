@@ -1,12 +1,16 @@
+import {operatorAction} from './operator-action.mjs';
+import {operatorConversations,operatorConversation} from './operator-reader.mjs';
 import http from 'node:http';
+import {webchat} from './webchat.mjs';
 import { readFile } from 'node:fs/promises';
 import { equal, verifyMeta, parseEvents } from './security.mjs';
 import {parseComments} from './comments.mjs';
 import {completeOperatorQuote} from './operator-order.mjs';
 import {auditWindow,conversationAuditPage} from './conversation-audit.mjs';
 import {verifiedConversationLink} from './inbox-link.mjs';
+import {suppliedContact} from './staff-order.mjs';
 
-export async function createHttpServer({store,worker,emailWorker,commentWorker,accounts,adminToken,appSecret,verifyToken}) {
+export async function createHttpServer({store,worker,emailWorker,commentWorker,accounts,adminToken,appSecret,verifyToken,websiteSecret}) {
 const page=await readFile(new URL('../public/index.html',import.meta.url));
 const server=http.createServer(async(req,res)=>{
   res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');
@@ -14,6 +18,7 @@ const server=http.createServer(async(req,res)=>{
   try {
     const url=new URL(req.url,'http://localhost');
     if(url.pathname==='/webhooks/meta'&&!appSecret)return reply(503,{error:'Meta connection is not configured'});
+    if(url.pathname==='/webchat')return await webchat({req,url,reply,store,worker,secret:websiteSecret});
     if(url.pathname==='/health'){await store.pool.query('SELECT 1');return reply(200,{ok:true,botEnabled:worker.enabled,accounts:accounts.length});}
     if(req.method==='GET'&&url.pathname==='/webhooks/meta'){
       if(url.searchParams.get('hub.mode')==='subscribe'&&equal(url.searchParams.get('hub.verify_token'),verifyToken)) {res.writeHead(200,{'Content-Type':'text/plain'});return res.end(url.searchParams.get('hub.challenge')??'');}
@@ -21,10 +26,14 @@ const server=http.createServer(async(req,res)=>{
     }
     if(req.method==='GET'&&url.pathname==='/'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'"});return res.end(page);}
     const isWebhook=req.method==='POST'&&url.pathname==='/webhooks/meta';
-    if(!isWebhook&&!equal(req.headers.authorization,`Bearer ${adminToken}`))return reply(401,{error:'Unauthorized'});
+    const operatorWrite=req.method==='POST'&&url.pathname==='/operator/action';
+    const operatorRead=req.method==='GET'&&['/operator/conversations','/operator/conversation'].includes(url.pathname);
+    if(!isWebhook&&(((operatorRead||operatorWrite)&&!websiteSecret)||!equal(req.headers.authorization,`Bearer ${(operatorRead||operatorWrite)?websiteSecret:adminToken}`)))return reply(401,{error:'Unauthorized'});
+    if(operatorRead){try{const data=url.pathname==='/operator/conversations'?await operatorConversations(store,url):await operatorConversation(store,url);return reply(data?200:404,data??{error:'Not found'});}catch{return reply(400,{error:'Invalid query'});}}
     let bytes=0;const chunks=[];
     for await(const chunk of req){bytes+=chunk.length;if(bytes>256*1024)return reply(413,{error:'Too large'});chunks.push(chunk);}
     const raw=Buffer.concat(chunks);
+    if(operatorWrite){const result=await operatorAction({store,worker,body:JSON.parse(raw)});return reply(result.status,result.data);}
     if(req.method==='GET'&&url.pathname==='/admin/email-drafts'){
       if(!emailWorker||emailWorker.status==='disabled')return reply(200,{status:'disabled'});
       const result=await store.pool.query('SELECT status,reason,count(*)::int AS count FROM spc_email_drafts GROUP BY status,reason');
@@ -65,6 +74,20 @@ const server=http.createServer(async(req,res)=>{
       const state=store.decode(result.rows[0].state);
       const attachments=await store.pool.query('SELECT payload FROM spc_chat_events WHERE conversation=$1 ORDER BY created_at DESC LIMIT 30',[url.searchParams.get('id')]);
       return reply(200,{history:state.history,orders:state.orders.map(o=>({number:o.number})),attachments:attachments.rows.flatMap(e=>store.decode(e.payload).attachments??[])});
+    }
+    if(req.method==='GET'&&url.pathname==='/admin/staff-diagnostics'){
+      const id=url.searchParams.get('id');
+      if(!id||id.length>200)return reply(400,{error:'Invalid conversation'});
+      const result=await store.pool.query('SELECT state FROM spc_chat_conversations WHERE id=$1',[id]);
+      if(!result.rowCount)return reply(404,{error:'Not found'});
+      const state=store.decode(result.rows[0].state),plan=state.staffPlanSummary;
+      const support=await store.pool.query('SELECT status,created_at,payload FROM spc_chat_support WHERE conversation=$1 ORDER BY created_at DESC LIMIT 5',[id]);
+      // Explicit allowlist: never expose access tokens, signed quotes or credentials.
+      return reply(200,{diagnostic:state.staffOrderDiagnostic??null,checkFailure:state.staffOrderCheckFailure??null,attention:state.staffOrderAttention??null,
+        historyIncomplete:state.staffHistoryIncomplete??false,
+        attempt:state.staffOrder?{eventId:state.staffOrder.eventId,status:state.staffOrder.status,message:state.staffOrder.message}:null,
+        plan:plan?{lines:plan.lines,agreedTotal:plan.agreedTotal,unitPrices:plan.unitPrices,shipping:plan.shipping,emailPresent:Boolean(plan.guestEmail),contactEvidenceMatched:plan.shipping?suppliedContact({shipping:plan.shipping,guestEmail:plan.guestEmail},state.history??[],state.customer):false}:null,
+        support:support.rows.map(r=>{const p=store.decode(r.payload);return {status:r.status,at:r.created_at,reason:p.reason,detail:p.transcript?.split('\n\n')[0]};})});
     }
     if(req.method==='POST'&&url.pathname==='/admin/action'){
       const body=JSON.parse(raw);if(typeof body.id!=='string'||body.id.length>200)return reply(400,{error:'Invalid conversation'});

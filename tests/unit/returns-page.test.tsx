@@ -2,10 +2,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  orders: vi.fn(), count: vi.fn(), reclamations: vi.fn(), reshipments: vi.fn(),
+  resolutions: vi.fn(), orders: vi.fn(), count: vi.fn(), reclamations: vi.fn(), reshipments: vi.fn(),
   jobs: vi.fn(), warehouses: vi.fn(), movements: vi.fn(), authorize: vi.fn(),
 }));
 vi.mock("@/lib/db", () => ({ db: {
+  returnResolution: { findMany: mocks.resolutions },
   order: { findMany: mocks.orders, count: mocks.count },
   orderReshipment: { findMany: mocks.reshipments },
   reclamation: { findMany: mocks.reclamations },
@@ -31,6 +32,7 @@ const returnedOrder = (id: string, shipments = [{
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.resolutions.mockResolvedValue([]);
   mocks.jobs.mockResolvedValue([]);
   mocks.reshipments.mockResolvedValue([]);
   mocks.orders.mockResolvedValue([]);
@@ -90,14 +92,14 @@ describe("ERP returns page", () => {
       expect(html).toContain(`TRACK-${index}`);
       expect(html).toContain(`/admin/erp/prodajni-nalozi/${index}`);
     }
-    expect(html).toMatch(/Vraćene porudžbine<\/p><p[^>]*>7<\/p>/);
-    expect(html).toContain("Nema kreiranih reklamacionih povrata.");
+    expect(html).toContain("Aktivni (7)");
+    expect(html).toContain("Svi povrati");
     expect(html).not.toContain("Nema kreiranih povrata.");
     expect(html).not.toContain("Primi i proknjiži");
     // Keep both historical/manual order returns and courier-confirmed returns
     // eligible, without counting failed deliveries or replacement shipments.
     const where = { OR: [
-      { status: "VRACENO" },
+      { status: "VRACENO", shipments: { none: { reshipment: { isNot: null } } } },
       { shipments: { some: { purpose: "ORDER_DELIVERY", status: "RETURNED", reshipment: null } } },
     ] };
     expect(mocks.orders).toHaveBeenCalledWith(expect.objectContaining({ where }));
@@ -134,11 +136,36 @@ describe("ERP returns page", () => {
       idempotencyKey: "reclamation-return:claim", createdAt: new Date("2026-09-10T10:00:00Z"),
       warehouse: { code: "POV", name: "Povratna roba" },
     }]);
-    const html = renderToStaticMarkup(await ReturnsPage());
+    const active = renderToStaticMarkup(await ReturnsPage());
+    expect(active).not.toContain("R-1-SPC-1");
+    const html = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ view: "completed" }) }));
     expect(html).toContain("R-1-SPC-1");
     expect(html).toContain("POV · Povratna roba");
-    expect(html).toMatch(/Proknjižene reklamacije<\/p><p[^>]*>1<\/p>/);
-    expect(html).toContain("Nema evidentiranih povrata porudžbina.");
+    expect(html).toContain("Završeni (1)");
+    expect(html).toContain("Svi povrati");
     expect(html).not.toContain("Primi i proknjiži");
   });
+});
+
+it("moves lost returns out of the active queue and preserves their reason in completed", async () => {
+  mocks.orders.mockResolvedValue([returnedOrder("lost")]);
+  mocks.resolutions.mockResolvedValue([{ key: "order:lost", reason: "Kurir potvrdio gubitak", createdAt: new Date() }]);
+  const active = renderToStaticMarkup(await ReturnsPage());
+  expect(active).not.toContain("SPC-lost");
+  expect(active).toContain("Nema aktivnih povrata");
+  const completed = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ view: "completed" }) }));
+  expect(completed).toContain("SPC-lost");
+  expect(completed).toContain("Kurir potvrdio gubitak");
+  expect(completed).not.toContain("Primi paket");
+  expect(completed).not.toContain("Označi kao izgubljenu");
+});
+it("removes fully received reshipment returns but keeps partial receipts active", async () => {
+  const retry = { id: "r", orderId: "o", batchId: null, batch: null, reason: "Ponovno slanje", order: { number: "SPC-RETRY" }, sourceShipmentId: "s", sourceShipment: { provider: "X_EXPRESS", trackingNo: "OLD", status: "RETURNED" }, items: [{ id: "ri", sku: "SKU", name: "Sto", quantity: 2, receivedQty: 2 }] };
+  mocks.reshipments.mockResolvedValue([retry]);
+  expect(renderToStaticMarkup(await ReturnsPage())).not.toContain("SPC-RETRY");
+  const completed = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ view: "completed" }) }));
+  expect(completed).toContain("SPC-RETRY");
+  expect(completed).not.toContain("Primi 1 kom");
+  mocks.reshipments.mockResolvedValue([{ ...retry, items: [{ ...retry.items[0], receivedQty: 1 }] }]);
+  expect(renderToStaticMarkup(await ReturnsPage())).toContain("Primi 1 kom");
 });

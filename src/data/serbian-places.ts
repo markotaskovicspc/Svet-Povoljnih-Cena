@@ -181,11 +181,15 @@ export const SERBIAN_PLACES: SerbianPlace[] = [
 
 /** Strip Serbian Latin diacritics + lowercase for fuzzy matching. */
 export function normalizeSerbianPlaceSearch(s: string): string {
+  const cyrillic = 'абвгдђежзијклљмнњопрстћуфхцчџш';
+  const latin = ['a','b','v','g','d','dj','e','z','z','i','j','k','l','lj','m','n','nj','o','p','r','s','t','c','u','f','h','c','c','dz','s'];
   return s
     .toLowerCase()
+    .replace(/[а-шђјљњћџ]/g, c => latin[cyrillic.indexOf(c)] ?? c)
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/g, "dj");
+    .replace(/đ/g, "dj")
+    .replace(/dj/g, "d");
 }
 
 /**

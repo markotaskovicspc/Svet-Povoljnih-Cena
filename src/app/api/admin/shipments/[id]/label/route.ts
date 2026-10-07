@@ -1,3 +1,4 @@
+import { readShipmentAssignment } from "@/lib/courier/shipment-assignment";
 import { isMyGlsReturn } from "@/lib/mygls/return-booking";
 import { isCancelledDelivery } from "@/lib/courier/cancelled-delivery";
 import { renderPrintHtmlPdf } from "@/lib/pdf/print-html";
@@ -25,7 +26,7 @@ export async function GET(
   const shipment = await db.shipment.findUnique({
     where: { id },
     include: {
-      pickupBatchLines: { select: { packedQuantity: true, packedItems: true, providerParcelNumber: true, providerClientReference: true } },
+      pickupBatchLines: { select: { packageNo: true, packedQuantity: true, packedItems: true, providerParcelNumber: true, providerClientReference: true } },
       order: {
         select: {
           number: true,
@@ -81,6 +82,23 @@ export async function GET(
     }
     let html: string;
     try {
+      // Before X Express stored direct picking links, the persisted assignment
+      // key identified the exact original/deferred/reshipment package group.
+      if (!shipment.pickupBatchLines?.length && shipment.purpose === "ORDER_DELIVERY") {
+        const assignment = readShipmentAssignment(shipment.rawCreateResponse);
+        if (assignment) {
+          shipment.pickupBatchLines = await db.pickupBatchLine.findMany({
+            where: {
+              orderId: shipment.orderId,
+              lineGroupKey: assignment.assignmentKey ?? `order:${shipment.orderId}:X_EXPRESS`,
+              deferredAt: null,
+              batch: { provider: X_EXPRESS_PROVIDER },
+            },
+            orderBy: { packageNo: "asc" },
+            select: { packageNo: true, packedQuantity: true, packedItems: true, providerParcelNumber: true, providerClientReference: true },
+          });
+        }
+      }
       html = renderXExpressLabelsHtml(shipment);
     } catch (error) {
       return NextResponse.json(

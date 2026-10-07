@@ -3,6 +3,36 @@ import assert from 'node:assert/strict';
 import {selectTown,orderErrorMessage} from '../src/delivery.mjs';
 import {createSpcClient} from '../src/spc.mjs';
 const town={townId:123,name:'Kruševac',postalCode:'37000'};
+test('quote normalizes only leading zeros in house numbers and preserves full suffixes',async()=>{
+ const original=globalThis.fetch;
+ globalThis.fetch=async(url,options)=>({ok:true,json:async()=>options?.body?{ok:true,input:JSON.parse(options.body).input}:{items:[town]}});
+ try{
+  for(const [supplied,expected] of [['033','33'],['0033A','33A'],['0040/63','40/63'],['40/63','40/63'],['12-14','12-14'],['bb','bb'],['000','000'],['','']]){
+   const r=await createSpcClient('https://example.test','test')({action:'quote',input:{shipping:{city:'Kruševac',houseNumber:supplied}}});
+   assert.equal(r.input.shipping.houseNumber,expected);
+  }
+ }finally{globalThis.fetch=original;}
+});
+test('Belica with nearby post office postcode resolves by exact unique locality, without buyer email',async()=>{
+ const original=globalThis.fetch,calls=[];
+ globalThis.fetch=async(url,options)=>{
+  calls.push({query:new URL(url).searchParams.get('q'),body:options?.body});
+  return {ok:true,json:async()=>options?.body?{ok:true,input:JSON.parse(options.body).input}:{items:new URL(url).searchParams.get('q')==='35273'?[{townId:1,name:'Bunar',postalCode:'35273'}]:[{townId:2,name:'Belica',postalCode:'35000'}]}};
+ };
+ try{
+  const result=await createSpcClient('https://example.test','test')({action:'quote',input:{guestEmail:null,shipping:{city:'Belica',postalCode:'35273'}}});
+  assert.equal(result.ok,true);assert.deepEqual(calls.slice(0,2).map(x=>x.query),['35273','Belica']);
+  assert.equal(result.input.shipping.city,'Belica');assert.equal(result.input.shipping.postalCode,'35000');assert.equal(result.input.shipping.xExpressTownId,2);assert(!('guestEmail' in result.input));
+ }finally{globalThis.fetch=original;}
+});
+test('postal correction does not guess between two exact same-name localities',async()=>{
+ const original=globalThis.fetch;let quoteCalled=false;
+ globalThis.fetch=async(url,options)=>{if(options?.body)quoteCalled=true;return {ok:true,json:async()=>({items:[{townId:1,name:'Belica',postalCode:'35000'},{townId:2,name:'Belica',postalCode:'99999'}]})};};
+ try{
+  const result=await createSpcClient('https://example.test','test')({action:'staff_quote',input:{shipping:{city:'Belica',postalCode:'35273'}}});
+  assert.equal(result.error.code,'DELIVERY_ADDRESS_INVALID');assert.equal(quoteCalled,false);
+ }finally{globalThis.fetch=original;}
+});
 test('Batajnica resolves through verified API alias without discarding customer postcode',()=>{
  const b={townId:791059,name:'Batajnica',postalCode:'11273',aliases:['Zemun Batajnica','Beograd Batajnica']};
  for(const city of ['Batajnica','Батајница','Zemun - Batajnica'])assert.equal(selectTown([b],{city,postalCode:'11273'}),b);
@@ -36,4 +66,9 @@ test('staff quote resolves optional postcode and omits null email while preservi
   await createSpcClient('https://example.test','synthetic')({action:'staff_quote',staffPricing,input:{guestEmail:null,shipping:{city:'Kruševac',postalCode:null}}});
   assert.equal(sent.action,'staff_quote');assert.deepEqual(sent.staffPricing,staffPricing);assert(!('guestEmail' in sent.input));assert.equal(sent.input.shipping.postalCode,'37000');assert.equal(sent.input.shipping.xExpressTownId,123);
  }finally{globalThis.fetch=original;}
+});
+
+test('omitted diacritics and both d/dj spellings resolve only unique exact courier towns',()=>{
+ for(const [name,city] of [['Ćuprija','Cuprija'],['Čačak','Cacak'],['Šabac','Sabac'],['Žitište','Zitiste'],['Aranđelovac','Arandelovac'],['Aranđelovac','Arandjelovac']])assert.equal(selectTown([{townId:2,name,postalCode:'12345'}],{city}).townId,2);
+ assert.equal(selectTown([{townId:1,name:'Ćelije'},{townId:2,name:'Čelije'}],{city:'Celije'}),null);
 });

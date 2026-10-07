@@ -80,7 +80,7 @@ export function SimpleLandingPageEditor({
   );
   const [heroImageAlt, setHeroImageAlt] = useState(values.heroImageAlt ?? "");
   const [heroCtaLabel, setHeroCtaLabel] = useState(values.heroCtaLabel ?? "");
-  const [heroCtaHref, setHeroCtaHref] = useState(values.heroCtaHref ?? "#proizvodi");
+  const [heroCtaHref, setHeroCtaHref] = useState(values.heroCtaHref ?? "");
   const [products, setProducts] = useState(initialProducts);
   const [seoTitle, setSeoTitle] = useState(values.seoTitle ?? "");
   const [seoDescription, setSeoDescription] = useState(values.seoDescription ?? "");
@@ -90,17 +90,22 @@ export function SimpleLandingPageEditor({
   const [startsAt, setStartsAt] = useState(toLocalDateTime(values.startsAt));
   const [endsAt, setEndsAt] = useState(toLocalDateTime(values.endsAt));
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
+  const hasBanner = Boolean(heroImageUrl.trim() || heroMobileImageUrl.trim());
+  const previewImage = previewDevice === "mobile"
+    ? heroMobileImageUrl || heroImageUrl
+    : heroImageUrl || heroMobileImageUrl;
   const publishIssues = useMemo(() => {
     const issues: string[] = [];
-    if (!heroImageUrl) issues.push("Dodajte desktop sliku banera.");
-    if (!heroCtaLabel || !heroCtaHref) issues.push("Unesite naziv i link CTA dugmeta.");
+    if (hasBanner && Boolean(heroCtaLabel.trim()) !== Boolean(heroCtaHref.trim())) {
+      issues.push("Za CTA dugme unesite i naziv i link ili ostavite oba polja prazna.");
+    }
     if (!products.length) issues.push("Dodajte najmanje jedan proizvod.");
     const unavailable = products.filter((product) => !product.availableForWeb);
     if (unavailable.length) {
       issues.push(`${unavailable.length} izabranih proizvoda trenutno nije dostupno za web.`);
     }
     return issues;
-  }, [heroCtaHref, heroCtaLabel, heroImageUrl, products]);
+  }, [heroCtaHref, heroCtaLabel, hasBanner, products]);
 
   return (
     <AdminActionForm action={action} className="space-y-6">
@@ -116,7 +121,7 @@ export function SimpleLandingPageEditor({
         <div className="space-y-6">
           <EditorSection
             title="Osnovni podaci"
-            description="Naziv se koristi kao nevidljivi H1 i SEO fallback; ne prikazuje se preko banera."
+            description="Naziv je naslov stranice i SEO fallback. Vidljiv je kada stranica nema baner."
           >
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Slug" hint="Javna adresa je /ponuda/slug">
@@ -129,7 +134,7 @@ export function SimpleLandingPageEditor({
                   className={values.lockedSlug ? "bg-muted-bg" : undefined}
                 />
               </Field>
-              <Field label="Naziv stranice (nevidljivi H1)">
+              <Field label="Naziv stranice (H1)">
                 <Input
                   name="title"
                   required
@@ -143,7 +148,7 @@ export function SimpleLandingPageEditor({
 
           <EditorSection
             title="Glavni baner"
-            description="Iste proporcije kao na početnoj: desktop 24:7, mobilni prikaz kvadrat. Na slici je samo CTA dole levo."
+            description="Baner nije obavezan. Bez slike prikazuju se naslov i proizvodi. Desktop proporcije su 24:7, a mobilni prikaz je kvadrat."
           >
             <MediaUrlField
               pageId={values.id}
@@ -159,6 +164,21 @@ export function SimpleLandingPageEditor({
               value={heroMobileImageUrl}
               onChange={setHeroMobileImageUrl}
             />
+            {hasBanner ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setHeroImageUrl("");
+                  setHeroMobileImageUrl("");
+                  setHeroImageAlt("");
+                  setHeroCtaLabel("");
+                  setHeroCtaHref("");
+                }}
+              >
+                <Trash2 className="size-4" /> Ukloni baner
+              </Button>
+            ) : null}
             <Field label="Alt tekst slike">
               <Input
                 name="heroImageAlt"
@@ -168,10 +188,9 @@ export function SimpleLandingPageEditor({
               />
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Naziv CTA dugmeta">
+              <Field label="Naziv CTA dugmeta" hint="Dugme na baneru nije obavezno.">
                 <Input
                   name="heroCtaLabel"
-                  required
                   maxLength={80}
                   value={heroCtaLabel}
                   onChange={(event) => setHeroCtaLabel(event.target.value)}
@@ -181,7 +200,6 @@ export function SimpleLandingPageEditor({
               <Field label="CTA link" hint="Može biti #proizvodi, interni put ili HTTPS link.">
                 <Input
                   name="heroCtaHref"
-                  required
                   value={heroCtaHref}
                   onChange={(event) => setHeroCtaHref(event.target.value)}
                   placeholder="#proizvodi"
@@ -259,14 +277,21 @@ export function SimpleLandingPageEditor({
                 ))}
               </div>
             </div>
-            <div className={cn("relative bg-white", previewDevice === "mobile" ? "mx-auto aspect-square max-w-72" : "aspect-[24/7]")}>
-              {(previewDevice === "mobile" ? heroMobileImageUrl || heroImageUrl : heroImageUrl) ? <Image src={previewDevice === "mobile" ? heroMobileImageUrl || heroImageUrl : heroImageUrl} alt="" fill unoptimized loading="eager" className="object-contain" /> : null}
-              {heroCtaLabel ? (
-                <span className="absolute bottom-4 left-4 rounded-full bg-canvas px-4 py-2 text-xs text-ink-900 shadow-soft-2">
-                  {heroCtaLabel}
-                </span>
-              ) : null}
-            </div>
+            {hasBanner ? (
+              <div className={cn("relative bg-white", previewDevice === "mobile" ? "mx-auto aspect-square max-w-72" : "aspect-[24/7]")}>
+                <Image src={previewImage} alt="" fill unoptimized loading="eager" className="object-contain" />
+                {heroCtaLabel && heroCtaHref ? (
+                  <span className="absolute bottom-4 left-4 rounded-full bg-canvas px-4 py-2 text-xs text-ink-900 shadow-soft-2">
+                    {heroCtaLabel}
+                  </span>
+                ) : null}
+              </div>
+            ) : (
+              <div className="bg-white p-4">
+                <p className="font-display text-lg font-semibold text-ink-900">{title || "Naziv stranice"}</p>
+                <p className="mt-1 text-xs text-ink-500">Stranica bez banera</p>
+              </div>
+            )}
             <div className="p-4 text-xs text-ink-500">Brzi pregled · {products.length} {products.length === 1 ? "proizvod" : "proizvoda"}</div>
           </div>
         </aside>

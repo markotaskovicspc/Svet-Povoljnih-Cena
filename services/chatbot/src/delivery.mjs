@@ -5,10 +5,27 @@ export function normalizePlace(value) {
 }
 export function selectTown(items,shipping) {
   const postalCode=String(shipping.postalCode??'').trim();
-  const placeKey=value=>normalizePlace(value).replace(/[^a-z0-9]+/g,' ').trim();
+  const placeKey=value=>normalizePlace(value).replace(/dj/g,'d').replace(/[^a-z0-9]+/g,' ').trim();
   const matches=items.filter(t=>[t.name,...(t.aliases??[])].some(n=>placeKey(n)===placeKey(shipping.city)) && (!postalCode||t.postalCode===postalCode));
   const unique=[...new Map(matches.map(t=>[t.townId,t])).values()];
   return unique.length===1 && Number.isInteger(unique[0].townId) && unique[0].townId>0 ? unique[0] : null;
+}
+// Preserve an explicitly supplied Belgrade borough when extraction kept only
+// the parent city. Never infer a borough from a street or an old purchase.
+export function preserveCityDistrict(shipping,history){
+  if(normalizePlace(shipping.city)!=='beograd')return shipping;
+  const boroughs=['Vračar','Zemun','Novi Beograd','Voždovac','Zvezdara','Čukarica','Palilula','Rakovica','Savski venac','Stari grad','Surčin','Grocka','Barajevo','Lazarevac','Mladenovac','Obrenovac','Sopot'];
+  for(const message of [...history].reverse()){
+    if(message.role!=='user')continue;
+    const text=normalizePlace(message.content);
+    const matches=boroughs.filter(name=>{
+      const key=normalizePlace(name);
+      return new RegExp(`\\bbeograd\\s*[,()—–-]?\\s*${key}\\b|\\b${key}\\s*[,()—–-]?\\s*beograd\\b`).test(text);
+    });
+    if(matches.length===1)return {...shipping,city:`Beograd (${matches[0]})`};
+    if(matches.length>1)return shipping;
+  }
+  return shipping;
 }
 export function orderErrorMessage(code) {
   const reasons={

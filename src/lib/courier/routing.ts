@@ -124,14 +124,19 @@ export function routeService(order: PackageRouteInput): ShipmentService {
     : "COURIER_SMALL";
 }
 
-/** Consolidated soft goods can enter picking before the outer parcel is measured.
+/** Consolidated goods and explicit cartons can enter picking before the outer parcel is measured.
  * Known lower bounds still route bulky/heavy contents to MyGLS. Labels always
  * require the final physical measurements, independently of these routing hints.
  */
 export function physicalPackageRouteItem(pkg: PhysicalPackage): PackageRouteInput["items"][number] {
-  const dimensions = pkg.routingMeasurements ?? pkg;
+  const dimensions = {
+    widthCm: pkg.widthCm ?? pkg.routingMeasurements?.widthCm,
+    depthCm: pkg.depthCm ?? pkg.routingMeasurements?.depthCm,
+    heightCm: pkg.heightCm ?? pkg.routingMeasurements?.heightCm,
+    weightKg: pkg.weightKg ?? pkg.routingMeasurements?.weightKg,
+  };
   return { withAssembly: false, qty: 1, packQty: 1,
-    allowUnmeasuredParcel: Boolean(pkg.packedItems?.length),
+    allowUnmeasuredParcel: Boolean(pkg.packedItems?.length || pkg.routingMeasurements),
     packWidthCm: dimensions.widthCm, packDepthCm: dimensions.depthCm,
     packHeightCm: dimensions.heightCm, packGrossWeightKg: dimensions.weightKg };
 }

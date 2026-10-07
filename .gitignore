@@ -52,7 +52,7 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
-/services/chatbot/tmp/daily-audit/
+/services/chatbot/tmp/
 next-env.d.ts
 
 # Local AR tooling and Blender automatic backups

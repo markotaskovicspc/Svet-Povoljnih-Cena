@@ -1,8 +1,10 @@
 # Ponovno slanje nove robe
 
-U detalju WEB porudžbine, u odeljku Kurir uz preuzetu/neisporučenu X Express ili MyGLS pošiljku, OPS/SUPER bira **Pošalji novu robu / vrati u picking** i upisuje razlog.
+U detalju WEB porudžbine, u odeljku Kurir uz preuzetu/neisporučenu X Express ili MyGLS pošiljku, OPS/SUPER bira **Vrati u picking** i upisuje razlog. Zatim na izabranom picking nalogu bira **Učitaj porudžbine**.
 
-- Jedna transakcija čuva očekivani povrat prethodne pošiljke, izdvaja novu robu sa slobodnog lagera, pravi novi picking nalog i vraća porudžbinu u U_PRIPREMI. Isti izvorni shipment može pokrenuti samo jedno ponovno slanje.
+Ako je X Express prihvatio najavu (postoji broj pošiljke i potvrda prijema), a status je ostao CREATED ili je naknadno označen FAILED / DELETED bez evidentiranog preuzimanja, ista akcija je dostupna uz obaveznu ručnu potvrdu da je roba fizički preuzeta. Potvrda, operater i razlog ostaju u istoriji porudžbine i revizionom zapisu; ne upisuje se izmišljeni kurirski status niti se kontaktira kurir. Lokalno pripremljena adresnica bez prihvaćene najave nije dovoljna. Ovo je ponovno slanje nove robe nakon preuzimanja, a ne obnova preuzimanja robe koja je još u magacinu.
+
+- Jedna transakcija čuva očekivani povrat prethodne pošiljke, izdvaja novu robu sa slobodnog lagera i vraća porudžbinu u U_PRIPREMI. Picking nalog se ne kreira automatski; nova roba se učitava tek eksplicitnom akcijom na izabranom nalogu. Isti izvorni shipment može pokrenuti samo jedno ponovno slanje.
 - Nova roba ima zaseban ADJUSTMENT izlaz, sa idempotentnim ključem. Ne menja se originalna količina prodate robe, prvobitna rezervacija niti fiskalni obračun. Roba je od tog trenutka izdvojena za pripremu i nije raspoloživa drugoj prodaji.
 - Kopiraju se količine i fizički paketi izvornog picking naloga, ali se spremnost potvrđuje ponovo. Nova grupa i nova adresnica imaju sopstven identitet. Prethodni nalog i adresnica ostaju u istoriji.
 - Pouzeće nove pošiljke preuzima iznos prethodne grupe; plaćena porudžbina nema novo pouzeće. Povrat stare pošiljke mora operater da dogovori sa kurirom: lokalna akcija ne otkazuje već preuzetu adresnicu niti garantuje prekid stare naplate.
@@ -14,4 +16,4 @@ U detalju WEB porudžbine, u odeljku Kurir uz preuzetu/neisporučenu X Express i
 
 Potrebna je migracija `20260924000200_order_reshipment`, zatim postojeći `db:harden` i deploy aplikacije. Migracija uključuje RLS i uklanjanje prava Data API uloga. Ne menjati postojeću produkcijsku politiku dostupnosti.
 
-Lokalno su provereni servisni testovi sa mock bazom, tracking, izbor adresnica i serverski prikaz povrata. Za završnu proveru na testnoj bazi: ponoviti zahtev istovremeno iz dva taba, proveriti jedan izlaz nove robe, novu adresnicu i COD, poslati stari RETURNED/DELIVERED callback, primiti deo pa ostatak stare robe i ponoviti isti prijem. Proveriti da nema refund job-a niti duplog ulaza. Produkcijska migracija, stvarno slanje kuriru i test stvarne baze nisu izvršeni u ovoj lokalnoj izmeni.
+Podrška za ručno potvrđeno preuzimanje bez skeniranja ne zahteva novu migraciju. Servisni testovi pokrivaju obaveznu potvrdu, odbijanje nepodobnih pošiljki, jedno izdvajanje robe i eksplicitno učitavanje u picking. Browser test `tests/e2e/order-unscanned-pickup.spec.ts` koristi privremenu baznu šemu i proverava i ponavljanje zahteva iz starog taba, očuvanje stare pošiljke i pouzeća i učitavanje nove grupe samo jednom. Pokreće se postojećim `test:e2e:client-feedback:isolated` runnerom uz `E2E_ORDER_RESHIPMENT=1` i `CLIENT_FEEDBACK_E2E_SPECS=tests/e2e/order-unscanned-pickup.spec.ts`. Stvarna najava kuriru nije deo te provere.

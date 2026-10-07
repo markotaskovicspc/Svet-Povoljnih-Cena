@@ -21,7 +21,7 @@ type AdminFormAction = (
   formData: FormData,
 ) => Promise<AdminActionState>;
 
-type FiscalizationRow = {
+export type FiscalizationRow = {
   id: string;
   orderNumber: string;
   fiscalReceiptNumber: string;
@@ -55,6 +55,12 @@ type FiscalizationRow = {
   warehouseName: string;
   paymentMethod: string;
   refunded: boolean;
+  channel: string;
+  documentKind: string;
+  cogs: string;
+  totalCogs: string;
+  canRefund: boolean;
+  pdfHref?: string;
 };
 
 type ManualOrder = {
@@ -87,6 +93,8 @@ function manualOrderMatches(order: ManualOrder, query: string) {
 }
 
 const columns: { key: keyof FiscalizationRow; label: string; align?: "right" | "center" }[] = [
+  { key: "channel", label: "Kanal" },
+  { key: "documentKind", label: "Dokument" },
   { key: "orderNumber", label: "Broj porudžbine" },
   { key: "customerName", label: "Kupac" },
   { key: "pib", label: "PIB" },
@@ -112,6 +120,8 @@ const columns: { key: keyof FiscalizationRow; label: string; align?: "right" | "
   { key: "color2", label: "Boja 2" },
   { key: "qty", label: "Količina", align: "right" },
   { key: "unitPriceGross", label: "MP cena", align: "right" },
+  { key: "cogs", label: "COGS / kom", align: "right" },
+  { key: "totalCogs", label: "COGS ukupno", align: "right" },
   { key: "totalNet", label: "Ukupno bez PDV", align: "right" },
   { key: "totalGross", label: "Ukupno sa PDV", align: "right" },
   { key: "warehouseName", label: "Magacin" },
@@ -136,12 +146,12 @@ export function FiscalizationClient({
   const [selectedRows, setSelectedRows] = useState<string[]>([]);
   const [manualOpen, setManualOpen] = useState(false);
   const [refundOpen, setRefundOpen] = useState(false);
-  const refundableIds = useMemo(() => rows.filter((row) => !row.refunded).map((row) => row.id), [rows]);
+  const refundableIds = useMemo(() => rows.filter((row) => row.canRefund && !row.refunded).map((row) => row.id), [rows]);
   const selectedRefundable = selectedRows.filter((id) => refundableIds.includes(id));
   const selectedOrderNumber = rows.find((row) => selectedRefundable.includes(row.id))?.orderNumber;
   const selectedOrderRefundableIds = selectedOrderNumber
     ? rows
-        .filter((row) => row.orderNumber === selectedOrderNumber && !row.refunded)
+        .filter((row) => row.orderNumber === selectedOrderNumber && row.canRefund && !row.refunded)
         .map((row) => row.id)
     : [];
   const allSelectedOrderRowsSelected =
@@ -236,7 +246,7 @@ export function FiscalizationClient({
                     type="checkbox"
                     checked={selectedRows.includes(row.id)}
                     disabled={
-                      row.refunded ||
+                      !row.canRefund || row.refunded ||
                       Boolean(selectedOrderNumber && row.orderNumber !== selectedOrderNumber)
                     }
                     onChange={() => toggleRow(row.id)}
@@ -262,7 +272,7 @@ export function FiscalizationClient({
                   </td>
                 ))}
                 <td className="whitespace-nowrap px-3 py-3 font-mono text-xs text-ink-700">
-                  {row.fiscalReceiptNumber}
+                  {row.pdfHref ? <a href={row.pdfHref} target="_blank" rel="noopener noreferrer" className="underline">{row.fiscalReceiptNumber}</a> : row.fiscalReceiptNumber}
                 </td>
                 <td className="whitespace-nowrap px-3 py-3 text-xs text-ink-600">{row.issuedAt}</td>
               </tr>

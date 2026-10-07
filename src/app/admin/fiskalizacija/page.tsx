@@ -15,7 +15,8 @@ import {
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle } from "@/components/admin/card";
 import { Input } from "@/components/ui/input";
-import { FiscalizationClient } from "./fiscalization-client";
+import { FiscalizationClient, type FiscalizationRow } from "./fiscalization-client";
+import { ananasMerchandiseItems, fiscalMerchandiseAmounts, isFiscalService } from "@/lib/admin/fiscal-merchandise";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -118,6 +119,7 @@ export default async function FiscalizationPage({
     supplier?: string;
     category?: string;
     refunded?: string;
+    channel?: string;
   }>;
 }) {
   await requireAdminAction(["OPS"]);
@@ -132,7 +134,7 @@ export default async function FiscalizationPage({
   const where: Prisma.FiscalDocumentLineWhereInput = {
     fiscalDocument: {
       is: {
-        kind: "SALE",
+        kind: { in: ["SALE", "REFUND"] },
         status: "ISSUED",
         ...(from || to
           ? {
@@ -159,17 +161,17 @@ export default async function FiscalizationPage({
       : {}),
     ...(sp.supplier ? { supplierName: { contains: sp.supplier, mode: "insensitive" as const } } : {}),
     ...(sp.category ? { categoryName: { contains: sp.category, mode: "insensitive" as const } } : {}),
-    ...(refunded === "yes" ? { refundedQty: { gt: 0 } } : {}),
-    ...(refunded === "no" ? { refundedQty: 0 } : {}),
+    ...(refunded === "yes" ? { AND:[{OR:[{refundedQty:{gt:0}},{fiscalDocument:{is:{kind:"REFUND"}}}]}] } : {}),
+    ...(refunded === "no" ? { AND:[{refundedQty:0},{fiscalDocument:{is:{kind:"SALE"}}}] } : {}),
   };
 
-  const [lines, warehouses, manualOrders] = await Promise.all([
+  const [lines, warehouses, manualOrders, ananasDocuments] = await Promise.all([
     db.fiscalDocumentLine.findMany({
       where,
       orderBy: { createdAt: "desc" },
       take: PAGE_LIMIT,
       include: {
-        fiscalDocument: { select: { receiptNumber: true, issuedAt: true, paymentMethod: true } },
+        fiscalDocument: { select: { receiptNumber: true, issuedAt: true, paymentMethod: true, kind: true } },
       },
     }),
     db.warehouse.findMany({
@@ -178,9 +180,16 @@ export default async function FiscalizationPage({
       select: { id: true, code: true, name: true, isDefault: true },
     }),
     loadManualOrders(),
+    sp.channel === "SPC" ? Promise.resolve([]) : db.ananasDocument.findMany({
+      where: {kind:{in:["SALE","REFUND"]},...(from||to?{issuedAt:{...(from?{gte:from}:{}),...(to?{lte:to}:{})}}:{})},
+      orderBy:[{issuedAt:"desc"},{id:"desc"}],take:PAGE_LIMIT,
+    }),
   ]);
 
-  const rows = lines.map((line) => ({
+  const rows: FiscalizationRow[] = lines.filter(line=>sp.channel!=="ANANAS" && !isFiscalService(line.sku,line.shortName)).map((line) => {
+    const amounts=fiscalMerchandiseAmounts({qty:line.qty,totalGross:num(line.totalGross),totalNet:num(line.totalNet),serviceGross:num(line.serviceGross),vatRate:num(line.vatRate)});
+    const sign=line.fiscalDocument.kind==="REFUND"?-1:1;
+    return ({
     id: line.id,
     orderNumber: line.orderNumber,
     fiscalReceiptNumber: line.fiscalDocument.receiptNumber ?? "-",
@@ -207,20 +216,35 @@ export default async function FiscalizationPage({
     attribute4: line.attribute4 ?? "-",
     color1: line.color1 ?? "-",
     color2: line.color2 ?? "-",
-    qty: line.qty,
-    unitPriceGross: formatRsd(num(line.unitPriceGross)),
-    totalNet: formatRsd(num(line.totalNet)),
-    totalGross: formatRsd(num(line.totalGross)),
+    qty: sign*line.qty,
+    unitPriceGross: formatRsd(amounts.unit),
+    totalNet: formatRsd(sign*amounts.net),
+    totalGross: formatRsd(sign*amounts.gross),
     warehouseName: line.warehouseName ?? "DC",
     paymentMethod: line.fiscalDocument.paymentMethod ?? "UPLATA_NA_RACUN",
-    refunded: line.refundedQty >= line.qty,
-  }));
+    refunded: sign<0 || line.refundedQty >= line.qty,
+    channel:"SPC", documentKind:sign<0?"Refundacija":"Račun", canRefund:sign>0,
+    cogs:line.unitCogs==null?"—":formatRsd(num(line.unitCogs)),
+    totalCogs:line.unitCogs==null?"—":formatRsd(sign*line.qty*num(line.unitCogs)),
+  });});
+  const emptyFields={customerName:"—",pib:"—",priceList:"MP",address:"—",city:"—",postalCode:"—",phone:"—",email:"—",supplierName:"—",categoryName:"—",groupName:"—",subgroupName:"—",collectionName:"—",shortDescription:"—",attribute1:"—",attribute2:"—",attribute3:"—",attribute4:"—",color1:"—",color2:"—",warehouseName:"Ananas",cogs:"—",totalCogs:"—"};
+  if(sp.channel!=="SPC" && !sp.supplier && !sp.category)for(const doc of ananasDocuments){
+    const sign=doc.kind==="REFUND"?-1:1;
+    if(refunded==="yes"&&sign>0 || refunded==="no"&&sign<0)continue;
+    ananasMerchandiseItems(doc.items).forEach((item,index)=>{
+      if(q&&![doc.orderNumber,doc.fiscalNumber,item.sku,item.name].some(value=>value.toLowerCase().includes(q.toLowerCase())))return;
+      rows.push({...emptyFields,id:`ananas:${doc.id}:${index}`,orderNumber:doc.orderNumber,fiscalReceiptNumber:doc.fiscalNumber,issuedAt:doc.issuedAt.toLocaleString("sr-Latn-RS"),sku:item.sku,shortName:item.name,qty:sign*item.quantity,unitPriceGross:formatRsd(item.gross/item.quantity),totalGross:formatRsd(sign*item.gross),totalNet:item.net==null?"—":formatRsd(sign*item.net),paymentMethod:doc.paymentMethods,refunded:sign<0,channel:"Ananas",documentKind:sign<0?"Refundacija":"Račun",canRefund:false,pdfHref:`/api/admin/ananas/${doc.id}/pdf`});
+    });
+  }
+  const rowTimes=new Map(lines.map(line=>[line.id,line.fiscalDocument.issuedAt?.getTime()??line.createdAt.getTime()]));
+  for(const doc of ananasDocuments)ananasMerchandiseItems(doc.items).forEach((_,index)=>rowTimes.set(`ananas:${doc.id}:${index}`,doc.issuedAt.getTime()));
+  rows.sort((a,b)=>(rowTimes.get(b.id)??0)-(rowTimes.get(a.id)??0));
 
   return (
     <>
       <PageHeader
         title="Fiskalizacija i refundacija"
-        description="Pregled fiskalizovanih porudžbina po artikalima i refundacija"
+        description="SPC i Ananas računi i refundacije po artiklima, bez dostave i montaže"
         crumbs={[
           { href: "/admin", label: "Admin" },
           { href: "/admin/erp", label: "ERP" },
@@ -237,6 +261,7 @@ export default async function FiscalizationPage({
       />
       <div className="space-y-4 px-8 py-6">
         <Card>
+          <p className="mb-3 text-sm text-ink-500">COGS je sačuvana nabavna vrednost u trenutku SPC fiskalizacije. Crtica znači da istorijski COGS nije dostupan; Ananas ga ne dostavlja. Ananas refundacije se preuzimaju iz Ananasa i ovde se ne izdaju ponovo. Prikaz je ograničen na poslednjih 500 dokumenata/redova po kanalu.</p>
           <CardTitle description={`${rows.length.toLocaleString("sr-Latn-RS")} prikazanih redova`}>
             Filteri
           </CardTitle>
@@ -249,6 +274,7 @@ export default async function FiscalizationPage({
             </div>
             <FilterInput name="supplier" label="Dobavljač" value={sp.supplier} />
             <FilterInput name="category" label="Kategorija" value={sp.category} />
+            <label className="text-sm">Kanal<select name="channel" defaultValue={sp.channel??"all"} className="block h-8 rounded-lg border px-2"><option value="all">SPC + Ananas</option><option value="SPC">SPC</option><option value="ANANAS">Ananas</option></select></label>
             <div>
               <label className="text-xs font-medium uppercase tracking-[0.12em] text-ink-500">Od</label>
               <Input name="from" type="date" defaultValue={sp.from ?? ""} className="h-8" />

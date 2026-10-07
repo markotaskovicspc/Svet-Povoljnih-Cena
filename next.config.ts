@@ -93,11 +93,11 @@ const contentSecurityPolicy = [
   "form-action 'self'",
   "frame-ancestors 'none'",
   "object-src 'none'",
-  `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""} https://www.googletagmanager.com https://connect.facebook.net`,
+  `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""} https://www.googletagmanager.com https://connect.facebook.net https://*.clarity.ms`,
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self' data:",
-  `img-src 'self' data: blob: https://www.svetpovoljnihcena.rs https://*.supabase.co${supabaseOrigin ? ` ${supabaseOrigin}` : ""} https://images.unsplash.com https://placehold.co https://www.google-analytics.com https://www.googletagmanager.com https://www.facebook.com`,
-  `connect-src 'self' blob: https://*.supabase.co${supabaseOrigin ? ` ${supabaseOrigin}` : ""} https://www.google-analytics.com https://region1.google-analytics.com https://www.facebook.com`,
+  `img-src 'self' data: blob: https://www.svetpovoljnihcena.rs https://*.supabase.co${supabaseOrigin ? ` ${supabaseOrigin}` : ""} https://images.unsplash.com https://placehold.co https://www.google-analytics.com https://www.googletagmanager.com https://www.facebook.com https://*.clarity.ms https://c.bing.com`,
+  `connect-src 'self' blob: https://*.supabase.co${supabaseOrigin ? ` ${supabaseOrigin}` : ""} https://www.google-analytics.com https://region1.google-analytics.com https://www.facebook.com https://*.clarity.ms https://c.bing.com`,
   `media-src 'self' https://*.supabase.co${supabaseOrigin ? ` ${supabaseOrigin}` : ""}`,
   "worker-src 'self' blob:",
   ...(upgradeInsecureRequests ? ["upgrade-insecure-requests"] : []),
@@ -117,6 +117,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   distDir,
+  typescript: { tsconfigPath: "tsconfig.build.json" },
   poweredByHeader: false,
   allowedDevOrigins: ["127.0.0.1", ...(process.env.AR_PREVIEW_HOST ? [process.env.AR_PREVIEW_HOST] : [])],
   // resvg selects a platform-specific native binding at runtime. Keep it out

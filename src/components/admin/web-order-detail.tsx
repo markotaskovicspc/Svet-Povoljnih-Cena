@@ -16,7 +16,7 @@ import { enqueueBackgroundJob, processBackgroundJob } from "@/lib/background-job
 import { withAdminState, requireAdminAction } from "@/lib/admin";
 import type { AdminActionState } from "@/lib/admin/action-state";
 import { queueOrderReshipment } from "@/lib/admin/order-reshipment.server";
-import { canReshipCourierDelivery } from "@/lib/admin/order-reshipment-eligibility";
+import { canConfirmUnscannedXExpressPickup, canReshipCourierDelivery } from "@/lib/admin/order-reshipment-eligibility";
 import {
   createShipmentForOrder,
   syncCourierShipmentById,
@@ -402,12 +402,13 @@ async function reshipOrderAction(_state: AdminActionState, formData: FormData) {
       const orderId = String(data.get("orderId") ?? "");
       const shipmentId = String(data.get("shipmentId") ?? "");
       const reason = String(data.get("reason") ?? "");
-      const retry = await queueOrderReshipment({ orderId, shipmentId, reason, actorId });
+      const confirmUnscannedPickup = data.get("confirmUnscannedPickup") === "yes";
+      const retry = await queueOrderReshipment({ orderId, shipmentId, reason, actorId, confirmUnscannedPickup });
       revalidatePath(`/admin/erp/prodajni-nalozi/${orderId}`);
       revalidatePath("/admin/erp/preuzimanja");
       revalidatePath("/admin/erp/povrati");
       revalidatePath("/admin/erp/preuzimanja/povrati");
-      return { ok: true as const, entityId: orderId, diff: { shipmentId, reshipmentId: retry.id, batchId: retry.batchId, reason }, message: `${retry.batch ? `Nova roba je već u picking nalogu ${retry.batch.number}.` : "Nova roba je dostupna za učitavanje u picking preko dugmeta „Učitaj porudžbine“."} Stara pošiljka je u očekivanim povratima. Povrat dogovorite sa kurirom; stara adresnica nije automatski otkazana.` };
+      return { ok: true as const, entityId: orderId, diff: { shipmentId, reshipmentId: retry.id, batchId: retry.batchId, reason, confirmUnscannedPickup }, message: `${retry.batch ? `Nova roba je već u picking nalogu ${retry.batch.number}.` : "Nova roba je dostupna za učitavanje u picking preko dugmeta „Učitaj porudžbine“."} Prijem stare robe pratite u evidenciji povrata. Povrat preostale robe dogovorite sa kurirom; stara adresnica nije automatski otkazana.` };
     },
   )(formData);
 }
@@ -1396,7 +1397,7 @@ export async function WebOrderDetail({ id }: { id: string }) {
         where: { status: { not: "CANCELLED" } },
         select: { id: true },
       },
-      shipments: { include: { reshipment: { include: { batch: true } }, events: { orderBy: { occurredAt: "desc" } } } },
+      shipments: { include: { reshipment: { include: { batch: true, items: true } }, events: { orderBy: { occurredAt: "desc" } } } },
       pickupBatchLines: {
         where: {
           purpose: "ORDER_DELIVERY",
@@ -1652,6 +1653,34 @@ export async function WebOrderDetail({ id }: { id: string }) {
           { href: "/admin/erp/prodajni-nalozi", label: "Prodajni nalozi" },
           { label: order.number },
         ]}
+        actions={
+          !["OTKAZANO", "ISPORUCENO", "VRACENO"].includes(order.status) &&
+          !order.cancelledAt &&
+          !order.stockRestoredAt ? (
+            <AdminActionForm
+              action={updateStatus}
+              refreshOnSuccess
+              testId="web-order-cancel-form"
+              className="max-w-md"
+            >
+              <input type="hidden" name="id" value={order.id} />
+              <input type="hidden" name="status" value="OTKAZANO" />
+              <input
+                type="hidden"
+                name="note"
+                value="Cela WEB porudžbina je otkazana iz detalja porudžbine."
+              />
+              <SubmitButton
+                size="sm"
+                variant="destructive"
+                pendingLabel="Otkazivanje…"
+                confirm={`Otkazati celu porudžbinu ${order.number}? Rezervacije će biti oslobođene i kupac će dobiti obaveštenje. Već kreiran kurirski nalog se ne otkazuje automatski.`}
+              >
+                Otkaži porudžbinu
+              </SubmitButton>
+            </AdminActionForm>
+          ) : null
+        }
       />
       <div className="grid grid-cols-1 gap-6 px-8 py-6 xl:grid-cols-[1fr_360px]">
         <div className="space-y-6">
@@ -1716,8 +1745,7 @@ export async function WebOrderDetail({ id }: { id: string }) {
                   subtotal: formatRsd(num(it.unitPriceSale) * it.qty),
                   ...(canOfferWebItemEdit
                     ? {
-                        edit:
-                          order.items.length > 1 || it.qty > 1 ? (
+                        edit: (
                             <AdminActionForm
                               action={updateWebOrderItemQuantityAction}
                               preserveValues
@@ -1730,10 +1758,10 @@ export async function WebOrderDetail({ id }: { id: string }) {
                                 <input
                                   type="number"
                                   name="newQty"
-                                  min={0}
-                                  max={it.qty - 1}
+                                  min={order.items.length === 1 ? 1 : 0}
+                                  max={999}
                                   step={1}
-                                  defaultValue={it.qty > 1 ? it.qty - 1 : 0}
+                                  defaultValue={it.qty}
                                   required
                                   aria-label={`Nova količina za ${it.sku}`}
                                   className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-right text-sm"
@@ -1745,28 +1773,6 @@ export async function WebOrderDetail({ id }: { id: string }) {
                                 confirm={`Promeniti ${it.sku} sa ${it.qty} na unetu količinu? Iznosi, rezervacije i predračun biće preračunati; kupcu dokument neće biti automatski poslat.`}
                               >
                                 Sačuvaj
-                              </SubmitButton>
-                            </AdminActionForm>
-                          ) : (
-                            <AdminActionForm
-                              action={updateStatus}
-                              refreshOnSuccess
-                              className="flex justify-end"
-                            >
-                              <input type="hidden" name="id" value={order.id} />
-                              <input type="hidden" name="status" value="OTKAZANO" />
-                              <input
-                                type="hidden"
-                                name="note"
-                                value="Cela WEB porudžbina je otkazana umesto uklanjanja poslednje stavke."
-                              />
-                              <SubmitButton
-                                size="xs"
-                                variant="destructive"
-                                pendingLabel="Otkazivanje…"
-                                confirm={`Otkazati celu porudžbinu ${order.number}? Rezervisana roba biće vraćena na lager i kupac će dobiti obaveštenje.`}
-                              >
-                                Otkaži nalog
                               </SubmitButton>
                             </AdminActionForm>
                           ),
@@ -2497,20 +2503,29 @@ export async function WebOrderDetail({ id }: { id: string }) {
                         effectiveMyGlsShipmentStatus(shipment);
                       const handoverReport = readPackageHandoverReport(shipment.rawCreateResponse);
                       const partialHandover = incompletePackageHandover(shipment.rawCreateResponse);
+                      const unscannedPickup = canConfirmUnscannedXExpressPickup(shipment);
                       return (
                       <li key={shipment.id} className="rounded-lg border border-border p-3">
                         {shipment.reshipment ? (
                           <p className="mb-3 rounded-lg bg-muted p-3">
-                            Stara pošiljka je u <Link className="underline" href="/admin/erp/povrati">očekivanim povratima</Link>.
+                            {shipment.reshipment.items.every(item => item.receivedQty === item.quantity) ? (
+                              <>Povrat stare pošiljke je primljen. <Link className="underline" href="/admin/erp/povrati?view=completed">Pregled primljenog povrata</Link>.</>
+                            ) : <>Stara pošiljka je u <Link className="underline" href="/admin/erp/povrati">očekivanim povratima</Link>.</>}
                             {" "}Nova roba: {shipment.reshipment.batch ? <Link className="underline" href={`/admin/erp/preuzimanja/${shipment.reshipment.batchId}`}>{shipment.reshipment.batch.number}</Link> : "dostupna za učitavanje u picking preko dugmeta „Učitaj porudžbine“"}.
                           </p>
-                        ) : shipment.purpose === "ORDER_DELIVERY" && canReshipCourierDelivery(shipment) && !["OTKAZANO", "ISPORUCENO"].includes(order.status) ? (
+                        ) : shipment.purpose === "ORDER_DELIVERY" && (canReshipCourierDelivery(shipment) || unscannedPickup) && !["OTKAZANO", "ISPORUCENO"].includes(order.status) ? (
                           <AdminActionForm action={reshipOrderAction} refreshOnSuccess className="mb-4 space-y-3 rounded-lg border border-border p-3">
                             <input type="hidden" name="orderId" value={order.id} />
                             <input type="hidden" name="shipmentId" value={shipment.id} />
-                            <p>Omogući učitavanje nove robe u picking, a ovu pošiljku evidentiraj u očekivanim povratima. Picking nalog birate zasebno i robu dodajete preko „Učitaj porudžbine“. Prijem stare robe ne pokreće refundaciju. Povrat stare pošiljke dogovorite sa kurirom.</p>
+                            <p>Omogući učitavanje nove robe u picking, a ovu pošiljku evidentiraj u očekivanim povratima. Picking nalog birate zasebno i robu dodajete preko „Učitaj porudžbine“. Već primljena roba ostaje evidentirana kao primljena, bez ponovnog povećanja lagera. Ponovnim slanjem zaustavlja se njena automatska refundacija koja još nije pokrenuta. Povrat preostale robe dogovorite sa kurirom.</p>
+                            {unscannedPickup ? (
+                              <label className="flex items-start gap-2">
+                                <input type="checkbox" name="confirmUnscannedPickup" value="yes" required className="mt-0.5 size-4" />
+                                <span>Potvrđujem da je X Express preuzeo robu, iako preuzimanje nije evidentirano. Za kupca se izdvaja nova roba.</span>
+                              </label>
+                            ) : null}
                             <Field label="Razlog ponovnog slanja"><Textarea name="reason" required minLength={5} maxLength={500} rows={2} /></Field>
-                            <SubmitButton size="sm" confirm="Izdvojiti novu robu sa lagera i omogućiti njeno kasnije učitavanje u picking? Picking nalog se neće automatski kreirati. Stara roba će biti na čekanju za prijem povrata, bez refundacije kupcu.">Pripremi za ponovno slanje</SubmitButton>
+                            <SubmitButton size="sm" confirm="Izdvojiti novu robu sa lagera i omogućiti njeno kasnije učitavanje u picking? Picking nalog se neće automatski kreirati. Već primljen povrat ostaje primljen, a preostala roba čeka prijem. Automatska refundacija ovog povrata se zaustavlja.">Vrati u picking</SubmitButton>
                           </AdminActionForm>
                         ) : null}
                         <dl className="space-y-1 text-ink-700">

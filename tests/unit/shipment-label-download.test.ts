@@ -1,6 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ shipment: vi.fn(), pdf: vi.fn(), html: vi.fn() }));
-vi.mock("@/lib/db", () => ({ db: { shipment: { findUnique: mocks.shipment } } }));
+const mocks = vi.hoisted(() => ({ shipment: vi.fn(), pdf: vi.fn(), html: vi.fn(), lines: vi.fn() }));
+vi.mock("@/lib/db", () => ({ db: { shipment: { findUnique: mocks.shipment }, pickupBatchLine: { findMany: mocks.lines } } }));
 vi.mock("@/lib/admin", () => ({ requireAdminAction: vi.fn() }));
 vi.mock("@/lib/mygls", () => ({ MYGLS_PROVIDER: "MYGLS", downloadMyGlsLabelPdf: vi.fn() }));
 vi.mock("@/lib/pdf/print-html", () => ({ renderPrintHtmlPdf: mocks.pdf }));
@@ -28,4 +28,14 @@ it("does not regenerate labels for cancelled outgoing goods", async () => {
   expect(result.status).toBe(409);
   expect((await result.json()).error).toBe("order_cancelled");
   expect(mocks.pdf).not.toHaveBeenCalled();
+});
+
+it("recovers old X Express picking contents by their exact saved assignment group", async () => {
+  const shipment = await mocks.shipment();
+  mocks.shipment.mockResolvedValue({ ...shipment, orderId: "order", pickupBatchLines: [], rawCreateResponse: { assignment: { orderItemIds: ["item"], codAmount: 1, assignmentKey: "order:order:X_EXPRESS:deferred:original" } } });
+  const lines = [{ packageNo: 1, packedItems: [{ name: "POMPEA", quantity: 2 }], providerParcelNumber: null }];
+  mocks.lines.mockResolvedValue(lines);
+  expect((await request()).status).toBe(200);
+  expect(mocks.lines).toHaveBeenCalledWith(expect.objectContaining({ where: { orderId: "order", lineGroupKey: "order:order:X_EXPRESS:deferred:original", deferredAt: null, batch: { provider: "X_EXPRESS" } } }));
+  expect(mocks.html).toHaveBeenCalledWith(expect.objectContaining({ pickupBatchLines: lines }));
 });

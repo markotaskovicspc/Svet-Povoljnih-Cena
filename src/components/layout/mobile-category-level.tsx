@@ -40,7 +40,7 @@ export function MobileCategoryLevel({
         </h2>
       </div>
 
-      <Link
+      <Link prefetch={false}
         href={category.href}
         onClick={onNavigate}
         aria-label={`Pogledaj sve iz kategorije ${category.label}`}
@@ -88,7 +88,7 @@ export function MobileCategoryLevel({
                   {rowContent}
                 </button>
               ) : (
-                <Link
+                <Link prefetch={false}
                   href={node.href}
                   onClick={onNavigate}
                   aria-current={isActive ? "page" : undefined}

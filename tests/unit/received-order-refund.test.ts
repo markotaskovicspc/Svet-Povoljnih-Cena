@@ -20,6 +20,19 @@ beforeEach(() => {
 });
 
 describe("automatic fiscal refund after physical receipt", () => {
+  it("does not refund a receipt transferred to reshipment while the worker waited for the lock", async () => {
+    m.receipt.mockResolvedValueOnce({ orderId: "order", orderItemId: "item", idempotencyKey: "order-return:SPC:item:1" })
+      .mockResolvedValueOnce({ orderId: "order", orderItemId: null, idempotencyKey: "reshipment-return:ri:1" });
+    await refundReceivedOrder({ movementId: "receipt" });
+    expect(m.receipt).toHaveBeenCalledTimes(2);
+    expect(m.count).not.toHaveBeenCalled();
+    expect(m.issue).not.toHaveBeenCalled();
+  });
+  it("completes stale jobs for an already transferred receipt without a refund", async () => {
+    m.receipt.mockResolvedValue({ orderId: "order", orderItemId: null, idempotencyKey: "reshipment-return:ri:1" });
+    await refundReceivedOrder({ movementId: "receipt" });
+    expect(m.issue).not.toHaveBeenCalled();
+  });
   it("refunds one received unit out of three, using the original payment and buyer", async () => {
     await refundReceivedOrder({ movementId: "receipt" });
     expect(m.lock).toHaveBeenCalledWith("order", expect.any(Function));

@@ -132,7 +132,7 @@ export function MobileNav({
               >
                 <X className="size-5" aria-hidden />
               </button>
-              <Link
+              <Link prefetch={false}
                 href="/"
                 aria-label={`${BRAND.name} - početna`}
                 onClick={close}
@@ -148,7 +148,7 @@ export function MobileNav({
                 />
               </Link>
               <div className="flex shrink-0 items-center justify-end gap-1">
-                <Link
+                <Link prefetch={false}
                   href="/"
                   onClick={close}
                   aria-label="Početna"
@@ -156,7 +156,7 @@ export function MobileNav({
                 >
                   <Home className="size-5" aria-hidden />
                 </Link>
-                <Link
+                <Link prefetch={false}
                   href={accountHref}
                   onClick={close}
                   aria-label="Moj nalog"
