@@ -378,6 +378,7 @@ async function resolveSlot(slot: HomeSlotForRender) {
     const presentation = actionPresentation[action.kind];
     const products = await listHomeFamilyCards({
       actionSlug: action.slug,
+      promoOrderKey: presentation.href.slice(1),
       limit,
       includeTotal: false,
     });
@@ -504,7 +505,7 @@ async function loadHomeLayout(): Promise<HomeLayout> {
 
 const getHomeLayoutAcrossRequests = unstable_cache(
   loadHomeLayout,
-  ["storefront-home-layout-v2-family"],
+  ["storefront-home-layout-v3-promo-order"],
   {
     revalidate: 60,
     tags: ["storefront-home"],

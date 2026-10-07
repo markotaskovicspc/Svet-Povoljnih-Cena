@@ -459,6 +459,9 @@ export type ListingKind =
  *   - kategorija/kolekcija: heroji → niža cena
  */
 function defaultSortFor(list: Product[], kind: ListingKind): Product[] {
+  if (list.some(product => product.promoSortPosition !== undefined)) {
+    return list.sort((a, b) => (a.promoSortPosition ?? Infinity) - (b.promoSortPosition ?? Infinity));
+  }
   const cmpHero = (a: Product, b: Product) => Number(!!b.isHero) - Number(!!a.isHero);
   const cmpDiscount = (a: Product, b: Product) =>
     (b.discountPct ?? 0) - (a.discountPct ?? 0);

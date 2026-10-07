@@ -92,6 +92,8 @@ export interface Material {
 }
 
 export interface Product {
+  /** Manual promo ordering from the server; ignored by explicit price sorts. */
+  promoSortPosition?: number;
   /** Database id when the product originates from the canonical catalog. */
   id?: string;
   /** Internal supplier profile key used for supplier-specific storefront rules. */

@@ -1,4 +1,5 @@
 import "server-only";
+import { comparePromoRank, promoKeyForQuery, promoProductOrderKey, readPromoProductOrder } from "@/lib/storefront/promo-product-order";
 import { Prisma } from "@prisma/client";
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
@@ -1039,6 +1040,10 @@ export async function getCollectionBySlug(
 export type ProductSort = "default" | "price-asc" | "price-desc" | "discount-desc";
 
 export interface ListProductsInput {
+  /** Admin-only loading of the current automatic promo order. */
+  ignorePromoOrder?: boolean;
+  /** Homepage action slots can share the order of their standard promo page. */
+  promoOrderKey?: string;
   /** Filter by category materialized path prefix, e.g. `/namestaj/police`. */
   categoryPath?: string;
   /** Filter by promo action slug (akcija / nedeljna-akcija / heroji-meseca / outlet…). */
@@ -1461,7 +1466,15 @@ async function loadProducts(
   const project = (product: ProductListRow) =>
     mapProductListRow(product, pricingRules, deliveryWindows, heroContext);
 
-  if (usesResolvedPrice) {
+  const promoKey = !input.ignorePromoOrder && (!input.sort || input.sort === "default")
+    ? promoKeyForQuery(input) : undefined;
+  const promoSetting = promoKey
+    ? await db.adminSetting.findUnique({ where: { key: promoProductOrderKey(promoKey) }, select: { value: true } })
+    : null;
+  const promoOrder = readPromoProductOrder(promoSetting?.value);
+  const promoRanks = new Map(promoOrder.map((sku, index) => [sku, index]));
+
+  if (usesResolvedPrice || promoOrder.length) {
     const rows = await db.product.findMany({
       where: listingWhere,
       select: productListSelect,
@@ -1493,6 +1506,7 @@ async function loadProducts(
     const direction = input.sort === "price-desc" ? -1 : 1;
     priced.sort(
       (left, right) =>
+        comparePromoRank(left.product.sku, right.product.sku, promoRanks) ||
         Number(Boolean(right.product.isHero)) -
           Number(Boolean(left.product.isHero)) ||
         (sortsByResolvedPrice
@@ -1504,15 +1518,18 @@ async function loadProducts(
             })
           : 0),
     );
-    const cursorIndex = input.cursor
-      ? priced.findIndex(({ rowId }) => rowId === input.cursor)
+    const cursorId = input.cursor?.replace(/^(hero:|regular:)/, "");
+    const cursorIndex = cursorId
+      ? priced.findIndex(({ rowId }) => rowId === cursorId)
       : -1;
     const start = cursorIndex >= 0 ? cursorIndex + 1 : 0;
     const page = priced.slice(start, start + limit + 1);
     const hasMore = page.length > limit;
     const slice = hasMore ? page.slice(0, limit) : page;
     return {
-      items: slice.map(({ product }) => product),
+      items: slice.map(({ product }) => promoOrder.length
+        ? { ...product, promoSortPosition: promoRanks.get(product.sku) ?? promoRanks.size }
+        : product),
       nextCursor: hasMore ? slice[slice.length - 1]!.rowId : null,
       total: input.includeTotal === false ? 0 : priced.length,
     };

@@ -9,6 +9,7 @@ import {
 import { requireAdminAction } from "@/lib/admin";
 import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
 import { db } from "@/lib/db";
+import { STANDARD_PROMO_PAGES } from "@/lib/storefront/promo-product-order";
 
 export const dynamic = "force-dynamic";
 
@@ -169,6 +170,13 @@ export default async function ErpModulePage({
         }
       />
       <div className="px-8 py-6">
+        {slug === "landing-strane" ? <section className="mb-8" aria-label="Standardne promo strane">
+          <h2 className="mb-2 text-lg font-semibold">Standardne promo strane</h2>
+          <p className="mb-4 text-sm text-ink-600">Heroji meseca i ostale automatske ponude. Ovde uredite redosled proizvoda za stranicu i početnu.</p>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{STANDARD_PROMO_PAGES.map(page => <Link key={page.key} href={`/admin/erp/landing-strane/standard-${page.key}`} className="rounded-xl border bg-background p-4 transition hover:bg-muted">
+            <span className="block font-semibold">{page.title}</span><span className="mt-1 block text-xs text-ink-500">{page.href}</span><span className="mt-3 block text-sm text-walnut">Uredi redosled proizvoda →</span>
+          </Link>)}</div>
+        </section> : null}
         {slug === "kretanja-zaliha" ? (
           <nav className="mb-6 flex flex-wrap gap-2" aria-label="Lager">
             <Link
