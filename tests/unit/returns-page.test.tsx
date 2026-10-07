@@ -44,6 +44,22 @@ beforeEach(() => {
 });
 
 describe("ERP returns page", () => {
+  it("shows each unit's saved parcel next to its receipt control", async () => {
+    const order = returnedOrder("parcel");
+    mocks.orders.mockResolvedValue([{ ...order, items: [{ ...order.items[0], productId: "product" }], shipments: [{
+      id: "shipment-parcel", provider: "X_EXPRESS", trackingNo: "AAA1", packageCount: 2,
+      providerParcelNumbers: ["AAA1", "AAA2"], returnArrivals: [{ parcelNumber: "AAA2" }],
+      rawCreateResponse: { articleLabels: [
+        { Code: "AAA1", sku: "SKU-parcel", packedQuantity: 1 },
+        { Code: "AAA2", sku: "SKU-parcel", packedQuantity: 1 },
+      ] },
+    }] }]);
+    const html = renderToStaticMarkup(await ReturnsPage());
+    expect(html).toMatch(/Komad 1\/2<\/p><p[^>]*>Paket: AAA1 \(dolazak nije potvrđen\)/);
+    expect(html).toMatch(/Komad 2\/2<\/p><p[^>]*>Paket: AAA2 \(dolazak potvrđen\)/);
+    expect(html).toContain("Pretraga ispod samo pronalazi postojeći povrat");
+  });
+
   it("shows the unresolved old shipment for stock-only receipt while the new picking stays linked", async () => {
     mocks.reshipments.mockResolvedValue([{ id: "r", orderId: "o", batchId: "b", reason: "Kurir ne nalazi robu", order: { number: "SPC-RETRY" }, batch: { number: "PRE-NEW" }, sourceShipmentId: "s", sourceShipment: { provider: "X_EXPRESS", trackingNo: "OLD-TRACK", status: "IN_TRANSIT" }, items: [{ id: "ri", sku: "SKU", name: "Sto", quantity: 2, receivedQty: 1 }] }]);
     const html = renderToStaticMarkup(await ReturnsPage());
