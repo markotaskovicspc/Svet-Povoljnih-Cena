@@ -18,7 +18,7 @@ export async function findReturnParcel(input: string) {
         ...["PrintLabelsInfoList", "PrintDataInfoList"].flatMap(path => ["ParcelNumber", "ParcelNumberWithCheckdigit"].map(field => ({ provider: "MYGLS", rawCreateResponse: { path: [path], array_contains: [{ [field]: Number(code) }] } }))),
       ] : []),
     ] },
-    include: { returnArrivals: true, order: { include: { items: true } }, reclamation: true, reshipment: { include: { items: true } } },
+    include: { returnArrivals: true, order: { include: { items: { include: { product: { select: { barcode: true, shortDescription: true, collection: { select: { name: true } }, attribute1: true, attribute2: true, attribute3: true, attribute4: true, colorPrimary: true, colorSecondary: true } } } } } }, reclamation: true, reshipment: { include: { items: true } } },
     take: 2,
   });
   if (matches.length !== 1) throw new Error(matches.length > 1 ? "Kod pripada više pošiljki. Proverite evidenciju." : "Paket nije pronađen. Proverite kod sa adresnice.");

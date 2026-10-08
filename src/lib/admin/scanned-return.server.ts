@@ -5,6 +5,7 @@ import { reclamationParcelQuantity } from './return-receipt-plan';
 import { returnUnitParcelNumbers } from './return-parcels';
 import { receiveReclamationReturn } from './reclamation-fulfillment.server';
 import { receiveReturnedOrderUnit } from './returned-orders.server';
+import { returnPickingDescription } from './return-picking-display';
 import { receiveReshipmentReturn } from './order-reshipment.server';
 
 export async function scannedReturnPlan(input: string) {
@@ -19,7 +20,7 @@ export async function scannedReturnPlan(input: string) {
       { idempotencyKey: `reclamation-return:${claim.id}` },
       { idempotencyKey: `reclamation-return:${claim.id}:parcel:${code}` },
     ] } });
-    return { shipment, code, kind: 'reclamation' as const, lines: [{ id: claim.orderItemId ?? claim.id, sku: claim.sku, name: shipment.order.items.find(i => i.id === claim.orderItemId)?.name ?? claim.sku, units: Array.from({ length: qty }, (_, i) => i + 1) }], received: receipts.length > 0 };
+    return { shipment, code, kind: 'reclamation' as const, lines: [{ id: claim.orderItemId ?? claim.id, sku: claim.sku, name: shipment.order.items.find(i => i.id === claim.orderItemId)?.name ?? claim.sku, totalQuantity: claim.quantity, description: returnPickingDescription(shipment.order.items.find(i => i.id === claim.orderItemId)), units: Array.from({ length: qty }, (_, i) => i + 1) }], received: receipts.length > 0 };
   }
   const items = shipment.reshipment ? shipment.reshipment.items.map(item => ({ ...item, id: item.orderItemId, receiptItemId: item.id, qty: item.quantity })) : shipment.order.items.map(item => ({ ...item, receiptItemId: item.id }));
   const lines = items.flatMap(item => {
@@ -28,7 +29,7 @@ export async function scannedReturnPlan(input: string) {
       const match = returnUnitParcelNumbers(item, [shipment], unit);
       if (match.exact && match.parcels.some(p => p.code === code)) units.push(unit);
     }
-    return units.length ? [{ id: item.receiptItemId, sku: item.sku, name: item.name, units }] : [];
+    return units.length ? [{ id: item.receiptItemId, sku: item.sku, name: item.name, totalQuantity: item.qty, description: returnPickingDescription(shipment.order.items.find(i => i.id === item.id)), units }] : [];
   });
   if (!lines.length) throw new Error('Sadržaj paketa nije pouzdano povezan. Potrebna je ručna provera u evidenciji.');
   const keys = lines.flatMap(line => line.units.map(unit => shipment.reshipment ? `reshipment-return:${line.id}:${unit}` : `order-return:${shipment.order.number}:${line.id}:${unit}`));

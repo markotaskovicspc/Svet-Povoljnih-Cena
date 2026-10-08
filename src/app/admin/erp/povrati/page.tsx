@@ -609,8 +609,46 @@ export default async function ReturnsPage({
           </form>
           {scanError ? <p role="alert" className="mt-4 text-warning">{scanError}</p> : null}
           {scanPlan ? <div className="mt-5 space-y-3 rounded-xl border border-border p-4">
-            <p className="font-medium">{scanPlan.shipment.order.number} · Paket {displayReturnParcelNumber(scanPlan.code, scanPlan.shipment.provider)}</p>
-            {scanPlan.lines.map(line => <p key={line.id}>{line.sku} · {line.name} · {line.units.length} kom u ovom paketu</p>)}
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[680px] text-sm">
+                <thead className="bg-muted-bg/70 text-left text-xs uppercase tracking-[0.08em] text-ink-500">
+                  <tr>
+                    <th className="px-3 py-3">Izvor</th>
+                    <th className="px-3 py-3">Artikli u povratu</th>
+                    <th className="px-3 py-3 text-right">Paketa</th>
+                    <th className="px-3 py-3">Skenirani paket i status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  <tr className="align-top">
+                    <td className="px-3 py-3">
+                      <Link href={scanPlan.shipment.reclamation ? `/admin/erp/reklamacije-dnevnik/${scanPlan.shipment.reclamation.id}` : `/admin/erp/prodajni-nalozi/${scanPlan.shipment.orderId}`} className="font-medium text-walnut hover:underline">
+                        {scanPlan.shipment.reclamation?.number ?? scanPlan.shipment.order.number}
+                      </Link>
+                      <p className="mt-1 text-xs text-ink-500">{scanPlan.shipment.order.number} · {scanPlan.kind === "reclamation" ? "Reklamacioni povrat" : scanPlan.kind === "reshipment" ? "Povrat stare pošiljke" : "Povrat porudžbine"}</p>
+                    </td>
+                    <td className="px-3 py-3">
+                      <ul className="space-y-2">
+                        {scanPlan.lines.map(line => <li key={line.id}>
+                          <span className="font-mono font-semibold">{line.sku}</span>{" "}
+                          <span>{line.name}</span>{" "}
+                          <strong className="whitespace-nowrap">× {line.totalQuantity}</strong>
+                          <p className="text-xs text-ink-500">{line.description || "Bez dodatnih podataka"}</p>
+                          <p className="mt-1 font-medium">U skeniranom paketu: {line.units.length} kom</p>
+                        </li>)}
+                      </ul>
+                    </td>
+                    <td className="px-3 py-3 text-right text-lg font-semibold tabular-nums">{scanPlan.shipment.packageCount}</td>
+                    <td className="px-3 py-3">
+                      <p className="font-medium">Paket {returnParcelNumbers(scanPlan.shipment).indexOf(scanPlan.code) + 1}/{scanPlan.shipment.packageCount}</p>
+                      <p className="mt-1 font-mono">{displayReturnParcelNumber(scanPlan.code, scanPlan.shipment.provider)}</p>
+                      <p className="mt-1 text-xs text-ink-500">{scanPlan.shipment.provider} · {SHIPMENT_STATUS_LABEL[scanPlan.shipment.status] ?? scanPlan.shipment.status}</p>
+                      <p className="mt-1 text-xs">{scanPlan.received ? "Primljeno" : "Čeka pregled i prijem"}</p>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
             {scanPlan.received ? <p className="text-success">Već primljeno. Ponovni sken ne uvećava lager.</p> : <AdminActionForm action={receiveScannedAction} refreshOnSuccess preserveValues className="flex flex-wrap items-end gap-3">
               <input type="hidden" name="code" value={params?.q ?? ""} />
               {warehouseSelect}
