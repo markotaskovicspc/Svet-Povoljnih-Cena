@@ -72,6 +72,20 @@ const DIRECT_STATUS: Record<string, ShipmentStatus> = {
   "28": "FAILED",
   "29": "FAILED",
   "30": "FAILED",
+  "31": "FAILED",
+  "32": "OUT_FOR_DELIVERY",
+  "33": "FAILED",
+  "34": "FAILED",
+  "35": "FAILED",
+  "36": "FAILED",
+  "38": "FAILED",
+  "39": "FAILED",
+  "40": "RETURNED",
+  "41": "IN_TRANSIT",
+  "42": "FAILED",
+  "43": "FAILED",
+  "44": "FAILED",
+  "47": "IN_TRANSIT",
   "86": "PICKED_UP",
 };
 
@@ -99,12 +113,12 @@ export function inferMyGlsShipmentStatus(
     return "CREATED";
   }
   if (/(return|returned|vracen|refused|odbij)/.test(text)) return "RETURNED";
-  if (/(absent|failed|unsuccess|not (?:yet )?delivered|undelivered|cancelled|canceled|otkazan|wrong|incomplete|problem|damaged|gresk|neuspes|nije isporuc|nije uruc)/.test(text)) {
+  if (/(absent|failed|unsuccess|not (?:yet |be )?delivered|undelivered|cancelled|canceled|otkazan|wrong|incomplete|problem|damaged|gresk|neuspes|nije isporuc|nije uruc)/.test(text)) {
     return "FAILED";
   }
   // Match delivery attempts and movement before positive delivery proof.
   // In particular, "u isporuci" and "neuspešno isporučeno" are not delivered.
-  if (/(out for delivery|during the day|u isporuci|na dostavi)/.test(text)) {
+  if (/(out for delivery|during the day|(?:will|expected to) be delivered|u isporuci|na dostavi)/.test(text)) {
     return "OUT_FOR_DELIVERY";
   }
   if (/(delivered|isporucen|urucen)/.test(text)) return "DELIVERED";
