@@ -67,6 +67,9 @@ export async function markReturnLost(input: {
           })
         )
           throw new Error("Povrat je već primljen.");
+        const parcels = await tx.stockMovement.findMany({ where: { idempotencyKey: { startsWith: `reclamation-return:${input.id}:parcel:` } }, select: { qty: true } });
+        if (claim && parcels.reduce((sum, receipt) => sum + receipt.qty, 0) >= claim.quantity)
+          throw new Error("Povrat je već u celosti primljen.");
       } else {
         if (
           order.status !== "VRACENO" &&

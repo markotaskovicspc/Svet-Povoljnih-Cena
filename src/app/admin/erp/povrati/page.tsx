@@ -1,5 +1,5 @@
 import { SHIPMENT_STATUS_LABEL } from "@/lib/courier/status";
-import { confirmReturnParcelArrival } from "@/lib/admin/return-arrival.server";
+import { scannedReturnPlan, receiveScannedReturn } from "@/lib/admin/scanned-return.server";
 import { returnUnitParcelNumbers, returnItemParcelNumbers, returnParcelNumbers, returnParcelArrived, displayReturnParcelNumber, normalizeReturnParcelNumber, type ReturnShipment } from "@/lib/admin/return-parcels";
 import {
   canReceiveReclamationShipment,
@@ -178,7 +178,7 @@ export default async function ReturnsPage({
     db.warehouse.findMany({
       where: { active: true },
       orderBy: { code: "asc" },
-      select: { id: true, code: true, name: true },
+      select: { id: true, code: true, name: true, isDefault: true },
     }),
     db.stockMovement.findMany({
       where: {
@@ -189,6 +189,7 @@ export default async function ReturnsPage({
       },
       select: {
         id: true,
+        qty: true,
         idempotencyKey: true,
         warehouseId: true,
         createdAt: true,
@@ -197,6 +198,12 @@ export default async function ReturnsPage({
     }),
     db.returnResolution.findMany(),
   ]);
+  let scanPlan: Awaited<ReturnType<typeof scannedReturnPlan>> | null = null;
+  let scanError = "";
+  if (query && /^[A-Z0-9]{5,40}$/.test(query)) {
+    try { scanPlan = await scannedReturnPlan(query); }
+    catch (error) { scanError = error instanceof Error ? error.message : "Paket nije pronađen."; }
+  }
   const receiptByKey = new Map(movements.map((m) => [m.idempotencyKey, m]));
   const lostByKey = new Map(resolutions.map((r) => [r.key, r]));
   const jobs = movements.length
@@ -307,7 +314,7 @@ export default async function ReturnsPage({
                   <input
                     type="hidden"
                     name="unitNo"
-                    value={item.receivedQty + 1}
+                    value={Array.from({ length: item.quantity }, (_, i) => i + 1).find(unit => !receiptByKey.has(`reshipment-return:${item.id}:${unit}`)) ?? item.receivedQty + 1}
                   />
                   {warehouseSelect}
                   <SubmitButton
@@ -505,18 +512,21 @@ export default async function ReturnsPage({
     const key = `reclamation:${reclamation.id}`;
     const shipment = reclamation.shipments[0];
     const receipt = receiptByKey.get(`reclamation-return:${reclamation.id}`);
+    const partialReceipts = movements.filter(m => m.idempotencyKey?.startsWith(`reclamation-return:${reclamation.id}:parcel:`));
+    const partialQty = partialReceipts.reduce((sum, m) => sum + (m.qty ?? 0), 0);
+    const received = Boolean(receipt) || partialQty >= reclamation.quantity;
     rows.push({
       key,
       kind: "reclamation",
-      arrived: Boolean(receipt) || Boolean(shipment?.returnArrivals?.length) || canReceiveReclamationShipment(shipment),
+      arrived: received || Boolean(shipment?.returnArrivals?.length) || canReceiveReclamationShipment(shipment),
       codes: shipment ? returnParcelNumbers(shipment) : [],
       id: reclamation.id,
       orderId: reclamation.orderId,
       number: reclamation.order.number,
       type: "Reklamacioni povrat",
-      received: Boolean(receipt),
+      received,
       date: reclamation.createdAt?.getTime() ?? 0,
-      shipment: shipment ? <><ReturnShipmentCodes shipment={shipment} received={Boolean(receipt)} /><p>{myGlsReturnStatusLabel(shipment)}</p></> : <>Bez povratne pošiljke</>,
+      shipment: shipment ? <><ReturnShipmentCodes shipment={shipment} received={received} /><p>{myGlsReturnStatusLabel(shipment)}</p></> : <>Bez povratne pošiljke</>,
       details: (
         <>
           <Link
@@ -527,12 +537,12 @@ export default async function ReturnsPage({
           </Link>
           <p className="text-sm">
             {reclamation.sku} · {reclamation.orderItem?.name ?? "—"} ·{" "}
-            {reclamation.quantity} kom
+            {reclamation.quantity} kom · Primljeno {receipt ? reclamation.quantity : partialQty}/{reclamation.quantity}
           </p>
-          {receipt ? (
+          {received ? (
             <p className="text-sm text-success">
-              Proknjiženo {formatDate(receipt.createdAt)} ·{" "}
-              {receipt.warehouse.code} · {receipt.warehouse.name}
+              Proknjiženo {formatDate((receipt ?? partialReceipts.at(-1)!).createdAt)} ·{" "}
+              {(receipt ?? partialReceipts.at(-1)!).warehouse.code} · {(receipt ?? partialReceipts.at(-1)!).warehouse.name}
             </p>
           ) : lostByKey.has(key) ? null : canReceiveReclamationShipment(
               shipment,
@@ -568,14 +578,14 @@ export default async function ReturnsPage({
   const verificationCount = rows.filter((row) => !completed(row) && !row.arrived).length;
   const completedCount = rows.filter(completed).length;
   const visible = rows
-    .filter((row) => view === "completed" ? completed(row) : !completed(row) && row.arrived === (view === "active"))
+    .filter((row) => query || (view === "completed" ? completed(row) : !completed(row) && row.arrived === (view === "active")))
     .filter((row) => !query || normalizeReturnParcelNumber(row.number).includes(query) || row.codes.some((code) => code.includes(query)))
     .sort((a, b) => b.date - a.date || a.key.localeCompare(b.key));
   return (
     <>
       <PageHeader
         title="Povrati za prijem"
-        description="Fizički pristigli paketi su u aktivnim povratima. Kurirski povrati bez potvrde dolaska ostaju u pregledu Za proveru."
+        description="Skenirajte paket, proverite sadržaj, izaberite magacin i potvrdite prijem."
         crumbs={[
           { href: "/admin", label: "Admin" },
           { href: "/admin/erp/preuzimanja", label: "Picking i preuzimanja" },
@@ -588,6 +598,30 @@ export default async function ReturnsPage({
         }
       />
       <main className="space-y-6 px-4 py-6 md:px-8">
+        <Card>
+          <CardTitle>Prijem povratnog paketa</CardTitle>
+          <form className="flex flex-wrap items-end gap-3">
+            <Field label="Skeniraj paket ili unesi broj porudžbine">
+              <input name="q" autoFocus defaultValue={params?.q ?? ""} maxLength={40} placeholder="Kod sa adresnice" className="h-11 w-80 max-w-full rounded-lg border border-input px-3" />
+            </Field>
+            <button className="rounded-lg bg-foreground px-4 py-3 text-background">Pronađi paket</button>
+            {query ? <Link href="/admin/erp/povrati" className="text-sm underline">Sledeći paket</Link> : null}
+          </form>
+          {scanError ? <p role="alert" className="mt-4 text-warning">{scanError}</p> : null}
+          {scanPlan ? <div className="mt-5 space-y-3 rounded-xl border border-border p-4">
+            <p className="font-medium">{scanPlan.shipment.order.number} · Paket {displayReturnParcelNumber(scanPlan.code, scanPlan.shipment.provider)}</p>
+            {scanPlan.lines.map(line => <p key={line.id}>{line.sku} · {line.name} · {line.units.length} kom u ovom paketu</p>)}
+            {scanPlan.received ? <p className="text-success">Već primljeno. Ponovni sken ne uvećava lager.</p> : <AdminActionForm action={receiveScannedAction} refreshOnSuccess preserveValues className="flex flex-wrap items-end gap-3">
+              <input type="hidden" name="code" value={params?.q ?? ""} />
+              {warehouseSelect}
+              {scanPlan.kind === "order" ? <Field label="Identifikacija kupca (ako nije na računu)"><input name="buyerId" maxLength={100} className="h-9 rounded-lg border border-input px-2" /></Field> : null}
+              <SubmitButton disabled={!warehouses.length}>Potvrdi prijem</SubmitButton>
+              <p className="w-full text-xs text-ink-500">Potvrdom prijema potvrđujete da ste pregledali sadržaj paketa. Ako je roba oštećena, izaberite magacin za proveru vraćene robe.</p>
+            </AdminActionForm>}
+          </div> : null}
+        </Card>
+        <details open={Boolean(query)}>
+          <summary className="cursor-pointer py-3 font-medium">Evidencija povrata i ručna provera</summary>
         <div className="grid gap-4 sm:grid-cols-4">
           <StatCard
             label="Pristigli povrati"
@@ -609,15 +643,6 @@ export default async function ReturnsPage({
           <CardTitle description="Povrati porudžbina, reklamacija i prethodnih pošiljki nakon ponovnog slanja. Završeni prikaz zadržava evidenciju i obradu refundacije.">
             Svi povrati
           </CardTitle>
-          <AdminActionForm action={confirmArrivalAction} refreshOnSuccess className="mb-5 flex flex-wrap items-end gap-3">
-            <Field label="Kod fizički pristiglog paketa">
-              <input name="code" required maxLength={40} placeholder="Skenirajte ili unesite kod sa adresnice" className="h-9 w-80 max-w-full rounded-lg border border-input px-2" />
-            </Field>
-            <SubmitButton size="sm" confirm="Potvrđujete da je paket fizički stigao? Ova potvrda ne knjiži lager i ne pokreće refundaciju.">Potvrdi dolazak</SubmitButton>
-          </AdminActionForm>
-          <p className="mb-4 text-xs text-ink-500">Potvrda dolaska iznad evidentira fizički pristigao paket. Pretraga ispod samo pronalazi postojeći povrat.</p>
-          <p className="mb-4 text-xs text-ink-500">Aktivni: dolazak potvrđen, prijem robe još nije završen. Za proveru: dolazak nije potvrđen. Završeni: roba primljena ili pošiljka evidentirana kao izgubljena.</p>
-          <p className="mb-4 text-xs text-ink-500">Brojevi ispod označavaju kurirske pakete. Prijem robe se knjiži po komadu; jedan paket može sadržati više komada.</p>
           <nav aria-label="Prikaz povrata" className="mb-5 flex flex-wrap gap-2">
             {(
               [
@@ -636,14 +661,6 @@ export default async function ReturnsPage({
               </Link>
             ))}
           </nav>
-          <form className="mb-5 flex flex-wrap items-end gap-3">
-            <input type="hidden" name="view" value={view} />
-            <Field label="Pretraga po porudžbini ili kodu bilo kog paketa">
-              <input name="q" defaultValue={params?.q ?? ""} className="h-9 w-80 max-w-full rounded-lg border border-input px-2" />
-            </Field>
-            <button className="rounded-lg border border-border px-3 py-2 text-sm">Pretraži</button>
-            {query ? <Link href={`/admin/erp/povrati?view=${view}`} className="text-sm underline">Poništi pretragu</Link> : null}
-          </form>
           {view === "verification" ? <p className="mb-4 text-sm text-warning">Dolazak ovih povrata nije potvrđen. Proverite kodove i fizičko stanje; nemojte ih zatvarati ili knjižiti samo na osnovu kurirskog statusa.</p> : null}
           {!warehouses.length && view !== "completed" ? (
             <p className="mb-4 text-sm text-warning">
@@ -739,6 +756,7 @@ export default async function ReturnsPage({
             </p>
           ) : null}
         </Card>
+        </details>
       </main>
     </>
   );
@@ -817,15 +835,18 @@ function ReturnShipmentCodes({ shipment, received = false }: { shipment: ReturnS
   </div>;
 }
 
-async function confirmArrivalAction(_state: AdminActionState, formData: FormData) {
+async function receiveScannedAction(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
-    { allowed: ["OPS"], action: "return.parcel.arrival", entity: "ReturnParcelArrival" },
+    { allowed: ["OPS"], action: "return.parcel.receive", entity: "Shipment" },
     async (actorId, data: FormData) => {
-      const result = await confirmReturnParcelArrival({ code: String(data.get("code") ?? ""), actorId });
+      const result = await receiveScannedReturn({ code: String(data.get("code") ?? ""), warehouseId: String(data.get("warehouseId") ?? ""), buyerId: String(data.get("buyerId") ?? "").trim() || undefined, actorId });
+      after(async () => { for (const jobId of result.jobIds) await processBackgroundJob(jobId); });
       revalidatePath("/admin/erp/povrati");
       revalidatePath("/admin/erp/preuzimanja/povrati");
-      return { ok: true as const, entityId: result.arrival.id, message: "Dolazak paketa je potvrđen. Lager i refundacija čekaju pregled i prijem robe.", diff: { orderId: result.orderId, parcelNumber: result.arrival.parcelNumber } };
+      revalidatePath("/admin/erp/reklamacije-dnevnik", "layout");
+      revalidatePath("/admin/erp/stanje-po-magacinima");
+      return { ok: true as const, entityId: result.orderId, message: result.alreadyReceived ? "Paket je već primljen." : `Paket je primljen u ${result.warehouse.code} · ${result.warehouse.name}.`, diff: { warehouseId: result.warehouse.id } };
     },
   )(formData);
 }

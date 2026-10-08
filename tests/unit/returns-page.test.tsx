@@ -57,7 +57,7 @@ describe("ERP returns page", () => {
     const html = renderToStaticMarkup(await ReturnsPage());
     expect(html).toMatch(/Komad 1\/2<\/p><p[^>]*>Paket: AAA1 \(dolazak nije potvrđen\)/);
     expect(html).toMatch(/Komad 2\/2<\/p><p[^>]*>Paket: AAA2 \(dolazak potvrđen\)/);
-    expect(html).toContain("Pretraga ispod samo pronalazi postojeći povrat");
+    expect(html).toContain("Skeniraj paket ili unesi broj porudžbine");
   });
 
   it("shows the unresolved old shipment for stock-only receipt while the new picking stays linked", async () => {

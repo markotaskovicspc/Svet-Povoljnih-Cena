@@ -1,3 +1,5 @@
+import { reclamationParcelQuantity } from "./return-receipt-plan";
+import { normalizeReturnParcelNumber, returnParcelArrived, returnParcelNumbers } from "./return-parcels";
 import { assertReturnNotLost } from "./return-resolution.server";
 import { assertMyGlsReturnAccepted, canReceiveReclamationShipment } from "@/lib/mygls/return-booking";
 import "server-only";
@@ -379,6 +381,7 @@ export async function receiveReclamationReturn(args: {
   reclamationId: string;
   warehouseId: string;
   actorId: string;
+  parcelNumber?: string;
 }) {
   return db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`reclamation-return-receipt:${args.reclamationId}`}))::text AS "lock"`;
@@ -389,14 +392,23 @@ export async function receiveReclamationReturn(args: {
           where: { purpose: "RECLAMATION_RETURN" },
           orderBy: { createdAt: "desc" },
           take: 1,
+          include: { returnArrivals: true },
         },
       },
     });
     if (!reclamation) throw new Error("Reklamacija nije pronađena.");
     const shipment = reclamation.shipments[0];
-    if (!shipment || !canReceiveReclamationShipment(shipment)) {
-      throw new Error("Povrat može da se primi tek kada kurir potvrdi isporuku u magacin.");
+    if (!shipment) throw new Error("Povratna pošiljka nije pronađena.");
+    const code = args.parcelNumber ? normalizeReturnParcelNumber(args.parcelNumber) : null;
+    const numbers = returnParcelNumbers(shipment);
+    const physicalReceipt = code ? returnParcelArrived(shipment, code) :
+      numbers.length === shipment.packageCount && numbers.every(number => returnParcelArrived(shipment, number));
+    if (!physicalReceipt && !canReceiveReclamationShipment(shipment)) {
+      throw new Error("Potvrdite fizički dolazak paketa ili osvežite potvrdu kurira.");
     }
+    const parcelQty = code ? reclamationParcelQuantity(shipment, {
+      id: reclamation.orderItemId ?? "", sku: reclamation.sku, qty: reclamation.quantity,
+    }, code) : null;
     if (!reclamation.productId) {
       throw new Error("Reklamacija nema vezan artikal i ne može da se proknjiži na lager.");
     }
@@ -415,10 +427,18 @@ export async function receiveReclamationReturn(args: {
     }
     await lockOrderReturn(tx, reclamation.orderId);
     await assertReturnNotLost(tx, `reclamation:${reclamation.id}`);
-    const existingReceipt = await tx.stockMovement.findUnique({
-      where: { idempotencyKey: `reclamation-return:${reclamation.id}` },
-    });
-    if (!existingReceipt && reclamation.orderItemId) {
+    const aggregateKey = `reclamation-return:${reclamation.id}`;
+    const key = code ? `${aggregateKey}:parcel:${code}` : aggregateKey;
+    const [aggregateReceipt, parcelReceipts] = await Promise.all([
+      tx.stockMovement.findUnique({ where: { idempotencyKey: aggregateKey } }),
+      tx.stockMovement.findMany({ where: { idempotencyKey: { startsWith: `${aggregateKey}:parcel:` } } }),
+    ]);
+    const existingReceipt = aggregateReceipt ?? parcelReceipts.find(row => row.idempotencyKey === key);
+    if (existingReceipt) return { movement: existingReceipt, warehouse };
+    const receivedQty = parcelReceipts.reduce((sum, row) => sum + row.qty, 0);
+    const quantity = parcelQty ?? reclamation.quantity - receivedQty;
+    if (quantity <= 0 || receivedQty + quantity > reclamation.quantity) throw new Error("Povrat je već primljen ili količina prelazi reklamaciju.");
+    if (reclamation.orderItemId) {
       const balance = await returnedStockBalance(tx, reclamation.orderItemId);
       if (balance.refunded > 0) {
         throw new Error("Artikal već ima fiskalnu refundaciju i vraćeno stanje. Proverite postojeće knjiženje pre prijema reklamacije da se lager ne uveća dvaput.");
@@ -444,13 +464,13 @@ export async function receiveReclamationReturn(args: {
       });
     }
     const movement = await adjustInventory(tx, {
-      idempotencyKey: `reclamation-return:${reclamation.id}`,
+      idempotencyKey: key,
       productId: reclamation.productId,
       sku: reclamation.sku,
-      qtyDelta: reclamation.quantity,
+      qtyDelta: quantity,
       warehouseId: warehouse.id,
       kind: StockMovementKind.REFUND_RETURN,
-      note: `Povrat po reklamaciji ${reclamation.number} primljen u ${warehouse.code} · ${warehouse.name}.`,
+      note: `Povrat po reklamaciji ${reclamation.number}${code ? `, paket ${code}` : ""} primljen u ${warehouse.code} · ${warehouse.name}.`,
       actorId: args.actorId,
       orderId: reclamation.orderId,
       orderItemId: reclamation.orderItemId,
@@ -459,7 +479,7 @@ export async function receiveReclamationReturn(args: {
       where: { id: reclamation.id },
       data: {
         warehouseId: warehouse.id,
-        warehouseStatus: "READY",
+        warehouseStatus: receivedQty + quantity === reclamation.quantity ? "READY" : undefined,
         status: reclamation.status === "PRIMLJENO" ? "U_OBRADI" : undefined,
       },
     });
