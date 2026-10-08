@@ -1,4 +1,5 @@
 import { SHIPMENT_STATUS_LABEL } from "@/lib/courier/status";
+import { ReturnScanner } from "@/components/admin/return-scanner";
 import { scannedReturnPlan, receiveScannedReturn } from "@/lib/admin/scanned-return.server";
 import { returnUnitParcelNumbers, returnItemParcelNumbers, returnParcelNumbers, returnParcelArrived, displayReturnParcelNumber, normalizeReturnParcelNumber, type ReturnShipment } from "@/lib/admin/return-parcels";
 import {
@@ -601,13 +602,7 @@ export default async function ReturnsPage({
       <main className="space-y-6 px-4 py-6 md:px-8">
         <Card>
           <CardTitle>Prijem povratnog paketa</CardTitle>
-          <form className="flex flex-wrap items-end gap-3">
-            <Field label="Skeniraj paket ili unesi broj porudžbine">
-              <input name="q" autoFocus defaultValue={params?.q ?? ""} maxLength={40} placeholder="Kod sa adresnice" className="h-11 w-80 max-w-full rounded-lg border border-input px-3" />
-            </Field>
-            <button className="rounded-lg bg-foreground px-4 py-3 text-background">Pronađi paket</button>
-            {query ? <Link href="/admin/erp/povrati" className="text-sm underline">Sledeći paket</Link> : null}
-          </form>
+          <ReturnScanner key={params?.q ?? ""} initialCode={params?.q ?? ""} />
           {scanError ? <p role="alert" className="mt-4 text-warning">{scanError}</p> : null}
           {scanPlan ? <div className="mt-5 space-y-3 rounded-xl border border-border p-4">
             <div className="overflow-x-auto">

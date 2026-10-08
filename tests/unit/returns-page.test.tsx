@@ -46,6 +46,13 @@ beforeEach(() => {
 });
 
 describe("ERP returns page", () => {
+  it("offers camera scanning on the lookup form while keeping receipt a separate action", async () => {
+    const html = renderToStaticMarkup(await ReturnsPage());
+    expect(html).toContain("Skeniraj kamerom");
+    expect(html).toContain('action="/admin/erp/povrati"');
+    expect(html).toContain('method="get"');
+    expect(html).not.toContain("Potvrdi prijem");
+  });
   it("shows the scanned parcel's failure even when another parcel made the shipment delivered", async () => {
     mocks.scan.mockResolvedValue({ kind: "reclamation", code: "9002838515", received: false,
       shipment: { orderId: "o", order: { number: "SPC-2026-001117" }, reclamation: { id: "r", number: "R-1-SPC-2026-001117" }, provider: "MYGLS", status: "DELIVERED", packageCount: 2, providerParcelNumbers: [9002838514, 9002838515], rawCreateResponse: { myGlsParcelHandover: { parcels: [
