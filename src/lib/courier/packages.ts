@@ -150,7 +150,8 @@ export function hasKnownMyGlsOversizeSurcharge(pkg: PhysicalPackage) {
  * Expands order lines into full courier cartons and a separate remainder.
  * Package count follows courierUnitsPerBox, but catalogue dimensions always
  * come from individual article packaging, independently of the packed quantity.
- * A grouped package's weight still requires an exact matching carton weight.
+ * A matching carton weight takes precedence; otherwise sum the known unit
+ * weights for the actual packed quantity, including a partially filled carton.
  * Missing values intentionally remain null so an operator must enter real
  * measurements before a provider request can be sent.
  */
@@ -174,21 +175,21 @@ export function derivePhysicalPackages(
       const packedQuantity = Math.min(unitsPerBox, quantity - index * unitsPerBox);
       const multiple = packedQuantity > 1;
       const matchingCarton = item.product?.packQty === packedQuantity;
+      const unitWeight = courierUnitWeightKg(item.product);
       const measurements = {
-        weightKg: multiple ? (matchingCarton ? positiveNumber(item.product?.packGrossWeightKg) : null) : courierUnitWeightKg(item.product),
+        weightKg: (multiple && matchingCarton ? positiveNumber(item.product?.packGrossWeightKg) : null)
+          ?? (unitWeight == null ? null : Number((unitWeight * packedQuantity).toFixed(3))),
         ...courierUnitDimensionsCm(item.product),
       };
-      const unitWeight = courierUnitWeightKg(item.product);
       packages.push({
         packedQuantity,
         packageNo: packages.length + 1,
         orderItemId: item.id,
         content: item.name,
         ...measurements,
-        // Estimated aggregate weight only guides routing. It must never replace
-        // a measured grouped-package weight for readiness or a courier label.
+        // Routing uses the same catalogue weight as picking and courier labels.
         ...(multiple ? { routingMeasurements: {
-          weightKg: measurements.weightKg ?? (unitWeight == null ? null : unitWeight * packedQuantity),
+          weightKg: measurements.weightKg,
           widthCm: measurements.widthCm ?? positiveNumber(item.product?.unitPackWidthCm),
           depthCm: measurements.depthCm ?? positiveNumber(item.product?.unitPackDepthCm),
           heightCm: measurements.heightCm ?? positiveNumber(item.product?.unitPackHeightCm),

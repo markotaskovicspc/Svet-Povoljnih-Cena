@@ -4,14 +4,14 @@ import { loadEligibleOrders, setPickupPackageReady } from "@/lib/admin/pickup-ba
 import { buildPickupPrintRows } from "@/lib/admin/pickup-print";
 import { getPickingSession } from "@/lib/admin/picking.server";
 
-it("loads CITY LINE individual dimensions once, preserves 16 units, and requires package weight before readiness", async () => {
+it("loads CITY LINE individual dimensions once, preserves 16 units, and loads grouped weight before readiness", async () => {
   const prefix = `CARTON-${Date.now()}`;
   const warehouse = await db.warehouse.create({ data: { code: `${prefix}-DC`, name: prefix, active: true, isDefault: true } });
   const actor = await db.adminUser.create({ data: { email: `${prefix}@example.invalid`, passwordHash: "unused", role: "OPS" } });
   const product = await db.product.create({ data: {
     sku: "110174", slug: prefix.toLowerCase(), name: "Trpezarijska stolica CITY LINE", description: "Test",
     fullPrice: 1000, courierUnitsPerBox: 2,
-    unitPackWidthCm: 53, unitPackDepthCm: 45, unitPackHeightCm: 51, grossWeightKg: 3,
+    unitPackWidthCm: 53, unitPackDepthCm: 45, unitPackHeightCm: 51, grossWeightKg: 3.5,
   } });
   const batch = await db.pickupBatch.create({ data: { number: prefix, provider: "X_EXPRESS", courier: "COURIER_SMALL" } });
   const order = await db.order.create({ data: {
@@ -26,10 +26,10 @@ it("loads CITY LINE individual dimensions once, preserves 16 units, and requires
   expect(await loadEligibleOrders(batch.id, actor.id, [order.id])).toMatchObject({ orderCount: 0, lineCount: 0 });
   const lines = await db.pickupBatchLine.findMany({ where: { batchId: batch.id }, include: { orderItem: true } });
   expect(lines).toHaveLength(8);
-  expect(lines.every(line => Number(line.widthCm) === 53 && Number(line.depthCm) === 45 && Number(line.heightCm) === 51 && line.weightKg === null && line.warehouseReadyAt === null)).toBe(true);
+  expect(lines.every(line => Number(line.widthCm) === 53 && Number(line.depthCm) === 45 && Number(line.heightCm) === 51 && Number(line.weightKg) === 7 && line.warehouseReadyAt === null)).toBe(true);
   expect(buildPickupPrintRows(lines)).toMatchObject([{ sku: "110174", quantity: 16, packageCount: 8 }]);
   expect((await getPickingSession(batch.id)).rows).toMatchObject([{ sku: "110174", quantity: 16 }]);
-  await expect(setPickupPackageReady(batch.id, lines[0].id, true, actor.id)).rejects.toThrow();
+  await expect(setPickupPackageReady(batch.id, lines[0].id, true, actor.id)).resolves.toMatchObject({ warehouseReadyById: actor.id });
   expect(await db.shipment.count({ where: { orderId: order.id } })).toBe(0);
   expect((await db.orderItem.findFirstOrThrow({ where: { orderId: order.id } })).warehouseReservedQty).toBe(16);
 });

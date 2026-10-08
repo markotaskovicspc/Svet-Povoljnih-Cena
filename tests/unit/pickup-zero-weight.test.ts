@@ -94,3 +94,14 @@ it("loads a bank-confirmed paid order and advances it into preparation", async (
   expect(mocks.query.mock.calls[1][0].text).toContain(`orders."status" IN ('KREIRANO', 'POTVRDJENO')`);
   expect(mocks.update).toHaveBeenCalledWith({ where: { id: { in: ["order"] }, status: { in: ["KREIRANO", "POTVRDJENO"] } }, data: { status: "U_PRIPREMI" } });
 });
+
+it("persists City Line gross weight for each pair and the odd remaining chair", async () => {
+  mocks.items.mockResolvedValue([{ id: "item", orderId: "order", sku: "110174", name: "CITY LINE", qty: 5, warehouseReservedQty: 5, withAssembly: false,
+    product: { courierUnitsPerBox: 2, packQty: null, packGrossWeightKg: null,
+      grossWeightKg: 3.5, weightKg: 3, unitPackWidthCm: 53, unitPackDepthCm: 45, unitPackHeightCm: 51 },
+  }]);
+  expect(await loadEligibleOrders("batch", "actor", ["order"])).toMatchObject({ orderCount: 1, lineCount: 3, skippedInvalidDimensionsCount: 0 });
+  const lines = mocks.insert.mock.calls[0][0].data;
+  expect(lines.map((line: { packedQuantity: number; weightKg: number }) => [line.packedQuantity, line.weightKg])).toEqual([[2, 7], [2, 7], [1, 3.5]]);
+  expect(lines.every((line: object) => !("warehouseReadyAt" in line))).toBe(true);
+});

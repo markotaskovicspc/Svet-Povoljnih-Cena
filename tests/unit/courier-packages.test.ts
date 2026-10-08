@@ -280,19 +280,35 @@ describe("explicit courier cartons", () => {
         unitPackWidthCm: 55, unitPackDepthCm: 45, unitPackHeightCm: 21,
         grossWeightKg: 2.6, weightKg: 2 } }]);
     expect(packages).toHaveLength(1);
-    expect(packages[0]).toMatchObject({ packedQuantity: 2, widthCm: 55, depthCm: 45, heightCm: 21, weightKg: null });
-    expect(() => requireCompleteXExpressPackages(packages)).toThrow("težina");
-    expect(() => requireCompleteXExpressPackages([{ ...packages[0], weightKg: 5 }])).not.toThrow();
+    expect(packages[0]).toMatchObject({ packedQuantity: 2, widthCm: 55, depthCm: 45, heightCm: 21, weightKg: 5.2 });
+    expect(() => requireCompleteXExpressPackages(packages)).not.toThrow();
   });
   it("does not substitute transport dimensions when individual dimensions are missing on a grouped package", () => {
     const [pkg] = derivePhysicalPackages([{ id: "i", name: "Stolica", qty: 2,
       product: { ...product, unitPackWidthCm: null, unitPackDepthCm: null, unitPackHeightCm: null } }]);
     expect(pkg).toMatchObject({ packedQuantity: 2, weightKg: 12, widthCm: null, depthCm: null, heightCm: null });
   });
-  it("does not invent a weight for a partially filled carton", () => {
+  it("sums unit weights for a partially filled carton instead of using the full carton weight", () => {
     const packages = derivePhysicalPackages([{ id: "i", name: "Stolica", qty: 2,
       product: { ...product, courierUnitsPerBox: 4, packQty: 4 } }]);
-    expect(packages[0]).toMatchObject({ packedQuantity: 2, weightKg: null });
-    expect(() => requireCompleteXExpressPackages(packages)).toThrow("težina");
+    expect(packages[0]).toMatchObject({ packedQuantity: 2, weightKg: 10 });
+    expect(() => requireCompleteXExpressPackages(packages)).not.toThrow();
+  });
+});
+
+describe("grouped package weight fallback", () => {
+  it.each([
+    [{ grossWeightKg: 3.5, weightKg: 3 }, 7],
+    [{ grossWeightKg: 0, weightKg: 3 }, 6],
+    [{ grossWeightKg: 3.5, packQty: 2, packGrossWeightKg: 0 }, 7],
+    [{ grossWeightKg: 3.5, packQty: 4, packGrossWeightKg: 20 }, 7],
+    [{ grossWeightKg: 0.1 }, 0.2],
+    [{ grossWeightKg: 0, weightKg: 0 }, null],
+    [{ packQty: 4, packGrossWeightKg: 20 }, null],
+  ])("uses only valid weights for the actual packed quantity: %j", (weights, expected) => {
+    const [pkg] = derivePhysicalPackages([{ id: "city", name: "CITY LINE", qty: 2,
+      product: { courierUnitsPerBox: 2, ...weights } }]);
+    expect(pkg.weightKg).toBe(expected);
+    expect(pkg.routingMeasurements?.weightKg).toBe(expected);
   });
 });
