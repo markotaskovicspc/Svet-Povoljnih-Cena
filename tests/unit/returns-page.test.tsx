@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   resolutions: vi.fn(), orders: vi.fn(), count: vi.fn(), reclamations: vi.fn(), reshipments: vi.fn(),
-  jobs: vi.fn(), warehouses: vi.fn(), movements: vi.fn(), authorize: vi.fn(),
+  scan: vi.fn(), jobs: vi.fn(), warehouses: vi.fn(), movements: vi.fn(), authorize: vi.fn(),
 }));
 vi.mock("@/lib/db", () => ({ db: {
   returnResolution: { findMany: mocks.resolutions },
@@ -15,6 +15,7 @@ vi.mock("@/lib/db", () => ({ db: {
   backgroundJob: { findMany: mocks.jobs },
 } }));
 vi.mock("@/lib/admin", () => ({ requireAdminAction: mocks.authorize, withAdminState: vi.fn() }));
+vi.mock("@/lib/admin/scanned-return.server", () => ({ scannedReturnPlan: mocks.scan, receiveScannedReturn: vi.fn() }));
 vi.mock("@/lib/admin/reclamation-fulfillment.server", () => ({ receiveReclamationReturn: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
@@ -33,6 +34,7 @@ const returnedOrder = (id: string, shipments = [{
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.scan.mockRejectedValue(new Error("Paket nije pronađen."));
   mocks.resolutions.mockResolvedValue([]);
   mocks.jobs.mockResolvedValue([]);
   mocks.reshipments.mockResolvedValue([]);
@@ -44,6 +46,20 @@ beforeEach(() => {
 });
 
 describe("ERP returns page", () => {
+  it("shows picking columns while distinguishing total return quantity from the scanned parcel", async () => {
+    mocks.scan.mockResolvedValue({ kind: "reclamation", code: "9002838514", received: false,
+      shipment: { orderId: "o", order: { number: "SPC-2026-001117" }, reclamation: { id: "r", number: "R-1-SPC-2026-001117" }, provider: "MYGLS", status: "DELIVERED", packageCount: 2, providerParcelNumbers: [9002838514, 9002838515] },
+      lines: [{ id: "i", sku: "110085", name: "CONFERENCE MASTER", totalQuantity: 2, units: [1], description: "123456789 · Stolice · crna" }],
+    });
+    const html = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ q: "09002838514" }) }));
+    expect(html).toContain("Artikli u povratu");
+    expect(html).toContain("Skenirani paket i status");
+    expect(html).toContain("× 2</strong>");
+    expect(html).toContain("U skeniranom paketu: 1 kom");
+    expect(html).toContain("123456789 · Stolice · crna");
+    expect(html).toContain("Paket 1/2");
+    expect(html).toContain("Potvrdi prijem");
+  });
   it("shows each unit's saved parcel next to its receipt control", async () => {
     const order = returnedOrder("parcel");
     mocks.orders.mockResolvedValue([{ ...order, items: [{ ...order.items[0], productId: "product" }], shipments: [{
