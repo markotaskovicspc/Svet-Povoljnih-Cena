@@ -606,7 +606,7 @@ export default async function PickupBatchPage({
             </Link>
             {batch.labelsCreatedAt ? (
               <Link
-                href={`/api/admin/erp/preuzimanja/${batch.id}/labels`}
+                href={`/admin/erp/preuzimanja/${batch.id}/adresnice`}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"

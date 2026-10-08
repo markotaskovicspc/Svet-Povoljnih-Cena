@@ -24,6 +24,27 @@ const shipment: XExpressLabelShipment = {
 };
 
 describe("X Express article identification", () => {
+  it("selects a single existing label without changing its code, quantity or package number", () => {
+    const articleLabels = buildXExpressArticleLabels({ codes, packages, items, purpose: "ORDER_DELIVERY" });
+    const html = renderXExpressBatchLabelsHtml([{ ...shipment, rawCreateResponse: { articleLabels } }], {
+      selection: [{ shipmentId: shipment.id, packageIndex: 1 }],
+      packageQuantitiesByShipmentId: { [shipment.id]: [2, 1] },
+    });
+    expect(html).toContain(codes[1]);
+    expect(html).not.toContain(codes[0]);
+    expect(html).toContain('class="pkg">2/2');
+    expect(html).toContain("U kutiji: 1 kom");
+    expect(html).toContain("Šifra:</strong> 001234");
+    expect(html).not.toContain("Šifra:</strong> RAB-123");
+    const reordered = renderXExpressBatchLabelsHtml([shipment], {
+      selection: [{ shipmentId: shipment.id, packageIndex: 1 }, { shipmentId: shipment.id, packageIndex: 0 }],
+    });
+    expect(reordered.indexOf(codes[1])).toBeLessThan(reordered.indexOf(codes[0]));
+    expect(() => renderXExpressBatchLabelsHtml([shipment], {
+      selection: [{ shipmentId: shipment.id, packageIndex: 2 }],
+    })).toThrow("povezana sa paketom");
+  });
+
   it("binds duplicate names to their exact package and renders snapshots by tracking code", () => {
     const articleLabels = buildXExpressArticleLabels({ codes, packages, items, purpose: "ORDER_DELIVERY" });
     expect(articleLabels.map((label) => label.sku)).toEqual(["RAB-123", "001234"]);

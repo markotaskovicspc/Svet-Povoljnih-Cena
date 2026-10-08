@@ -26,7 +26,7 @@ function line(orderId: string, packageNo = 1, deferredAt: Date | null = null) {
   return {
     orderId, orderItemId: `${orderId}-item`, reclamationId: null,
     purpose: "ORDER_DELIVERY" as const, lineGroupKey: `order:${orderId}`,
-    packageNo, packedQuantity: 1, providerParcelNumber: null as string | null, providerClientReference: null as string | null, deferredAt, orderItem: { name: orderId },
+    packageNo, packedQuantity: 1, providerParcelNumber: null as string | null, providerClientReference: null as string | null, deferredAt, orderItem: { name: orderId, sku: orderId },
   };
 }
 function shipment(orderId: string, packageCount = 1) {
@@ -39,7 +39,7 @@ function shipment(orderId: string, packageCount = 1) {
 let lines: ReturnType<typeof line>[];
 let provider: string;
 let unpaidOrderIds: string[];
-const request = () => GET(new Request("https://example.test/api/admin/erp/preuzimanja/batch/labels"), {
+const request = (query = "") => GET(new Request(`https://example.test/api/admin/erp/preuzimanja/batch/labels${query}`), {
   params: Promise.resolve({ id: "batch" }),
 });
 
@@ -224,4 +224,50 @@ it.each(["MYGLS", "X_EXPRESS"])("excludes cancelled order labels without erasing
   expect(mocks.orders.mock.calls[0][0].where.id.in).toEqual(["active"]);
   if (courier === "X_EXPRESS") expect(mocks.render.mock.calls[0][0].map((s: { id: string }) => s.id)).toEqual(["shipment-active"]);
   else expect(mocks.download.mock.calls.map(call => call[0])).toEqual(["active.pdf"]);
+});
+
+
+it.each(["MYGLS", "X_EXPRESS"])("filters and sorts individual labels inside a multi-article shipment (%s)", async courier => {
+  provider = courier;
+  lines = [
+    { ...line("order", 1), orderItemId: "chair", orderItem: { name: "Stolica", sku: "0020" }, providerClientReference: "CHAIR" },
+    { ...line("order", 2), orderItemId: "lamp", orderItem: { name: "Lampa", sku: "0010" }, providerClientReference: "LAMP" },
+  ];
+  mocks.shipments.mockResolvedValue([shipment("order", 2)]);
+  const response = await request("?q=0010&sort=name");
+  expect(response.status).toBe(200);
+  expect(response.headers.get("x-courier-label-count")).toBe("1");
+  const selection = courier === "MYGLS" ? mocks.merge.mock.calls[0][2] : mocks.render.mock.calls[0][1].selection;
+  expect(selection).toEqual([expect.objectContaining({ sourceIndex: 0, packageIndex: 1, clientReference: "LAMP" })]);
+  await request("?sort=sku");
+  const ordered = courier === "MYGLS" ? mocks.merge.mock.calls[1][2] : mocks.render.mock.calls[1][1].selection;
+  expect(ordered.map((row: { packageIndex: number }) => row.packageIndex)).toEqual([1, 0]);
+});
+
+it("does not silently print every label when the article search is empty", async () => {
+  const response = await request("?q=missing-sku");
+  expect(response.status).toBe(409);
+  expect(await response.text()).toContain("Nema adresnica za zadati naziv ili šifru");
+  expect(mocks.download).not.toHaveBeenCalled();
+  expect(mocks.render).not.toHaveBeenCalled();
+});
+
+
+it.each(["MYGLS", "X_EXPRESS"])("sorts SKUs across shipments while retaining the original parcel identities (%s)", async courier => {
+  provider = courier;
+  lines = [
+    { ...line("first", 1), orderItem: { name: "Stolica", sku: "0010" }, providerClientReference: "FIRST-1" },
+    { ...line("first", 2), orderItem: { name: "Stolica", sku: "0010" }, providerClientReference: "FIRST-2" },
+    { ...line("second"), orderItem: { name: "Sto", sku: "0002" }, providerClientReference: "SECOND" },
+  ];
+  mocks.shipments.mockResolvedValue([shipment("second"), shipment("first", 2)]);
+  const response = await request("?sort=sku");
+  expect(response.status).toBe(200);
+  expect(response.headers.get("x-courier-label-count")).toBe("3");
+  const selection = courier === "MYGLS" ? mocks.merge.mock.calls[0][2] : mocks.render.mock.calls[0][1].selection;
+  expect(selection).toEqual([
+    expect.objectContaining({ shipmentId: "shipment-second", sourceIndex: 1, packageIndex: 0, clientReference: "SECOND" }),
+    expect.objectContaining({ shipmentId: "shipment-first", sourceIndex: 0, packageIndex: 0, clientReference: "FIRST-1" }),
+    expect.objectContaining({ shipmentId: "shipment-first", sourceIndex: 0, packageIndex: 1, clientReference: "FIRST-2" }),
+  ]);
 });

@@ -23,6 +23,22 @@ async function providerPdf(count: number, name = "Trpezarijska stolica ELEGANCE 
 }
 
 describe("GLS print layout", () => {
+  it("selects and orders exact parcel identities while keeping original package numbers", async () => {
+    const source = { bytes: await providerPdf(3), packageCount: 3, groupKey: "order" };
+    const result = await packMyGlsLabels([source], "Selected", [
+      { sourceIndex: 0, clientReference: "TRACK-2" },
+      { sourceIndex: 0, clientReference: "TRACK-0" },
+    ]);
+    const doc = await PDFDocument.load(result);
+    expect(doc.getPageCount()).toBe(1);
+    expect(readMyGlsPageText(doc, doc.getPage(0)).map(b => b.text)).toEqual(["Paket 3/3", "Paket 1/3"]);
+    for (const selection of [
+      [{ sourceIndex: 0 }],
+      [{ sourceIndex: 0, clientReference: "MISSING" }],
+      [{ sourceIndex: 0, clientReference: "TRACK-0" }, { sourceIndex: 0, clientReference: "TRACK-0" }],
+    ]) await expect(packMyGlsLabels([source], "Invalid", selection)).rejects.toThrow("povezati izabrani paket");
+  });
+
   it("reflows tiny product text without duplicating identifiers and still adds every product barcode", async () => {
     const before = await providerPdf(5);
     const result = await enlargeMyGlsArticleText(before);

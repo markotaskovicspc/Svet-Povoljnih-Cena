@@ -17,16 +17,21 @@ import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
 import { xExpressLabelItemSelect } from "@/lib/x-express/article-labels";
 import { renderXExpressBatchLabelsHtml } from "@/lib/x-express/labels";
 import { fulfillmentPaymentReadiness } from "@/lib/payments/fulfillment-readiness";
+import { pickupLabelSort, selectPickupLabels } from "@/lib/admin/pickup-label-selection";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
   await requireAdminAction(["OPS"]);
+  const query = new URL(request.url).searchParams;
+  const search = query.get("q")?.trim() ?? "";
+  const sort = pickupLabelSort(query.get("sort"));
+  const customized = Boolean(search || sort !== "order");
   const { id } = await context.params;
   const batch = await db.pickupBatch.findUnique({
     where: { id },
@@ -51,7 +56,8 @@ export async function GET(
           providerParcelNumber: true,
           providerClientReference: true,
           packageNo: true,
-          orderItem: { select: { name: true } },
+          orderItem: { select: { name: true, sku: true } },
+          reclamation: { select: { resolution: true, resolutionNote: true } },
           order: { select: { status: true, cancelledAt: true } },
         },
       },
@@ -63,6 +69,10 @@ export async function GET(
   batch.lines = batch.lines.filter((line) => !isCancelledDelivery(line));
   if (!batch.lines.length) {
     return labelConflict("Nalog nema aktivne pakete za štampu.", batch.id);
+  }
+  const selectedLines = selectPickupLabels(batch.lines, search, sort);
+  if (!selectedLines.length) {
+    return labelConflict("Nema adresnica za zadati naziv ili šifru artikla.", batch.id);
   }
   if (batch.provider !== MYGLS_PROVIDER && batch.provider !== X_EXPRESS_PROVIDER) {
     return labelConflict("Kurirska služba nije podešena na nalogu.", batch.id);
@@ -199,6 +209,16 @@ export async function GET(
     );
   }
 
+  const selection = customized ? selectedLines.map(line => {
+    const sourceIndex = shipments.findIndex(shipment => shipmentMatchesLine(shipment, line));
+    const shipment = shipments[sourceIndex]!;
+    const packageIndex = batch.lines.filter(candidate => shipmentMatchesLine(shipment, candidate))
+      .sort((a, b) => a.packageNo - b.packageNo).indexOf(line);
+    return { sourceIndex, shipmentId: shipment.id, packageIndex,
+      parcelNumber: line.providerParcelNumber, clientReference: line.providerClientReference };
+  }) : undefined;
+  const printedCount = selection?.length ?? labelCount;
+
   if (batch.provider === MYGLS_PROVIDER) {
     let pdf: Buffer;
     try {
@@ -214,7 +234,7 @@ export async function GET(
         bytes,
         packageCount: Math.max(1, shipments[index]!.packageCount),
         groupKey: `${shipments[index]!.orderId}:${shipments[index]!.purpose}:${shipments[index]!.reclamationId ?? ""}`,
-      })), `${batch.number} - kurirske etikete`);
+      })), `${batch.number} - kurirske etikete`, selection);
     } catch (error) {
       if (!(error instanceof MyGlsPrintLayoutError)) throw error;
       return labelConflict(error.message, batch.id);
@@ -226,7 +246,7 @@ export async function GET(
         "cache-control": "private, no-store",
         "x-content-type-options": "nosniff",
         "x-courier-label-source": "mygls-provider-pdfs-packed",
-        "x-courier-label-count": String(labelCount),
+        "x-courier-label-count": String(printedCount),
       },
     });
   }
@@ -254,6 +274,7 @@ export async function GET(
     })), {
       title: batch.number,
       autoPrint: false,
+      selection,
       packageContentsByShipmentId,
       packageOrderItemIdsByShipmentId,
       packageQuantitiesByShipmentId: Object.fromEntries(shipments.map(shipment => [shipment.id, batch.lines
@@ -276,7 +297,7 @@ export async function GET(
       "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:; script-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
       "x-content-type-options": "nosniff",
       "x-courier-label-source": "x-express-api-data-batch",
-      "x-courier-label-count": String(labelCount),
+      "x-courier-label-count": String(printedCount),
     },
   });
 }

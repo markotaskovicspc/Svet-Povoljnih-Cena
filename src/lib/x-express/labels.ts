@@ -144,20 +144,33 @@ export function renderXExpressBatchLabelsHtml(
     packageContentsByShipmentId?: Readonly<Record<string, readonly string[]>>;
     packageQuantitiesByShipmentId?: Readonly<Record<string, readonly number[]>>;
     packageOrderItemIdsByShipmentId?: Readonly<Record<string, readonly (string | null)[]>>;
+    /** Select already-rendered physical labels without renumbering parcels. */
+    selection?: readonly { shipmentId: string; packageIndex: number }[];
   } = {},
 ) {
   if (!shipments.length) {
     throw new Error("Nema X Express etiketa za štampu.");
   }
   const title = options.title ?? shipments.map((shipment) => shipment.order.number).join(", ");
-  const labels = shipments.flatMap((shipment) =>
+  const labelsByShipment = new Map(shipments.map((shipment) => [shipment.id,
     renderShipmentLabels(
       shipment,
       options.packageContentsByShipmentId?.[shipment.id],
       options.packageOrderItemIdsByShipmentId?.[shipment.id],
       options.packageQuantitiesByShipmentId?.[shipment.id],
     ),
-  );
+  ]));
+  const used = new Set<string>();
+  const labels = options.selection ? options.selection.map(({ shipmentId, packageIndex }) => {
+    const key = `${shipmentId}:${packageIndex}`;
+    const label = labelsByShipment.get(shipmentId)?.[packageIndex];
+    if (!Number.isSafeInteger(packageIndex) || !label || used.has(key)) {
+      throw new Error("Izabrana X Express adresnica nije jedinstveno povezana sa paketom.");
+    }
+    used.add(key);
+    return label;
+  }) : [...labelsByShipment.values()].flat();
+  if (!labels.length) throw new Error("Nema X Express etiketa za štampu.");
   const sheets = chunkLabels(labels, 4);
 
   return `<!doctype html>

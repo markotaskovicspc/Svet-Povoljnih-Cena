@@ -24,7 +24,7 @@ export default async function PickupBatchPrintPage({
   await requireAdminAction(["OPS"]);
   const [{ id }, query] = await Promise.all([params, searchParams]);
   if (query.section === "labels") {
-    redirect(`/api/admin/erp/preuzimanja/${id}/labels`);
+    redirect(`/admin/erp/preuzimanja/${id}/adresnice`);
   }
   const batch = await db.pickupBatch.findUnique({
     where: { id },
@@ -83,12 +83,12 @@ export default async function PickupBatchPrintPage({
         <div className="flex flex-wrap gap-2">
           {batch.labelsCreatedAt ? (
             <Link
-              href={`/api/admin/erp/preuzimanja/${batch.id}/labels`}
+              href={`/admin/erp/preuzimanja/${batch.id}/adresnice`}
               target="_blank"
               rel="noreferrer"
               className="inline-flex h-9 items-center rounded-lg border border-black bg-white px-3 text-sm font-medium"
             >
-              Otvori sve kurirske adresnice
+              Pretraga i štampa adresnica
             </Link>
           ) : (
             <span
