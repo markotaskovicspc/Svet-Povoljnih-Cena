@@ -97,14 +97,14 @@ describe("X Express recipient PUDO instruction", () => {
 });
 
 describe("GLS informational notification", () => {
-  it.each(["CREATED", "PICKED_UP", "IN_TRANSIT", "DELIVERED", "FAILED"])("preserves %s and physical timestamps", async status => {
+  it.each(["24", "037", "46", "99"].flatMap(code => ["CREATED", "PICKED_UP", "IN_TRANSIT", "DELIVERED", "FAILED"].map(status => [code, status])))("instruction %s preserves %s and physical timestamps", async (code, status) => {
     const shipment = { id: "s", orderId: "o", provider: "MYGLS", status, lastStatusEventAt: physicalEventAt,
       rawCreateResponse: null, order: { user: null, guestEmail: null, shipPhone: "" } };
     mocks.loadShipment.mockResolvedValue(shipment);
     mocks.loadLockedShipment.mockResolvedValue(shipment);
-    expect(await applyShipmentEvent("COURIER_SMALL", { ...redirect, providerStatusCode: "99", message: "Notification" }))
+    expect(await applyShipmentEvent("COURIER_SMALL", { ...redirect, providerStatusCode: code, message: "Notification" }))
       .toMatchObject({ status, stateApplied: false, eventCreated: true, orderStatus: null });
-    expect(mocks.createEvent).toHaveBeenCalledWith({ data: expect.objectContaining({ status, providerStatusCode: "99" }) });
+    expect(mocks.createEvent).toHaveBeenCalledWith({ data: expect.objectContaining({ status, providerStatusCode: code }) });
     expect(mocks.updateShipment).not.toHaveBeenCalled();
     expect(mocks.updateOrder).not.toHaveBeenCalled();
     expect(mocks.updatePickup).not.toHaveBeenCalled();

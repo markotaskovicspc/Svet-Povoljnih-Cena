@@ -9,6 +9,10 @@ import {
 import { myGlsShipmentStatusSyncWhere } from "@/lib/mygls/sync";
 
 describe("MyGLS status mapping", () => {
+  it.each(["24", "037", "46"])("keeps instruction %s informational without physical progress", code => {
+    expect(isMyGlsNotification(code)).toBe(true);
+    expect(inferMyGlsShipmentStatus(code, "Change completed for delivery address")).toBe("CREATED");
+  });
   it.each([
     ["U isporuci", "OUT_FOR_DELIVERY"],
     ["Neuspešno isporučeno", "FAILED"],
@@ -16,10 +20,21 @@ describe("MyGLS status mapping", () => {
     ["Not yet delivered", "FAILED"],
     ["Undelivered", "FAILED"],
     ["Pickup cancelled", "FAILED"],
+    ["The parcel could not be delivered due to exceeded time frame", "FAILED"],
+    ["The parcel will be delivered in the evening", "OUT_FOR_DELIVERY"],
     ["Returned after delivery failed", "RETURNED"],
     ["Isporučeno", "DELIVERED"],
   ] as const)("maps an unknown code from its full description: %s", (label, expected) => {
     expect(inferMyGlsShipmentStatus("", label)).toBe(expected);
+  });
+  it.each([
+    ["32", "The parcel will be delivered in the evening", "OUT_FOR_DELIVERY"],
+    ["33", "The parcel could not be delivered due to exceeded time frame", "FAILED"],
+    ["40", "The parcel has been returned to sender", "RETURNED"],
+    ["43", "Parcel is not to locate", "FAILED"],
+    ["47", "The parcel has left the parcel center", "IN_TRANSIT"],
+  ] as const)("maps documented status %s before ambiguous delivery text", (code, label, expected) => {
+    expect(inferMyGlsShipmentStatus(code, label)).toBe(expected);
   });
   it("keeps recent delivered and failed shipments eligible for delayed return discovery", () => {
     const now = new Date("2026-09-17T10:00:00.000Z");
