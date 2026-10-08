@@ -188,7 +188,7 @@ export async function receiveReshipmentReturn(input: { itemId: string; unitNo: n
     if (!Number.isInteger(input.unitNo) || input.unitNo < 1 || input.unitNo > item.quantity) throw new Error("Neispravna jedinica povrata.");
     const key = `reshipment-return:${item.id}:${input.unitNo}`;
     if (await tx.stockMovement.findUnique({ where: { idempotencyKey: key } })) return;
-    if (input.unitNo !== item.receivedQty + 1) throw new Error("Osvežite pregled primljenih količina.");
+    if (item.receivedQty >= item.quantity) throw new Error("Povrat je već u celosti primljen.");
     await adjustInventory(tx, { idempotencyKey: key, productId: item.productId, sku: item.sku, warehouseId: input.warehouseId, qtyDelta: 1, kind: "ADJUSTMENT", orderId: item.reshipment.orderId, actorId: input.actorId, note: `Pregledana i primljena stara roba po ponovnom slanju ${item.reshipment.order.number}, pošiljka ${item.reshipment.sourceShipment.trackingNo ?? item.reshipment.sourceShipmentId}; ${input.unitNo}/${item.quantity}, ${item.sku}. Bez refundacije.` });
     await tx.orderReshipmentItem.update({ where: { id: item.id }, data: { receivedQty: { increment: 1 } } });
     await tx.orderStatusEvent.create({ data: { orderId: item.reshipment.orderId, status: item.reshipment.order.status, actorId: input.actorId, note: `Primljen povrat stare pošiljke: ${item.sku}, ${input.unitNo}/${item.quantity} kom. Porudžbina i nova isporuka ostaju aktivne.` } });

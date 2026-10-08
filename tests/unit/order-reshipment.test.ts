@@ -244,6 +244,10 @@ describe("physical return of the old goods", () => {
     expect(tx.order.update).not.toHaveBeenCalled();
     expect(tx.orderReshipmentItem.update).toHaveBeenCalledTimes(1);
   });
+  it("receives the second parcel before the first without losing its identity", async () => {
+    await receiveReshipmentReturn({ ...receipt, unitNo: 2 });
+    expect(adjust.mock.calls[0][1]).toMatchObject({ qtyDelta: 1, idempotencyKey: "reshipment-return:ri:2" });
+  });
   it("does not receive the same unit twice", async () => {
     tx.stockMovement.findUnique.mockResolvedValue({ id: "existing" });
     await receiveReshipmentReturn(receipt);
@@ -259,7 +263,7 @@ describe("physical return of the old goods", () => {
     await expect(receiveReshipmentReturn({ ...receipt, warehouseId: "" })).rejects.toThrow("magacin");
     expect(adjust).not.toHaveBeenCalled();
   });
-  it.each([0, 2, 3, 1.5])("rejects invalid or out-of-sequence unit %s", async unitNo => {
+  it.each([0, 3, 1.5])("rejects invalid unit %s", async unitNo => {
     await expect(receiveReshipmentReturn({ ...receipt, unitNo })).rejects.toThrow();
     expect(adjust).not.toHaveBeenCalled();
   });
