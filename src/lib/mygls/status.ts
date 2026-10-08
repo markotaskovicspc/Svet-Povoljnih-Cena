@@ -97,14 +97,17 @@ export function inferMyGlsShipmentStatus(
   if (/(data sent|cod data sent|announced|registered|kreiran|najavljen)/.test(text)) {
     return "CREATED";
   }
-  if (/(delivered|isporuc|urucen)/.test(text)) return "DELIVERED";
   if (/(return|returned|vracen|refused|odbij)/.test(text)) return "RETURNED";
-  if (/(absent|failed|wrong|incomplete|problem|damaged|gresk|neuspes)/.test(text)) {
+  if (/(absent|failed|unsuccess|not (?:yet )?delivered|undelivered|cancelled|canceled|otkazan|wrong|incomplete|problem|damaged|gresk|neuspes|nije isporuc|nije uruc)/.test(text)) {
     return "FAILED";
   }
-  if (/(out for delivery|during the day|kurir|dostav|isporuci)/.test(text)) {
+  // Match delivery attempts and movement before positive delivery proof.
+  // In particular, "u isporuci" and "neuspešno isporučeno" are not delivered.
+  if (/(out for delivery|during the day|u isporuci|na dostavi)/.test(text)) {
     return "OUT_FOR_DELIVERY";
   }
+  if (/(delivered|isporucen|urucen)/.test(text)) return "DELIVERED";
+  if (/(kurir|dostav|isporuci)/.test(text)) return "OUT_FOR_DELIVERY";
   if (/(handed over|successful pick up|picked up|preuzet)/.test(text)) {
     return "PICKED_UP";
   }

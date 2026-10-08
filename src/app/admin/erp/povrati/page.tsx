@@ -4,6 +4,7 @@ import { returnUnitParcelNumbers, returnItemParcelNumbers, returnParcelNumbers, 
 import {
   canReceiveReclamationShipment,
   myGlsReturnStatusLabel,
+  scannedReturnStatusLabel,
 } from "@/lib/mygls/return-booking";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -642,7 +643,7 @@ export default async function ReturnsPage({
                     <td className="px-3 py-3">
                       <p className="font-medium">Paket {returnParcelNumbers(scanPlan.shipment).indexOf(scanPlan.code) + 1}/{scanPlan.shipment.packageCount}</p>
                       <p className="mt-1 font-mono">{displayReturnParcelNumber(scanPlan.code, scanPlan.shipment.provider)}</p>
-                      <p className="mt-1 text-xs text-ink-500">{scanPlan.shipment.provider} · {SHIPMENT_STATUS_LABEL[scanPlan.shipment.status] ?? scanPlan.shipment.status}</p>
+                      <p className="mt-1 text-xs text-ink-500">{scanPlan.shipment.provider} · {scannedReturnStatusLabel(scanPlan.shipment, scanPlan.code)}</p>
                       <p className="mt-1 text-xs">{scanPlan.received ? "Primljeno" : "Čeka pregled i prijem"}</p>
                     </td>
                   </tr>

@@ -61,9 +61,29 @@ export function myGlsReturnStatusLabel(shipment: ReturnShipment) {
 
 /** For a reverse shipment, RETURNED can mean sent back to the customer. */
 export function canReceiveReclamationShipment(shipment?: ReturnShipment | null) {
+  if (shipment?.provider === "MYGLS" && shipment.syncError === "MyGLS etiketa obrisana.") return false;
   return Boolean(shipment && (shipment.status === "DELIVERED"
     ? !isMyGlsReturn(shipment) || allReturnParcelsDelivered(shipment)
     : !isMyGlsReturn(shipment) && shipment.status === "RETURNED"));
+}
+
+/** A multi-parcel shipment's latest event is not proof of this parcel's state. */
+export function scannedReturnStatusLabel(shipment: ReturnShipment, code: string) {
+  if (shipment.provider === "MYGLS") {
+    if (shipment.syncError === "MyGLS etiketa obrisana.") return "Adresnica otkazana — potrebna ručna provera";
+    const snapshot = record(record(shipment.rawCreateResponse).myGlsParcelHandover);
+    const parcels = Array.isArray(snapshot.parcels) ? snapshot.parcels.map(record) : [];
+    const parcel = parcels.find(p => String(p.parcelNumber) === String(Number(code)));
+    if (parcel && typeof parcel.latestStatusAt === "string" && Number.isFinite(Date.parse(parcel.latestStatusAt))) {
+      const status = parcel.latestStatus as ShipmentStatus;
+      if (Object.hasOwn(SHIPMENT_STATUS_LABEL, status)) {
+        return isMyGlsReturn(shipment) && status === "PICKED_UP" ? "Preuzeto kod kupca" : SHIPMENT_STATUS_LABEL[status];
+      }
+    }
+    if ((shipment.packageCount ?? 1) > 1) return "Status ovog paketa nije potvrđen";
+  }
+  const label = isMyGlsReturn(shipment) ? myGlsReturnStatusLabel(shipment)! : SHIPMENT_STATUS_LABEL[shipment.status as ShipmentStatus] ?? shipment.status;
+  return (shipment.packageCount ?? 1) > 1 ? `Status cele pošiljke: ${label}` : label;
 }
 
 function allReturnParcelsDelivered(shipment: ReturnShipment) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canReceiveReclamationShipment, assertMyGlsReturnAccepted, myGlsReturnStatusLabel, myGlsReturnBooking } from "@/lib/mygls/return-booking";
+import { canReceiveReclamationShipment, assertMyGlsReturnAccepted, myGlsReturnStatusLabel, myGlsReturnBooking, scannedReturnStatusLabel } from "@/lib/mygls/return-booking";
 const shipment = { provider: "MYGLS", purpose: "RECLAMATION_RETURN", status: "CREATED", providerParcelId: "123", trackingNo: "456" };
 describe("P&R evidence and presentation", () => {
   it("does not treat an ordinary label or courierRequestedAt as a booked pickup", () => {
@@ -26,6 +26,21 @@ describe("P&R evidence and presentation", () => {
 it("does not offer warehouse receipt for a P&R package returned to its sender/customer", () => {
   expect(canReceiveReclamationShipment({ ...shipment, status: "RETURNED" })).toBe(false);
   expect(canReceiveReclamationShipment({ ...shipment, status: "DELIVERED" })).toBe(true);
+});
+
+it("does not offer automatic receipt for a deleted label with a stale delivered status", () => {
+  expect(canReceiveReclamationShipment({ ...shipment, status: "DELIVERED", syncError: "MyGLS etiketa obrisana." })).toBe(false);
+});
+
+it("does not borrow another parcel's status when per-parcel evidence is missing or undated", () => {
+  const multi = { ...shipment, status: "DELIVERED", packageCount: 2 };
+  expect(scannedReturnStatusLabel(multi, "11")).toBe("Status ovog paketa nije potvrđen");
+  expect(scannedReturnStatusLabel({ ...multi, rawCreateResponse: { myGlsParcelHandover: { parcels: [{ parcelNumber: 11, latestStatus: "DELIVERED" }] } } }, "11")).toBe("Status ovog paketa nije potvrđen");
+});
+
+it("shows reverse pickup from the customer and labels non-GLS aggregate evidence", () => {
+  expect(scannedReturnStatusLabel({ ...shipment, status: "PICKED_UP" }, "456")).toBe("Preuzeto kod kupca");
+  expect(scannedReturnStatusLabel({ ...shipment, provider: "X_EXPRESS", status: "DELIVERED", packageCount: 2 }, "456")).toBe("Status cele pošiljke: Isporučeno");
 });
 
 it("requires dated delivery proof for every parcel, not the last whole-shipment event", () => {

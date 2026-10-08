@@ -9,6 +9,18 @@ import {
 import { myGlsShipmentStatusSyncWhere } from "@/lib/mygls/sync";
 
 describe("MyGLS status mapping", () => {
+  it.each([
+    ["U isporuci", "OUT_FOR_DELIVERY"],
+    ["Neuspešno isporučeno", "FAILED"],
+    ["Not delivered", "FAILED"],
+    ["Not yet delivered", "FAILED"],
+    ["Undelivered", "FAILED"],
+    ["Pickup cancelled", "FAILED"],
+    ["Returned after delivery failed", "RETURNED"],
+    ["Isporučeno", "DELIVERED"],
+  ] as const)("maps an unknown code from its full description: %s", (label, expected) => {
+    expect(inferMyGlsShipmentStatus("", label)).toBe(expected);
+  });
   it("keeps recent delivered and failed shipments eligible for delayed return discovery", () => {
     const now = new Date("2026-09-17T10:00:00.000Z");
     const where = myGlsShipmentStatusSyncWhere(now);
