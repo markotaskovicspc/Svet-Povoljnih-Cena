@@ -1,3 +1,4 @@
+import {metaSendTarget} from './meta-send-target.mjs';
 import {receiveSupportContact,requestSupportContact} from './support-contact.mjs';
 import {staffSummary} from './support-summary.mjs';
 import {receiveAdContext} from './ad-context.mjs';
@@ -455,10 +456,10 @@ export class Worker {
       if(!account) return;
       await c.query(`UPDATE spc_chat_outbox SET status='sending' WHERE id=$1`,[out.id]);
       try {
-        const host=account.login==='instagram'?'graph.instagram.com':'graph.facebook.com';
+        const {host,id:sendId}=metaSendTarget(account,this.accounts);
         const payload={recipient:{id:row.sender},message:message.imageUrl?{attachment:{type:'image',payload:{url:message.imageUrl}}}:{text:message.text.slice(0,1900)}};
         if(row.channel==='facebook'){payload.messaging_type='RESPONSE';payload.message.metadata='spc-bot';}
-        const res=await fetch(`https://${host}/${this.graphVersion}/${account.id}/messages`,{method:'POST',headers:{authorization:`Bearer ${account.token}`,'content-type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(12000),redirect:'error'});
+        const res=await fetch(`https://${host}/${this.graphVersion}/${sendId}/messages`,{method:'POST',headers:{authorization:`Bearer ${account.token}`,'content-type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(12000),redirect:'error'});
         const data=await res.json();
         if(message.imageUrl && res.status===400 && data.error?.code===100) {
           // Definite media rejection: the product link was sent first, keep chat usable.
