@@ -46,6 +46,19 @@ beforeEach(() => {
 });
 
 describe("ERP returns page", () => {
+  it("shows the scanned parcel's failure even when another parcel made the shipment delivered", async () => {
+    mocks.scan.mockResolvedValue({ kind: "reclamation", code: "9002838515", received: false,
+      shipment: { orderId: "o", order: { number: "SPC-2026-001117" }, reclamation: { id: "r", number: "R-1-SPC-2026-001117" }, provider: "MYGLS", status: "DELIVERED", packageCount: 2, providerParcelNumbers: [9002838514, 9002838515], rawCreateResponse: { myGlsParcelHandover: { parcels: [
+        { parcelNumber: 9002838514, latestStatus: "DELIVERED", latestStatusAt: "2026-10-08T12:00:00Z" },
+        { parcelNumber: 9002838515, latestStatus: "FAILED", latestStatusAt: "2026-10-07T12:00:00Z" },
+      ] } } },
+      lines: [{ id: "i", sku: "110085", name: "Stolica", totalQuantity: 2, units: [2] }],
+    });
+    const html = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ q: "09002838515" }) }));
+    expect(html).toContain("Paket 2/2");
+    expect(html).toContain("MYGLS · Neuspešna isporuka");
+    expect(html).not.toContain("MYGLS · Isporučeno");
+  });
   it("shows picking columns while distinguishing total return quantity from the scanned parcel", async () => {
     mocks.scan.mockResolvedValue({ kind: "reclamation", code: "9002838514", received: false,
       shipment: { orderId: "o", order: { number: "SPC-2026-001117" }, reclamation: { id: "r", number: "R-1-SPC-2026-001117" }, provider: "MYGLS", status: "DELIVERED", packageCount: 2, providerParcelNumbers: [9002838514, 9002838515] },
