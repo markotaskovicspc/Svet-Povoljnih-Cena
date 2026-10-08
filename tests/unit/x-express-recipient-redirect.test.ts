@@ -130,3 +130,14 @@ describe("tracking after replacement goods are queued", () => {
     expect(mocks.updatePickup).not.toHaveBeenCalled();
   });
 });
+
+
+it("matches a notification for a secondary parcel in the same shipment", async () => {
+  shipmentAt("IN_TRANSIT");
+  await applyShipmentEvent("COURIER_SMALL", { ...redirect, trackingNo: "09002829870" });
+  expect(mocks.loadShipment).toHaveBeenCalledWith(expect.objectContaining({ where: {
+    service: "COURIER_SMALL",
+    OR: [{ trackingNo: "09002829870" }, { providerParcelNumbers: { array_contains: ["09002829870"] } }],
+  } }));
+  expect(mocks.createEvent).toHaveBeenCalled();
+});

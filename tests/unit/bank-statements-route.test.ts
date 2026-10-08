@@ -1,7 +1,7 @@
 import {beforeEach,expect,it,vi} from 'vitest';
 import {createHmac} from 'node:crypto';
 const mocks=vi.hoisted(()=>({inspect:vi.fn(),existing:vi.fn(),receipt:vi.fn(),enqueue:vi.fn(),process:vi.fn(),after:vi.fn()}));
-vi.mock('next/server',()=>({NextResponse:{json:(body:any,init?:ResponseInit)=>Response.json(body,init)},after:mocks.after}));
+vi.mock('next/server',()=>({NextResponse:{json:(body:unknown,init?:ResponseInit)=>Response.json(body,init)},after:mocks.after}));
 vi.mock('@/lib/payments/bank-statements.server',()=>({inspectBankEntry:mocks.inspect}));
 vi.mock('@/lib/db',()=>({db:{backgroundJob:{findUnique:mocks.existing},payment:{findFirst:mocks.receipt}}}));
 vi.mock('@/lib/background-jobs',()=>({enqueueBackgroundJob:mocks.enqueue,processBackgroundJob:mocks.process}));

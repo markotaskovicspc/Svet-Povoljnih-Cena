@@ -44,7 +44,7 @@ export async function markReturnLost(input: {
       if (existing) return existing;
       const order = await tx.order.findUniqueOrThrow({
         where: { id: orderId },
-        include: { items: true, shipments: { include: { reshipment: true } } },
+        include: { items: true, shipments: { include: { reshipment: true, returnArrivals: true } } },
       });
       if (input.kind === "reshipment") {
         const items = await tx.orderReshipmentItem.findMany({
@@ -73,7 +73,7 @@ export async function markReturnLost(input: {
           !order.shipments.some(
             (s) =>
               s.purpose === "ORDER_DELIVERY" &&
-              s.status === "RETURNED" &&
+              (s.status === "RETURNED" || Boolean(s.returnArrivals?.length)) &&
               !s.reshipment,
           )
         )
@@ -83,7 +83,7 @@ export async function markReturnLost(input: {
           !order.shipments.some(
             (s) =>
               s.purpose === "ORDER_DELIVERY" &&
-              s.status === "RETURNED" &&
+              (s.status === "RETURNED" || Boolean(s.returnArrivals?.length)) &&
               !s.reshipment,
           ) &&
           order.shipments.some((s) => s.reshipment)

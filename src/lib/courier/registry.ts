@@ -507,7 +507,13 @@ export async function applyShipmentEvent(
   options: ApplyShipmentEventOptions = {},
 ): Promise<ApplyEventResult | null> {
   const shipment = await db.shipment.findFirst({
-    where: { trackingNo: event.trackingNo, service },
+    where: {
+      service,
+      OR: [
+        { trackingNo: event.trackingNo },
+        { providerParcelNumbers: { array_contains: [event.trackingNo] } },
+      ],
+    },
     include: {
       order: {
         select: {

@@ -21,7 +21,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { EMPTY_HERO_PICTOGRAMS } from "@/lib/landing-pages/blocks";
 import { cn } from "@/lib/utils";
 
-type SelectedProduct = {
+export type SelectedProduct = {
   sku: string;
   name: string;
   slug: string;
@@ -312,7 +312,7 @@ function EditorSection({ title, description, children }: { title: string; descri
   );
 }
 
-function ProductPicker({ products, onChange }: { products: SelectedProduct[]; onChange: (products: SelectedProduct[]) => void }) {
+export function ProductPicker({ products, onChange, reorderOnly = false }: { products: SelectedProduct[]; onChange: (products: SelectedProduct[]) => void; reorderOnly?: boolean }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SelectedProduct[]>([]);
   const [busy, setBusy] = useState(false);
@@ -352,7 +352,7 @@ function ProductPicker({ products, onChange }: { products: SelectedProduct[]; on
 
   return (
     <div className="space-y-4">
-      <Field label="Pretraga po nazivu ili SKU-u">
+      {!reorderOnly ? <Field label="Pretraga po nazivu ili SKU-u">
         <div className="flex gap-2">
           <Input
             value={query}
@@ -369,7 +369,7 @@ function ProductPicker({ products, onChange }: { products: SelectedProduct[]; on
             <Search className="size-4" /> {busy ? "Tražim…" : "Pretraži"}
           </Button>
         </div>
-      </Field>
+      </Field> : null}
       {error ? <p role="alert" className="text-sm text-danger">{error}</p> : null}
       {results.length ? (
         <div className="grid gap-2 sm:grid-cols-2">
@@ -408,7 +408,7 @@ function ProductPicker({ products, onChange }: { products: SelectedProduct[]; on
               </span>
               <ProductIconButton label="Pomeri gore" disabled={index === 0} onClick={() => move(index, -1)}><ChevronUp /></ProductIconButton>
               <ProductIconButton label="Pomeri dole" disabled={index === products.length - 1} onClick={() => move(index, 1)}><ChevronDown /></ProductIconButton>
-              <ProductIconButton label="Ukloni" danger onClick={() => onChange(products.filter((_, at) => at !== index))}><Trash2 /></ProductIconButton>
+              {!reorderOnly ? <ProductIconButton label="Ukloni" danger onClick={() => onChange(products.filter((_, at) => at !== index))}><Trash2 /></ProductIconButton> : null}
             </div>
           ))}
         </div>

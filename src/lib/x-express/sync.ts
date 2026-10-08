@@ -375,6 +375,29 @@ async function upsertStatusCode(status: XExpressStatusCode) {
   });
 }
 
+// A delivery exception can be followed by a physical return. Revisit recent
+// terminal exceptions/deliveries, just as MyGLS does, without starving active work.
+export function xExpressShipmentStatusSyncWhere(now = new Date()): Prisma.ShipmentWhereInput {
+  const returnWindowStart = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+  const recheckBefore = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+  return {
+    provider: X_EXPRESS_PROVIDER,
+    service: "COURIER_SMALL",
+    trackingNo: { not: null },
+    providerShipmentId: { not: null },
+    OR: [
+      { status: { notIn: ["DELIVERED", "RETURNED", "FAILED"] } },
+      {
+        status: { in: ["FAILED", "DELIVERED"] },
+        AND: [
+          { OR: [{ deliveredAt: { gte: returnWindowStart } }, { deliveredAt: null, createdAt: { gte: returnWindowStart } }] },
+          { OR: [{ lastStatusSyncAt: null }, { lastStatusSyncAt: { lt: recheckBefore } }] },
+        ],
+      },
+    ],
+  };
+}
+
 export async function syncXExpressShipmentStatuses(limit = 100) {
   requireXExpressEnabled();
   const run = await db.courierSyncRun.create({
@@ -385,13 +408,7 @@ export async function syncXExpressShipmentStatuses(limit = 100) {
 
   try {
     const shipments = await db.shipment.findMany({
-      where: {
-        provider: X_EXPRESS_PROVIDER,
-        service: "COURIER_SMALL",
-        trackingNo: { not: null },
-        providerShipmentId: { not: null },
-        status: { notIn: ["DELIVERED", "RETURNED", "FAILED"] },
-      },
+      where: xExpressShipmentStatusSyncWhere(),
       orderBy: [{ lastStatusSyncAt: "asc" }, { updatedAt: "asc" }],
       take: Math.max(1, Math.min(limit, 500)),
       select: { id: true },

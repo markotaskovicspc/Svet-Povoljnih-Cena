@@ -443,7 +443,7 @@ export async function loadEligibleOrders(
       FROM "Order" AS orders
       WHERE ${onlyOrderIds ? (onlyOrderIds.length ? Prisma.sql`orders."id" IN (${Prisma.join([...onlyOrderIds])})` : Prisma.sql`FALSE`) : Prisma.sql`TRUE`}
         AND (
-          orders."status" = 'KREIRANO'
+          orders."status" IN ('KREIRANO', 'POTVRDJENO')
           OR (
             orders."status" = 'U_PRIPREMI'
             AND EXISTS (
@@ -710,7 +710,7 @@ export async function loadEligibleOrders(
       })),
     });
     await tx.order.updateMany({
-      where: { id: { in: loadedOrderIds }, status: "KREIRANO" },
+      where: { id: { in: loadedOrderIds }, status: { in: ["KREIRANO", "POTVRDJENO"] } },
       data: { status: "U_PRIPREMI" },
     });
     await tx.orderStatusEvent.createMany({

@@ -11,6 +11,10 @@ import { Card, CardTitle } from "@/components/admin/card";
 import { PageHeader } from "@/components/admin/page-header";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { buttonVariants } from "@/components/ui/button";
+import { StandardPromoEditor } from "@/components/admin/standard-promo-editor";
+import { getStandardPromoSkus } from "@/lib/landing-pages/standard-promo.server";
+import { standardPromoPage, promoProductOrderKey, readPromoProductOrder } from "@/lib/storefront/promo-product-order";
+import { saveStandardPromoOrder } from "../standard-actions";
 import {
   archiveLandingPageAction,
   deleteLandingDraftAction,
@@ -27,6 +31,18 @@ export const metadata = { title: "Izmena landing strane", robots: { index: false
 export default async function EditLandingPage({ params }: { params: Promise<{ id: string }> }) {
   await requireAdminAction(["CONTENT"]);
   const { id } = await params;
+  const standard = id.startsWith("standard-") ? standardPromoPage(id.slice("standard-".length)) : undefined;
+  if (standard) {
+    const [skus, setting] = await Promise.all([
+      getStandardPromoSkus(standard.key),
+      db.adminSetting.findUnique({ where: { key: promoProductOrderKey(standard.key) } }),
+    ]);
+    const products = await getLandingAdminProductsBySkus(skus);
+    return <>
+      <PageHeader title={standard.title} description={`Standardna promo strana · ${standard.href}`} crumbs={[{ href: "/admin", label: "Admin" }, { href: "/admin/erp/landing-strane", label: "Landing strane" }, { label: standard.title }]} actions={<Link href={standard.href} target="_blank" className={buttonVariants({ variant: "outline" })}>Pogledaj na sajtu</Link>} />
+      <div className="px-8 py-6"><Card><CardTitle>Redosled proizvoda</CardTitle><StandardPromoEditor key={`${standard.key}:${JSON.stringify(setting?.value)}:${skus.join(",")}`} pageKey={standard.key} action={saveStandardPromoOrder} initialProducts={products} manual={readPromoProductOrder(setting?.value).length > 0} /></Card></div>
+    </>;
+  }
   const [page, pictograms] = await Promise.all([
     db.landingPage.findUnique({
       where: { id },

@@ -1,3 +1,4 @@
+import { saveWarehouseAction } from "../warehouse-action";
 import { isMyGlsReturn, myGlsReturnBooking, myGlsReturnStatusLabel } from "@/lib/mygls/return-booking";
 import { formatStreetAddress } from "@/lib/address/house-number";
 import Image from "next/image";
@@ -15,7 +16,6 @@ import { requireAdminAction, withAdminState, type AdminActionState } from "@/lib
 import {
   cancelReclamationShipment,
   createReclamationShipment,
-  saveReclamationWarehouse,
 } from "@/lib/admin/reclamation-fulfillment.server";
 import { removeReclamationReplacementFromPicking } from "@/lib/admin/pickup-batch.server";
 import { signReclamationPhotoUrls } from "@/lib/api/uploads";
@@ -205,34 +205,6 @@ async function removeReplacementAction(_state: AdminActionState, formData: FormD
   )(formData);
 }
 
-async function saveWarehouseAction(_state: AdminActionState, formData: FormData) {
-  "use server";
-  return withAdminState(
-    { allowed: ["OPS"], action: "reclamation.warehouseUpdate", entity: "Reclamation" },
-    async (actorId, formData: FormData) => {
-      const id = String(formData.get("id") ?? "");
-      const warehouseId = String(formData.get("warehouseId") ?? "");
-      if (!id || !warehouseId) {
-        return { ok: false as const, error: "Izaberite magacin." };
-      }
-      const rows = String(formData.get("replacementPackageRows") ?? "").split(",").filter(Boolean);
-      const entered = rows.map((row) => Object.fromEntries(
-        ["weightKg", "widthCm", "depthCm", "heightCm"].map((key) => [key, Number(formData.get(`replacementPackage.${row}.${key}`))]),
-      ));
-      const packages = entered.length && entered.some((pkg) => Object.values(pkg).some((value) => value !== 0)) ? entered : undefined;
-      const saved = await saveReclamationWarehouse({ reclamationId: id, warehouseId, packages, actorId });
-      refresh(id);
-      return {
-        ok: true as const,
-        entityId: id,
-        diff: { warehouseId: saved.warehouseId, warehouseStatus: saved.warehouseStatus, replacementReadyAt: saved.replacementReadyAt?.toISOString() ?? null },
-        message: saved.replacementReadyAt
-          ? "Spremnost je sačuvana. Zamena će ući u picking tek na klik „Učitaj porudžbine“ u nalogu odgovarajućeg kurira."
-          : "Magacinski zadatak je sačuvan.",
-      };
-    },
-  )(formData);
-}
 
 async function createShipmentAction(_state: AdminActionState, formData: FormData) {
   "use server";
@@ -417,7 +389,7 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
 
           <Card>
             <CardTitle description="Izaberite magacin i unesite mere paketa. Čuvanjem se zamena automatski označava kao spremna. Zamena se učitava tek kada magacioner u picking nalogu klikne „Učitaj porudžbine“.">Magacin i priprema</CardTitle>
-            <AdminActionForm action={saveWarehouseAction} preserveValues className="space-y-3">
+            <AdminActionForm action={saveWarehouseAction} refreshOnSuccess preserveValues className="space-y-3">
               <fieldset disabled={Boolean(replacementPicking || replacementShipment)} className="grid gap-3 sm:grid-cols-2 disabled:opacity-70">
               <input type="hidden" name="id" value={reclamation.id} />
               <Field label="Magacin"><select name="warehouseId" required defaultValue={reclamation.warehouseId ?? ""} className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm"><option value="" disabled>Izaberite</option>{warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.code} · {warehouse.name}</option>)}</select></Field>

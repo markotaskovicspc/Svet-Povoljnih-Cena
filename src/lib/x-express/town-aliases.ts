@@ -5,7 +5,14 @@ const BATAJNICA = {
   townId: 791059, townName: "Beograd (Zemun)",
   aliases: ["Batajnica", "Батајница", "Zemun Batajnica", "Beograd Batajnica", "Beograd Zemun Batajnica"],
 };
-const aliases = [BATAJNICA];
+// Postal locality 11185 belongs to Zemun; the provider routes this borough
+// under its existing Beograd (Zemun) record, as for Batajnica above.
+const ZEMUN_POLJE = {
+  name: "Zemun polje", postalCode: "11185",
+  townId: 791059, townName: "Beograd (Zemun)",
+  aliases: ["Zemun polje", "Земун поље", "Beograd Zemun polje", "Beograd (Zemun polje)"],
+};
+const aliases = [BATAJNICA, ZEMUN_POLJE];
 function key(value: string) {
   return value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/[^\p{L}\p{N}]+/gu, " ").trim();
@@ -14,7 +21,7 @@ export function searchTownAliases(query: string) {
   const q = key(query);
   if (q.length < 3) return [];
   return aliases.filter(a => a.postalCode === q
-    || a.aliases.slice(0,2).some(n => key(n).startsWith(q))
+    || a.aliases.slice(0,2).some(n => key(n).startsWith(q) && !(key(n).includes(" ") && key(n).split(" ")[0] === q))
     || a.aliases.some(n => key(n) === q));
 }
 export function exactTownAlias(city: string, postalCode?: string | null) {

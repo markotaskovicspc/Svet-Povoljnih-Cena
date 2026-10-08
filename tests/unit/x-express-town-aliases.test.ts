@@ -10,6 +10,11 @@ describe('verified courier locality aliases',()=>{
   expect(exactTownAlias('Batajnica','11080')).toBeUndefined();
   expect(exactTownAlias('Batajnica naselje','11273')).toBeUndefined();
  });
+ it('resolves Zemun polje by exact name/postcode while keeping the existing courier ID',()=>{
+  for(const q of ['11185','Zemun polje','Земун поље','Beograd (Zemun polje)'])expect(searchTownAliases(q)[0]?.townId).toBe(791059);
+  expect(exactTownAlias('Zemun polje','11080')).toBeUndefined();
+  expect(customerTownLabel({city:'Zemun polje',postalCode:'11185'},town)).toEqual({city:'Zemun polje',postalCode:'11185'});
+ });
  it('preserves customer locality in receipt/order only for the verified courier record',()=>{
   expect(customerTownLabel({city:'Батајница',postalCode:'11273'},town)).toEqual({city:'Batajnica',postalCode:'11273'});
   expect(customerTownLabel({city:'Batajnica',postalCode:'11273'},{...town,id:123,name:'Other',postalCode:'99999'})).toEqual({city:'Other',postalCode:'99999'});

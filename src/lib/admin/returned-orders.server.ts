@@ -1,3 +1,4 @@
+import { readShipmentAssignment } from "@/lib/courier/shipment-assignment";
 import { assertReturnNotLost } from "./return-resolution.server";
 import "server-only";
 
@@ -10,10 +11,19 @@ import { lockOrderReturn } from "@/lib/fiscal/return-lock";
 
 // Courier returns belong to the original order. They do not require a
 // reclamation or a separately created RECLAMATION_RETURN shipment.
+export const returnShipmentWhere = {
+  purpose: "ORDER_DELIVERY", reshipment: null,
+  OR: [
+    { status: "RETURNED" },
+    { returnArrivals: { some: {} } },
+    { provider: "X_EXPRESS", status: "IN_TRANSIT", providerStatusCode: { in: ["RETURNING", "RET_ASSIGNED", "REVERSE_RETURN", "REVERSE_RETURNING"] } },
+  ],
+} satisfies Prisma.ShipmentWhereInput;
+
 const returnedOrdersWhere = {
   OR: [
     { status: "VRACENO", shipments: { none: { reshipment: { isNot: null } } } },
-    { shipments: { some: { purpose: "ORDER_DELIVERY", status: "RETURNED", reshipment: null } } },
+    { shipments: { some: returnShipmentWhere } },
   ],
 } satisfies Prisma.OrderWhereInput;
 
@@ -39,15 +49,15 @@ export async function listReturnedOrders() {
           },
         },
         shipments: {
-          where: { purpose: "ORDER_DELIVERY", status: "RETURNED", reshipment: null },
+          where: returnShipmentWhere,
           orderBy: { createdAt: "desc" },
-          select: { id: true, provider: true, trackingNo: true, lastStatusEventAt: true },
+          select: { id: true, provider: true, trackingNo: true, status: true, packageCount: true, providerParcelNumbers: true, lastStatusEventAt: true, returnArrivals: true, rawCreateResponse: true },
         },
       },
     }),
     db.order.count({ where: returnedOrdersWhere }),
   ]);
-  return { orders, total };
+  return { orders: orders.map((order) => ({ ...order, items: order.items.filter((item) => belongsToReturn(item.id, order.shipments)) })), total };
 }
 
 export async function receiveReturnedOrderUnit(args: {
@@ -64,6 +74,7 @@ export async function receiveReturnedOrderUnit(args: {
       where: { id: args.orderId, ...returnedOrdersWhere },
       select: {
         number: true,
+        shipments: { where: returnShipmentWhere, select: { rawCreateResponse: true } },
         items: {
           where: { id: args.orderItemId },
           select: { id: true, productId: true, sku: true, qty: true },
@@ -72,12 +83,12 @@ export async function receiveReturnedOrderUnit(args: {
       },
     });
     const item = order?.items[0];
-    if (!order || !item) throw new Error("Vraćeni paket nije pronađen.");
+    if (!order || !item || !belongsToReturn(item.id, order.shipments)) throw new Error("Stavka povrata nije pronađena.");
     if (!item.productId) {
       throw new Error("Artikal nema vezu sa lagerom i ne može da se proknjiži.");
     }
     if (!Number.isInteger(args.unitNo) || args.unitNo < 1 || args.unitNo > item.qty) {
-      throw new Error("Broj fizičkog paketa nije ispravan.");
+      throw new Error("Redni broj komada nije ispravan.");
     }
     const warehouse = await tx.warehouse.findFirst({
       where: { id: args.warehouseId, active: true },
@@ -101,7 +112,7 @@ export async function receiveReturnedOrderUnit(args: {
       qtyDelta,
       warehouseId: warehouse.id,
       kind: StockMovementKind.REFUND_RETURN,
-      note: `Paket ${args.unitNo}/${item.qty} vraćene porudžbine ${order.number} pregledan i primljen u ${warehouse.code} · ${warehouse.name}.`,
+      note: `Komad ${args.unitNo}/${item.qty} vraćene porudžbine ${order.number} pregledan i primljen u ${warehouse.code} · ${warehouse.name}.`,
       actorId: args.actorId,
       orderId: args.orderId,
       orderItemId: item.id,
@@ -110,7 +121,7 @@ export async function receiveReturnedOrderUnit(args: {
         data: { idempotencyKey: key, productId: item.productId, sku: item.sku, qty: 0,
           warehouseId: warehouse.id, kind: "REFUND_RETURN", orderId: args.orderId,
           orderItemId: item.id, actorId: args.actorId,
-          note: "Paket primljen; lager je već vraćen fiskalnom refundacijom." },
+          note: "Komad primljen; lager je već vraćen fiskalnom refundacijom." },
       });
     }
     const jobKey = `return-fiscal:${movement.id}`;
@@ -135,4 +146,11 @@ export async function receiveReturnedOrderUnit(args: {
     }
     return { movement, warehouse, jobId: job.id };
   }, { maxWait: 10_000, timeout: 30_000 });
+}
+
+function belongsToReturn(itemId: string, shipments: { rawCreateResponse?: unknown }[] = []) {
+  if (!shipments.length) return true; // Historical manually recorded order return.
+  const assignments = shipments.map((shipment) => readShipmentAssignment(shipment.rawCreateResponse));
+  // Historical unassigned shipments require manual inspection; never guess a mapping.
+  return assignments.some((assignment) => !assignment || assignment.orderItemIds.includes(itemId));
 }
