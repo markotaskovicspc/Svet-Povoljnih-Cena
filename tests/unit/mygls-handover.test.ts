@@ -13,6 +13,13 @@ const events = normalizeMyGlsStatusResponses({ ParcelList: numbers.map((ParcelNu
 })) }, numbers);
 
 describe("GLS physical parcel handover", () => {
+  it.each(["24", "37", "46"])("ignores later instruction %s when deriving delivery proof", code => {
+    const progress = normalizeMyGlsStatusResponses({ ParcelList: numbers.map(ParcelNumber => ({ ParcelNumber, ParcelStatusList: [
+      { StatusCode: "05", StatusDate: at.toISOString() },
+      { StatusCode: code, StatusDate: "2026-09-15T09:00:00Z" },
+    ] })) }, numbers);
+    expect(buildMyGlsHandover(numbers, progress, true).parcels.every(p => p.latestStatus === "DELIVERED" && p.latestStatusAt === at.toISOString())).toBe(true);
+  });
   it("counts only the scanned parcel, ignoring response ordering and stale whole-order markers", () => {
     const snapshot = buildMyGlsHandover(numbers, [...events].reverse());
     expect(snapshot.parcels).toEqual([{ parcelNumber: numbers[0], pickedUpAt: null }, { parcelNumber: numbers[1], pickedUpAt: at.toISOString() }]);

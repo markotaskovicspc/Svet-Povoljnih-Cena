@@ -25,9 +25,11 @@ export const MYGLS_RECOVERABLE_STATUS_CODES = [
   "99",
 ] as const;
 
-/** Notification carries no physical progress (StatusInfo is a notification subtype). */
+/** Notifications and delivery instructions carry no physical parcel progress.
+ * MyGLS API Appendix G: 24 option saved, 37 shipper request, 46 address changed.
+ */
 export function isMyGlsNotification(code: string | number | null | undefined) {
-  return code != null && String(code).trim().replace(/^0+(?=\d)/, "") === "99";
+  return code != null && ["24", "37", "46", "99"].includes(String(code).trim().replace(/^0+(?=\d)/, ""));
 }
 
 type StoredMyGlsShipmentStatus = {
@@ -64,7 +66,6 @@ const DIRECT_STATUS: Record<string, ShipmentStatus> = {
   "21": "IN_TRANSIT",
   "22": "IN_TRANSIT",
   "23": "RETURNED",
-  "24": "IN_TRANSIT",
   "25": "IN_TRANSIT",
   "26": "IN_TRANSIT",
   "27": "IN_TRANSIT",

@@ -9,6 +9,10 @@ import {
 import { myGlsShipmentStatusSyncWhere } from "@/lib/mygls/sync";
 
 describe("MyGLS status mapping", () => {
+  it.each(["24", "037", "46"])("keeps instruction %s informational without physical progress", code => {
+    expect(isMyGlsNotification(code)).toBe(true);
+    expect(inferMyGlsShipmentStatus(code, "Change completed for delivery address")).toBe("CREATED");
+  });
   it.each([
     ["U isporuci", "OUT_FOR_DELIVERY"],
     ["Neuspešno isporučeno", "FAILED"],
