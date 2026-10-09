@@ -27,6 +27,8 @@ import {
 import {
   databaseLandingPageId,
   databaseLandingPageKey,
+  categoryPageId,
+  categoryPageKey,
 } from "@/lib/storefront/homepage-landing";
 import { getLandingPageForStorefrontById } from "@/lib/storefront/landing-pages";
 
@@ -38,7 +40,7 @@ export const metadata = {
 
 const sourceTypeLabel: Record<HomeSectionSourceType, string> = {
   ACTION: "Akcija",
-  LANDING_PAGE: "Landing page",
+  LANDING_PAGE: "Landing page / kategorija",
 };
 
 const landingPageStatusLabel: Record<LandingPageStatus, string> = {
@@ -89,11 +91,20 @@ async function saveSection(_state: AdminActionState, formData: FormData) {
       if (data.sourceType === "LANDING_PAGE" && !landingPageKey) {
         return {
           ok: false as const,
-          error: "Izaberite landing page za ovu sekciju.",
+          error: "Izaberite landing page ili kategoriju za ovu sekciju.",
         };
       }
 
-      if (
+      const categoryId = categoryPageId(landingPageKey);
+      if (categoryId) {
+        const category = await db.category.findUnique({
+          where: { id: categoryId },
+          select: { id: true },
+        });
+        if (!category) {
+          return { ok: false as const, error: "Izabrana kategorija više ne postoji." };
+        }
+      } else if (
         landingPageKey &&
         !LANDING_PAGE_OPTIONS.some((option) => option.key === landingPageKey)
       ) {
@@ -159,7 +170,7 @@ async function saveSection(_state: AdminActionState, formData: FormData) {
 export default async function HomeAdminPage() {
   await requireAdminAction(["CONTENT"]);
 
-  const [slots, actions, landingPages] = await Promise.all([
+  const [slots, actions, landingPages, categories] = await Promise.all([
     db.homeSectionSlot.findMany({ orderBy: { slotKey: "asc" } }),
     db.action.findMany({
       orderBy: [{ sortOrder: "asc" }, { startsAt: "desc" }],
@@ -176,6 +187,10 @@ export default async function HomeAdminPage() {
       where: { archivedAt: null },
       orderBy: [{ updatedAt: "desc" }, { title: "asc" }],
       select: { id: true, slug: true, title: true, status: true },
+    }),
+    db.category.findMany({
+      orderBy: { path: "asc" },
+      select: { id: true, name: true, path: true },
     }),
   ]);
 
@@ -210,7 +225,7 @@ export default async function HomeAdminPage() {
           return (
             <Card key={slotKey}>
               <CardTitle
-                description="Izaberite akciju ili postojeću landing stranicu. Aktivna sekcija ostaje na svom mestu i kada trenutno nema dostupnih proizvoda."
+                description="Izaberite akciju, landing stranicu ili kategoriju iz hamburger menija. Aktivna sekcija ostaje na svom mestu i kada trenutno nema dostupnih proizvoda."
               >
                 {HOME_SECTION_SLOT_LABELS[slotKey]}
               </CardTitle>
@@ -220,6 +235,7 @@ export default async function HomeAdminPage() {
                 values={values}
                 actions={actions}
                 landingPages={landingPages}
+                categories={categories}
               />
             </Card>
           );
@@ -260,6 +276,7 @@ function SectionForm({
   values,
   actions,
   landingPages,
+  categories,
 }: {
   action: (
     state: AdminActionState,
@@ -269,6 +286,7 @@ function SectionForm({
   values: SectionFormValues;
   actions: ActionOption[];
   landingPages: DatabaseLandingPageOption[];
+  categories: { id: string; name: string; path: string }[];
 }) {
   return (
     <AdminActionForm action={action} className="space-y-4">
@@ -314,13 +332,13 @@ function SectionForm({
         </select>
       </Field>
 
-      <Field label="Landing page">
+      <Field label="Landing page / kategorija">
         <select
           name="landingPageKey"
           defaultValue={values.landingPageKey ?? ""}
           className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
         >
-          <option value="">— Izaberite landing page —</option>
+          <option value="">— Izaberite stranicu —</option>
           <optgroup label="Standardne stranice">
             {LANDING_PAGE_OPTIONS.map((page) => (
               <option key={page.key} value={page.key}>
@@ -328,6 +346,15 @@ function SectionForm({
               </option>
             ))}
           </optgroup>
+          {categories.length ? (
+            <optgroup label="Kategorije iz hamburger menija">
+              {categories.map((category) => (
+                <option key={category.id} value={categoryPageKey(category.id)}>
+                  {category.name} (/k{category.path})
+                </option>
+              ))}
+            </optgroup>
+          ) : null}
           {landingPages.length ? (
             <optgroup label="Landing strane iz baze">
               {landingPages.map((page) => (

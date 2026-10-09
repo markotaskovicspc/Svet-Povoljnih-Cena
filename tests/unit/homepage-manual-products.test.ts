@@ -7,12 +7,16 @@ const mocks = vi.hoisted(() => ({
   page: vi.fn(),
   products: vi.fn(),
   listProducts: vi.fn(),
+  category: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({ unstable_cache: (fn: unknown) => fn }));
 vi.mock("@/lib/db", () => ({
   hasDatabaseConnection: () => true,
-  db: { homeSectionSlot: { findMany: mocks.slots } },
+  db: {
+    homeSectionSlot: { findMany: mocks.slots },
+    category: { findUnique: mocks.category },
+  },
 }));
 vi.mock("@/lib/storefront/homepage-schema", () => ({
   hasHomeSectionSlotTable: async () => true,
@@ -86,6 +90,43 @@ beforeEach(() => {
   mocks.page.mockResolvedValue(page());
   mocks.products.mockResolvedValue(products);
   mocks.listProducts.mockResolvedValue({ items: products, nextCursor: null });
+  mocks.category.mockResolvedValue({ name: "Koferi", path: "/putovanje/koferi" });
+});
+
+describe("hamburger category pages on the homepage", () => {
+  it("resolves the current category path, groups family cards and respects the limit", async () => {
+    mocks.slots.mockResolvedValue(slots(2, "category:koferi-id"));
+
+    const layout = await getHomeLayout();
+
+    expect(mocks.category).toHaveBeenCalledWith({
+      where: { id: "koferi-id" }, select: { name: true, path: true },
+    });
+    expect(mocks.listProducts).toHaveBeenCalledWith(expect.objectContaining({
+      categoryPath: "/putovanje/koferi", limit: 6,
+    }));
+    expect(layout.sections.FIRST).toMatchObject({ title: "Koferi", href: "/k/putovanje/koferi" });
+    expect(layout.sections.FIRST?.products.map((product) => product.sku)).toEqual(["110006", "110018"]);
+    expect(mocks.page).not.toHaveBeenCalled();
+  });
+
+  it("keeps an empty category section and its custom title", async () => {
+    const configured = slots(12, "category:koferi-id");
+    mocks.slots.mockResolvedValue(configured.map((slot) => ({ ...slot, titleOverride: "Za putovanja" })));
+    mocks.listProducts.mockResolvedValue({ items: [], nextCursor: null });
+
+    expect((await getHomeLayout()).sections.FIRST).toMatchObject({
+      title: "Za putovanja", href: "/k/putovanje/koferi", products: [],
+    });
+  });
+
+  it("omits a deleted category without querying an unfiltered catalog", async () => {
+    mocks.slots.mockResolvedValue(slots(12, "category:deleted"));
+    mocks.category.mockResolvedValue(null);
+
+    expect((await getHomeLayout()).sections.FIRST).toBeUndefined();
+    expect(mocks.listProducts).not.toHaveBeenCalled();
+  });
 });
 
 describe("manual landing products on the homepage", () => {

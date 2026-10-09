@@ -24,6 +24,7 @@ import {
 import { normalizeStorefrontHref } from "@/lib/storefront/href";
 import {
   databaseLandingPageId,
+  categoryPageId,
   landingPageProductSkus,
 } from "@/lib/storefront/homepage-landing";
 import { getLandingPageForStorefrontById } from "@/lib/storefront/landing-pages";
@@ -413,6 +414,23 @@ async function resolveSlot(slot: HomeSlotForRender) {
     };
   }
 
+  const categoryId = categoryPageId(slot.landingPageKey);
+  if (categoryId) {
+    const category = await db.category.findUnique({
+      where: { id: categoryId },
+      select: { name: true, path: true },
+    });
+    if (!category) return null;
+
+    const products = await listHomeFamilyCards({ categoryPath: category.path, limit });
+    return {
+      slotKey: slot.slotKey,
+      title: slot.titleOverride?.trim() || category.name,
+      href: `/k${category.path}`,
+      products,
+    };
+  }
+
   const landingPageId = databaseLandingPageId(slot.landingPageKey);
   if (!landingPageId) return null;
 
@@ -507,7 +525,7 @@ async function loadHomeLayout(): Promise<HomeLayout> {
 
 const getHomeLayoutAcrossRequests = unstable_cache(
   loadHomeLayout,
-  ["storefront-home-layout-v4-promo-order-manual-skus"],
+  ["storefront-home-layout-v5-category-pages"],
   {
     revalidate: 60,
     tags: ["storefront-home"],
