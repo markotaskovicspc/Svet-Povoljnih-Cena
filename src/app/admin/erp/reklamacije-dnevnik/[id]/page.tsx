@@ -28,7 +28,7 @@ import { AdminActionForm } from "@/components/admin/action-form";
 import { Field } from "@/components/admin/field";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { ReclamationPackages } from "@/components/admin/reclamation-packages";
-import { readReclamationPackages } from "@/lib/admin/reclamation-packages";
+import { readReclamationPackages, reclamationCataloguePackages } from "@/lib/admin/reclamation-packages";
 import { Textarea } from "@/components/ui/textarea";
 
 export const dynamic = "force-dynamic";
@@ -278,7 +278,11 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
         events: { orderBy: { createdAt: "desc" } },
         order: { select: { number: true, shipStreet: true, shipHouseNumber: true, shipCity: true, shipPostalCode: true } },
         orderItem: { select: { name: true, qty: true } },
-        product: { select: { name: true } },
+        product: { select: {
+          name: true, grossWeightKg: true, weightKg: true,
+          unitPackWidthCm: true, unitPackDepthCm: true, unitPackHeightCm: true,
+          courierUnitsPerBox: true, packQty: true, packGrossWeightKg: true,
+        } },
         warehouse: { select: { id: true, code: true, name: true, address: true, city: true } },
         shipments: {
           where: { purpose: { not: "ORDER_DELIVERY" } },
@@ -301,6 +305,9 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
     }),
   ]);
   if (!reclamation) notFound();
+  const cataloguePackages = reclamationCataloguePackages(reclamation);
+  const savedPackages = readReclamationPackages(reclamation.replacementPackages);
+  const initialPackages = savedPackages.length ? savedPackages : cataloguePackages;
   const signedPhotos = await signReclamationPhotoUrls(reclamation.photos.map((photo) => photo.url));
   const replacementPicking = reclamation.pickupBatchLines[0]?.batch ?? null;
   const replacementShipment = reclamation.shipments.find(
@@ -393,7 +400,7 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
               <fieldset disabled={Boolean(replacementPicking || replacementShipment)} className="grid gap-3 sm:grid-cols-2 disabled:opacity-70">
               <input type="hidden" name="id" value={reclamation.id} />
               <Field label="Magacin"><select name="warehouseId" required defaultValue={reclamation.warehouseId ?? ""} className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm"><option value="" disabled>Izaberite</option>{warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.code} · {warehouse.name}</option>)}</select></Field>
-              {["ZAMENA_ARTIKLA", "ZAMENA_DELA"].includes(reclamation.resolution ?? "") ? <ReclamationPackages key={JSON.stringify(reclamation.replacementPackages)} initialPackages={readReclamationPackages(reclamation.replacementPackages)} /> : null}
+              {["ZAMENA_ARTIKLA", "ZAMENA_DELA"].includes(reclamation.resolution ?? "") ? <ReclamationPackages key={JSON.stringify([reclamation.resolution, reclamation.replacementQty, initialPackages])} initialPackages={initialPackages} cataloguePackages={cataloguePackages} /> : null}
               <div className="sm:col-span-2"><SubmitButton variant="outline" pendingLabel="Čuvam…">Sačuvaj magacinski zadatak</SubmitButton></div>
               </fieldset>
               {replacementPicking || replacementShipment ? <p className="text-xs text-ink-500">Priprema je zaključana dok je zamena u picking nalogu ili kod kurira.</p> : null}

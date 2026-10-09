@@ -51,6 +51,37 @@ test("warehouse readiness and measured parcels wait for explicit picking collect
     await page.getByRole("button", { name: "Prijavi se", exact: true }).click();
     await expect(page).toHaveURL((url) => url.pathname === path, { timeout: 30_000 });
     await expect(page.getByTestId("reclamation-picking-state")).toBeVisible();
+    // Saving a whole-item decision loads catalogue packaging without marking it ready.
+    const weight = page.getByRole("spinbutton", { name: "Paket 1 · Težina (kg)", exact: true });
+    const width = page.getByRole("spinbutton", { name: "Paket 1 · Širina (cm)", exact: true });
+    await expect(weight).toHaveValue("");
+    await expect(page.getByRole("button", { name: "Učitaj mere artikla", exact: true })).toHaveCount(0);
+    await page.getByRole("combobox", { name: "Način rešavanja", exact: true }).selectOption("ZAMENA_ARTIKLA");
+    await page.locator('input[name="replacementQty"]').fill("1");
+    await page.getByRole("button", { name: "Sačuvaj odluku", exact: true }).click();
+    await expect(weight).toHaveValue("2");
+    await expect(width).toHaveValue("90");
+    await expect(page.getByRole("spinbutton", { name: "Paket 1 · Dužina (cm)", exact: true })).toHaveValue("20");
+    await expect(page.getByRole("spinbutton", { name: "Paket 1 · Visina (cm)", exact: true })).toHaveValue("10");
+    expect((await db.reclamation.findUniqueOrThrow({ where: { id: claimId } })).replacementReadyAt).toBeNull();
+    await width.fill("85");
+    await page.getByRole("button", { name: "Sačuvaj magacinski zadatak", exact: true }).click();
+    await expect(page.getByText("Spremnost je sačuvana.", { exact: false })).toBeVisible();
+    await page.reload();
+    await expect(width).toHaveValue("85");
+    await page.getByRole("button", { name: "Učitaj mere artikla", exact: true }).click();
+    await expect(width).toHaveValue("90");
+    await page.getByRole("button", { name: "Dodaj paket", exact: true }).click();
+    await expect(page.getByRole("spinbutton", { name: "Paket 2 · Težina (kg)", exact: true })).toHaveValue("");
+    await page.getByRole("button", { name: "Učitaj mere artikla", exact: true }).click();
+    await expect(page.getByRole("spinbutton", { name: "Paket 2 · Težina (kg)", exact: true })).toHaveCount(0);
+    await expect(weight).toHaveValue("2");
+    // Changing to a spare part clears whole-item defaults and still requires real measurements.
+    await page.getByRole("combobox", { name: "Način rešavanja", exact: true }).selectOption("ZAMENA_DELA");
+    await page.locator('input[name="replacementQty"]').fill("0");
+    await page.getByRole("button", { name: "Sačuvaj odluku", exact: true }).click();
+    await expect(weight).toHaveValue("");
+    await expect(page.getByRole("button", { name: "Učitaj mere artikla", exact: true })).toHaveCount(0);
     const state = page.getByTestId("reclamation-picking-state");
     const countLines = () => db.pickupBatchLine.count({ where: { reclamationId: claimId } });
     const makeBatch = async (provider: "X_EXPRESS" | "MYGLS", suffix: string) => {
@@ -68,7 +99,6 @@ test("warehouse readiness and measured parcels wait for explicit picking collect
       await expect(page.getByRole("status").filter({ hasText: /Nema novih|Učitano/ })).toBeVisible();
     };
     const saveReady = async () => {
-      await page.getByRole("combobox", { name: "Status pripreme", exact: true }).selectOption("READY");
       await page.getByRole("button", { name: "Sačuvaj magacinski zadatak", exact: true }).click();
       await expect(page.getByText("Spremnost je sačuvana.", { exact: false })).toBeVisible();
       expect(await countLines()).toBe(0);
@@ -83,7 +113,6 @@ test("warehouse readiness and measured parcels wait for explicit picking collect
     await load(xBatch);
     expect(await countLines()).toBe(0);
     await page.goto(path);
-    await page.getByRole("combobox", { name: "Status pripreme", exact: true }).selectOption("READY");
     await page.getByRole("button", { name: "Sačuvaj magacinski zadatak", exact: true }).click();
     await expect(page.getByRole("alert").filter({ hasText: "Mere zamene" })).toBeVisible();
     expect((await db.reclamation.findUniqueOrThrow({ where: { id: claimId } })).warehouseStatus).toBe("PREPARING");

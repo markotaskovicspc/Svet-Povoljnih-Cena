@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { hasKnownMyGlsHardLimitViolation } from "@/lib/courier/packages";
+import { courierPackageCount, derivePhysicalPackages, hasKnownMyGlsHardLimitViolation, MAX_COURIER_PACKAGES, type PackageSourceItem } from "@/lib/courier/packages";
 
 const measurement = (label: string, max: number, decimals = 2) => z.number()
   .min(10 ** -decimals, `${label} mora biti najmanje ${10 ** -decimals}.`)
@@ -13,6 +13,25 @@ const packagesSchema = z.array(z.object({
 })).min(1, "Unesite mere najmanje jednog paketa.").max(99, "Dozvoljeno je najviše 99 paketa.");
 
 export type ReclamationPackage = z.infer<typeof packagesSchema>[number];
+export type ReclamationPackageDraft = { [Key in keyof ReclamationPackage]: number | null };
+
+/** Catalogue suggestions are editable and never imply warehouse readiness. */
+export function reclamationCataloguePackages(input: {
+  resolution: string | null;
+  quantity: number;
+  replacementQty: number | null;
+  product: PackageSourceItem["product"];
+}): ReclamationPackageDraft[] {
+  const qty = input.replacementQty ?? input.quantity;
+  if (input.resolution !== "ZAMENA_ARTIKLA" || !input.product ||
+    !Number.isInteger(qty) || qty < 1 ||
+    courierPackageCount(qty, input.product.courierUnitsPerBox) > MAX_COURIER_PACKAGES) return [];
+
+  return derivePhysicalPackages([{ id: "replacement", name: "Zamena", qty, product: input.product }],
+    { consolidatePompea: false }).map(({ weightKg, widthCm, depthCm, heightCm }) => ({
+    weightKg, widthCm, depthCm, heightCm,
+  }));
+}
 
 export function parseReclamationPackages(value: unknown): ReclamationPackage[] {
   const result = packagesSchema.safeParse(value);
