@@ -32,6 +32,8 @@ import { issueBuyerReceiptForOrder } from "@/lib/receipts";
 import { ipsPaymentProvider, IpsConfigError, IpsGatewayError } from "@/lib/payments";
 import { getXExpressConfig, X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
 import { announceXExpressShipment } from "@/lib/x-express/shipments";
+import { xExpressStatusDisplay } from "@/lib/x-express/status-display";
+import { XExpressTracking } from "@/components/admin/x-express-tracking";
 import { incompletePackageHandover, readPackageHandoverReport, packageHandoverLabel } from "@/lib/courier/package-handover";
 import { recordPackageHandover } from "@/lib/admin/package-handover.server";
 import {
@@ -1437,6 +1439,19 @@ export async function WebOrderDetail({ id }: { id: string }) {
     },
   });
   if (!order) notFound();
+  const xExpressShipments = order.shipments.filter((shipment) => shipment.provider === X_EXPRESS_PROVIDER);
+  const xExpressCodes = [...new Set(xExpressShipments.flatMap((shipment) => [
+    shipment.providerStatusCode, ...shipment.events.map((event) => event.providerStatusCode),
+  ]).filter((code): code is string => Boolean(code)))];
+  const xExpressLabels = new Map((xExpressCodes.length ? await db.courierStatusCode.findMany({
+    where: { provider: X_EXPRESS_PROVIDER, code: { in: xExpressCodes } },
+    select: { code: true, label: true },
+  }) : []).map((row) => [row.code, row.label]));
+  const xExpressProblems = xExpressShipments.filter((shipment) =>
+    shipment.purpose === "ORDER_DELIVERY" && !shipment.reshipment &&
+    shipment.providerStatusCode !== "ADDRESS_REPLACED" &&
+    xExpressStatusDisplay(shipment).attention,
+  );
   const [configuredPaymentMethods, saleFiscalDocumentCount] = await Promise.all([
     getCheckoutPaymentMethods(),
     db.fiscalDocument.count({ where: { orderId: order.id, kind: "SALE" } }),
@@ -1684,6 +1699,21 @@ export async function WebOrderDetail({ id }: { id: string }) {
       />
       <div className="grid grid-cols-1 gap-6 px-8 py-6 xl:grid-cols-[1fr_360px]">
         <div className="space-y-6">
+          {xExpressProblems.length ? (
+            <div role="alert" className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
+              <p className="font-semibold">X Express — potrebna je provera isporuke</p>
+              <ul className="mt-1 space-y-1">
+                {xExpressProblems.map((shipment) => (
+                  <li key={shipment.id}>
+                    {shipment.trackingNo ?? "Pošiljka"}: {xExpressStatusDisplay({
+                      ...shipment, dictionaryLabel: xExpressLabels.get(shipment.providerStatusCode ?? ""),
+                    }).label}
+                  </li>
+                ))}
+              </ul>
+              <a href="#x-express-tracking" className="mt-2 inline-block underline">Pogledaj statuse kurira</a>
+            </div>
+          ) : null}
           <p className="rounded-xl border border-warning/20 bg-warning/10 px-4 py-3 text-sm text-warning">
             Novi artikal može da se doda, a postojeća količina da se poveća,
             smanji ili ukloni samo pre naplate, fiskalizacije i otpreme;
@@ -2182,6 +2212,7 @@ export async function WebOrderDetail({ id }: { id: string }) {
             </Card>
           ))}
 
+          <XExpressTracking shipments={xExpressShipments} labels={xExpressLabels} />
           <Card>
             <CardTitle>Status timeline</CardTitle>
             <ul className="space-y-2 text-sm">
@@ -2556,7 +2587,9 @@ export async function WebOrderDetail({ id }: { id: string }) {
                                   : shipment.providerStatusCode ===
                                       "LOCAL_ANNOUNCEMENT_FAILED"
                                     ? "Slanje nije uspelo"
-                                    : shipment.providerStatusCode ?? "—"
+                                    : shipment.provider === X_EXPRESS_PROVIDER
+                                      ? xExpressStatusDisplay({ ...shipment, dictionaryLabel: xExpressLabels.get(shipment.providerStatusCode ?? "") }).label
+                                      : shipment.providerStatusCode ?? "—"
                             }
                           />
                           <Row k="Prijavljeno paketa" v={shipment.packageCount} />
@@ -2772,8 +2805,9 @@ export async function WebOrderDetail({ id }: { id: string }) {
                               {shipment.events.map((event) => (
                                 <li key={event.id}>
                                   {event.occurredAt.toLocaleString("sr-Latn-RS")} ·{" "}
-                                  {event.status}
-                                  {event.message ? ` · ${event.message}` : ""}
+                                  {shipment.provider === X_EXPRESS_PROVIDER
+                                    ? xExpressStatusDisplay({ ...event, dictionaryLabel: xExpressLabels.get(event.providerStatusCode ?? "") }).label
+                                    : `${event.status}${event.message ? ` · ${event.message}` : ""}`}
                                 </li>
                               ))}
                             </ul>

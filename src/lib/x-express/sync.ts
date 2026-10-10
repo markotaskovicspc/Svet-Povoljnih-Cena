@@ -7,6 +7,7 @@ import { loadOrderForEmail, sendOrderStatusChanged } from "@/lib/email";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { XExpressClient } from "./client";
 import { X_EXPRESS_PROVIDER, requireXExpressEnabled } from "./config";
+import { xExpressStatusDisplay } from "./status-display";
 import type {
   XExpressMunicipality,
   XExpressStatusCode,
@@ -385,6 +386,11 @@ export function xExpressShipmentStatusSyncWhere(now = new Date()): Prisma.Shipme
     service: "COURIER_SMALL",
     trackingNo: { not: null },
     providerShipmentId: { not: null },
+    // A replaced waybill must never regain control of the active delivery.
+    AND: [{ OR: [
+      { providerStatusCode: null },
+      { providerStatusCode: { not: "ADDRESS_REPLACED" } },
+    ] }],
     OR: [
       { status: { notIn: ["DELIVERED", "RETURNED", "FAILED"] } },
       {
@@ -528,15 +534,17 @@ async function applyDictionaryMappings(events: XExpressTrackingEvent[]) {
       code: { in: codes },
       active: true,
     },
-    select: { code: true, shipmentStatus: true },
+    select: { code: true, shipmentStatus: true, label: true },
   });
-  const byCode = new Map<string, ShipmentStatus | null>(
-    rows.map((row) => [row.code, row.shipmentStatus]),
-  );
-  return events.map((event) => ({
-    ...event,
-    status: byCode.get(event.providerStatusCode) ?? event.status,
-  }));
+  const byCode = new Map(rows.map((row) => [row.code, row]));
+  return events.map((event) => {
+    const dictionary = byCode.get(event.providerStatusCode);
+    return {
+      ...event,
+      status: dictionary?.shipmentStatus ?? event.status,
+      message: xExpressStatusDisplay({ ...event, dictionaryLabel: dictionary?.label }).label,
+    };
+  });
 }
 
 async function notifyShipmentSideEffects(

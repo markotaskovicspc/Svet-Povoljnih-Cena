@@ -12,6 +12,7 @@ import { loadOrderForEmail, sendOrderStatusChanged } from "@/lib/email";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { X_EXPRESS_PROVIDER, getXExpressConfig } from "./config";
 import { inferXExpressShipmentStatus } from "./status";
+import { xExpressStatusDisplay } from "./status-display";
 
 // z.preprocess() in Zod v4 doesn't inherit .optional()/.nullable() from the
 // inner schema for a missing object key — it must be applied to the
@@ -248,9 +249,17 @@ async function processXExpressWebhookEvent(event: XExpressWebhookEventRow) {
     },
   });
 
+  const dictionaryStatus = await db.courierStatusCode.findUnique({
+    where: { provider_code: { provider: X_EXPRESS_PROVIDER, code: event.statusCode } },
+    select: { label: true },
+  });
+  const status = inferXExpressShipmentStatus(event.statusCode, null);
   const result = await applyShipmentEvent("COURIER_SMALL", {
     trackingNo: shipment.trackingNo,
-    status: inferXExpressShipmentStatus(event.statusCode, null),
+    status,
+    message: xExpressStatusDisplay({
+      status, providerStatusCode: event.statusCode, dictionaryLabel: dictionaryStatus?.label,
+    }).label,
     providerStatusCode: event.statusCode,
     providerEventId: event.notifyId,
     occurredAt: event.statusTime,

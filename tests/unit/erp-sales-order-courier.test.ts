@@ -6,6 +6,18 @@ import {
 import { getErpModuleDefinition } from "@/lib/admin/erp";
 
 describe("sales-order courier overview display", () => {
+  it.each([
+    ["RETURNING", "IN_TRANSIT", "Kreiran povrat"],
+    ["DLV_FAIL_ADDRESS_ERR", "FAILED", "Netačna adresa"],
+    ["RET_ASSIGNED", "IN_TRANSIT", "Povrat u toku"],
+  ] as const)("shows %s as a red exception instead of generic transit", (providerStatusCode, status, label) => {
+    expect(salesOrderCourierDisplay({ shippingMethod: "KURIR", itemId: "line-a", shipments: [
+      shipment({ status, providerStatusCode, itemIds: ["line-a"] }),
+    ] })).toEqual({ service: "X Express", status: label });
+    const column = getErpModuleDefinition("prodajni-nalozi")?.columns.find((column) => column.key === "courierStatus");
+    expect(column?.statusToneByValue?.[label]).toBe("red");
+  });
+
   it("uses one operational status with the agreed business precedence", () => {
     expect(
       salesOrderOperationalStatus({

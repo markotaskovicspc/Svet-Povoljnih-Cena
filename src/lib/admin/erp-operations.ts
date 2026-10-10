@@ -53,6 +53,7 @@ import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
 import { readShipmentAssignment } from "@/lib/courier/shipment-assignment";
 import { incompletePackageHandover, packageHandoverLabel } from "@/lib/courier/package-handover";
 import { SHIPMENT_STATUS_LABEL } from "@/lib/courier/status";
+import { X_EXPRESS_EXCEPTION_LABELS } from "@/lib/x-express/status-display";
 import { resolveOrderDocumentBuyerAddress } from "@/lib/document-buyer";
 import { discountedSalesOrderLineTotals } from "@/lib/admin/sales-order-overview";
 
@@ -472,6 +473,7 @@ export const operationalErpModules: ErpModule[] = [
         "Nalog nije kreiran",
         "Kurirski nalog otkazan",
         ...Object.values(SHIPMENT_STATUS_LABEL),
+        ...new Set(Object.values(X_EXPRESS_EXCEPTION_LABELS)),
         "Nije kurirska isporuka",
         "Čeka proveru", "U obradi", "Problem / povrat", "Završeno — mešovito",
       ], {
@@ -486,6 +488,9 @@ export const operationalErpModules: ErpModule[] = [
         Isporučeno: "green",
         Vraćeno: "purple",
         "Neuspešna isporuka": "red",
+        "Kreiran povrat": "red",
+        "Povrat u toku": "red",
+        "Netačna adresa": "red",
         "Kurirski nalog otkazan": "red",
         "Nije kurirska isporuka": "neutral",
       }),
@@ -2036,7 +2041,9 @@ export function salesOrderCourierDisplay(args: {
     service,
     status: handoverReport ? packageHandoverLabel(handoverReport) : locallyCancelled
       ? "Kurirski nalog otkazan"
-      : SHIPMENT_STATUS_LABEL[shipment.status],
+      : (shipment.provider === X_EXPRESS_PROVIDER
+          ? X_EXPRESS_EXCEPTION_LABELS[shipment.providerStatusCode?.trim().toUpperCase() ?? ""]
+          : null) ?? SHIPMENT_STATUS_LABEL[shipment.status],
   };
 }
 
