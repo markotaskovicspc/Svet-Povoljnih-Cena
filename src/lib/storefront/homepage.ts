@@ -422,7 +422,13 @@ async function resolveSlot(slot: HomeSlotForRender) {
     });
     if (!category) return null;
 
-    const products = await listHomeFamilyCards({ categoryPath: category.path, limit });
+    // Match the category listing: each published SKU gets its own card,
+    // including colors from the same family.
+    const { items: products } = await listProducts({
+      categoryPath: category.path,
+      limit,
+      includeTotal: false,
+    });
     return {
       slotKey: slot.slotKey,
       title: slot.titleOverride?.trim() || category.name,
@@ -525,7 +531,7 @@ async function loadHomeLayout(): Promise<HomeLayout> {
 
 const getHomeLayoutAcrossRequests = unstable_cache(
   loadHomeLayout,
-  ["storefront-home-layout-v5-category-pages"],
+  ["storefront-home-layout-v6-category-skus"],
   {
     revalidate: 60,
     tags: ["storefront-home"],

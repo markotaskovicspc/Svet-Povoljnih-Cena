@@ -103,6 +103,7 @@ export function AdminActionForm({
   const [clientValidationMessage, setClientValidationMessage] = useState("");
   const [validationFocusRequest, setValidationFocusRequest] = useState(0);
   const refreshedState = useRef(state);
+  const formRef = useRef<HTMLFormElement>(null);
   const messageRef = useRef<HTMLParagraphElement>(null);
   const successPopupRef = useRef<Window | null>(null);
   const popupHandledState = useRef(state);
@@ -110,6 +111,17 @@ export function AdminActionForm({
   const messageIsSuccess = !clientValidationMessage && Boolean(state.message) && state.ok;
   const messageIsWarning = messageIsSuccess && state.tone === "warning";
   const hasMessage = Boolean(message);
+
+  useEffect(() => {
+    const form = formRef.current;
+    if (!preserveValues || !form) return;
+    // React resets action forms during its commit, when synthetic onReset
+    // handlers are disabled. A native listener can cancel that reset before
+    // the browser restores stale select defaults after a server refresh.
+    const preventReset = (event: Event) => event.preventDefault();
+    form.addEventListener("reset", preventReset);
+    return () => form.removeEventListener("reset", preventReset);
+  }, [preserveValues]);
 
   useEffect(() => {
     if (!refreshOnSuccess || !state.ok || refreshedState.current === state) return;
@@ -149,6 +161,7 @@ export function AdminActionForm({
 
   return (
     <form
+      ref={formRef}
       action={formAction}
       className={className}
       id={id}
@@ -165,13 +178,6 @@ export function AdminActionForm({
           '<p style="font:16px system-ui;padding:24px">Priprema dokumenta za štampu…</p>';
         successPopupRef.current = popup;
       }}
-      onReset={
-        preserveValues
-          ? (event) => {
-              event.preventDefault();
-            }
-          : undefined
-      }
       onInvalid={(event) => {
         setClientValidationMessage(nativeValidationMessage(event.currentTarget));
         setValidationFocusRequest((current) => current + 1);
