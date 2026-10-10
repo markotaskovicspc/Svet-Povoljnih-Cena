@@ -94,8 +94,9 @@ beforeEach(() => {
 });
 
 describe("hamburger category pages on the homepage", () => {
-  it("resolves the current category path, groups family cards and respects the limit", async () => {
+  it("resolves the current category path and requests the configured SKU limit", async () => {
     mocks.slots.mockResolvedValue(slots(2, "category:koferi-id"));
+    mocks.listProducts.mockResolvedValue({ items: products.slice(0, 2), nextCursor: "next" });
 
     const layout = await getHomeLayout();
 
@@ -103,11 +104,22 @@ describe("hamburger category pages on the homepage", () => {
       where: { id: "koferi-id" }, select: { name: true, path: true },
     });
     expect(mocks.listProducts).toHaveBeenCalledWith(expect.objectContaining({
-      categoryPath: "/putovanje/koferi", limit: 6,
+      categoryPath: "/putovanje/koferi", limit: 2, includeTotal: false,
     }));
     expect(layout.sections.FIRST).toMatchObject({ title: "Koferi", href: "/k/putovanje/koferi" });
-    expect(layout.sections.FIRST?.products.map((product) => product.sku)).toEqual(["110006", "110018"]);
+    expect(layout.sections.FIRST?.products.map((product) => product.sku)).toEqual(["110006", "110003"]);
+    expect(mocks.listProducts).toHaveBeenCalledTimes(1);
     expect(mocks.page).not.toHaveBeenCalled();
+  });
+
+  it("keeps all category SKUs even when several belong to the same family", async () => {
+    mocks.slots.mockResolvedValue(slots(12, "category:koferi-id"));
+
+    const layout = await getHomeLayout();
+
+    expect(layout.sections.FIRST?.products.map((product) => product.sku)).toEqual(skus);
+    expect(mocks.page).not.toHaveBeenCalled();
+    expect(mocks.products).not.toHaveBeenCalled();
   });
 
   it("keeps an empty category section and its custom title", async () => {

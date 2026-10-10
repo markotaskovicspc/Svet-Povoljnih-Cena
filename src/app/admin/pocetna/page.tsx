@@ -289,7 +289,7 @@ function SectionForm({
   categories: { id: string; name: string; path: string }[];
 }) {
   return (
-    <AdminActionForm action={action} className="space-y-4">
+    <AdminActionForm action={action} className="space-y-4" preserveValues>
       <input type="hidden" name="slotKey" value={slotKey} />
 
       <div className="grid grid-cols-2 gap-3">
@@ -306,7 +306,7 @@ function SectionForm({
             ))}
           </select>
         </Field>
-        <Field label="Broj proizvoda">
+        <Field label="Broj proizvoda" hint="Najveći broj dostupnih artikala koji će biti prikazan.">
           <Input
             name="productLimit"
             type="number"
