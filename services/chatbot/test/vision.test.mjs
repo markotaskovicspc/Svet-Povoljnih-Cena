@@ -28,3 +28,16 @@ test('new or unreadable image replaces old product context and stays recoverable
  await receiveProductImages({state,event:{id:'new',timestamp:Date.now(),attachments:[{type:'image',url:'bad'}]},load:async()=>{throw Error('expired');}});
  assert.equal(state.visualContext.eventId,'new');assert.deepEqual(state.visualContext.images,[]);assert.equal(state.visualContext.failed,1);
 });
+test('later photo does not invalidate a named and accepted product in current purchase',()=>{
+ const at=Date.now();const state={orders:[],history:[
+ {role:'assistant',content:'Fen TURBO AIR (FEN). Da li je to taj?',timestamp:at-3000},
+ {role:'user',content:'Da',timestamp:at-2000},
+ {role:'assistant',content:'Adresa?',timestamp:at-1000}],
+ visualContext:{createdAt:at,images:[{objects:[]}]}};
+ assert.equal(visualSelectionPresented(state,[{sku:'FEN',name:'Fen TURBO AIR'}]),true);
+ state.history[1].content='Ne, drugi fen';
+ assert.equal(visualSelectionPresented(state,[{sku:'FEN',name:'Fen TURBO AIR'}]),false);
+ state.history[1].content='Da';state.orders=[{number:'SPC-OLD'}];
+ state.history.push({role:'assistant',content:'Porudžbina SPC-OLD je uspešno kreirana.',timestamp:at-500});
+ assert.equal(visualSelectionPresented(state,[{sku:'FEN',name:'Fen TURBO AIR'}]),false);
+});

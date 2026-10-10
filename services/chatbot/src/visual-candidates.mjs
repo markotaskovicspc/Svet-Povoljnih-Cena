@@ -19,8 +19,8 @@ export async function resolveVisualSelection({state,event,model,choose}){
  // complete dialogue/visual descriptions and ask a targeted clarification.
  if(visual.clarificationAsked)return null;
  visual.clarificationAsked=true;
- const positions=objects.slice(0,4).map(o=>`${visual.images.length>1?'slika '+o.imageNumber+', ':''}${o.position}: ${o.description.slice(0,90)}`).filter(Boolean);
- return `Koji predmet želite — ${positions.join('; ')}? Možete poslati i isečak.`;
+ const positions=[...new Set(objects.slice(0,4).map(o=>`${visual.images.length>1?'slika '+o.imageNumber+', ':''}${o.position.split(/[,;:]/)[0].trim()}`).filter(Boolean))];
+ return positions.length>1?`Na koji predmet mislite: ${positions.join(' ili ')}?`:'Na koji predmet sa slike mislite? Možete poslati isečak.';
 }
 export async function rankVisualCandidates({object,products,model}){
  const content=[{type:'input_text',text:JSON.stringify({target:object,instruction:'Uporedi izgled izdvojenog predmeta sa fotografijama kandidata. Ne prepoznaj model iz sećanja.'})}];

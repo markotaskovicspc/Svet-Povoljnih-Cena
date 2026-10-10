@@ -1,8 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {selectTown,orderErrorMessage} from '../src/delivery.mjs';
+import {selectTown,orderErrorMessage,resolveQualifiedTown} from '../src/delivery.mjs';
 import {createSpcClient} from '../src/spc.mjs';
 const town={townId:123,name:'Kruševac',postalCode:'37000'};
+test('settlement plus municipality resolves by verified dictionary municipality, never nearest town',async()=>{
+ const village={townId:11,name:'Bajevac',postalCode:'14226',municipalityId:7};
+ const parent={townId:12,name:'Lajkovac',municipalityId:7};
+ const lookup=async q=>q==='Bajevac'?[village,{...village,townId:15,municipalityId:8}]:[parent];
+ assert.equal((await resolveQualifiedTown('Bajevac, Lajkovac',lookup)).townId,11);
+ assert.equal(await resolveQualifiedTown('Bajevac, Lajkovac',async q=>q==='Bajevac'?[{...village,municipalityId:8}]:[parent]),null);
+ assert.equal(await resolveQualifiedTown('Bajevac, Lajkovac',async q=>q==='Bajevac'?[village,{...village,townId:15}]:[parent]),null);
+});
 test('quote normalizes only leading zeros in house numbers and preserves full suffixes',async()=>{
  const original=globalThis.fetch;
  globalThis.fetch=async(url,options)=>({ok:true,json:async()=>options?.body?{ok:true,input:JSON.parse(options.body).input}:{items:[town]}});

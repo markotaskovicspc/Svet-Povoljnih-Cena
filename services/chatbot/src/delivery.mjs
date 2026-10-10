@@ -10,6 +10,25 @@ export function selectTown(items,shipping) {
   const unique=[...new Map(matches.map(t=>[t.townId,t])).values()];
   return unique.length===1 && Number.isInteger(unique[0].townId) && unique[0].townId>0 ? unique[0] : null;
 }
+export async function resolveQualifiedTown(city,lookup){
+ // Parenthesized city districts use dedicated routing aliases. Do not resolve
+ // "Beograd (Vračar)" to the broader parent city as a settlement fallback.
+ if(/[()]/.test(String(city??'')))return null;
+ const parts=String(city??'').split(/\s*,\s*|\s+[—–-]\s+/).map(s=>s.trim()).filter(Boolean);
+ if(parts.length!==2)return null;
+ const groups=await Promise.all(parts.map(lookup));
+ const exact=groups.map((items,i)=>items.filter(t=>normalizePlace(t.name)===normalizePlace(parts[i])));
+ const candidates=[];
+ for(const [localities,parents] of [[exact[0],exact[1]],[exact[1],exact[0]]]){
+  for(const town of localities){
+   if(Number.isInteger(town.municipalityId)&&parents.some(parent=>parent.municipalityId===town.municipalityId))candidates.push(town);
+  }
+ }
+ // The parent and settlement can both qualify. Prefer the settlement only when
+ // the first component is an exact, uniquely routed locality in that municipality.
+ const first=[...new Map(candidates.filter(t=>exact[0].includes(t)).map(t=>[t.townId,t])).values()];
+ return first.length===1&&first[0].townId>0?first[0]:null;
+}
 // Preserve an explicitly supplied Belgrade borough when extraction kept only
 // the parent city. Never infer a borough from a street or an old purchase.
 export function preserveCityDistrict(shipping,history){

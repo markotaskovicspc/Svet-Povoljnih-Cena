@@ -646,7 +646,7 @@ test('web human handoff captures email and sends a contact update after the firs
   await store.accept({...event,id:'human-request',text:'Potrebna mi je pomoć prave osobe'});await worker.tick();
   assert.equal(notices.length,1);
   let row=(await store.pool.query('SELECT * FROM spc_chat_conversations')).rows[0];
-  assert.match(store.decode(row.state).history.at(-1).content,/Na koju mejl/);assert.equal(row.paused,false);
+  assert.match(store.decode(row.state).history.at(-1).content,/na koju adresu/);assert.equal(row.paused,false);
   await store.accept({...event,id:'callback',text:'buyer@example.com'});await worker.tick();await worker.tick();
   assert.equal(notices.length,2);assert.equal(notices[1].callbackEmail,'buyer@example.com');assert.equal(notices[1].contactUpdate,true);
   row=(await store.pool.query('SELECT * FROM spc_chat_conversations')).rows[0];assert.equal(store.decode(row.state).supportContact.email,'buyer@example.com');

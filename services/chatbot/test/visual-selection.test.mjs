@@ -4,7 +4,8 @@ import {resolveVisualSelection} from '../src/visual-candidates.mjs';
 const context=()=>({history:[],visualContext:{createdAt:Date.now(),images:[{imageNumber:1,objects:[{position:'levo',description:'siva stolica'},{position:'desno',description:'sto'}]}]}});
 test('collage clarification is asked once and semantic follow-up reaches sales conversation',async()=>{
  const state=context(),choose=async()=>({intent:'clarify',imageNumber:null,objectNumber:null});
- assert.match(await resolveVisualSelection({state,event:{text:'ovu'},choose}),/siva stolica/);
+ const question=await resolveVisualSelection({state,event:{text:'ovu'},choose});
+ assert.match(question,/levo ili desno/);assert(!question.includes('siva stolica'));
  assert.equal(await resolveVisualSelection({state,event:{text:'4 sive stolice'},choose}),null);
 });
 test('category and colour can select a unique object without a spatial question',async()=>{

@@ -1,4 +1,4 @@
-import {isOrderConfirmation} from './security.mjs';
+import {isOrderConfirmation} from './confirmation.mjs';
 
 export const HISTORY_LIMIT=120;
 export function isOrderReceipt(message,orders=[]) {

@@ -17,7 +17,7 @@ export function requestSupportContact({state,event}){
   return null;
  }
  state.supportContact={askedAt:Date.now(),waiting:true};
- return 'Na koju mejl adresu kolega može da Vam se javi? Koristićemo je za odgovor na ovaj upit.';
+ return 'Ako želite odgovor mejlom, na koju adresu korisnička podrška može da Vam se javi? Možete nastaviti i ovde u razgovoru.';
 }
 export function receiveSupportContact({state,event}){
  // Do not interrupt reconciliation of an ERP write with an ordinary lead flow.
@@ -27,15 +27,24 @@ export function receiveSupportContact({state,event}){
   if(email){
    state.supportContact={...state.supportContact,email,waiting:false};
    state.supportRequest={reason:state.lastSupportRequest?.reason??'Kupac traži pomoć zaposlenog',contactUpdate:true};
-   return 'Hvala, zabeležio sam mejl uz Vaš upit za kolegu. Ne morate ostati u chatu; odgovor možete dobiti na toj adresi.';
+   return 'Hvala, zabeležio sam mejl uz Vaš upit za korisničku podršku. Odgovor možete dobiti na toj adresi.';
   }
   if(/^(?:ne|не|ne zelim|ne bih|ne hvala|necu)[.!\s]*$|ne (?:zelim|dajem|bih|mogu).{0,30}(?:mejl|email|adres)|nemam (?:mejl|email)|bez (?:mejla|emaila)/.test(normalize(event.text))){
    state.supportContact={...state.supportContact,waiting:false,declined:true};
-   return 'U redu, kontakt nije obavezan. Upit ostaje zabeležen za kolegu, a odgovor možete proveriti ovde u razgovoru.';
+   return 'U redu, mejl nije obavezan. Upit ostaje zabeležen za korisničku podršku, a odgovor možete proveriti ovde u razgovoru.';
   }
  }
  if(!wantsHuman(event.text))return null;
  delete state.pending;delete state.loyaltyPending;delete state.cancellation;delete state.reclamation;
  if(!state.lastSupportRequest)state.supportRequest={reason:'Kupac izričito traži pomoć zaposlenog: '+event.text.slice(0,140)};
- return requestSupportContact({state,event})??'Razumem, za ovaj upit je potrebna pomoć kolege. Kontakt i opis problema su zabeleženi uz razgovor; nemam potvrdu da je kolega već preuzeo zahtev.';
+ return requestSupportContact({state,event})??'Razumem. Upit je zabeležen za korisničku podršku; odgovor možete proveriti ovde u razgovoru.';
+}
+
+// The worker owns the optional callback question. Remove only duplicate email
+// questions from model prose, keeping the actual answer and other questions.
+export function appendSupportContact(message,question){
+ if(!question)return message;
+ const sentences=String(message??'').split(/(?<=[.!?])\s+/);
+ const answer=sentences.filter(s=>!(/\?/.test(s)&&/(?:mejl|email|e-mail)/i.test(s))).join(' ').trim();
+ return [answer,question].filter(Boolean).join('\n\n');
 }
