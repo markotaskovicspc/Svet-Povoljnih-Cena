@@ -9,20 +9,20 @@ import { envValue } from "@/lib/env";
 import { checkRateLimitForRequest, rateLimitJson } from "@/lib/security/rate-limit";
 import { createOrder } from "@/lib/api/checkout";
 import { channelOrderSchema } from "@/lib/checkout/order-schema";
-import { importDraftSchema, exactImportProduct, type ImportProduct } from "@/lib/admin/order-import/schema";
+import { importDraftSchema, exactImportProduct, importProductSearchTerms, withImportDefaults, type ImportProduct } from "@/lib/admin/order-import/schema";
 import { readImportQuote, signImportQuote } from "@/lib/admin/order-import/quote";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 const fail = (error: string, status = 400) => NextResponse.json({ error }, { status });
 async function productsFor(query: string): Promise<ImportProduct[]> {
-  const words = query.trim().split(/\s+/).filter(w => w.length >= 2).slice(0, 5);
+  const words = importProductSearchTerms(query);
   if (!words.length) return [];
   return db.product.findMany({
     where: { deletedAt: null, isActive: true, OR: [
       { sku: { equals: query.trim(), mode: "insensitive" } },
       { AND: words.map(word => ({ OR: [{ name: { contains: word, mode: "insensitive" as const } }, { sku: { contains: word, mode: "insensitive" as const } }] })) },
-    ] }, select: { sku: true, name: true }, take: 12, orderBy: { name: "asc" },
+    ] }, select: { sku: true, name: true }, take: 50, orderBy: { name: "asc" },
   });
 }
 export async function GET(req: NextRequest) {
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
       });
       if (!response.ok) return fail(response.status === 429 ? "GPT trenutno obrađuje druge porudžbine. Pokušajte za nekoliko sekundi." : "GPT trenutno nije pročitao porudžbinu. Pokušajte ponovo.", response.status === 429 ? 429 : 502);
       const payload = await response.json();
-      const draft = importDraftSchema.parse(payload.draft);
+      const draft = withImportDefaults(importDraftSchema.parse(payload.draft));
       const lines = await Promise.all(draft.lines.map(async line => {
         const candidates = await productsFor(line.sku || line.name);
         const match = exactImportProduct(line, candidates);

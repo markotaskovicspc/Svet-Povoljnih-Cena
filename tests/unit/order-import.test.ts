@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { exactImportProduct, importDraftSchema } from "@/lib/admin/order-import/schema";
+import { exactImportProduct, importDraftSchema, importProductSearchTerms, withImportDefaults } from "@/lib/admin/order-import/schema";
 import { signImportQuote, readImportQuote, type ImportQuote } from "@/lib/admin/order-import/quote";
 import { allowedNavFor, applyAdminNavPreferences } from "@/lib/admin/nav";
 const quote: ImportQuote = {
@@ -12,6 +12,24 @@ describe("order import review", () => {
     expect(exactImportProduct({ name: "URBAN SEAT", sku: "", qty: 1, unitPrice: null }, candidates)).toBeNull();
     expect(exactImportProduct({ name: "URBAN SEAT", sku: "urban-w", qty: 1, unitPrice: null }, candidates)?.sku).toBe("URBAN-W");
     expect(exactImportProduct({ name: "URBAN SEAT bela", sku: "invented", qty: 1, unitPrice: null }, candidates)).toBeNull();
+  });
+  it("connects the real BAKE MASTER catalog title despite extra screenshot descriptions", () => {
+    const line = { name: "Mini rerna BAKE MASTER 12 L, 1200 W", sku: "", qty: 1, unitPrice: null };
+    expect(importProductSearchTerms(line.name)).toEqual(["bake", "master"]);
+    expect(exactImportProduct(line, [{ sku: "210007", name: "Rerna BAKE MASTER" }])?.sku).toBe("210007");
+    expect(exactImportProduct(line, [{ sku: "1", name: "Rerna BAKE MASTER" }, { sku: "2", name: "Rerna BAKE MASTER" }])).toBeNull();
+    expect(exactImportProduct(line, [{ sku: "1", name: "Rerna BAKE MASTER 18L" }])).toBeNull();
+    expect(exactImportProduct(line, [{ sku: "1", name: "Rerna" }])).toBeNull();
+  });
+  it("ignores punctuation and spacing in units without losing variant differences", () => {
+    const line = { name: "Rerna BAKE MASTER 12 L, 1200 W", sku: "", qty: 1, unitPrice: null };
+    const candidates = [{ sku: "12", name: "Rerna BAKE MASTER, 12L / 1200W" }, { sku: "18", name: "Rerna BAKE MASTER 18L 1200W" }];
+    expect(exactImportProduct(line, candidates)?.sku).toBe("12");
+  });
+  it("defaults missing payment and shipping while preserving explicit agreements", () => {
+    const missing = { paymentMethod: "", shippingMethod: "" } as Parameters<typeof withImportDefaults>[0];
+    expect(withImportDefaults(missing)).toMatchObject({ paymentMethod: "POUZECE_GOTOVINA", shippingMethod: "KURIR" });
+    expect(withImportDefaults({ ...missing, paymentMethod: "UPLATA_NA_RACUN", shippingMethod: "KAMION" })).toMatchObject({ paymentMethod: "UPLATA_NA_RACUN", shippingMethod: "KAMION" });
   });
   it("rejects malformed model output and keeps missing information explicit", () => {
     expect(importDraftSchema.safeParse({ lines: [{ sku: "MOP", qty: -1 }] }).success).toBe(false);
