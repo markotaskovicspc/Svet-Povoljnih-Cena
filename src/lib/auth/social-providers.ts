@@ -27,10 +27,8 @@ export function getConfiguredSocialAuthProviders(
   options: { includeUnavailable?: boolean } = {},
 ): SocialAuthProvider[] {
   return (["google", "apple", "facebook"] as const).flatMap((id) => {
-    // Keep Facebook hidden until Stefan explicitly requests enabling it.
-    if (id === "facebook") return [];
     const available = configured(id);
-    if (!available && !options.includeUnavailable) return [];
+    if (!available && (id === "facebook" || !options.includeUnavailable)) return [];
     return [{ id, label: labels[id], action: available ? actions[id] : undefined }];
   });
 }
