@@ -4,6 +4,7 @@ import { processEmailAlerts } from "@/lib/email/alerts";
 import { processUrgentAdminAlerts } from "@/lib/email/admin-alerts";
 import { isAuthorizedCronRequest } from "@/lib/security/bearer";
 
+export const maxDuration = 300;
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 

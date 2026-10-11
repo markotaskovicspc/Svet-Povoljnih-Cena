@@ -1,4 +1,5 @@
 "use client";
+import { RestockWaitlist } from "./restock-waitlist";
 
 /**
  * Product card — Phase 1C polish.
@@ -536,6 +537,7 @@ export function ProductCard({
               </button>
             )}
           </div>
+          {!availability.canAddToCart ? <RestockWaitlist sku={product.sku} name={product.name} /> : null}
           <p
             className={cn(
               "mt-1 min-h-6 break-words text-[9px] leading-tight text-ink-500 sm:text-[10px] md:text-[10px]",

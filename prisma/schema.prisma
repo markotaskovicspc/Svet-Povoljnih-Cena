@@ -539,6 +539,7 @@ model Product {
   inboundInvoiceItems       InboundInvoiceItem[]
   retailPriceProposals      RetailPriceProposal[]
   wishlistItems             WishlistItem[]
+  restockSubscriptions      RestockSubscription[]
   backInStockAlerts         BackInStockAlert[]
   onSaleAlerts              OnSaleAlert[]
   reclamations              Reclamation[]
@@ -4129,4 +4130,25 @@ model ReturnResolution {
   createdAt DateTime @default(now())
 
   @@index([orderId])
+}
+
+/// Specific-product email consent, separate from general newsletter consent.
+model RestockSubscription {
+  id String @id @default(cuid())
+  email String
+  userId String?
+  productId String
+  source String @default("PRODUCT")
+  status String @default("PENDING")
+  requestedAt DateTime @default(now())
+  checkedAt DateTime @default(now())
+  notifiedAt DateTime?
+  cancelledAt DateTime?
+  sendStartedAt DateTime?
+  messageId String?
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  @@unique([email, productId])
+  @@index([status, checkedAt])
+  @@index([productId, status])
+  @@index([userId])
 }

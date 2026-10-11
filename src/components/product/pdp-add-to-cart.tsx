@@ -1,4 +1,5 @@
 "use client";
+import { RestockWaitlist } from "./restock-waitlist";
 
 /**
  * Sticky add-to-cart for the PDP.
@@ -231,6 +232,7 @@ export function PdpAddToCart({
     return (
       <div className="hidden flex-col gap-2 md:flex">
         {ctas}
+        {!availability.canAddToCart ? <RestockWaitlist sku={product.sku} name={product.name} /> : null}
         {availabilityMessage ? (
           <p className="text-xs text-ink-500" aria-live="polite">
             {availabilityMessage}
@@ -264,6 +266,7 @@ export function PdpAddToCart({
         <PdpMobilePriceContent quote={priceQuote} action={product.action} regularPrice={product.fullPrice} />
         {ctas}
       </div>
+      {!availability.canAddToCart ? <RestockWaitlist sku={product.sku} name={product.name} /> : null}
     </div>
   );
 }

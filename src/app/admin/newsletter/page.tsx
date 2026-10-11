@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { RestockSegments } from "@/components/admin/restock-segments";
 import type { MarketingContactStatus, Prisma } from "@prisma/client";
 import { requireAdminAction } from "@/lib/admin";
 import { db } from "@/lib/db";
@@ -41,6 +42,7 @@ export const metadata = {
 const views = [
   ["campaigns", "Kampanje"],
   ["audiences", "Publike"],
+  ["restock", "Zainteresovani za artikal"],
   ["contacts", "Custom liste i kontakti"],
   ["templates", "Šabloni"],
   ["settings", "Podešavanja"],
@@ -133,6 +135,7 @@ export default async function NewsletterPage({
 
         {view === "campaigns" ? <CampaignsView campaigns={recentCampaigns} /> : null}
         {view === "audiences" ? <AudiencesView selectedId={params.audienceId} /> : null}
+        {view === "restock" ? <RestockSegments /> : null}
         {view === "contacts" ? <ContactsView q={q} /> : null}
         {view === "templates" ? <TemplatesView /> : null}
         {view === "settings" ? <SettingsView contactsCount={contactsCount} /> : null}

@@ -311,7 +311,7 @@ export async function setWishlistAlerts(
         await tx.backInStockAlert.upsert({
           where: { userId_productId_channel: { userId, productId, channel } },
           create: { userId, productId, channel },
-          update: { notifiedAt: null },
+          update: { notifiedAt: null, createdAt: new Date() },
         });
       } else {
         await tx.backInStockAlert.deleteMany({ where: { userId, productId } });
