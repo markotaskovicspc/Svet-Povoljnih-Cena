@@ -373,7 +373,12 @@ export function AdminMobileNav({
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger
         render={
-          <Button variant="outline" size="icon" aria-label="Otvori meni" />
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Otvori meni"
+            className="fixed left-4 top-[max(env(safe-area-inset-top),0.75rem)] z-40 bg-surface shadow-md"
+          />
         }
       >
         <MenuIcon />
