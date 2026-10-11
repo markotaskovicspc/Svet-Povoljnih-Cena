@@ -150,7 +150,7 @@ export function NewsletterBlockEditor({
 
       <div className="xl:sticky xl:top-6 xl:self-start">
         <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-ink-500">Brzi pregled sadržaja</p>
-        <div className="max-h-[760px] overflow-y-auto rounded-2xl border bg-[#f2f6f8] p-4 shadow-inner">
+        <div data-admin-preview className="max-h-[760px] overflow-y-auto rounded-2xl border bg-[#f2f6f8] p-4 shadow-inner">
           <div className="mx-auto max-w-[560px] overflow-hidden rounded-xl border-t-[5px] border-[#123f5a] bg-white shadow-[0_8px_24px_rgba(18,63,90,0.10)]">
             <div className="px-6 pb-[18px] pt-7">
               {/* eslint-disable-next-line @next/next/no-img-element */}

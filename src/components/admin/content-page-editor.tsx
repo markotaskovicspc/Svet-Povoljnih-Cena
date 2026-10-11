@@ -334,7 +334,7 @@ function ContentPageEditorFields({
                   onChange={(event) => setSeoDescription(event.target.value)}
                 />
               </Field>
-              <div className="rounded-xl border border-border/60 bg-white p-4">
+              <div data-admin-preview className="rounded-xl border border-border/60 bg-white p-4">
                 <p className="text-lg text-[#1a0dab]">{seoTitle || title || "Naslov stranice"}</p>
                 <p className="mt-1 text-sm text-[#006621]">
                   www.svetpovoljnihcena.rs{contentPreviewPath(slug)}
@@ -399,7 +399,7 @@ function ContentPageEditorFields({
             <div className="border-b border-border/60 bg-muted-bg/50 px-4 py-3">
               <p className="text-sm font-medium text-ink-900">Javni pregled nacrta</p>
             </div>
-            <div className="max-h-[72vh] overflow-y-auto">
+            <div data-admin-preview className="max-h-[72vh] overflow-y-auto bg-surface">
               <div className="border-b border-border/60 bg-muted-bg/60 px-6 py-8">
                 {eyebrow ? <p className="font-mono text-xs tracking-wide text-walnut uppercase">{eyebrow}</p> : null}
                 <h1 className="mt-2 font-display text-3xl font-bold text-ink-900">{title || "Naslov stranice"}</h1>

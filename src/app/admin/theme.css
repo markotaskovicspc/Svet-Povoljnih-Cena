@@ -1,0 +1,91 @@
+/* The DOM marker exists only while the admin layout is mounted. Applying tokens
+   at the root also themes menus/dialogs portaled to body, without a lingering
+   class on html when navigating back to the storefront. Print stays light. */
+@media screen {
+  :root:has([data-admin-theme="dark"]) {
+    color-scheme: dark;
+    --canvas: #13171e;
+    --surface: #1c222c;
+    --muted-bg: #272f3b;
+    --ink-900: #f1f4f8;
+    --ink-700: #d4dce7;
+    --ink-500: #a7b3c4;
+    --ink-300: #91a0b4;
+    --walnut: #d6af82;
+    --olive: #b1bf82;
+    --sand: #424b58;
+    --success: #78d3a0;
+    --warning: #efbd70;
+    --danger: #ff8394;
+    --destructive: var(--danger);
+    --info: #8bb9f7;
+    --brand-blue: #8bb9f7;
+    --brand-blue-700: #afcefa;
+    --brand-blue-50: #20344d;
+    --border: #465163;
+    --input: #536075;
+    --ring: #d6af82;
+    --sidebar-border: var(--border);
+    --sidebar-ring: var(--ring);
+    --shadow-soft-1: 0 1px 2px #0003;
+    --shadow-soft-2: 0 2px 6px #0004;
+    --shadow-soft-3: 0 8px 20px #0005;
+    --shadow-soft-4: 0 16px 40px #0006;
+    --shadow-soft-5: 0 28px 64px #0007;
+
+    [data-sonner-toaster] {
+      --success-bg: #1d3933;
+      --success-border: #3c7061;
+      --success-text: #78d3b5;
+      --info-bg: #20344d;
+      --info-border: #45688f;
+      --info-text: #8bb9f7;
+      --warning-bg: #3c3020;
+      --warning-border: #806239;
+      --warning-text: #efbd70;
+      --error-bg: #40262e;
+      --error-border: #874755;
+      --error-text: #ff9ba8;
+    }
+
+    /* Compatibility for older admin forms using literal Tailwind colors.
+       Content previews opt out; product photos and iframes remain untouched. */
+    :where(*):not(:where([data-admin-preview], [data-admin-preview] *)) {
+      &.bg-white { background-color: var(--surface); }
+      &.bg-white\/80 { background-color: color-mix(in srgb, var(--surface) 80%, transparent); }
+      &.bg-white\/95 { background-color: color-mix(in srgb, var(--surface) 95%, transparent); }
+      &.bg-slate-50, &.bg-slate-100 { background-color: var(--muted-bg); }
+      &.bg-slate-50\/70 { background-color: color-mix(in srgb, var(--muted-bg) 70%, transparent); }
+      &.text-slate-400, &.text-slate-500 { color: var(--ink-500); }
+      &.text-slate-600, &.text-slate-700 { color: var(--ink-700); }
+      &.text-slate-800, &.text-slate-900 { color: var(--ink-900); }
+      &.border-slate-100, &.border-slate-200,
+      &.border-slate-200\/60, &.border-slate-200\/70 { border-color: var(--border); }
+
+      &.bg-ink-900.text-white, &.bg-walnut.text-white,
+      &.bg-destructive.text-white { color: var(--canvas); }
+      &.bg-amber-50, &.bg-amber-100 { background-color: #3c3020; }
+      &.bg-blue-50, &.bg-blue-100 { background-color: #20344d; }
+      &.bg-emerald-50, &.bg-green-50, &.bg-teal-50, &.bg-teal-100 { background-color: #1d3933; }
+      &.bg-red-50 { background-color: #40262e; }
+      &.text-amber-600, &.text-amber-700, &.text-amber-800,
+      &.text-amber-900, &.text-amber-950 { color: #efbd70; }
+      &.text-blue-600, &.text-blue-700 { color: #8bb9f7; }
+      &.text-emerald-600, &.text-emerald-700, &.text-emerald-950,
+      &.text-green-700, &.text-teal-700, &.text-teal-900 { color: #78d3b5; }
+      &.text-red-700, &.text-red-800 { color: #ff9ba8; }
+
+      @media (hover: hover) {
+        &.hover\:bg-white:hover { background-color: var(--surface); }
+        &.hover\:bg-slate-50:hover, &.hover\:bg-slate-100:hover { background-color: var(--muted-bg); }
+        &.hover\:text-slate-900:hover { color: var(--ink-900); }
+      }
+    }
+  }
+}
+
+/* Inline customer-facing previews keep the light palette declared in globals. */
+[data-admin-preview] {
+  color-scheme: light;
+  color: var(--ink-900);
+}

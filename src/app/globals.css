@@ -2,7 +2,13 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark {
+  @media screen {
+    &:is(.dark *, :root:has([data-admin-theme="dark"]) *):not(:where([data-admin-preview], [data-admin-preview] *)) {
+      @slot;
+    }
+  }
+}
 
 @theme inline {
   --color-background: var(--background);
@@ -98,7 +104,7 @@
   --ease-emphasis: cubic-bezier(0.83, 0, 0.17, 1);
 }
 
-:root {
+:root, [data-admin-preview] {
   /* Brand palette (per design system) */
   --canvas: #ffffff;
   --surface: #ffffff;

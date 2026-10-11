@@ -241,7 +241,7 @@ export function LandingPageEditor({
             <Field label="Meta opis" hint={`${seoDescription.length} / 500`}><Textarea name="seoDescription" rows={3} maxLength={500} value={seoDescription} onChange={(event) => setSeoDescription(event.target.value)} /></Field>
             <MediaUrlField pageId={values.id} label="Open Graph slika" name="ogImageUrl" value={ogImageUrl} onChange={setOgImageUrl} />
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="robotsIndex" checked={robotsIndex} onChange={(event) => setRobotsIndex(event.target.checked)} className="size-4 accent-walnut" /> Dozvoli indeksiranje u pretraživačima</label>
-            <div className="rounded-xl border border-border/60 bg-white p-4">
+            <div data-admin-preview className="rounded-xl border border-border/60 bg-white p-4">
               <p className="text-lg text-[#1a0dab]">{seoTitle || title || "Naslov landing strane"}</p>
               <p className="text-sm text-[#006621]">www.svetpovoljnihcena.rs{canonicalUrl || `/ponuda/${slug || "slug"}`}</p>
               <p className="mt-1 text-sm text-[#4d5156]">{seoDescription || lead || "Meta opis landing strane."}</p>
@@ -278,7 +278,7 @@ export function LandingPageEditor({
                 ))}
               </div>
             </div>
-            <div className={cn("relative bg-white", previewDevice === "mobile" ? "mx-auto aspect-square max-w-72" : "aspect-[16/10]")}>
+            <div data-admin-preview className={cn("relative bg-white", previewDevice === "mobile" ? "mx-auto aspect-square max-w-72" : "aspect-[16/10]")}>
               {(previewDevice === "mobile" ? heroMobileImageUrl || heroImageUrl : heroImageUrl) ? <Image src={previewDevice === "mobile" ? heroMobileImageUrl || heroImageUrl : heroImageUrl} alt="" fill unoptimized className="object-contain" /> : null}
               <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent" />
               <div className="relative z-10 p-5 text-white"><h2 className="font-display text-2xl font-bold">{title || "Naslov landing strane"}</h2>{lead ? <p className="mt-2 line-clamp-3 text-sm text-white/85">{lead}</p> : null}</div>

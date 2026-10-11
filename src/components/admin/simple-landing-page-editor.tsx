@@ -232,7 +232,7 @@ export function SimpleLandingPageEditor({
               <input type="checkbox" name="robotsIndex" checked={robotsIndex} onChange={(event) => setRobotsIndex(event.target.checked)} className="size-4 accent-walnut" />
               Dozvoli indeksiranje u pretraživačima
             </label>
-            <div className="rounded-xl border border-border/60 bg-white p-4">
+            <div data-admin-preview className="rounded-xl border border-border/60 bg-white p-4">
               <p className="text-lg text-[#1a0dab]">{seoTitle || title || "Naziv landing strane"}</p>
               <p className="text-sm text-[#006621]">www.svetpovoljnihcena.rs{canonicalUrl || `/ponuda/${slug || "slug"}`}</p>
               <p className="mt-1 text-sm text-[#4d5156]">{seoDescription || "Meta opis landing strane."}</p>
@@ -278,7 +278,7 @@ export function SimpleLandingPageEditor({
               </div>
             </div>
             {hasBanner ? (
-              <div className={cn("relative bg-white", previewDevice === "mobile" ? "mx-auto aspect-square max-w-72" : "aspect-[24/7]")}>
+              <div data-admin-preview className={cn("relative bg-white", previewDevice === "mobile" ? "mx-auto aspect-square max-w-72" : "aspect-[24/7]")}>
                 <Image src={previewImage} alt="" fill unoptimized loading="eager" className="object-contain" />
                 {heroCtaLabel && heroCtaHref ? (
                   <span className="absolute bottom-4 left-4 rounded-full bg-canvas px-4 py-2 text-xs text-ink-900 shadow-soft-2">
@@ -287,7 +287,7 @@ export function SimpleLandingPageEditor({
                 ) : null}
               </div>
             ) : (
-              <div className="bg-white p-4">
+              <div data-admin-preview className="bg-white p-4">
                 <p className="font-display text-lg font-semibold text-ink-900">{title || "Naziv stranice"}</p>
                 <p className="mt-1 text-xs text-ink-500">Stranica bez banera</p>
               </div>
