@@ -39,7 +39,6 @@ export default async function SalesOrdersOverviewPage({ searchParams }: { search
         }
       />
       <div className="px-4 py-6 md:px-8">
-        <Link href="/admin/erp/porudzbina-iz-chata" className="mb-5 inline-flex rounded-lg border border-primary bg-primary/10 px-4 py-3 font-medium">Porudžbina iz chata — slika ili tekst →</Link>
         <nav aria-label="Kanal prodajnih naloga" className="mb-5 flex flex-wrap gap-2">
           {[{ value: "", label: "Sve porudžbine" }, { value: "WEB", label: "Web" }, { value: "ANANAS", label: "Ananas" }, { value: "MP", label: "Maloprodaja" }, { value: "VP", label: "Veleprodaja" }, { value: "INO", label: "Inostranstvo" }].map(item => (
             <Link key={item.value} href={`/admin/erp/prodajni-nalozi?channel=${item.value || "ALL"}`} aria-current={(channel ?? "") === item.value ? "page" : undefined}
