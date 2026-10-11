@@ -1,4 +1,5 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { ananasInventoryPlan } from "@/lib/ananas/inventory-plan";
 const m = vi.hoisted(() => ({ documents: vi.fn(), normalize: vi.fn(), create: vi.fn(), update: vi.fn(), upsert: vi.fn(), transaction: vi.fn(), latest: vi.fn() }));
 vi.mock("@/lib/db", () => ({ db: { ananasSyncRun: { create: m.create, update: m.update, findFirst: m.latest }, $transaction: m.transaction } }));
 vi.mock("@/lib/ananas/client", () => ({ AnanasClient: class { documents = m.documents; } }));
@@ -9,6 +10,23 @@ beforeEach(() => {
   m.documents.mockResolvedValue([{ id: "one" }]);
   m.normalize.mockImplementation((row, kind) => ({ externalId: row.id, kind, fiscalNumber: `${kind}-1` }));
   m.transaction.mockImplementation(async fn => fn({ $queryRaw: vi.fn(), ananasDocument: { upsert: m.upsert, findUnique: vi.fn().mockResolvedValue(null) }, ananasSyncRun: { update: m.update } }));
+});
+afterEach(() => vi.restoreAllMocks());
+it("identifies a posted receipt conflict without overwriting it or logging buyer data", async () => {
+  const storedItems = [{ sku: "1145", name: "Drill", quantity: 1 }];
+  const incomingItems = [{ sku: "1145", name: "Drill", quantity: 2 }];
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  m.normalize.mockImplementation((row, kind) => ({ externalId: row.id, kind, fiscalNumber: "FISCAL-1", items: incomingItems }));
+  m.transaction.mockImplementation(async fn => fn({ $queryRaw: vi.fn(), ananasDocument: {
+    upsert: m.upsert, findUnique: vi.fn().mockResolvedValue({ id: "posted-doc", kind: "SALE", fiscalNumber: "FISCAL-1",
+      items: storedItems, inventoryPostedAt: new Date(), inventoryFingerprint: ananasInventoryPlan("SALE", storedItems).fingerprint }),
+  }, ananasSyncRun: { update: m.update } }));
+  await expect(syncAnanasDocuments(new Date("2026-09-01Z"), new Date("2026-09-02Z"))).rejects.toThrow(/FISCAL-1.*posted-doc/);
+  expect(m.upsert).not.toHaveBeenCalled();
+  expect(log).toHaveBeenCalledWith("ananas.inventory.document-conflict", expect.objectContaining({
+    documentId: "posted-doc", storedLines: [{ sku: "1145", qtyDelta: -1 }], incomingLines: [{ sku: "1145", qtyDelta: -2 }],
+  }));
+  expect(JSON.stringify(log.mock.calls)).not.toContain("Drill");
 });
 it("upserts identical provider keys on repeated imports and commits success with documents", async () => {
   await syncAnanasDocuments(new Date("2026-09-01Z"), new Date("2026-09-02Z"));

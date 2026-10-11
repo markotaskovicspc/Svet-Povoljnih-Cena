@@ -49,7 +49,14 @@ export async function syncAnanasDocuments(from: Date, to: Date, source: "MANUAL"
         await tx.$queryRaw`SELECT id FROM "AnanasDocument" WHERE kind = ${data.kind} AND "externalId" = ${data.externalId} FOR UPDATE`;
         const existing = await tx.ananasDocument.findUnique({ where: { kind_externalId: { kind: data.kind, externalId: data.externalId } } });
         if (existing?.inventoryPostedAt && existing.inventoryFingerprint !== ananasInventoryPlan(data.kind, data.items).fingerprint) {
-          throw new Error("Ananas stavke već knjiženog dokumenta su promenjene. Potrebna je kontrola.");
+          console.error("ananas.inventory.document-conflict", {
+            documentId: existing.id, kind: data.kind, externalId: data.externalId,
+            storedFiscalNumber: existing.fiscalNumber, incomingFiscalNumber: data.fiscalNumber,
+            storedLines: ananasInventoryPlan(existing.kind, existing.items).lines,
+            incomingLines: ananasInventoryPlan(data.kind, data.items).lines,
+            storedFingerprint: existing.inventoryFingerprint,
+          });
+          throw new Error(`Ananas stavke već knjiženog dokumenta ${existing.fiscalNumber} (${existing.id}) su promenjene. Potrebna je kontrola.`);
         }
         await tx.ananasDocument.upsert({ where: { kind_externalId: { kind: data.kind, externalId: data.externalId } }, create: data, update: data });
       }
