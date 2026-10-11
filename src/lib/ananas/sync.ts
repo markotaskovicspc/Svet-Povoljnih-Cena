@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 import { AnanasClient } from "./client";
 import { ananasDateRange, normalizeAnanasDocument } from "./documents";
+import { ananasInventoryPlan } from "./inventory-plan";
 
 export function ananasError(error: unknown) {
   // Provider bodies, tokens and customer details must not enter logs/UI.
@@ -13,7 +14,7 @@ export function ananasError(error: unknown) {
   return error instanceof Error && /^(Ananas |PIB Ananas |Neispravan |Neispravna |Neto iznos |Za jedan uvoz)/.test(error.message)
     ? error.message.slice(0, 300) : "Ananas sinhronizacija nije uspela. Proverite vezu, pristup i format odgovora.";
 }
-export async function syncAnanasDocuments(from: Date, to: Date, source: "MANUAL" | "AUTO" = "MANUAL") {
+export async function syncAnanasDocuments(from: Date, to: Date, source: "MANUAL" | "AUTO" | "INVENTORY_HISTORY" = "MANUAL") {
   ananasDateRange(from.toISOString(), to.toISOString());
   const run = await db.ananasSyncRun.create({ data: { from, to, source, status: "RUNNING" } });
   let stage = "preuzimanje računa i refundacija";
@@ -45,6 +46,11 @@ export async function syncAnanasDocuments(from: Date, to: Date, source: "MANUAL"
     stage = "upis dokumenata";
     await db.$transaction(async tx => {
       for (const data of documents) {
+        await tx.$queryRaw`SELECT id FROM "AnanasDocument" WHERE kind = ${data.kind} AND "externalId" = ${data.externalId} FOR UPDATE`;
+        const existing = await tx.ananasDocument.findUnique({ where: { kind_externalId: { kind: data.kind, externalId: data.externalId } } });
+        if (existing?.inventoryPostedAt && existing.inventoryFingerprint !== ananasInventoryPlan(data.kind, data.items).fingerprint) {
+          throw new Error("Ananas stavke već knjiženog dokumenta su promenjene. Potrebna je kontrola.");
+        }
         await tx.ananasDocument.upsert({ where: { kind_externalId: { kind: data.kind, externalId: data.externalId } }, create: data, update: data });
       }
       await tx.ananasSyncRun.update({ where: { id: run.id }, data: { status: "SUCCESS", count: documents.length, finishedAt: new Date() } });

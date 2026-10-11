@@ -11,7 +11,9 @@ import { AnanasSummary } from "@/components/admin/ananas-summary";
 import { AnanasOrdersPanel } from "@/components/admin/ananas-orders-panel";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { SubmitButton } from "@/components/admin/submit-button";
-import { importAnanas } from "./actions";
+import { importAnanas, saveAnanasInventory } from "./actions";
+import { getAnanasInventoryStatus } from "@/lib/ananas/inventory.server";
+import { AnanasInventoryRunner } from "@/components/admin/ananas-inventory-runner";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -36,6 +38,7 @@ export default async function AnanasPage({ searchParams }: { searchParams: Promi
     db.ananasSyncRun.findMany({ where: { source: { in: ["AUTO", "MANUAL"] } }, orderBy: { startedAt: "desc" }, take: 5 }),
   ]);
   const configured = ananasConfigured();
+  const inventory = await getAnanasInventoryStatus();
   const canImport = configured && period.endExclusive.getTime() - period.start.getTime() <= 31 * 86400000 + 3600000;
   const pageUrl = (value: number) => `?${new URLSearchParams({ from: period.fromInput, to: period.toInput, q, kind: kind ?? "", page: String(value) })}`;
   return <>
@@ -53,10 +56,22 @@ export default async function AnanasPage({ searchParams }: { searchParams: Promi
         </form>
       </Card>
       {sp.view === "orders" ? <AnanasOrdersPanel period={period} query={q} page={sp.page} /> : <>
+      <Card>
+        <CardTitle>Ananas lager od 1. juna 2025.</CardTitle>
+        <p className="mb-3 text-sm">Fiskalni računi skidaju robu samo sa magacina Ananas. Refundacije odmah vraćaju robu. Ponovna obrada ne ponavlja knjiženje. Istorija se nastavlja od poslednjeg sačuvanog perioda.</p>
+        <p className="mb-3 text-sm">Knjiženo: <strong>{inventory.posted}</strong> dokumenata. Čeka knjiženje: <strong>{inventory.pending}</strong>. Artikli u minusu: <strong>{inventory.negatives}</strong>. Istorija preuzeta do: {inventory.policy ? date(new Date(inventory.policy.historyThrough)) : "nije pokrenuta"}.</p>
+        <AdminActionForm action={saveAnanasInventory} refreshOnSuccess>
+          <label className="mr-5 text-sm"><input type="checkbox" name="enabled" defaultChecked={inventory.policy?.enabled ?? false} /> Automatsko knjiženje na Ananas lager</label>
+          <label className="mr-5 text-sm"><input type="checkbox" name="allowNegative" defaultChecked={inventory.policy?.allowNegative ?? true} /> Privremeno dozvoli minus dok unosimo prijemnice</label>
+          <SubmitButton>Sačuvaj Ananas lager</SubmitButton>
+        </AdminActionForm>
+        <AnanasInventoryRunner enabled={Boolean(configured && inventory.policy?.enabled)} />
+        <ul className="mt-3 text-sm text-red-700">{inventory.errors.map(error => <li key={error.id}>{error.fiscalNumber}: {error.inventoryError}</li>)}</ul>
+      </Card>
       <AnanasSummary period={period} />
       <Card>
         <CardTitle>Povezivanje i preuzimanje</CardTitle>
-        <p className="mb-4 text-sm text-ink-500">Automatsko preuzimanje radi svakog sata i ponovo proverava prethodnih 7 dana. Ručno možete uvesti do 31 dan odjednom. Ponovni uvoz ne duplira račune. Uvoz ne pravi nove porudžbine i ne menja lager.</p>
+        <p className="mb-4 text-sm text-ink-500">Automatsko preuzimanje radi svakog sata i ponovo proverava prethodnih 7 dana. Ručno možete uvesti do 31 dan odjednom. Ponovni uvoz ne duplira račune. Kada je Ananas knjiženje uključeno, fiskalni računi i refundacije menjaju Ananas lager.</p>
         {!configured && <p className="mb-4 text-sm text-red-700">Produkcioni API pristup nije podešen na serveru.</p>}
         {configured && !canImport && <p className="mb-4 text-sm">Za ručni uvoz skratite izabrani period na najviše 31 dan.</p>}
         <AdminActionForm action={importAnanas} refreshOnSuccess>
