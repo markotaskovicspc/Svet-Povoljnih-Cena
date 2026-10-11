@@ -3,6 +3,12 @@ import { z } from "zod";
 import { isFiscalService } from "@/lib/admin/fiscal-merchandise";
 
 export const ANANAS_INVENTORY_START = "2025-05-31T22:00:00.000Z"; // June 1, Belgrade
+// Marko confirmed the legacy numeric article migration: 1145 -> 110145.
+// Keep source SKUs in the fiscal fingerprint and idempotency identity.
+export function ananasInventorySku(sku: string) {
+  const value = sku.trim();
+  return /^\d{4}$/.test(value) ? `${value[0]}10${value.slice(1)}` : value;
+}
 const item = z.object({ sku: z.string(), name: z.string(), quantity: z.number().int().positive().max(1000000) });
 export function ananasInventoryPlan(kind: string, items: unknown) {
   if (kind !== "SALE" && kind !== "REFUND") throw new Error("Nepoznat tip Ananas dokumenta.");

@@ -59,13 +59,12 @@ export default async function AnanasPage({ searchParams }: { searchParams: Promi
       <Card>
         <CardTitle>Ananas lager od 1. juna 2025.</CardTitle>
         <p className="mb-3 text-sm">Fiskalni računi skidaju robu samo sa magacina Ananas. Refundacije odmah vraćaju robu. Ponovna obrada ne ponavlja knjiženje. Istorija se nastavlja od poslednjeg sačuvanog perioda.</p>
-        <p className="mb-3 text-sm">Knjiženo: <strong>{inventory.posted}</strong> dokumenata. Čeka knjiženje: <strong>{inventory.pending}</strong>. Artikli u minusu: <strong>{inventory.negatives}</strong>. Istorija preuzeta do: {inventory.policy ? date(new Date(inventory.policy.historyThrough)) : "nije pokrenuta"}.</p>
         <AdminActionForm action={saveAnanasInventory} refreshOnSuccess>
           <label className="mr-5 text-sm"><input type="checkbox" name="enabled" defaultChecked={inventory.policy?.enabled ?? false} /> Automatsko knjiženje na Ananas lager</label>
           <label className="mr-5 text-sm"><input type="checkbox" name="allowNegative" defaultChecked={inventory.policy?.allowNegative ?? true} /> Privremeno dozvoli minus dok unosimo prijemnice</label>
           <SubmitButton>Sačuvaj Ananas lager</SubmitButton>
         </AdminActionForm>
-        <AnanasInventoryRunner enabled={Boolean(configured && inventory.policy?.enabled)} />
+        <AnanasInventoryRunner enabled={Boolean(configured && inventory.policy?.enabled)} initialStatus={{ postedTotal: inventory.posted, pendingTotal: inventory.pending, negatives: inventory.negatives, through: inventory.policy?.historyThrough ?? null }} />
         <ul className="mt-3 text-sm text-red-700">{inventory.errors.map(error => <li key={error.id}>{error.fiscalNumber}: {error.inventoryError}</li>)}</ul>
       </Card>
       <AnanasSummary period={period} />
