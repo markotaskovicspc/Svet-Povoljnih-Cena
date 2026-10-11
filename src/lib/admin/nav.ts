@@ -87,6 +87,7 @@ export const adminNav: AdminNavGroup[] = [
         label: "Prodajni nalozi",
         allowed: O,
       },
+      { href: "/admin/erp/porudzbina-iz-chata", label: "Print screen poručivanje", allowed: O },
       { href: "/admin/erp/otpremnice", label: "Otpremnice", allowed: O },
       { href: "/admin/erp/kupci", label: "Kupci i partneri", allowed: O },
       {
@@ -298,6 +299,9 @@ export function applyAdminNavPreferences(
     preferences.visibleHrefs.filter((href) => byHref.has(href)),
   );
   if (byHref.has("/admin")) visible.add("/admin");
+  // Show the new order-import tab in menus saved before this feature existed.
+  const importHref = "/admin/erp/porudzbina-iz-chata";
+  if (byHref.has(importHref) && !preferences.order.includes(importHref)) visible.add(importHref);
 
   // Existing menus predate saved shortcuts, and newly pinned views must appear
   // without requiring another menu save. Keep their default placement until

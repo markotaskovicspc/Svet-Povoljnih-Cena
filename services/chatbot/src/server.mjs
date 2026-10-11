@@ -1,3 +1,4 @@
+import {extractOrderImport,orderImportInputSchema} from './order-import.mjs';
 import {operatorAction} from './operator-action.mjs';
 import {operatorConversations,operatorConversation} from './operator-reader.mjs';
 import http from 'node:http';
@@ -11,6 +12,7 @@ import {verifiedConversationLink} from './inbox-link.mjs';
 import {suppliedContact} from './staff-order.mjs';
 
 export async function createHttpServer({store,worker,emailWorker,commentWorker,accounts,adminToken,appSecret,verifyToken,websiteSecret}) {
+let orderImportActive=0;
 const page=await readFile(new URL('../public/index.html',import.meta.url));
 const server=http.createServer(async(req,res)=>{
   res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');
@@ -26,13 +28,20 @@ const server=http.createServer(async(req,res)=>{
     }
     if(req.method==='GET'&&url.pathname==='/'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'"});return res.end(page);}
     const isWebhook=req.method==='POST'&&url.pathname==='/webhooks/meta';
-    const operatorWrite=req.method==='POST'&&url.pathname==='/operator/action';
+    const orderImport=req.method==='POST'&&url.pathname==='/operator/order-import';
+    const operatorWrite=req.method==='POST'&&(url.pathname==='/operator/action'||orderImport);
     const operatorRead=req.method==='GET'&&['/operator/conversations','/operator/conversation'].includes(url.pathname);
     if(!isWebhook&&(((operatorRead||operatorWrite)&&!websiteSecret)||!equal(req.headers.authorization,`Bearer ${(operatorRead||operatorWrite)?websiteSecret:adminToken}`)))return reply(401,{error:'Unauthorized'});
     if(operatorRead){try{const data=url.pathname==='/operator/conversations'?await operatorConversations(store,url):await operatorConversation(store,url);return reply(data?200:404,data??{error:'Not found'});}catch{return reply(400,{error:'Invalid query'});}}
     let bytes=0;const chunks=[];
-    for await(const chunk of req){bytes+=chunk.length;if(bytes>256*1024)return reply(413,{error:'Too large'});chunks.push(chunk);}
+    for await(const chunk of req){bytes+=chunk.length;if(bytes>(orderImport?4*1024*1024:256*1024))return reply(413,{error:'Too large'});chunks.push(chunk);}
     const raw=Buffer.concat(chunks);
+    if(orderImport){
+      let body;try{body=orderImportInputSchema.parse(JSON.parse(raw));}catch{return reply(400,{error:'Invalid input'});}
+      if(orderImportActive>=2)return reply(429,{error:'Čitanje je zauzeto. Pokušajte za nekoliko sekundi.'});
+      orderImportActive++;
+      try{return reply(200,{ok:true,draft:await extractOrderImport(body,worker.model)});}catch{console.error('order_import.extraction_failed');return reply(502,{error:'Čitanje nije uspelo. Pokušajte ponovo.'});}finally{orderImportActive--;}
+    }
     if(operatorWrite){const result=await operatorAction({store,worker,body:JSON.parse(raw)});return reply(result.status,result.data);}
     if(req.method==='GET'&&url.pathname==='/admin/email-drafts'){
       if(!emailWorker||emailWorker.status==='disabled')return reply(200,{status:'disabled'});

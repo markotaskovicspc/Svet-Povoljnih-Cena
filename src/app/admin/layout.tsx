@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { Store } from "lucide-react";
 import { signOut } from "@/lib/auth/auth";
 import { getCurrentAdmin } from "@/lib/auth/session";
 import { db } from "@/lib/db";
@@ -124,12 +125,16 @@ export default async function AdminLayout({
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <AdminThemeToggle />
+                {canReceiveOrderPush(user.role) && <OrderNotifications adminId={user.id} />}
                 <Link
                   href="/"
-                  className="hidden text-xs text-ink-500 hover:text-walnut sm:inline"
+                  className="inline-flex h-8 w-9 items-center justify-center rounded-lg border border-border bg-background transition hover:bg-muted"
+                  aria-label="Otvori prodavnicu"
+                  title="Otvori prodavnicu"
                   target="_blank"
+                  rel="noopener noreferrer"
                 >
-                  Otvori prodavnicu →
+                  <Store className="size-4" aria-hidden />
                 </Link>
                 <form action={doSignOut}>
                   <Button type="submit" variant="outline" size="sm">
@@ -138,7 +143,6 @@ export default async function AdminLayout({
                 </form>
               </div>
             </div>
-            {canReceiveOrderPush(user.role) && <OrderNotifications adminId={user.id} />}
             {children}
           </div>
         </div>
