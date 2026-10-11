@@ -40,13 +40,14 @@ export async function importAnanasOrders(_: AdminActionState, form: FormData): P
 }
 
 export async function importAnanas(_: AdminActionState, form: FormData): Promise<AdminActionState> {
+  const deadline = Date.now() + 210000;
   return withAdminState({ allowed: ["OPS"], action: "ananas.import", entity: "AnanasSyncRun" }, async () => {
     const from = String(form.get("from") ?? ""), to = String(form.get("to") ?? "");
     const period = resolveReportPeriod({ range: "custom", from, to });
     if (period.preset !== "custom") return { ok: false, message: "Izaberite ispravan period." };
     try {
       const result = await syncAnanasDocuments(period.start, period.endExclusive);
-      const inventory = await postPendingAnanasInventory();
+      const inventory = await postPendingAnanasInventory(40, undefined, deadline);
       revalidatePath("/admin/erp/ananas");
       revalidatePath("/admin");
       return { ok: true, entityId: result.runId, message: `Uvoz završen: ${result.count} dokumenata. Knjiženo na Ananas lager: ${inventory.posted}; za proveru: ${inventory.failed}. Postojeći računi nisu duplirani.` };
