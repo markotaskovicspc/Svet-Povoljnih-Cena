@@ -24,7 +24,7 @@ export async function advanceAnanasInventoryHistory(actorId?: string, now = new 
     // A source sync has its own 180s API + 90s storage bounds. If draining
     // inventory used time, fetch the next interval in a fresh invocation.
     if (!waiting && Date.now() - started < 20000 && new Date(through) < now) {
-      const from = new Date(through), to = new Date(Math.min(now.getTime(), from.getTime() + 7 * 86400000));
+      const from = new Date(through), to = new Date(Math.min(now.getTime(), from.getTime() + 3 * 86400000));
       imported = (await syncAnanasDocuments(from, to, "INVENTORY_HISTORY")).count;
       through = to.toISOString();
     }

@@ -28,7 +28,7 @@ import {
   guaranteeItemsForOrder,
 } from "./guarantee-pdf";
 import { trackedDispatch } from "./tracking";
-import { buildEmailUnsubscribeUrl } from "./unsubscribe";
+import { type EmailUnsubscribePayload, buildEmailUnsubscribeUrl } from "./unsubscribe";
 
 /**
  * Phase 4D — typed senders the rest of the codebase calls.
@@ -560,7 +560,15 @@ interface AlertProduct {
   salePrice?: number | null;
 }
 
+export async function sendRestockWaitlistAlert(args: { to: string; subscriptionId: string; requestedAt: Date; product: AlertProduct }) {
+  return sendProductAlert({ kind: "back_in_stock", to: args.to, userId: args.subscriptionId,
+    product: args.product, unsubscribe: { purpose: "restock", subscriptionId: args.subscriptionId },
+    idempotencyKey: `restock:${args.subscriptionId}:${args.requestedAt.getTime()}` });
+}
+
 async function sendProductAlert(args: {
+  unsubscribe?: EmailUnsubscribePayload;
+  idempotencyKey?: string;
   kind: "back_in_stock" | "on_sale";
   to: string;
   userId: string;
@@ -569,7 +577,7 @@ async function sendProductAlert(args: {
   if (!args.to) return NULL;
   const cfg = getEmailConfig();
   const productUrl = `${cfg.baseUrl}/p/${encodeURIComponent(args.product.slug)}`;
-  const manageUrl = buildEmailUnsubscribeUrl({
+  const manageUrl = buildEmailUnsubscribeUrl(args.unsubscribe ?? {
     purpose: "alert",
     userId: args.userId,
     productId: args.product.id,
@@ -601,7 +609,7 @@ async function sendProductAlert(args: {
       kind: args.kind,
       product: args.product.sku,
     },
-    idempotencyKey: `${args.kind}:${args.userId}:${args.product.id}`,
+    idempotencyKey: args.idempotencyKey ?? `${args.kind}:${args.userId}:${args.product.id}`,
   });
 }
 

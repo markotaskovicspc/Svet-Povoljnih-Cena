@@ -1,31 +1,17 @@
 import "server-only";
 
 import type { Prisma } from "@prisma/client";
+import { processRestockWaitlist } from "./restock";
 import { db } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
 import {
-  sendBackInStockAlert,
   sendOnSaleAlert,
 } from "./send";
 import { isEmailSuppressed } from "./tracking";
 import { formatProductDisplayName } from "@/lib/product-name";
 
 export async function processEmailAlerts(limit = 100) {
-  const [backInStock, onSale] = await Promise.all([
-    db.backInStockAlert.findMany({
-      where: {
-        notifiedAt: null,
-        channel: "EMAIL",
-        product: { isActive: true, stock: { gt: 0 } },
-      },
-      take: limit,
-      orderBy: { createdAt: "asc" },
-      include: {
-        user: { select: { id: true, email: true, deletedAt: true } },
-        product: alertProductSelect,
-      },
-    }),
-    db.onSaleAlert.findMany({
+  const onSale = await db.onSaleAlert.findMany({
       where: {
         notifiedAt: null,
         channel: "EMAIL",
@@ -37,37 +23,12 @@ export async function processEmailAlerts(limit = 100) {
         user: { select: { id: true, email: true, deletedAt: true } },
         product: alertProductSelect,
       },
-    }),
-  ]);
+    });
+  const restock = await processRestockWaitlist(limit);
 
   let sent = 0;
   let failed = 0;
   let skipped = 0;
-
-  for (const alert of backInStock) {
-    if (!alert.user.email || alert.user.deletedAt) {
-      skipped += 1;
-      continue;
-    }
-    if (await isEmailSuppressed(alert.user.email).catch(() => false)) {
-      skipped += 1;
-      continue;
-    }
-    const result = await sendBackInStockAlert({
-      to: alert.user.email,
-      userId: alert.user.id,
-      product: productForEmail(alert.product),
-    });
-    if (result.ok) {
-      await db.backInStockAlert.update({
-        where: { id: alert.id },
-        data: { notifiedAt: new Date() },
-      });
-      sent += 1;
-    } else {
-      failed += 1;
-    }
-  }
 
   for (const alert of onSale.filter((a) => isProductOnSale(a.product))) {
     if (!alert.user.email || alert.user.deletedAt) {
@@ -95,10 +56,11 @@ export async function processEmailAlerts(limit = 100) {
   }
 
   return {
-    scanned: backInStock.length + onSale.length,
-    sent,
-    failed,
-    skipped,
+    scanned: restock.scanned + onSale.length,
+    sent: sent + restock.sent,
+    failed: failed + restock.review,
+    skipped: skipped + restock.skipped,
+    restock,
   };
 }
 

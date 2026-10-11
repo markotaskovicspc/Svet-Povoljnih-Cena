@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { getEmailConfig } from "./config";
 
 export type EmailUnsubscribePayload =
+  | { purpose: "restock"; subscriptionId: string; exp?: number }
   | {
       purpose: "newsletter";
       email: string;
@@ -141,6 +142,21 @@ export async function applyEmailUnsubscribe(payload: EmailUnsubscribePayload) {
     };
   }
 
+  if (payload.purpose === "restock") {
+    const subscription = await db.restockSubscription.updateMany({
+      where: { id: payload.subscriptionId }, data: { status: "CANCELLED", cancelledAt: new Date() },
+    });
+    const row = await db.restockSubscription.findUnique({ where: { id: payload.subscriptionId } });
+    if (row?.userId) await db.$transaction([
+      db.backInStockAlert.deleteMany({ where: { userId: row.userId, productId: row.productId } }),
+      db.wishlistItem.updateMany({ where: { userId: row.userId, productId: row.productId }, data: { notifyOnRestock: false } }),
+    ]);
+    return { ok: true as const, email: null, kind: "alert" as const, changed: subscription.count };
+  }
+  if (payload.alert === "back_in_stock") await db.restockSubscription.updateMany({
+    where: { userId: payload.userId, productId: payload.productId },
+    data: { status: "CANCELLED", cancelledAt: new Date() },
+  });
   const data =
     payload.alert === "back_in_stock"
       ? await db.$transaction([

@@ -20,10 +20,22 @@
     "RABALUX_X_EXPRESS_LONGITUDE": "19.7837926"
   },
   "crons": [
-    { "path": "/api/cron/ananas-inventory", "schedule": "*/5 * * * *" },
-    { "path": "/api/cron/sef", "schedule": "40 * * * *" },
-    { "path": "/api/cron/ananas-orders", "schedule": "7,22,37,52 * * * *" },
-    { "path": "/api/cron/ananas", "schedule": "25 * * * *" },
+    {
+      "path": "/api/cron/ananas-inventory",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/sef",
+      "schedule": "40 * * * *"
+    },
+    {
+      "path": "/api/cron/ananas-orders",
+      "schedule": "7,22,37,52 * * * *"
+    },
+    {
+      "path": "/api/cron/ananas",
+      "schedule": "25 * * * *"
+    },
     {
       "path": "/api/cron/background-jobs",
       "schedule": "*/5 * * * *"
@@ -71,6 +83,10 @@
     {
       "path": "/api/cron/rabalux/catalog",
       "schedule": "17 2 * * *"
+    },
+    {
+      "path": "/api/cron/restock",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
