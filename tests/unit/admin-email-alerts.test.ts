@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   backgroundJobs: vi.fn(),
@@ -38,6 +38,13 @@ import {
 } from "@/lib/email/admin-alerts";
 
 describe("urgent SUPER admin email alerts", () => {
+  afterEach(() => vi.unstubAllEnvs());
+  it("does not scan or send when the urgent digest is explicitly disabled", async () => {
+    vi.stubEnv("URGENT_ADMIN_ALERTS_ENABLED", "false");
+    expect(await processUrgentAdminAlerts()).toMatchObject({ disabled: true, sent: 0, recipients: 0 });
+    expect(mocks.trackedDispatch).not.toHaveBeenCalled();
+    expect(mocks.backgroundJobs).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.backgroundJobs.mockResolvedValue([]);

@@ -165,6 +165,9 @@ async function loadUrgentIncidents(): Promise<UrgentIncident[]> {
 }
 
 export async function processUrgentAdminAlerts() {
+  if (process.env.URGENT_ADMIN_ALERTS_ENABLED === "false") {
+    return { scanned: 0, recipients: 0, sent: 0, failed: 0, skipped: 0, disabled: true };
+  }
   const [incidents, allSuperAdmins, setting, recipientSetting] = await Promise.all([
     loadUrgentIncidents(),
     db.adminUser.findMany({
