@@ -30,7 +30,16 @@ it("posts historical Ananas sales/refunds once, permits a scoped minus, and pres
     await postAnanasDocumentInventory(refund.id);
     expect((await db.product.findUniqueOrThrow({ where: { id: product.id } })).deletedAt).toEqual(archivedAt);
     expect((await db.warehouseStock.findUniqueOrThrow({ where: { warehouseId_productId: { warehouseId: warehouse.id, productId: product.id } } })).qty).toBe(-15);
-    await db.$transaction(tx => adjustInventory(tx, { idempotencyKey: `${prefix}-RECEIPT`, warehouseId: warehouse.id, productId: product.id, qtyDelta: 16, kind: "PURCHASE_RECEIPT", note: "QA" }));
+    // Ananas can reuse invoiceId for two distinct fiscal refunds. Both must
+    // restore inventory exactly once; reprocessing either must remain harmless.
+    const correction = await document("REFUND", 2, "REFUND-CORRECTION");
+    await db.ananasDocument.update({ where: { id: correction.id }, data: { externalId: refund.externalId } });
+    await postAnanasDocumentInventory(correction.id);
+    await postAnanasDocumentInventory(refund.id);
+    await postAnanasDocumentInventory(correction.id);
+    expect((await db.warehouseStock.findUniqueOrThrow({ where: { warehouseId_productId: { warehouseId: warehouse.id, productId: product.id } } })).qty).toBe(-13);
+    expect(await db.stockMovement.count({ where: { idempotencyKey: { startsWith: `ananas-fiscal:${correction.id}:` } } })).toBe(1);
+    await db.$transaction(tx => adjustInventory(tx, { idempotencyKey: `${prefix}-RECEIPT`, warehouseId: warehouse.id, productId: product.id, qtyDelta: 14, kind: "PURCHASE_RECEIPT", note: "QA" }));
     expect((await db.warehouseStock.findUniqueOrThrow({ where: { warehouseId_productId: { warehouseId: warehouse.id, productId: product.id } } })).qty).toBe(1);
     await configureAnanasInventory(true, false, "QA");
     const tooMany = await document("SALE", 2, "STRICT");

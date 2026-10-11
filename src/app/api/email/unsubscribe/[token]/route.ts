@@ -53,14 +53,14 @@ export async function POST(
 }
 
 function titleFor(purpose: string) {
-  if (purpose === "alert") return "Isključivanje obaveštenja";
+  if (purpose === "alert" || purpose === "restock") return "Isključivanje obaveštenja za artikal";
   if (purpose === "cart_recovery") return "Isključivanje podsetnika za korpu";
   if (purpose === "marketing") return "Odjava od promotivnih mejlova";
   return "Odjava od newslettera";
 }
 
 function textFor(purpose: string) {
-  if (purpose === "alert") {
+  if (purpose === "alert" || purpose === "restock") {
     return "Potvrdite da želite da isključite ovo obaveštenje za proizvod.";
   }
   if (purpose === "marketing") {

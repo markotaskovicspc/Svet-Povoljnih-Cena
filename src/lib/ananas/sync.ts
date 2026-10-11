@@ -41,17 +41,24 @@ export async function syncAnanasDocuments(from: Date, to: Date, source: "MANUAL"
       ...sales.map(row => normalizeAnanasDocument(row, "SALE", MERCHANT_LEGAL_INFO.pib)),
       ...refunds.map(row => normalizeAnanasDocument(row, "REFUND", MERCHANT_LEGAL_INFO.pib)),
     ];
-    const documents = [...new Map(normalized.map(document => [`${document.kind}:${document.externalId}`, document])).values()];
+    const documents = [...new Map(normalized.map(document => [`${document.kind}:${document.fiscalNumber}`, document])).values()];
     // Atomic per period, deduplicated by provider document identity.
     stage = "upis dokumenata";
     await db.$transaction(async tx => {
       for (const data of documents) {
-        await tx.$queryRaw`SELECT id FROM "AnanasDocument" WHERE kind = ${data.kind} AND "externalId" = ${data.externalId} FOR UPDATE`;
-        const existing = await tx.ananasDocument.findUnique({ where: { kind_externalId: { kind: data.kind, externalId: data.externalId } } });
+        await tx.$queryRaw`SELECT id FROM "AnanasDocument" WHERE kind = ${data.kind} AND "fiscalNumber" = ${data.fiscalNumber} FOR UPDATE`;
+        const existing = await tx.ananasDocument.findUnique({ where: { kind_fiscalNumber: { kind: data.kind, fiscalNumber: data.fiscalNumber } } });
         if (existing?.inventoryPostedAt && existing.inventoryFingerprint !== ananasInventoryPlan(data.kind, data.items).fingerprint) {
-          throw new Error("Ananas stavke već knjiženog dokumenta su promenjene. Potrebna je kontrola.");
+          console.error("ananas.inventory.document-conflict", {
+            documentId: existing.id, kind: data.kind, externalId: data.externalId,
+            storedFiscalNumber: existing.fiscalNumber, incomingFiscalNumber: data.fiscalNumber,
+            storedLines: ananasInventoryPlan(existing.kind, existing.items).lines,
+            incomingLines: ananasInventoryPlan(data.kind, data.items).lines,
+            storedFingerprint: existing.inventoryFingerprint,
+          });
+          throw new Error(`Ananas stavke već knjiženog dokumenta ${existing.fiscalNumber} (${existing.id}) su promenjene. Potrebna je kontrola.`);
         }
-        await tx.ananasDocument.upsert({ where: { kind_externalId: { kind: data.kind, externalId: data.externalId } }, create: data, update: data });
+        await tx.ananasDocument.upsert({ where: { kind_fiscalNumber: { kind: data.kind, fiscalNumber: data.fiscalNumber } }, create: data, update: data });
       }
       await tx.ananasSyncRun.update({ where: { id: run.id }, data: { status: "SUCCESS", count: documents.length, finishedAt: new Date() } });
     }, { timeout: 90000 });

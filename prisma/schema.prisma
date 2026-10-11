@@ -4049,7 +4049,8 @@ model AnanasDocument {
   inventoryFingerprint String?
   inventoryError String? @db.Text
 
-  @@unique([kind, externalId])
+  // Ananas reuses invoiceId across separate fiscal corrections.
+  @@index([kind, externalId])
   @@unique([kind, fiscalNumber])
   @@index([issuedAt, kind])
   @@index([suborderNumber])

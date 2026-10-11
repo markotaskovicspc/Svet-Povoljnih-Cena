@@ -1,0 +1,33 @@
+import { beforeEach, expect, it, vi } from "vitest";
+const m = vi.hoisted(() => ({ policy: vi.fn(), post: vi.fn(), sync: vi.fn(), update: vi.fn(), state: {} as Record<string, unknown> }));
+vi.mock("@/lib/ananas/inventory.server", () => ({ ANANAS_INVENTORY_KEY: "ananas-inventory", getAnanasInventoryPolicy: m.policy, postPendingAnanasInventory: m.post }));
+vi.mock("@/lib/ananas/sync", () => ({ syncAnanasDocuments: m.sync }));
+vi.mock("@/lib/db", () => ({ db: {
+  $transaction: async (fn: (tx: unknown) => unknown) => fn({ $queryRaw: vi.fn(), adminSetting: {
+    update: m.update, findUniqueOrThrow: async () => ({ value: m.state }), findUnique: async () => ({ value: m.state }),
+  } }),
+  ananasDocument: { count: async () => 0 }, warehouseStock: { count: async () => 0 },
+} }));
+import { advanceAnanasInventoryHistory } from "@/lib/ananas/inventory-history.server";
+const start = "2025-05-31T22:00:00.000Z";
+beforeEach(() => {
+  vi.resetAllMocks();
+  m.state = { enabled: true, allowNegative: true, warehouseId: "ananas", historyThrough: "2026-02-21T22:00:00.000Z" };
+  m.policy.mockImplementation(async () => m.state);
+  m.update.mockImplementation(async ({ data }) => { m.state = data.value; return { value: m.state }; });
+  m.post.mockResolvedValue({ posted: 0, failed: 0 }); m.sync.mockResolvedValue({ count: 0 });
+});
+it("rescans from June once to recover refunds omitted by the former invoiceId identity", async () => {
+  await advanceAnanasInventoryHistory(undefined, new Date("2026-10-11Z"));
+  expect(m.sync).toHaveBeenCalledWith(new Date(start), new Date("2025-06-03T22:00:00.000Z"), "INVENTORY_HISTORY");
+  expect(m.state.documentIdentityVersion).toBe(2);
+  expect(m.state.allowNegative).toBe(true);
+  expect(m.state.warehouseId).toBe("ananas");
+  await advanceAnanasInventoryHistory(undefined, new Date("2026-10-11Z"));
+  expect(m.sync.mock.calls[1][0]).toEqual(new Date("2025-06-03T22:00:00.000Z"));
+});
+it("preserves the saved checkpoint once fiscal-number rescan has started", async () => {
+  m.state.documentIdentityVersion = 2;
+  await advanceAnanasInventoryHistory(undefined, new Date("2026-10-11Z"));
+  expect(m.sync.mock.calls[0][0]).toEqual(new Date("2026-02-21T22:00:00.000Z"));
+});

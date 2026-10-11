@@ -7,7 +7,7 @@ import { ananasInventoryPlan, ananasInventorySku, ANANAS_INVENTORY_START } from 
 
 export const ANANAS_INVENTORY_KEY = "ananas-inventory";
 const policySchema = z.object({ enabled: z.boolean(), allowNegative: z.boolean(), warehouseId: z.string(),
-  historyThrough: z.string().datetime(), leaseToken: z.string().optional(), leaseUntil: z.string().datetime().optional() });
+  historyThrough: z.string().datetime(), leaseToken: z.string().optional(), leaseUntil: z.string().datetime().optional(), documentIdentityVersion: z.literal(2).optional() });
 export type AnanasInventoryPolicy = z.infer<typeof policySchema>;
 export async function getAnanasInventoryPolicy(database: Prisma.TransactionClient = db) {
   const setting = await database.adminSetting.findUnique({ where: { key: ANANAS_INVENTORY_KEY } });

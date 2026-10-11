@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
 import { syncAnanasDocuments } from "./sync";
 import { ANANAS_INVENTORY_KEY, getAnanasInventoryPolicy, postPendingAnanasInventory } from "./inventory.server";
+import { ANANAS_INVENTORY_START } from "./inventory-plan";
 
 // API windows and stock transactions are individually resumable. A lease prevents
 // the browser and cron advancing the same history interval concurrently.
@@ -13,8 +14,14 @@ export async function advanceAnanasInventoryHistory(actorId?: string, now = new 
     const current = await getAnanasInventoryPolicy(tx);
     if (!current?.enabled) throw new Error("Ananas knjiženje nije uključeno.");
     if (current.leaseUntil && new Date(current.leaseUntil).getTime() > Date.now()) throw new Error("Ananas istorija se već obrađuje. Sačekajte završetak.");
-    await tx.adminSetting.update({ where: { key: ANANAS_INVENTORY_KEY }, data: { value: { ...current, leaseToken: token, leaseUntil: new Date(Date.now() + 360000).toISOString() } } });
-    return current;
+    // Rescan once after changing provider identity from invoiceId to fiscal number.
+    // Earlier corrections sharing invoiceId may have been omitted. Existing posted
+    // fiscal documents keep their ids and movements, so the rescan cannot repost them.
+    const effective = current.documentIdentityVersion === 2 ? current : {
+      ...current, historyThrough: ANANAS_INVENTORY_START, documentIdentityVersion: 2 as const,
+    };
+    await tx.adminSetting.update({ where: { key: ANANAS_INVENTORY_KEY }, data: { value: { ...effective, leaseToken: token, leaseUntil: new Date(Date.now() + 360000).toISOString() } } });
+    return effective;
   });
   let imported = 0;
   try {
