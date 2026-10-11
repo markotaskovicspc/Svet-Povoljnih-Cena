@@ -189,8 +189,8 @@ No synthetic email or email membership is created for conversation-only consent.
 Deploy the SPC integration API before the worker changes for nullable loyalty email.
 
 When a customer asks for a person or an ordinary handoff is queued, the worker
-asks once for an optional callback email, reusing customer-supplied contact when
-available. A refusal does not block the handoff. The encrypted conversation state
+asks once for an optional callback email only in web conversations, reusing customer-supplied contact when
+available. Facebook and Instagram support replies stay in the same conversation and do not request a callback email. A refusal does not block the web handoff. The encrypted conversation state
 and support outbox hold the contact; a later supplied email triggers a contact
 update even if the initial support notification was sent already. Support receives
 the transcript, protected ERP conversation link, and callback email as Reply-To.

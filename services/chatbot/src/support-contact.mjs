@@ -10,6 +10,10 @@ export function wantsHuman(text){
  return /(?:prav[auoe]+ (?:osob|podrsk)|pomoc prave osobe|(?:zelim|hocu|trazim|treba mi|potrebna mi je|dajte mi|spojite me|razgovaram sa).{0,40}(?:covek|coveka|osob|operater|koleg|zaposlen)|(?:human|real person|live agent)|(?:стварн|прав).{0,15}(?:особ|подршк)|(?:желим|хоћу|треба ми).{0,30}(?:човек|оператер))/.test(t);
 }
 export function requestSupportContact({state,event}){
+ if(event.channel!=='web'){
+  if(state.supportContact?.waiting)state.supportContact={...state.supportContact,waiting:false};
+  return null;
+ }
  if(state.supportContact?.email||state.supportContact?.declined||state.supportContact?.askedAt)return null;
  const email=customerEmail(event.text)||state.customer?.guestEmail||[...(state.history??[])].reverse().filter(m=>m.role==='user').map(m=>customerEmail(m.content)).find(Boolean);
  if(email&&emailSchema.safeParse(email).success){
@@ -20,6 +24,8 @@ export function requestSupportContact({state,event}){
  return 'Ako želite odgovor mejlom, na koju adresu korisnička podrška može da Vam se javi? Možete nastaviti i ovde u razgovoru.';
 }
 export function receiveSupportContact({state,event}){
+ // Old social conversations may still be waiting for the former callback question.
+ if(event.channel!=='web'&&state.supportContact?.waiting)state.supportContact={...state.supportContact,waiting:false};
  // Do not interrupt reconciliation of an ERP write with an ordinary lead flow.
  if(state.confirming||state.cancelling||state.submittingReclamation||state.reclamationInFlight||state.operatorOrder)return null;
  if(state.supportContact?.waiting){
@@ -42,9 +48,9 @@ export function receiveSupportContact({state,event}){
 
 // The worker owns the optional callback question. Remove only duplicate email
 // questions from model prose, keeping the actual answer and other questions.
-export function appendSupportContact(message,question){
- if(!question)return message;
+export function appendSupportContact(message,question,{channel='web'}={}){
+ if(!question&&channel==='web')return message;
  const sentences=String(message??'').split(/(?<=[.!?])\s+/);
  const answer=sentences.filter(s=>!(/\?/.test(s)&&/(?:mejl|email|e-mail)/i.test(s))).join(' ').trim();
- return [answer,question].filter(Boolean).join('\n\n');
+ return [answer,question].filter(Boolean).join('\n\n')||'Prosledio sam Vaš upit korisničkoj podršci. Odgovor možete proveriti ovde u razgovoru.';
 }

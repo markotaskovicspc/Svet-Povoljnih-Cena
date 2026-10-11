@@ -619,7 +619,7 @@ test('ordinary model failure notifies support once and keeps next customer messa
   for(let n=0;n<3;n++){await store.pool.query('UPDATE spc_chat_events SET next_at=now() WHERE id=$1',[event.id]);await worker.tick();}
   let row=(await store.pool.query('SELECT * FROM spc_chat_conversations')).rows[0];assert.equal(row.paused,false);assert.equal(store.decode(row.state).orders.length,0);
   assert.equal(calls.filter(c=>c.action==='support_handoff').length,1);assert.equal(calls.filter(c=>c.action==='create_order').length,0);
-  const replies=(await store.pool.query('SELECT payload FROM spc_chat_outbox')).rows;assert.equal(replies.length,1);assert.match(store.decode(replies[0].payload).text,/Možete nastaviti/);
+  const replies=(await store.pool.query('SELECT payload FROM spc_chat_outbox')).rows;assert.equal(replies.length,1);assert.doesNotMatch(store.decode(replies[0].payload).text,/na koju adresu|odgovor mejlom/);
   worker.answerFn=async()=>({text:'Nastavljamo razgovor.',images:[]});worker.orderReplyCheckFn=async()=>null;
   await store.accept({...event,id:'facebook:after-error',text:'Moja adresa je...',timestamp:Date.now()});await worker.tick();
   row=(await store.pool.query('SELECT * FROM spc_chat_conversations')).rows[0];assert.equal(row.paused,false);
@@ -651,5 +651,19 @@ test('web human handoff captures email and sends a contact update after the firs
   assert.equal(notices.length,2);assert.equal(notices[1].callbackEmail,'buyer@example.com');assert.equal(notices[1].contactUpdate,true);
   row=(await store.pool.query('SELECT * FROM spc_chat_conversations')).rows[0];assert.equal(store.decode(row.state).supportContact.email,'buyer@example.com');
   assert.equal((await store.pool.query("SELECT count(*)::int AS n FROM spc_chat_support WHERE status='sent'")).rows[0].n,2);
+ }finally{await store.close();}
+});
+
+for(const channel of ['facebook','instagram'])test(`${channel} support handoff never asks for email and delivers the conversation link`,async()=>{
+ const {store,worker,event}=await setup(channel);const notices=[];
+ try{
+  await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
+  worker.spc=async p=>{notices.push(p);return {ok:true};};
+  worker.answerFn=async({state})=>{state.supportRequest={reason:'Proveriti materijal stolice URBAN SEAT'};return {text:'Prosledio sam pitanje o materijalu korisničkoj podršci. Na koju mejl adresu da Vam javimo?',images:[]};};
+  await store.accept({...event,id:channel+':material',text:'Da li je sedište od plastike?'});await worker.tick();
+  const row=(await store.pool.query('SELECT * FROM spc_chat_conversations')).rows[0];const state=store.decode(row.state);
+  assert.match(state.history.at(-1).content,/materijalu/);assert.doesNotMatch(state.history.at(-1).content,/mejl|email|na koju adresu/);
+  assert(!state.supportContact?.waiting);assert.equal(row.paused,false);assert.equal(notices.length,1);
+  assert.equal(notices[0].channel,channel);assert.equal(notices[0].conversationId,event.conversation);assert.equal(notices[0].callbackEmail,undefined);
  }finally{await store.close();}
 });
