@@ -131,6 +131,9 @@ const schemas = {
     dispatchKey: z.string().min(1).max(80).optional(),
   }),
   SUPPLIER_CANCEL_EMAIL: z.object({ fulfillmentId: z.string().min(1) }),
+  SEF_INBOX_DISCOVER: z.object({ day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), environment: z.enum(["demo", "production"]), actorId: z.string().nullable() }),
+  SEF_INBOX_DOWNLOAD: z.object({ ids: z.array(z.number().int().positive()).min(1).max(5), environment: z.enum(["demo", "production"]), actorId: z.string().nullable() }),
+  EOTPREMNICA_SEND: z.object({ id: z.string().min(1) }),
   SUPPLIER_RECLAMATION_EMAIL: z.object({ reclamationId: z.string().min(1) }),
 } as const;
 
@@ -510,6 +513,29 @@ async function dispatchJob(job: JobRow) {
   const payload = schemas[kind].parse(job.payload);
 
   switch (kind) {
+    case "SEF_INBOX_DISCOVER": {
+      const { discoverSefInvoices } = await import("@/lib/sef/documents.server");
+      const args = payload as z.infer<typeof schemas.SEF_INBOX_DISCOVER>;
+      await discoverSefInvoices(args.day, args.environment, args.actorId);
+      return;
+    }
+    case "SEF_INBOX_DOWNLOAD": {
+      const { downloadSefInvoices } = await import("@/lib/sef/documents.server");
+      const args = payload as z.infer<typeof schemas.SEF_INBOX_DOWNLOAD>;
+      await downloadSefInvoices(args.ids, args.environment, args.actorId);
+      return;
+    }
+    case "EOTPREMNICA_SEND": {
+      const { sendDispatchNoteToSef } = await import("@/lib/admin/dispatch-note.server");
+      const id = (payload as z.infer<typeof schemas.EOTPREMNICA_SEND>).id;
+      try { await sendDispatchNoteToSef(id); }
+      catch (error) {
+        const doc = await db.dispatchNote.findUnique({ where: { id }, select: { sefStatus: true } });
+        if (doc?.sefStatus === "UNKNOWN") throw new PermanentBackgroundJobError("Ishod eOtpremnica zahteva nije potvrđen. Potrebna je provera statusa.");
+        throw error;
+      }
+      return;
+    }
     case "ADMIN_ORDER_PUSH": {
       const { fanOutOrderPush } = await import("@/lib/admin/order-push.server");
       await fanOutOrderPush((payload as z.infer<typeof schemas.ADMIN_ORDER_PUSH>).orderId);

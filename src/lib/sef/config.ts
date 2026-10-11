@@ -77,6 +77,7 @@ export function requireSefConfig(
   if (gate.environment === "production" && parsed.protocol !== "https:") {
     throw new Error("Produkcijski SEF_BASE_URL mora koristiti HTTPS.");
   }
+  if (parsed.username || parsed.password || parsed.search || parsed.hash || parsed.pathname !== "/") throw new Error("SEF_BASE_URL mora biti korenska API adresa, bez /swagger putanje, parametara ili ključa.");
 
   return { environment: gate.environment, baseUrl, apiKey };
 }

@@ -23,7 +23,7 @@ GLS XLSX export sa `x:` XML prefiksom se normalizuje u memoriji jer ga ExcelJS d
 
 GLS COD import zahteva datum uplate; ne zamenjuje ga datumom dostave. GLS trošak zahteva obračunski datum (npr. 30.09.2026). Zbirni period koristi taj datum. Fiskalizovana dostava koristi ISSUED fiskalne stavke DOSTAVA i datum računa; refundacije umanjuju zbir. Stari FiscalReceipt bez fiskalnih stavki se broji kao nedostajući izvor, bez izmišljanja iznosa dostave iz sadašnje porudžbine. Porudžbine bez jedinstvenog kurira prikazane su kao neraspoređene, bez dupliranja među kuririma.
 
-X Express original je zasad slika; Marko potvrđuje da XLSX nema, a PDF dobija na SEF-u. Podržan je standardni obrazac; direktna SEF integracija i automatski OCR nisu deo ovog uvoza. Nema automatskog uvoza iz privatnog mejla niti menjanja stvarnih podataka pri testovima.
+X Express original je zasad slika; Marko potvrđuje da XLSX nema, a PDF dobija na SEF-u. Podržan je standardni obrazac. SEF preuzimanje originalnog XML-a i priloga, kao i uvoz ugrađenog CSV/XLSX-a, opisani su u [SEF integraciji](sef-integration.md). PDF se prepisuje u obrazac; automatski OCR nije implementiran. Nema automatskog uvoza iz privatnog mejla niti menjanja stvarnih podataka pri testovima.
 
 ## Provere i puštanje
 

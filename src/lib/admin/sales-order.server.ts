@@ -894,6 +894,7 @@ function ensureEditableOrder(order: {
   status: OrderStatus;
   invoices: unknown[];
   fiscalDocuments: unknown[];
+  sefDocuments?: unknown[];
   shipments: unknown[];
   dispatchNotes: unknown[];
   dispatchItemCount: number;
@@ -908,6 +909,7 @@ function ensureEditableOrder(order: {
   if (
     order.invoices.length ||
     order.fiscalDocuments.length ||
+    (order.sefDocuments?.length ?? 0) ||
     order.shipments.length ||
     order.dispatchNotes.length ||
     order.dispatchItemCount > 0
@@ -935,6 +937,7 @@ export async function updateManualSalesOrder(
       include: {
         invoices: { select: { id: true } },
         fiscalDocuments: { select: { id: true } },
+        sefDocuments: { where: { direction: "OUT", environment: "production", status: { notIn: ["DRAFT", "ERROR"] } }, select: { id: true } },
         shipments: { select: { id: true } },
         dispatchNotes: { select: { id: true } },
         items: {
@@ -1064,6 +1067,7 @@ export async function deleteManualSalesOrders(
         payments: { select: { status: true } },
         invoices: { select: { id: true } },
         fiscalDocuments: { select: { id: true } },
+        sefDocuments: { where: { direction: "OUT", environment: "production", status: { notIn: ["DRAFT", "ERROR"] } }, select: { id: true } },
         shipments: { select: { id: true } },
         dispatchNotes: { select: { id: true } },
         supplierFulfillments: { select: { sentAt: true } },

@@ -1398,6 +1398,7 @@ model Order {
   invoices             Invoice[]
   fiscal               FiscalReceipt?
   fiscalDocuments      FiscalDocument[]
+  sefDocuments         SefDocument[]
   paymentRefunds       PaymentRefund[]
   stockMovements       StockMovement[]
   reclamations         Reclamation[]
@@ -1879,6 +1880,44 @@ enum InvoiceStatus {
   EMAIL_SENT
   EMAIL_FAILED
   CANCELLED
+}
+
+/// SEF invoices are distinct from warehouse receipts and fiscal accounting copies.
+model SefDocument {
+  id            String   @id @default(cuid())
+  environment   String
+  direction     String
+  remoteId      String?
+  orderId       String?
+  requestId     String?  @unique
+  number        String
+  supplierName  String
+  supplierPib   String
+  customerName  String
+  customerPib   String
+  issueDate     DateTime
+  dueDate       DateTime?
+  currency      String   @default("RSD")
+  net           Decimal  @db.Decimal(12, 2)
+  vat           Decimal  @db.Decimal(12, 2)
+  gross         Decimal  @db.Decimal(12, 2)
+  xml           String   @db.Text
+  status        String   @default("DOWNLOADED")
+  error         String?  @db.Text
+  sentAt        DateTime?
+  inventoryPostedAt DateTime?
+  inventorySnapshot Json?
+  actorId       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  order Order? @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@unique([environment, direction, remoteId])
+  @@unique([environment, direction, orderId])
+  @@index([direction, issueDate])
+  @@index([supplierPib, issueDate])
+  @@index([status, updatedAt])
 }
 
 model Invoice {

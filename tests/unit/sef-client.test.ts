@@ -13,6 +13,38 @@ const config = {
 describe("SEF client", () => {
   beforeEach(() => vi.restoreAllMocks());
 
+  it.each([{ SalesInvoiceIds: [12, 34] }, [12, 34], { salesInvoiceIds: [12, 34] }])("accepts SEF list variants without rejecting HTTP 200", async body => {
+    const request = vi.fn(async () => new Response(JSON.stringify(body), { status: 200 }));
+    expect((await new SefClient(config, request).listSalesInvoiceIds({ dateFrom: new Date("2026-10-10"), dateTo: new Date("2026-10-11") })).salesInvoiceIds).toEqual([12, 34]);
+  });
+
+  it("does not mistake an HTML login page for a working API", async () => {
+    const request = vi.fn(async () => new Response("<!doctype html><html>login</html>", { status: 200 }));
+    await expect(new SefClient(config, request).healthCheck()).rejects.toThrow("SEF_BASE_URL");
+  });
+
+  it("reads incoming IDs with the same authentication boundary", async () => {
+    const request = vi.fn(async () => new Response(JSON.stringify({ PurchaseInvoiceIds: [20] }), { status: 200 }));
+    expect(await new SefClient(config, request).listPurchaseInvoiceIds({ dateFrom: new Date("2026-10-10"), dateTo: new Date("2026-10-11") })).toEqual([20]);
+  });
+
+  it("submits a validated invoice once with a stable request ID and no CRF registration", async () => {
+    const request = vi.fn(async (_url: unknown, _init?: RequestInit) => new Response(JSON.stringify({ SalesInvoiceId: 42 }), { status: 200 }));
+    expect(await new SefClient(config, request).submitInvoice("<Invoice/>", "fixed-id")).toEqual({ invoiceId: 42 });
+    const [url, init] = request.mock.calls[0];
+    expect(String(url)).toContain("requestId=fixed-id");
+    expect(String(url)).toContain("executeValidation=true");
+    expect(String(url)).toContain("sendToCir=No");
+    expect(init?.body).toBe("<Invoice/>");
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retry an ambiguous write failure or leak echoed secrets", async () => {
+    const request = vi.fn(async () => new Response(JSON.stringify({ message: "secret-example-key" }), { status: 500 }));
+    await expect(new SefClient(config, request).submitInvoice("<Invoice/>", "fixed-id")).rejects.toThrow("HTTP 500");
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
   it("authenticates centrally and parses invoice IDs", async () => {
     const request = vi.fn(async () =>
       new Response(JSON.stringify({ salesInvoiceIds: [12, 34] }), {

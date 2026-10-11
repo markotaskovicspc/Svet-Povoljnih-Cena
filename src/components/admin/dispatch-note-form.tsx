@@ -475,7 +475,7 @@ export function DispatchNoteForm({
   };
 
   const executeDetailAction = async (
-    action: "delete" | "post" | "sef",
+    action: "delete" | "post" | "sef" | "sef-status",
   ) => {
     if (!detail || runningAction) return;
     const confirmation =
@@ -635,9 +635,10 @@ export function DispatchNoteForm({
                 onClick={() => void executeDetailAction("sef")}
               >
                 <Send className="size-4" aria-hidden />
-                {runningAction === "sef" ? "Slanje…" : "Pošalji na SEF"}
+                {runningAction === "sef" ? "Slanje…" : "Pošalji eOtpremnicu"}
               </Button>
             ) : null}
+            {readOnly && detail?.sefRequestId ? <Button type="button" variant="outline" disabled={Boolean(runningAction)} onClick={() => void executeDetailAction("sef-status")}>Proveri eOtpremnica status</Button> : null}
             {readOnly && detail?.canDelete ? (
               <Button
                 type="button"

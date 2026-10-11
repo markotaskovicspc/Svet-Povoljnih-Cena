@@ -266,7 +266,6 @@ export function getIntegrationReadiness(
         ...(eotpremnicaProduction
           ? [enabled("EOTPREMNICA_PRODUCTION_ACCEPTED")]
           : []),
-        present("EOTPREMNICA_BASE_URL"),
         present("EOTPREMNICA_API_KEY"),
       ],
     }),
@@ -359,7 +358,7 @@ export async function getSefHealthSnapshot(): Promise<SefHealthSnapshot> {
     return {
       configured: true,
       ok: false,
-      message: status
+      message: status === 200 && error instanceof SefApiError ? error.message : status
         ? `SEF provera nije prošla (HTTP ${status}).`
         : "SEF trenutno nije dostupan.",
     };

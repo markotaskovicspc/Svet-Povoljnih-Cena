@@ -34,6 +34,7 @@ describe("hourly all-channel fiscal reconciliation", () => {
         total: { gt: 0 },
         items: { some: {} },
         fiscalDocuments: { none: { kind: "SALE" } },
+        sefDocuments: { none: { direction: "OUT", environment: "production", status: { notIn: ["DRAFT", "ERROR"] } } },
         shipments: {
           some: {
             purpose: "ORDER_DELIVERY",
