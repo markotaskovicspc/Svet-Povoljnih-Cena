@@ -4,6 +4,7 @@ import type {
   ErpRow,
   ErpValue,
 } from "@/lib/admin/erp";
+import { normalizeSerbianSearch } from "@/lib/serbian-search";
 
 export function gridTextValue(value: ErpValue) {
   if (value === null || value === undefined) return "";
@@ -66,8 +67,8 @@ export function gridValueMatchesFilter(
   value: ErpValue,
   filter: AdminGridFilter,
 ) {
-  const actualText = gridTextValue(value).trim().toLowerCase();
-  const expectedText = filter.value.trim().toLowerCase();
+  const actualText = normalizeSerbianSearch(gridTextValue(value).trim());
+  const expectedText = normalizeSerbianSearch(filter.value.trim());
   if (!expectedText) return true;
   const actualNumber = Number(actualText.replace(",", "."));
   const expectedNumber = Number(expectedText.replace(",", "."));
@@ -111,15 +112,13 @@ export function filterAndSortGridRows(
   filters: AdminGridFilter[],
   sorting: AdminGridSort[],
 ) {
-  const needle = query.trim().toLowerCase();
+  const needle = normalizeSerbianSearch(query.trim());
   const filtered = rows.filter((row) => {
     if (
       needle &&
-      !columnKeys
-        .map((key) => gridTextValue(row.values[key]))
-        .join(" ")
-        .toLowerCase()
-        .includes(needle)
+      !normalizeSerbianSearch(
+        columnKeys.map((key) => gridTextValue(row.values[key])).join(" "),
+      ).includes(needle)
     ) {
       return false;
     }

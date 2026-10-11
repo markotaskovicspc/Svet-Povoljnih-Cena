@@ -118,10 +118,12 @@ export async function GET(req: Request) {
     .slice(0, limit);
 
   return NextResponse.json({
-    items: (exactNameItems.length
-      ? exactNameItems
-      : normalizedExactItems.length
-        ? normalizedExactItems
+    // An exact spelling must not hide an equivalent spelling with another
+    // provider ID/postcode. The customer still chooses the actual location.
+    items: (normalizedExactItems.length
+      ? normalizedExactItems
+      : exactNameItems.length
+        ? exactNameItems
       : exactPostalItems.length
         ? exactPostalItems
         : items
