@@ -1,5 +1,6 @@
 import "server-only";
 import { z } from "zod";
+import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { adjustInventory } from "@/lib/inventory";
@@ -7,7 +8,7 @@ import { ananasInventoryPlan, ananasInventorySku, ANANAS_INVENTORY_START } from 
 
 export const ANANAS_INVENTORY_KEY = "ananas-inventory";
 const policySchema = z.object({ enabled: z.boolean(), allowNegative: z.boolean(), warehouseId: z.string(),
-  historyThrough: z.string().datetime(), leaseToken: z.string().optional(), leaseUntil: z.string().datetime().optional(), documentIdentityVersion: z.literal(2).optional() });
+  historyThrough: z.string().datetime(), leaseToken: z.string().optional(), leaseUntil: z.string().datetime().optional(), documentIdentityVersion: z.literal(2).optional(), historyWindowHours: z.union([z.literal(72), z.literal(24), z.literal(6), z.literal(1)]).optional() });
 export type AnanasInventoryPolicy = z.infer<typeof policySchema>;
 export async function getAnanasInventoryPolicy(database: Prisma.TransactionClient = db) {
   const setting = await database.adminSetting.findUnique({ where: { key: ANANAS_INVENTORY_KEY } });
@@ -44,10 +45,27 @@ export async function postAnanasDocumentInventory(documentId: string, actorId?: 
     }
     // Archived products still own their historical warehouse ledger. Posting
     // their fiscal documents must not require restoring them to the catalog.
-    const products = await tx.product.findMany({ where: { sku: { in: plan.lines.map(line => ananasInventorySku(line.sku)) } }, select: { id: true, sku: true } });
-    const bySku = new Map(products.map(product => [product.sku, product]));
+    let products = await tx.product.findMany({ where: { sku: { in: plan.lines.map(line => ananasInventorySku(line.sku)) } }, select: { id: true, sku: true } });
+    let bySku = new Map(products.map(product => [product.sku, product]));
     const missing = plan.lines.filter(line => !bySku.has(ananasInventorySku(line.sku)));
-    if (missing.length) throw new Error(`Ananas artikli nisu pronađeni: ${missing.map(line => ananasInventorySku(line.sku)).join(", ").slice(0,400)}.`);
+    if (missing.length) {
+      const unknown = missing.filter(line => !/^\d{6}$/.test(ananasInventorySku(line.sku)));
+      if (unknown.length) throw new Error(`Ananas artikli nisu pronađeni: ${unknown.map(line => ananasInventorySku(line.sku)).join(", ").slice(0,400)}.`);
+      // Marko requested missing six-digit articles from Ananas, then assigns
+      // suppliers himself. Import only an inactive ERP shell, never web stock,
+      // a guessed price, a supplier, or a replacement for an archived article.
+      const sourceItems = z.array(z.object({ sku: z.string(), name: z.string() })).parse(document.items);
+      const skus = [...new Set(missing.map(line => ananasInventorySku(line.sku)))];
+      await tx.product.createMany({ skipDuplicates: true, data: skus.map(sku => ({
+        sku, slug: `ananas-${sku}-${randomUUID().slice(0, 8)}`,
+        name: sourceItems.find(row => ananasInventorySku(row.sku) === sku)?.name.trim() || `Ananas artikal ${sku}`,
+        description: `Artikal preuzet iz Ananas fiskalnog dokumenta ${document.fiscalNumber}. Dobavljača i podatke dopuniti u ERP-u.`,
+        fullPrice: 0, stock: 0, incomingStock: 0, isActive: false,
+        availableWebManual: false, availableWholesaleManual: false, availableExportManual: false,
+      })) });
+      products = await tx.product.findMany({ where: { sku: { in: plan.lines.map(line => ananasInventorySku(line.sku)) } }, select: { id: true, sku: true } });
+      bySku = new Map(products.map(product => [product.sku, product]));
+    }
     // One document is atomic: neither missing SKUs nor partial retries consume stock.
     for (const line of plan.lines) {
       const product = bySku.get(ananasInventorySku(line.sku))!;
