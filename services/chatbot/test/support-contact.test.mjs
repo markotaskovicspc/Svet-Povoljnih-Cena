@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {receiveSupportContact,requestSupportContact,wantsHuman,appendSupportContact} from '../src/support-contact.mjs';
+import {receiveSupportContact,requestSupportContact,wantsHuman,appendSupportContact,guardSupportContact} from '../src/support-contact.mjs';
 const event={channel:'web',text:'ovo je užasno kada je nekome potrebna pomoć prave osobe'};
 test('explicit human request interrupts an unconfirmed offer and asks for callback contact once',()=>{
  const state={pending:{},loyaltyPending:{}};
@@ -45,3 +45,10 @@ for(const channel of ['facebook','instagram']){
   assert.equal(appendSupportContact('Materijal proverava podrška. Na koju mejl adresu da Vam javimo?',null,{channel}), 'Materijal proverava podrška.');
  });
 }
+
+test('social support follow-ups suppress old callback requests but preserve identity verification',()=>{
+ const text='Materijal proverava podrška. Ostavite mejl adresu za odgovor.';
+ assert.equal(guardSupportContact({channel:'facebook',text,state:{lastSupportRequest:{}}}),'Materijal proverava podrška.');
+ assert.equal(guardSupportContact({channel:'web',text,state:{lastSupportRequest:{}}}),text);
+ for(const protectedState of [{claimVerification:{}},{reclamation:{}},{loyaltyPending:{}}])assert.equal(guardSupportContact({channel:'facebook',text,state:{lastSupportRequest:{},...protectedState}}),text);
+});

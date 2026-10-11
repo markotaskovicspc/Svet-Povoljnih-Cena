@@ -51,6 +51,16 @@ export function receiveSupportContact({state,event}){
 export function appendSupportContact(message,question,{channel='web'}={}){
  if(!question&&channel==='web')return message;
  const sentences=String(message??'').split(/(?<=[.!?])\s+/);
- const answer=sentences.filter(s=>!(/\?/.test(s)&&/(?:mejl|email|e-mail)/i.test(s))).join(' ').trim();
+ const answer=sentences.filter(s=>{
+  const text=normalize(s);
+  const email=/(?:mejl|e-?mail|e-post)/.test(text);
+  const request=/\?/.test(s)||/(?:posaljite|napisite|navedite|dostavite|ostavite)[^.!?\n]{0,80}(?:mejl|e-?mail|e-post)/.test(text);
+  return !(email&&request);
+ }).join(' ').trim();
  return [answer,question].filter(Boolean).join('\n\n')||'Prosledio sam Vaš upit korisničkoj podršci. Odgovor možete proveriti ovde u razgovoru.';
+}
+
+export function guardSupportContact({channel,text,state}){
+ if(!['facebook','instagram'].includes(channel)||!(state.supportRequest||state.lastSupportRequest)||state.claimVerification||state.reclamation||state.loyaltyPending)return text;
+ return appendSupportContact(text,null,{channel});
 }
