@@ -30,9 +30,10 @@ export function exactTownAlias(city: string, postalCode?: string | null) {
 export function customerTownLabel(
   shipping: {city: string; postalCode: string},
   town: {id: number; name: string; postalCode: string | null} | null,
+  options: {preserveCustomerPostalCode?: boolean} = {},
 ) {
   const alias = exactTownAlias(shipping.city, shipping.postalCode);
   if (alias && town?.id === alias.townId && town.name === alias.townName)
-    return {city: alias.name, postalCode: alias.postalCode};
-  return {city: town?.name ?? shipping.city, postalCode: town?.postalCode ?? shipping.postalCode};
+    return {city: alias.name, postalCode: options.preserveCustomerPostalCode ? shipping.postalCode : alias.postalCode};
+  return {city: town?.name ?? shipping.city, postalCode: options.preserveCustomerPostalCode ? shipping.postalCode : town?.postalCode ?? shipping.postalCode};
 }

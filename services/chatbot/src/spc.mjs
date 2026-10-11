@@ -26,8 +26,8 @@ export function createSpcClient(base, secret) {
         town=selectTown(items,{...shipping,postalCode:null});
       }
       if(!town)town=await resolveQualifiedTown(shipping.city,lookup);
-      if(!town) return {ok:false,error:{code:'DELIVERY_ADDRESS_INVALID',message:'Pitaj samo za tačno naselje/opštinu da razjasniš mesto. Poštanski broj popunjava sistem; ne izmišljaj ga i ne biraj proizvoljno među istoimenim mestima.',candidates:items.slice(0,8).map(t=>({name:t.name,postalCode:t.postalCode}))}};
-      payload={...payload,input:{...payload.input,guestEmail:payload.input.guestEmail||undefined,shipping:{...shipping,city:town.name,postalCode:town.postalCode,xExpressTownId:town.townId}}};
+      if(!town) return {ok:false,error:{code:'DELIVERY_ADDRESS_INVALID',message:'Pitaj samo za tačno naselje/opštinu da razjasniš mesto. Sačuvaj poštanski broj koji je kupac naveo; ako ga nije naveo, popunjava ga sistem. Ne izmišljaj ga i ne biraj proizvoljno među istoimenim mestima.',candidates:items.slice(0,8).map(t=>({name:t.name,postalCode:t.postalCode}))}};
+      payload={...payload,input:{...payload.input,guestEmail:payload.input.guestEmail||undefined,shipping:{...shipping,city:town.name,postalCode:shipping.postalCode?.trim()||town.postalCode,xExpressTownId:town.townId}}};
     }
     const body = JSON.stringify(payload);
     const response = await fetch(url, {method:'POST', headers:{'content-type':'application/json',...signRequest(body,secret)},body,signal:AbortSignal.timeout(25000),redirect:'error'});

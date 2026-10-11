@@ -30,7 +30,7 @@ test('Belica with nearby post office postcode resolves by exact unique locality,
  try{
   const result=await createSpcClient('https://example.test','test')({action:'quote',input:{guestEmail:null,shipping:{city:'Belica',postalCode:'35273'}}});
   assert.equal(result.ok,true);assert.deepEqual(calls.slice(0,2).map(x=>x.query),['35273','Belica']);
-  assert.equal(result.input.shipping.city,'Belica');assert.equal(result.input.shipping.postalCode,'35000');assert.equal(result.input.shipping.xExpressTownId,2);assert(!('guestEmail' in result.input));
+  assert.equal(result.input.shipping.city,'Belica');assert.equal(result.input.shipping.postalCode,'35273');assert.equal(result.input.shipping.xExpressTownId,2);assert(!('guestEmail' in result.input));
  }finally{globalThis.fetch=original;}
 });
 test('postal correction does not guess between two exact same-name localities',async()=>{
@@ -79,4 +79,15 @@ test('staff quote resolves optional postcode and omits null email while preservi
 test('omitted diacritics and both d/dj spellings resolve only unique exact courier towns',()=>{
  for(const [name,city] of [['Ćuprija','Cuprija'],['Čačak','Cacak'],['Šabac','Sabac'],['Žitište','Zitiste'],['Aranđelovac','Arandelovac'],['Aranđelovac','Arandjelovac']])assert.equal(selectTown([{townId:2,name,postalCode:'12345'}],{city}).townId,2);
  assert.equal(selectTown([{townId:1,name:'Ćelije'},{townId:2,name:'Čelije'}],{city:'Celije'}),null);
+});
+
+ test('Jasenovik buyer correction 18207 survives dictionary 18000 for quote and staff quote',async()=>{
+ const original=globalThis.fetch;
+ globalThis.fetch=async(url,options)=>({ok:true,json:async()=>options?.body?{ok:true,input:JSON.parse(options.body).input}:{items:[{townId:321,name:'Jasenovik',postalCode:'18000'}]}});
+ try{
+  for(const action of ['quote','staff_quote']){
+   const result=await createSpcClient('https://example.test','test')({action,input:{shipping:{city:'Jasenovik',postalCode:'18207'}}});
+   assert.equal(result.ok,true);assert.equal(result.input.shipping.postalCode,'18207');assert.equal(result.input.shipping.xExpressTownId,321);assert.equal(result.input.shipping.city,'Jasenovik');
+  }
+ }finally{globalThis.fetch=original;}
 });
