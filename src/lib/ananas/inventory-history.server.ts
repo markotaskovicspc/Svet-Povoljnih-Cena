@@ -68,7 +68,7 @@ export async function advanceAnanasInventoryHistory(actorId?: string, now = new 
     ]);
     return { imported, posted: before.posted + after.posted, failed: before.failed + after.failed, through,
       postedTotal, pendingTotal: remaining, negatives,
-      complete: new Date(through) >= now && remaining === 0, needsReview: new Date(through) >= now && remaining > 0 && remaining === errors };
+      complete: new Date(through) >= now && remaining === 0, needsReview: new Date(through) >= now && remaining > 0 && remaining === errors && before.posted + after.posted === 0 };
   } finally {
     await db.$transaction(async tx => {
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('ananas-inventory-policy'))::text`;
