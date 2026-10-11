@@ -5,6 +5,7 @@ import { formatStreetAddress } from "@/lib/address/house-number";
 // Both the optimistic replay and the replay found under the session lock must
 // validate the same persisted buyer, basket and delivery details.
 export const checkoutReplaySelect = {
+  checkoutLinesSnapshot: true,
   userId: true, guestEmail: true, guestLoyaltyEmail: true, paymentMethod: true, shippingMethod: true,
   voucherCode: true, notes: true, billingSameAsShipping: true,
   shipFirstName: true, shipLastName: true, shipPhone: true,
@@ -77,7 +78,7 @@ export function checkoutRequestMatchesOrder(
       clean(order.billStreet), clean(order.billHouseNumber), clean(order.billCity),
       clean(order.billPostalCode), order.billXExpressTownId, order.billXExpressStreetId,
       clean(order.billCompanyName), clean(order.billPib)],
-    lines(order.items),
+    lines(Array.isArray(order.checkoutLinesSnapshot) ? order.checkoutLinesSnapshot as Array<{ sku: string; qty: number; withAssembly?: boolean }> : order.items),
   ];
   return JSON.stringify(requested) === JSON.stringify(saved);
 }

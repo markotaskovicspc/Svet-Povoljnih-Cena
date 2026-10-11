@@ -341,7 +341,33 @@ enum SupplierSyncChangeStatus {
   CONFLICT
 }
 
+model ProductSet {
+  id String @id @default(cuid())
+  slug String @unique
+  name String
+  description String @default("") @db.Text
+  active Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  components ProductSetComponent[]
+}
+
+model ProductSetComponent {
+  id String @id @default(cuid())
+  setId String
+  productId String
+  quantity Int
+  /// The allocated selling price per real component unit; their sum is the set price.
+  unitPrice Decimal @db.Decimal(12, 2)
+  position Int @default(0)
+  set ProductSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+  @@unique([setId, productId])
+  @@index([productId])
+}
+
 model Product {
+  setComponents ProductSetComponent[]
   id               String        @id @default(cuid())
   sku              String        @unique
   barcode          String?
@@ -1287,6 +1313,8 @@ enum CourierSyncStatus {
 }
 
 model Order {
+  /// Original atomic basket for idempotent checkout of component-based sets.
+  checkoutLinesSnapshot Json?
   id                         String       @id @default(cuid())
   /// Human-friendly number e.g. "SPC-2026-001234"
   number                     String       @unique
@@ -1443,6 +1471,7 @@ model CheckoutSession {
 }
 
 model OrderItem {
+  productSetName String?
   id                       String   @id @default(cuid())
   orderId                  String
   productId                String?

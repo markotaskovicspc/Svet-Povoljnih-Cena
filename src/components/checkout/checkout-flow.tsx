@@ -406,10 +406,14 @@ export function CheckoutFlow({
             lines: lines.map((line) => ({ sku: line.sku, qty: line.qty })),
           }),
         });
-        const result = (await response.json().catch(() => null)) as {
-          ok: true;
-          data: CheckoutDeliveryQuote;
-        } | null;
+        const result = (await response.json().catch(() => null)) as
+          | { ok: true; data: CheckoutDeliveryQuote }
+          | { ok: false; error?: string; message?: string }
+          | null;
+        if (result && !result.ok && result.error === "invalid_set" && typeof result.message === "string") {
+          setDeliveryQuoteError(result.message);
+          return false;
+        }
         if (!response.ok || !result?.ok) {
           throw new Error("Dostava trenutno ne može da se obračuna.");
         }
@@ -1025,6 +1029,7 @@ function ReviewStep({
 }) {
   const data = useFormContext<CheckoutFormData>().getValues();
   const reviewShippingPrice = deliveryQuote.prices[data.shippingMethod];
+  const hasSet = useCart((state) => state.lines.some(line => line.sku.startsWith("set:")));
 
   return (
     <div className="flex flex-col gap-3 sm:gap-5 lg:grid lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)] lg:items-start lg:gap-4">
@@ -1054,7 +1059,7 @@ function ReviewStep({
               : "Kamionska isporuka"}{" "}
             · {reviewShippingPrice == null
               ? "Nije moguće obračunati"
-              : formatRsd(reviewShippingPrice)}
+              : formatRsd(reviewShippingPrice, hasSet)}
           </p>
           {data.shippingMethod === "kurir" && data.glsDeliveryPoint ? (
             <p className="mt-1 text-xs text-ink-500">
@@ -1422,6 +1427,8 @@ function readCreateOrderError(
       ? result.error
       : null;
   switch (error?.code) {
+    case "INVALID_SET":
+      return error.reason ?? "Set je promenjen. Proverite korpu.";
     case "OUT_OF_STOCK":
       return `Artikal ${error.sku ?? ""} trenutno nema dovoljno zaliha.`;
     case "INACTIVE":

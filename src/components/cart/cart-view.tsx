@@ -6,7 +6,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ArrowRight, Loader2, ShoppingBag, Tag, Truck } from "lucide-react";
 import { useCart } from "@/lib/hooks/use-cart";
-import { formatRsd } from "@/lib/format";
+import { formatRsd as formatCurrency } from "@/lib/format";
 import { CartLineRow } from "./cart-line-row";
 import {
   useCheckout,
@@ -32,7 +32,7 @@ import { computeTotals } from "@/components/checkout/order-summary";
 export function CartView() {
   const hydrated = useCart((s) => s.hydrated);
   const lines = useCart((s) => s.lines);
-  const { quote, loading: deliveryLoading } = useCartDeliveryQuote(
+  const { quote, loading: deliveryLoading, error: deliveryError } = useCartDeliveryQuote(
     lines,
     hydrated && lines.length > 0,
   );
@@ -90,6 +90,7 @@ export function CartView() {
           fullTotal={fullTotal}
           quote={quote}
           deliveryLoading={deliveryLoading}
+          deliveryError={deliveryError}
         />
       </div>
 
@@ -144,14 +145,18 @@ function CartSummary({
   fullTotal,
   quote,
   deliveryLoading,
+  deliveryError,
 }: {
   subtotal: number;
   savings: number;
   fullTotal: number;
   quote: CheckoutDeliveryQuote | null;
   deliveryLoading: boolean;
+  deliveryError: string | null;
 }) {
   const lines = useCart((s) => s.lines);
+  const exactPrices = lines.some(line => line.sku.startsWith("set:"));
+  const formatRsd = (value: number) => formatCurrency(value, exactPrices);
   const loyaltyDiscount = appliedLoyaltySavings(lines);
   const saleSavings = Math.max(0, savings - loyaltyDiscount);
   const voucher = useCheckout((s) => s.voucher);
@@ -254,7 +259,7 @@ function CartSummary({
           ) : null}
           {shipping == null && !deliveryLoading ? (
             <p className="text-action text-xs">
-              Za ovu korpu dostava ne može automatski da se obračuna.
+              {deliveryError ?? "Za ovu korpu dostava ne može automatski da se obračuna."}
             </p>
           ) : null}
         </dl>

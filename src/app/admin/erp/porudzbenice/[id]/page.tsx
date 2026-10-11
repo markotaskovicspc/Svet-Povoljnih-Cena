@@ -9,6 +9,7 @@ import { Card, CardTitle } from "@/components/admin/card";
 import { ConfirmSubmitButton } from "@/components/admin/confirm-submit";
 import { Field } from "@/components/admin/field";
 import { PageHeader } from "@/components/admin/page-header";
+import { PurchaseOrderImport } from "@/components/admin/purchase-order-import";
 import { PurchaseOrderSendDialog } from "@/components/admin/purchase-order-send-dialog";
 import { PurchaseOrderSupplierFields } from "@/components/admin/purchase-order-supplier-fields";
 import { PurchaseOrderDeliveryFields } from "@/components/admin/purchase-order-delivery-fields";
@@ -854,6 +855,7 @@ export default async function PurchaseOrderEditorPage({
                     </Field>
                     <SubmitButton>Dodaj</SubmitButton>
                   </AdminActionForm>
+                  {order.status === "DRAFT" ? <PurchaseOrderImport orderId={order.id} /> : null}
                 </Card>
               </div>
             ) : null}

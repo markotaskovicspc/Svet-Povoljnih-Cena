@@ -1,3 +1,4 @@
+import { ProductSetError } from "@/lib/product-sets/core";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { resolveDeliveryQuote } from "@/lib/checkout/config";
@@ -44,9 +45,14 @@ export async function POST(req: Request) {
   }
 
   const user = await getCurrentUser();
+  try {
   const quote = await resolveDeliveryQuote({
     ...parsed.data,
     loggedIn: user?.userType === "customer" || Boolean(await getGuestLoyaltyMember()),
   });
   return NextResponse.json({ ok: true, data: quote });
+  } catch (error) {
+    if (error instanceof ProductSetError) return NextResponse.json({ ok: false, error: "invalid_set", message: error.message }, { status: 400 });
+    throw error;
+  }
 }

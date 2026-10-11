@@ -1,4 +1,6 @@
 import "server-only";
+import { resolveSetBasket, lockSetVersions } from "@/lib/product-sets/server";
+import { ProductSetError } from "@/lib/product-sets/core";
 import {staffLoyaltyPricesMatch, type StaffLoyaltyPrice} from "@/lib/checkout/staff-loyalty-pricing";
 import { customerTownLabel } from "@/lib/x-express/town-aliases";
 import {
@@ -73,6 +75,7 @@ export type { CreateOrderInput } from "@/lib/checkout/order-schema";
  */
 
 export type CreateOrderError =
+  | { code: "INVALID_SET"; reason: string }
   | { code: "EMPTY_CART" }
   | { code: "PRICE_CHANGED" }
   | { code: "OUT_OF_STOCK"; sku: string }
@@ -392,6 +395,15 @@ export async function createOrder(
     return { ok: false, error: { code: "PAYMENT_UNAVAILABLE" } };
   }
 
+  const originalInput = input;
+  let setBasket: Awaited<ReturnType<typeof resolveSetBasket>>;
+  try {
+    setBasket = await resolveSetBasket(input.lines);
+  } catch (error) {
+    if (error instanceof ProductSetError) return { ok: false, error: { code: "INVALID_SET", reason: error.message } };
+    throw error;
+  }
+  input = { ...input, lines: setBasket.lines };
   const skus = input.lines.map((l) => l.sku);
   const products = await db.product.findMany({
     where: { ...webStorefrontProductWhere(), sku: { in: skus } },
@@ -512,6 +524,7 @@ export async function createOrder(
       sku: line.sku,
       qty: line.qty,
       product: {
+        fixedSetPrice: setBasket.prices.get(line.sku),
         fullPrice: retailBySku.get(line.sku)!.price,
         salePrice: p.salePrice ? num(p.salePrice) : null,
         discountPct: p.discountPct,
@@ -539,10 +552,11 @@ export async function createOrder(
 
   const deliveryQuote = await resolveDeliveryQuote({
     city: input.shipping.city,
-    lines: input.lines.map((line) => ({ sku: line.sku, qty: line.qty })),
+    lines: originalInput.lines.map((line) => ({ sku: line.sku, qty: line.qty })),
     loggedIn: Boolean(userId || guestLoyalty),
     staffLoyaltySkus: options.staffLoyaltyPrices?.map(approved => approved.sku),
-  });
+  }).catch(error => { if (error instanceof ProductSetError) return error; throw error; });
+  if (deliveryQuote instanceof ProductSetError) return { ok: false, error: { code: "INVALID_SET", reason: deliveryQuote.message } };
   if (input.shippingMethod === "KAMION" && !deliveryQuote.truckAvailable) {
     return { ok: false, error: { code: "DELIVERY_UNAVAILABLE" } };
   }
@@ -610,7 +624,8 @@ export async function createOrder(
       return {
         productId: p.id,
         sku: p.sku,
-        name: p.name,
+        name: setBasket.names.has(p.sku) ? `${p.name} — set: ${setBasket.names.get(p.sku)}` : p.name,
+        productSetName: setBasket.names.get(p.sku) ?? null,
         qty: r.qty,
         unitPriceFull: new Prisma.Decimal(r.unitPriceFull),
         unitPriceSale: new Prisma.Decimal(r.unitPriceSale),
@@ -787,13 +802,15 @@ export async function createOrder(
           input.checkoutSessionId,
         );
         if (existingOrder) {
-          if (!checkoutRequestMatchesOrder(input, userId, existingOrder)) {
+          if (!checkoutRequestMatchesOrder(originalInput, userId, existingOrder)) {
             throw new CheckoutSessionMismatchError();
           }
           await queueCheckoutFollowUp(tx, existingOrder.id, accessToken, options.customerReplyDraftOnly);
           return { ...existingOrder, reusedExisting: true };
         }
       }
+
+      await lockSetVersions(tx, setBasket.versions);
 
       const customer = await upsertWebCustomer(tx, {
         userId,
@@ -830,6 +847,7 @@ export async function createOrder(
       const order = await tx.order.create({
         data: {
           number,
+          checkoutLinesSnapshot: setBasket.versions.length ? originalInput.lines : undefined,
           publicAccessTokenHash: hashOrderAccessToken(accessToken),
           publicAccessTokenCreatedAt: new Date(),
           guestLoyaltyEmail: guestLoyalty?.email ?? null,
@@ -1128,6 +1146,7 @@ export async function createOrder(
       };
     });
   } catch (err) {
+    if (err instanceof ProductSetError) return { ok: false, error: { code: "INVALID_SET", reason: err.message } };
     if (err instanceof CheckoutSessionMismatchError) {
       return { ok: false, error: { code: "CHECKOUT_SESSION_MISMATCH" } };
     }

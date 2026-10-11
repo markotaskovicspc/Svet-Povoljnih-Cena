@@ -963,9 +963,10 @@ export async function receivePurchaseOrder(
  * legacy volume snapshot is repaired from the current article master so the
  * inbound receipt can continue after the master data is completed.
  */
-export async function recomputePurchaseOrderTotals(id: string) {
+export async function recomputePurchaseOrderTotals(id: string, transaction?: Prisma.TransactionClient) {
+  const client = transaction ?? db;
   const [order, pricingRules] = await Promise.all([
-    db.purchaseOrder.findUnique({
+    client.purchaseOrder.findUnique({
       where: { id },
       include: {
         items: {
@@ -1068,13 +1069,13 @@ export async function recomputePurchaseOrderTotals(id: string) {
   const financialsByItemId = new Map(
     financials.lines.map((line) => [line.id, line]),
   );
-  await db.$transaction([
+  const writes = [
     ...items.map((row) => {
       const financial = financialsByItemId.get(row.item.id);
       if (!financial) {
         throw new Error(`Obračun stavke ${row.item.id} nije pronađen.`);
       }
-      return db.purchaseOrderItem.update({
+      return client.purchaseOrderItem.update({
         where: { id: row.item.id },
         data: {
           packQty: row.packQty,
@@ -1086,7 +1087,7 @@ export async function recomputePurchaseOrderTotals(id: string) {
         },
       });
     }),
-    db.purchaseOrder.update({
+    client.purchaseOrder.update({
       where: { id },
       data: {
         totalVolume: roundLogisticsVolume(totalVolume),
@@ -1095,7 +1096,9 @@ export async function recomputePurchaseOrderTotals(id: string) {
         bmPct: financials.totalBmPct,
       },
     }),
-  ]);
+  ];
+  if (transaction) await Promise.all(writes);
+  else await db.$transaction(writes);
 }
 
 /** Refresh all non-posted orders that reference any of the changed products. */

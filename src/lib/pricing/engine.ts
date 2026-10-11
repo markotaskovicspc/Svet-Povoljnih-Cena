@@ -28,6 +28,8 @@ export interface PricingAction {
 }
 
 export interface PricingProduct {
+  /** Server-resolved set allocation; keeps exact cents and bypasses component offers. */
+  fixedSetPrice?: number;
   fullPrice: number;
   /** Customer-facing 30-day reference price; loyalty history is excluded. */
   referencePrice?: number | null;
@@ -202,6 +204,10 @@ export function resolveProductPriceQuote(
   options: { now?: Date; loggedIn?: boolean; maxDiscountPct?: number } = {},
 ): ProductPriceQuote {
   const now = options.now ?? new Date();
+  if (product.fixedSetPrice != null && Number.isFinite(product.fixedSetPrice) && product.fixedSetPrice > 0) {
+    const price = Math.round(product.fixedSetPrice * 100) / 100;
+    return { full: price, actionOffer: null, loyaltyOffer: null, payable: { effective: price, full: price, onSale: false, kind: "full", discountPct: 0, actionExpired: false, linearDiscountPct: 0 } };
+  }
   const full = product.fullPrice;
   if (!Number.isFinite(full) || full <= 0) {
     const safeFull = Math.max(0, Number.isFinite(full) ? full : 0);

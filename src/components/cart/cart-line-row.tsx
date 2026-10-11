@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Trash2 } from "lucide-react";
 import { useCart, type CartLine } from "@/lib/hooks/use-cart";
-import { formatRsd } from "@/lib/format";
+import { formatRsd as formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { CartQuantityControl } from "@/components/cart/cart-quantity-control";
 import type { DeliveryCategory } from "@/lib/delivery-tariff";
@@ -24,6 +24,8 @@ export function CartLineRow({
   onNavigate,
   deliveryCategory,
 }: CartLineRowProps) {
+  const isSet = line.sku.startsWith("set:");
+  const formatRsd = (value: number) => formatCurrency(value, isSet);
   const remove = useCart((s) => s.remove);
   const onSale = line.unitPriceSale < line.unitPriceFull;
   const isLoyaltyPrice =
@@ -42,7 +44,7 @@ export function CartLineRow({
       )}
     >
       <Link
-        href={`/p/${line.slug}`}
+        href={isSet ? `/setovi/${line.slug}` : `/p/${line.slug}`}
         onClick={onNavigate}
         className={cn(
           "relative shrink-0 overflow-hidden rounded-xl bg-white ring-1 ring-border/60",
@@ -61,15 +63,20 @@ export function CartLineRow({
       </Link>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <Link
-          href={`/p/${line.slug}`}
+          href={isSet ? `/setovi/${line.slug}` : `/p/${line.slug}`}
           onClick={onNavigate}
           className="hover:text-walnut line-clamp-2 text-sm font-medium text-ink-900 transition focus-visible:underline focus-visible:outline-none"
         >
           {line.name}
         </Link>
         <p className="font-mono text-[11px] tracking-tight text-ink-500">
-          {line.sku}
+          {isSet ? "Prodajni set" : line.sku}
         </p>
+        {isSet ? (
+          <p className="text-[11px] text-ink-500">
+            Cena seta je konačna; loyalty popust se ne obračunava dodatno.
+          </p>
+        ) : null}
         {isLoyaltyPrice ? (
           <p className="text-action text-[11px] font-medium">Loyalty cena</p>
         ) : null}

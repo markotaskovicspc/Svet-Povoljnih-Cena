@@ -334,6 +334,7 @@ export async function updateWebOrderItemQuantity(input: {
       createdAt: true,
       userId: true,
       guestLoyaltyEmail: true,
+      checkoutLinesSnapshot: true,
       shipCity: true,
       shippingMethod: true,
       shipping: true,
@@ -344,6 +345,7 @@ export async function updateWebOrderItemQuantity(input: {
     },
   });
   if (!preview) throw new Error("Porudžbina ne postoji.");
+  if (preview.checkoutLinesSnapshot) throw new Error("Porudžbina sadrži prodajni set. Sastav i cenu seta nije moguće menjati pojedinačno; otkažite porudžbinu i kreirajte novu sa ispravnim setom.");
   const previewItem = preview.items.find((item) => item.id === input.orderItemId);
   if (!previewItem) throw new Error("Stavka ne pripada porudžbini.");
   if (input.newQty === previewItem.qty) throw new Error("Unesite drugačiju količinu.");
@@ -813,6 +815,7 @@ export async function addWebOrderItem(input: {
       createdAt: true,
       userId: true,
       guestLoyaltyEmail: true,
+      checkoutLinesSnapshot: true,
       shipCity: true,
       shippingMethod: true,
       items: {
@@ -822,6 +825,7 @@ export async function addWebOrderItem(input: {
     },
   });
   if (!preview) throw new Error("Porudžbina ne postoji.");
+  if (preview.checkoutLinesSnapshot) throw new Error("Porudžbina sadrži prodajni set. Sastav i cenu seta nije moguće menjati pojedinačno; otkažite porudžbinu i kreirajte novu sa ispravnim setom.");
   const previewMatches = preview.items.filter(
     (item) => item.sku === productRef.sku,
   );

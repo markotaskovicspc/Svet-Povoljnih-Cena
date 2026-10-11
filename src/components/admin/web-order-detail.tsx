@@ -43,7 +43,7 @@ import {
   MYGLS_PROVIDER,
 } from "@/lib/mygls";
 import { num } from "@/lib/api/_helpers";
-import { formatRsd } from "@/lib/format";
+import { formatRsd as formatMoney } from "@/lib/format";
 import {
   hasBusinessIdentity,
   resolveOrderDocumentBuyerAddress,
@@ -1439,6 +1439,8 @@ export async function WebOrderDetail({ id }: { id: string }) {
     },
   });
   if (!order) notFound();
+  const hasProductSets = Boolean(order.checkoutLinesSnapshot);
+  const formatRsd = (value: number) => formatMoney(value, hasProductSets);
   const xExpressShipments = order.shipments.filter((shipment) => shipment.provider === X_EXPRESS_PROVIDER);
   const xExpressCodes = [...new Set(xExpressShipments.flatMap((shipment) => [
     shipment.providerStatusCode, ...shipment.events.map((event) => event.providerStatusCode),
@@ -1616,7 +1618,7 @@ export async function WebOrderDetail({ id }: { id: string }) {
   const currentEditablePayments = order.payments.filter(
     (payment) => payment.status !== "FAILED",
   );
-  const canOfferWebItemEdit =
+  const canOfferWebItemEdit = !hasProductSets &&
     ["KREIRANO", "POTVRDJENO", "U_PRIPREMI"].includes(order.status) &&
     !order.stockRestoredAt &&
     !order.cancelledAt &&
@@ -1715,11 +1717,11 @@ export async function WebOrderDetail({ id }: { id: string }) {
             </div>
           ) : null}
           <p className="rounded-xl border border-warning/20 bg-warning/10 px-4 py-3 text-sm text-warning">
-            Novi artikal može da se doda, a postojeća količina da se poveća,
-            smanji ili ukloni samo pre naplate, fiskalizacije i otpreme;
-            poslednja stavka se uklanja otkazivanjem cele porudžbine. Adresa i
-            telefon mogu da se isprave do predaje pošiljke kuriru, uz obaveznu
-            zamenu postojeće adresnice.
+            {hasProductSets
+              ? "Ova porudžbina sadrži prodajni set. Komponente i cena ostaju zajedno; za drugačiji sastav otkažite porudžbinu i kreirajte novu. "
+              : "Novi artikal može da se doda, a postojeća količina da se poveća, smanji ili ukloni samo pre naplate, fiskalizacije i otpreme; poslednja stavka se uklanja otkazivanjem cele porudžbine. "}
+            Adresa i telefon mogu da se isprave do predaje pošiljke kuriru, uz
+            obaveznu zamenu postojeće adresnice.
           </p>
           <Card>
             <CardTitle>Identitet prodajnog naloga</CardTitle>

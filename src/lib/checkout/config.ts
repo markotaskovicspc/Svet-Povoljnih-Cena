@@ -1,4 +1,6 @@
 import "server-only";
+import { resolveSetBasket } from "@/lib/product-sets/server";
+import { isProductSetSku } from "@/lib/product-sets/core";
 
 import {
   DeliveryScope,
@@ -184,6 +186,9 @@ export async function resolveDeliveryQuote({
       truckCities: [...DEFAULT_DELIVERY_QUOTE.truckCities],
     };
   }
+  const setSkus = lines.filter(line => isProductSetSku(line.sku)).map(line => line.sku);
+  const setBasket = await resolveSetBasket(lines.map(line => ({ sku: line.sku, qty: line.qty ?? 1 })));
+  lines = setBasket.lines;
   const now = new Date();
   const normalizedCity = normalizeCity(city);
   const skus = [...new Set(lines.map((line) => line.sku).filter(Boolean))];
@@ -325,6 +330,7 @@ export async function resolveDeliveryQuote({
       return [line.sku, price] as const;
     }),
   ) as Partial<Record<SKU, number>>;
+  for (const sku of setSkus) assemblyPricesBySku[sku] = 0;
   const fallbackTruckCities = [...DEFAULT_TRUCK_CITY_NAMES];
   const databaseTruckCities = truckCities.map((row) => row.name);
   const effectiveTruckCities = TRUCK_DELIVERY_ENABLED
@@ -352,6 +358,7 @@ export async function resolveDeliveryQuote({
             activePricingRules,
           );
           const unitPrice = effectiveUnitPrice({
+            fixedSetPrice: setBasket.prices.get(line.sku),
             fullPrice: num(product.priceListEntries[0]?.price ?? product.fullPrice),
             salePrice: product.salePrice == null ? null : num(product.salePrice),
             discountPct: product.discountPct,

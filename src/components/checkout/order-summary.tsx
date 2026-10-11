@@ -14,7 +14,7 @@ import {
   type CheckoutDeliveryQuote,
   type CheckoutPaymentMethodConfig,
 } from "@/lib/checkout/config-shared";
-import { formatRsd } from "@/lib/format";
+import { formatRsd as formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { PaymentMethod, ShippingMethod, SKU } from "@/types";
 import { DeliveryCategoryBreakdown } from "@/components/cart/delivery-category-breakdown";
@@ -134,6 +134,8 @@ export function OrderSummary({
   const { firstPurchasePct } = useCommerceTerms();
   const hydrated = useCart((s) => s.hydrated);
   const lines = useCart((s) => s.lines);
+  const exactPrices = lines.some(line => line.sku.startsWith("set:"));
+  const formatRsd = (value: number) => formatCurrency(value, exactPrices);
   const voucher = useCheckout((s) => s.voucher);
   const deliveryQuoteReady = deliveryQuoteStatus === "ready";
 

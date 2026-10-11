@@ -24,7 +24,17 @@ function formatInteger(value: number) {
   return `${sign}${Math.abs(rounded).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`;
 }
 
-export function formatRsd(value: number) {
+export function formatRsd(value: number, exact = false) {
+  // Set allocations can carry paras; ordinary catalog displays keep their
+  // existing whole-dinar presentation unless precision is explicitly requested.
+  if (exact && Number.isFinite(value)) {
+    const cents = Math.round((value + Number.EPSILON) * 100);
+    if (cents % 100 !== 0) {
+      const absolute = Math.abs(cents);
+      return `${cents < 0 ? "-" : ""}${formatInteger(Math.floor(absolute / 100))},${String(absolute % 100).padStart(2, "0")} RSD`;
+    }
+    return `${formatInteger(cents / 100)} RSD`;
+  }
   return `${formatInteger(value)} RSD`;
 }
 

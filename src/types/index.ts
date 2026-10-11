@@ -345,6 +345,7 @@ export type PaymentMethod =
 export type ShippingMethod = "kurir" | "kamion";
 
 export interface OrderItem {
+  productSetName?: string;
   sku: SKU;
   name: string;
   qty: number;

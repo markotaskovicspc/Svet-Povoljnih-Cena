@@ -15,13 +15,17 @@ import {
   Receipt,
 } from "lucide-react";
 import { useCheckout } from "@/lib/checkout/store";
-import { formatDateTime, formatRsd } from "@/lib/format";
+import { formatDateTime, formatRsd as formatMoney } from "@/lib/format";
 import { resolveDocumentBuyerAddress } from "@/lib/document-buyer";
 import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 import { cn } from "@/lib/utils";
 import type { Order, PaymentMethod } from "@/types";
 import { PurchaseAnalytics } from "@/components/analytics/first-party-analytics";
 import { CancelOrderButton } from "@/components/orders/cancel-order-button";
+
+function formatOrderRsd(order: Order, value: number) {
+  return formatMoney(value, order.items.some(item => Boolean(item.productSetName)));
+}
 
 /**
  * Renders the server-authorized order and its payment-specific blocks.
@@ -233,7 +237,7 @@ function PaymentMethodView({
           Plaćanje se pokreće na Raiffeisen IPS strani, gde se prikazuje IPS QR
           kod ili deep link za m-banking aplikaciju.
         </p>
-        <DetailRow label="Iznos" value={formatRsd(order.total)} mono />
+        <DetailRow label="Iznos" value={formatOrderRsd(order, order.total)} mono />
         <DetailRow label="Broj porudžbine" value={order.id} mono />
         {order.payment?.paymentReference ? (
           <DetailRow label="RP referenca" value={order.payment.paymentReference} mono />
@@ -272,7 +276,7 @@ function PaymentMethodView({
             value={MERCHANT_LEGAL_INFO.bankAccount}
             mono
           />
-          <DetailRow label="Iznos" value={formatRsd(order.total)} mono />
+          <DetailRow label="Iznos" value={formatOrderRsd(order, order.total)} mono />
           <DetailRow label="Poziv na broj" value={order.id} mono />
         </div>
       </div>
@@ -293,7 +297,7 @@ function PaymentMethodView({
         <div className="bg-muted-bg/60 flex items-center justify-between rounded-lg px-3 py-2">
           <span className="text-xs text-ink-500">Iznos</span>
           <span className="text-ink-900 font-mono text-sm font-medium">
-            {formatRsd(order.total)}
+            {formatOrderRsd(order, order.total)}
           </span>
         </div>
         <a
@@ -314,7 +318,7 @@ function PaymentMethodView({
         </p>
         <p>
           Iznos plaćate kuriru pri preuzimanju pošiljke. Pripremite{" "}
-          <span className="text-ink-900 font-mono">{formatRsd(order.total)}</span>
+          <span className="text-ink-900 font-mono">{formatOrderRsd(order, order.total)}</span>
           {method === "pouzece_kartica"
             ? " — kuriri imaju POS terminale za karticu."
             : " u gotovini."}
@@ -378,7 +382,7 @@ function IpsPaymentReceipt({
           </p>
           <div className="flex flex-col gap-2">
             <DetailRow label="Broj porudžbine" value={order.id} mono />
-            <DetailRow label="Iznos transakcije" value={formatRsd(order.total)} mono />
+            <DetailRow label="Iznos transakcije" value={formatOrderRsd(order, order.total)} mono />
             <DetailRow label="Status transakcije" value={statusLabel} />
             <DetailRow
               label="RP referenca"
@@ -484,7 +488,7 @@ function Uplatnica({ order }: { order: Order }) {
         <span className="text-ink-500">VALUTA</span>
         <span className="text-ink-900">RSD</span>
         <span className="text-ink-500">IZNOS</span>
-        <span className="text-ink-900 text-base">{formatRsd(order.total)}</span>
+        <span className="text-ink-900 text-base">{formatOrderRsd(order, order.total)}</span>
         <span className="text-ink-500">RAČUN PRIMAOCA</span>
         <span className="text-ink-900">{MERCHANT_LEGAL_INFO.bankAccount}</span>
         <span className="text-ink-500">POZIV NA BROJ</span>
@@ -557,12 +561,12 @@ function OrderRecap({ order }: { order: Order }) {
             <div className="min-w-0 flex-1">
               <p className="truncate text-ink-900">{it.name}</p>
               <p className="text-[11px] text-ink-500 tabular-nums">
-                {it.qty} × {formatRsd(it.unitPriceSale)}
+                {it.qty} × {formatOrderRsd(order, it.unitPriceSale)}
                 {it.withAssembly ? " + montaža" : ""}
               </p>
             </div>
             <span className="text-xs font-medium text-ink-900 tabular-nums">
-              {formatRsd(it.unitPriceSale * it.qty)}
+              {formatOrderRsd(order, it.unitPriceSale * it.qty)}
             </span>
           </li>
         ))}
@@ -570,33 +574,33 @@ function OrderRecap({ order }: { order: Order }) {
       <dl className="border-border/60 flex flex-col gap-1.5 border-t pt-3 text-sm">
         <Row
           label="Vrednost artikala"
-          value={formatRsd(order.subtotal + order.savings)}
+          value={formatOrderRsd(order, order.subtotal + order.savings)}
         />
         {order.savings > 0 ? (
-          <Row label="Ušteda" value={`−${formatRsd(order.savings)}`} action />
+          <Row label="Ušteda" value={`−${formatOrderRsd(order, order.savings)}`} action />
         ) : null}
-        <Row label="Isporuka" value={formatRsd(order.shipping)} />
+        <Row label="Isporuka" value={formatOrderRsd(order, order.shipping)} />
         {order.assemblyTotal > 0 ? (
-          <Row label="Montaža" value={formatRsd(order.assemblyTotal)} />
+          <Row label="Montaža" value={formatOrderRsd(order, order.assemblyTotal)} />
         ) : null}
         {order.voucherDiscount && order.voucherCode ? (
           <Row
             label={`Vaučer „${order.voucherCode}”`}
-            value={`−${formatRsd(order.voucherDiscount)}`}
+            value={`−${formatOrderRsd(order, order.voucherDiscount)}`}
             action
           />
         ) : null}
         {order.firstPurchaseDiscount ? (
           <Row
             label="Popust za prvu kupovinu"
-            value={`−${formatRsd(order.firstPurchaseDiscount)}`}
+            value={`−${formatOrderRsd(order, order.firstPurchaseDiscount)}`}
             action
           />
         ) : null}
         {order.savedCardDiscount ? (
           <Row
             label="Popust za sačuvanu karticu"
-            value={`−${formatRsd(order.savedCardDiscount)}`}
+            value={`−${formatOrderRsd(order, order.savedCardDiscount)}`}
             action
           />
         ) : null}
@@ -604,7 +608,7 @@ function OrderRecap({ order }: { order: Order }) {
       <div className="border-border/60 flex items-baseline justify-between border-t pt-3">
         <span className="text-sm font-medium text-ink-900">Ukupno</span>
         <span className="font-display text-2xl text-ink-900">
-          {formatRsd(order.total)}
+          {formatOrderRsd(order, order.total)}
         </span>
       </div>
       {order.payment ? (

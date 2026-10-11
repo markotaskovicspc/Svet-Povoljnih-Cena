@@ -14,7 +14,7 @@ import { SUPPLIER_PARITY_OPTIONS } from "@/lib/supplier-master";
 
 export type PurchasePriceCommandInput = Record<string, unknown>;
 
-const articleSnapshotSelect = {
+export const articleSnapshotSelect = {
   id: true,
   sku: true,
   name: true,
@@ -92,49 +92,59 @@ export async function createPurchasePrice(input: PurchasePriceCommandInput) {
   validatePurchasePricePeriod(validFrom, validTo);
   const article = await resolveArticleSnapshot(input.sku);
 
-  return db.$transaction(async (tx) => {
-    const [sameStart, previous, next] = await Promise.all([
-      tx.purchasePrice.findFirst({
-        where: { productId: article.productId, validFrom },
-        select: { id: true },
-      }),
-      tx.purchasePrice.findFirst({
-        where: { productId: article.productId, validFrom: { lt: validFrom } },
-        orderBy: { validFrom: "desc" },
-        select: { id: true, validTo: true },
-      }),
-      tx.purchasePrice.findFirst({
-        where: { productId: article.productId, validFrom: { gt: validFrom } },
-        orderBy: { validFrom: "asc" },
-        select: { validFrom: true },
-      }),
-    ]);
-    if (sameStart) {
-      throw new Error("Nabavna cena za ovaj artikal i datum već postoji.");
-    }
+  return db.$transaction((tx) =>
+    insertPurchasePriceInTransaction(tx, article, price, validFrom, validTo),
+  );
+}
 
-    const nextBoundary = next ? previousUtcDay(next.validFrom) : null;
-    const effectiveValidTo =
-      nextBoundary && (!validTo || validTo > nextBoundary)
-        ? nextBoundary
-        : validTo;
-    validatePurchasePricePeriod(validFrom, effectiveValidTo);
+export async function insertPurchasePriceInTransaction(
+  tx: Prisma.TransactionClient,
+  article: Awaited<ReturnType<typeof resolveArticleSnapshot>>,
+  price: string,
+  validFrom: Date,
+  validTo: Date | null,
+) {
+  const [sameStart, previous, next] = await Promise.all([
+    tx.purchasePrice.findFirst({
+      where: { productId: article.productId, validFrom },
+      select: { id: true },
+    }),
+    tx.purchasePrice.findFirst({
+      where: { productId: article.productId, validFrom: { lt: validFrom } },
+      orderBy: { validFrom: "desc" },
+      select: { id: true, validTo: true },
+    }),
+    tx.purchasePrice.findFirst({
+      where: { productId: article.productId, validFrom: { gt: validFrom } },
+      orderBy: { validFrom: "asc" },
+      select: { validFrom: true },
+    }),
+  ]);
+  if (sameStart) {
+    throw new Error("Nabavna cena za ovaj artikal i datum već postoji.");
+  }
 
-    if (previous && (!previous.validTo || previous.validTo >= validFrom)) {
-      await tx.purchasePrice.update({
-        where: { id: previous.id },
-        data: { validTo: previousUtcDay(validFrom) },
-      });
-    }
+  const nextBoundary = next ? previousUtcDay(next.validFrom) : null;
+  const effectiveValidTo =
+    nextBoundary && (!validTo || validTo > nextBoundary)
+      ? nextBoundary
+      : validTo;
+  validatePurchasePricePeriod(validFrom, effectiveValidTo);
 
-    return tx.purchasePrice.create({
-      data: {
-        ...article,
-        price,
-        validFrom,
-        validTo: effectiveValidTo,
-      },
+  if (previous && (!previous.validTo || previous.validTo >= validFrom)) {
+    await tx.purchasePrice.update({
+      where: { id: previous.id },
+      data: { validTo: previousUtcDay(validFrom) },
     });
+  }
+
+  return tx.purchasePrice.create({
+    data: {
+      ...article,
+      price,
+      validFrom,
+      validTo: effectiveValidTo,
+    },
   });
 }
 

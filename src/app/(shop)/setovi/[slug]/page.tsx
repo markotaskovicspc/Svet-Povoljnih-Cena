@@ -1,0 +1,14 @@
+import Link from "next/link";
+import Image from "next/image";
+import { notFound } from "next/navigation";
+import { getPublicSets } from "@/lib/product-sets/server";
+import { RABALUX_DELIVERY_WINDOW } from "@/lib/rabalux/availability";
+import { formatRsd as formatMoney } from "@/lib/format";
+const formatRsd = (value: number) => formatMoney(value, true);
+import { AddSet } from "../add-set";
+export const dynamic = "force-dynamic";
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) { const { slug } = await params; const [set] = await getPublicSets({ slug }); return { title: set?.name ?? "Set nije pronađen" }; }
+export default async function ProductSetDetail({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params; const [set] = await getPublicSets({ slug }); if (!set) notFound();
+  return <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6"><Link href="/setovi" className="text-sm underline">← Svi setovi</Link><div className="mt-6 grid gap-8 lg:grid-cols-2"><section><div className="relative aspect-square rounded-2xl border border-border bg-white">{set.image && <Image src={set.image} alt={set.name} fill priority sizes="(max-width:1024px) 100vw, 50vw" className="object-contain p-8" />}</div><p className="mt-2 text-sm text-ink-500">Prikazana je jedna od komponenti. Tačan sastav je naveden u nastavku.</p></section><section className="space-y-5"><p className="text-xs uppercase tracking-widest text-ink-500">Prodajni set</p><h1 className="text-3xl font-semibold">{set.name}</h1>{set.description && <p className="whitespace-pre-wrap text-ink-600">{set.description}</p>}<p className="text-3xl font-semibold text-walnut">{formatRsd(set.price)}</p><p className="text-sm text-ink-500">Cena za ceo set sa PDV-om. Trošak dostave prikazuje se u korpi prema artiklima i adresi.</p><p className="font-medium">{set.stock ? set.supplier ? `Dostupno kod dobavljača · ${RABALUX_DELIVERY_WINDOW.min}–${RABALUX_DELIVERY_WINDOW.max} radna dana za dobavljačke artikle` : "Sve komponente su dostupne" : "Jedna ili više komponenti trenutno nisu dostupne"}</p><AddSet sku={set.sku} name={set.name} slug={set.slug} price={set.price} image={set.image} available={set.stock > 0} /><h2 className="border-t border-border pt-5 text-lg font-semibold">Šta sadrži ovaj set</h2><ul className="divide-y divide-border">{set.components.map(c => <li key={c.sku} className="flex gap-4 py-3">{c.image && <Image src={c.image} alt="" width={64} height={64} className="size-16 rounded-lg object-contain" />}<div><Link href={`/p/${c.slug}`} className="font-medium underline">{c.name}</Link><p className="text-sm text-ink-500">{c.quantity} kom. · šifra {c.sku}</p></div></li>)}</ul><p className="text-sm text-ink-500">Set se u korpi menja i uklanja kao celina. Račun i isporuka sadrže njegove pojedinačne artikle. Montažu seta dogovorite sa podrškom pre poručivanja.</p></section></div></main>;
+}

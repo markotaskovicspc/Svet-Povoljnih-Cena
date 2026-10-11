@@ -1,3 +1,5 @@
+import { getPublicSets } from "@/lib/product-sets/server";
+import { isProductSetSku, productSetId } from "@/lib/product-sets/core";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getProductBySku } from "@/lib/api/catalog";
@@ -34,9 +36,10 @@ export async function POST(req: Request) {
   }
 
   const skus = Array.from(new Set(parsed.data.skus.map((sku) => sku.trim())));
-  const [catalogProducts, currentUser] = await Promise.all([
-    Promise.all(skus.map((sku) => getProductBySku(sku))),
+  const [catalogProducts, currentUser, sets] = await Promise.all([
+    Promise.all(skus.filter(sku => !isProductSetSku(sku)).map((sku) => getProductBySku(sku))),
     getCurrentUser(),
+    skus.some(isProductSetSku) ? getPublicSets({ ids: skus.filter(isProductSetSku).map(productSetId) }) : Promise.resolve([]),
   ]);
   const products: Product[] = catalogProducts
     .filter((product): product is Product => Boolean(product))
@@ -63,5 +66,5 @@ export async function POST(req: Request) {
     };
   });
 
-  return NextResponse.json({ items, products });
+  return NextResponse.json({ items, products, setPrices: sets.map(set => ({ sku: set.sku, name: set.name, slug: set.slug, unitPriceFull: set.price, unitPriceSale: set.price, thumbnailUrl: set.image ?? undefined })) });
 }

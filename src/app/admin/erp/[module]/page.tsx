@@ -151,6 +151,14 @@ export default async function ErpModulePage({
         ]}
         actions={
           <div className="flex flex-wrap gap-2">
+            {slug === "nabavne-cene" ? (
+              <Link
+                href="/admin/erp/nabavne-cene/uvoz"
+                className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
+              >
+                Masovni uvoz nabavnih cena
+              </Link>
+            ) : null}
             {slug === "artikli" && <Link href={isArticleArchive ? "/admin/erp/artikli" : "/admin/erp/artikli?view=archived-articles"} className="inline-flex h-8 items-center rounded-lg border border-border px-2.5 text-sm">{isArticleArchive ? "Svi artikli" : "Arhivirani artikli (ARH)"}</Link>}
             {slug === "preuzimanja" ? (
               <Link

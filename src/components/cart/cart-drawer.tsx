@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/sheet";
 import { useCart } from "@/lib/hooks/use-cart";
 import { useCartUi } from "@/lib/hooks/use-cart-ui";
-import { formatRsd } from "@/lib/format";
+import { formatRsd as formatCurrency } from "@/lib/format";
 import { CartLineRow } from "./cart-line-row";
 import { CartLoginOffer } from "./cart-view";
 import { useCartDeliveryQuote } from "@/lib/hooks/use-cart-delivery-quote";
@@ -31,6 +31,8 @@ export function CartDrawer() {
   const openSuggestion = useCartUi((s) => s.openSuggestion);
 
   const lines = useCart((s) => s.lines);
+  const exactPrices = lines.some(line => line.sku.startsWith("set:"));
+  const formatRsd = (value: number) => formatCurrency(value, exactPrices);
   const subtotal = lines.reduce((n, l) => n + l.unitPriceSale * l.qty, 0);
   const guestLoyalty = useGuestLoyalty();
   const loggedIn = useLoyaltyEligibility();
@@ -41,7 +43,7 @@ export function CartDrawer() {
     0,
   );
   const count = lines.reduce((n, l) => n + l.qty, 0);
-  const { quote, loading: deliveryLoading } = useCartDeliveryQuote(
+  const { quote, loading: deliveryLoading, error: deliveryError } = useCartDeliveryQuote(
     lines,
     open,
   );
@@ -140,7 +142,7 @@ export function CartDrawer() {
             ) : null}
             {shipping == null && !deliveryLoading ? (
               <p className="text-action text-xs">
-                Za ovu korpu dostava ne može automatski da se obračuna.
+                {deliveryError ?? "Za ovu korpu dostava ne može automatski da se obračuna."}
               </p>
             ) : null}
             {firstPurchaseDiscount > 0 ? <div className="flex justify-between text-sm text-action"><span>Prva kupovina −{firstPurchasePct}%</span><strong>−{formatRsd(firstPurchaseDiscount)}</strong></div> : null}

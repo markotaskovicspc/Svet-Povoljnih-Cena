@@ -12,6 +12,7 @@ import { formatProductDisplayName } from "@/lib/product-name";
  */
 
 const orderListSelect = {
+  checkoutLinesSnapshot: true,
   id: true,
   number: true,
   status: true,
@@ -19,6 +20,7 @@ const orderListSelect = {
   createdAt: true,
   items: {
     select: {
+      productSetName: true,
       sku: true,
       name: true,
       attribute1: true,
@@ -153,6 +155,7 @@ export async function getPublicOrderForConfirmation(
     customerEmail: row.user?.email ?? row.guestEmail ?? undefined,
     status: ORDER_STATUS_LOWER[row.status],
     items: row.items.map((i) => ({
+      productSetName: i.productSetName ?? undefined,
       sku: i.sku,
       name: formatProductDisplayName(i.name, i.attribute1),
       qty: i.qty,

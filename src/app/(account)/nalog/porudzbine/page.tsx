@@ -68,7 +68,7 @@ export default async function AccountOrdersPage() {
                 </div>
                 <div className="flex items-center justify-between gap-4 md:min-w-[220px] md:justify-end">
                   <span className="font-display text-xl text-ink-900">
-                    {formatRsd(order.total)}
+                    {formatRsd(order.total, Boolean(order.checkoutLinesSnapshot))}
                   </span>
                   <span className="text-sm font-medium text-walnut group-hover:underline">
                     Detalji

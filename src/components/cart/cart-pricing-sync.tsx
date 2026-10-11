@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
+import type { CartPriceUpdate } from "@/lib/hooks/use-cart";
 import { useCart } from "@/lib/hooks/use-cart";
 import { useLoyaltyEligibility } from "@/components/pricing/pricing-eligibility";
 import { resolveProductPriceQuote } from "@/lib/pricing";
@@ -49,13 +50,13 @@ export function CartPricingSync() {
               signal: controller.signal,
             });
             if (!response.ok) throw new Error("cart pricing lookup failed");
-            return (await response.json()) as { products?: Product[] };
+            return (await response.json()) as { products?: Product[]; setPrices?: CartPriceUpdate[] };
           }),
         );
         const products = payloads.flatMap((payload) => payload.products ?? []);
         if (controller.signal.aborted) return;
         reprice(
-          products.map((product) => {
+          [...payloads.flatMap(payload => payload.setPrices ?? []), ...products.map((product): CartPriceUpdate => {
             const quote = resolveProductPriceQuote(product, {
               loggedIn: loyaltyEligible,
             });
@@ -77,7 +78,7 @@ export function CartPricingSync() {
                   ]) ?? undefined
                 : undefined,
             };
-          }),
+          })],
         );
       } catch (error) {
         if (!controller.signal.aborted) {

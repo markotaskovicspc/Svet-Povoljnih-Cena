@@ -24,6 +24,7 @@ export function useCartDeliveryQuote(
   const [resolved, setResolved] = useState<{
     key: string;
     quote: CheckoutDeliveryQuote | null;
+    error: string | null;
   } | null>(null);
 
   useEffect(() => {
@@ -39,17 +40,19 @@ export function useCartDeliveryQuote(
       .then(async (response) => {
         const result = (await response.json().catch(() => null)) as
           | { ok: true; data: CheckoutDeliveryQuote }
+          | { ok: false; error?: string; message?: string }
           | null;
         if (!controller.signal.aborted) {
           setResolved({
             key: requestKey,
             quote: response.ok && result?.ok ? result.data : null,
+            error: result && !result.ok && result.error === "invalid_set" && typeof result.message === "string" ? result.message : null,
           });
         }
       })
       .catch(() => {
         if (!controller.signal.aborted) {
-          setResolved({ key: requestKey, quote: null });
+          setResolved({ key: requestKey, quote: null, error: null });
         }
       });
 
@@ -59,6 +62,7 @@ export function useCartDeliveryQuote(
   const isCurrent = active && resolved?.key === requestKey;
   return {
     quote: isCurrent ? resolved.quote : null,
+    error: isCurrent ? resolved.error : null,
     loading: active && !isCurrent,
   };
 }

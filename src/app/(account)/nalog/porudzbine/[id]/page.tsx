@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, PackageCheck } from "lucide-react";
 import { requireUser } from "@/lib/auth/session";
 import { getOrderForUser } from "@/lib/api/orders";
-import { formatRsd } from "@/lib/format";
+import { formatRsd as formatMoney } from "@/lib/format";
 import { CancelOrderButton } from "@/components/orders/cancel-order-button";
 
 export const metadata: Metadata = {
@@ -24,6 +24,7 @@ export default async function AccountOrderDetailPage({
   const user = await requireUser(`/nalog/porudzbine/${encodeURIComponent(id)}`);
   const order = await getOrderForUser(user.id, id);
   if (!order) notFound();
+  const formatRsd = (value: number) => formatMoney(value, Boolean(order.checkoutLinesSnapshot));
 
   return (
     <main className="mx-auto w-full max-w-[var(--container-page)] px-4 py-10 md:px-6 md:py-14">

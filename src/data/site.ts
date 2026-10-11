@@ -155,6 +155,7 @@ export const footerColumns: { title: string; links: { label: string; href: strin
   {
     title: "Kupovina",
     links: [
+      { label: "Prodajni setovi", href: "/setovi" },
       { label: "Mesečna akcija", href: "/akcija" },
       { label: "Heroji meseca", href: "/heroji-meseca" },
       { label: "Niske cene pod trajnom zaštitom", href: "/niske-cene-pod-zastitom" },
