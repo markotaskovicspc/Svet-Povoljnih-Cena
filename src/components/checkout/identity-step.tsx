@@ -213,7 +213,7 @@ export function IdentityStep({
             <p className="mt-1 text-sm text-ink-500">
               {showAuth === "login"
                 ? "Izaberite isti način prijave koji koristite na stranici naloga."
-                : "Najbrže je preko Google, Apple ili Facebook naloga."}
+                : "Možete koristiti ponuđene načine prijave ili e-poštu."}
             </p>
             <CustomerAuthMethods
               callbackUrl="/checkout/podaci"
