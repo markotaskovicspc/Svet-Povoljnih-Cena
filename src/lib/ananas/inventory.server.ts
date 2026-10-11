@@ -59,14 +59,14 @@ export async function postAnanasDocumentInventory(documentId: string, actorId?: 
   }, { timeout: 60000 });
 }
 
-export async function postPendingAnanasInventory(limit = 40, actorId?: string, deadline = Date.now() + 90000) {
+export async function postPendingAnanasInventory(limit = 40, actorId?: string, deadline = Date.now() + 90000, retryErrors = true) {
   const policy = await getAnanasInventoryPolicy();
   if (!policy?.enabled) return { posted: 0, failed: 0 };
   const where = { issuedAt: { gte: new Date(ANANAS_INVENTORY_START) }, inventoryPostedAt: null };
   const size = Math.min(limit, 100);
   const documents = await db.ananasDocument.findMany({ where: { ...where, inventoryError: null },
     orderBy: [{ issuedAt: "asc" }, { id: "asc" }], take: size });
-  if (documents.length < size) documents.push(...await db.ananasDocument.findMany({ where: { ...where, inventoryError: { not: null } },
+  if (retryErrors && documents.length < size) documents.push(...await db.ananasDocument.findMany({ where: { ...where, inventoryError: { not: null } },
     orderBy: [{ updatedAt: "asc" }, { id: "asc" }], take: size - documents.length }));
   let posted = 0, failed = 0;
   for (const document of documents) {

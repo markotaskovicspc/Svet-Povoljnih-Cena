@@ -18,7 +18,7 @@ export async function advanceAnanasInventoryHistory(actorId?: string, now = new 
   });
   let imported = 0;
   try {
-    const before = await postPendingAnanasInventory(40, actorId, started + 90000);
+    const before = await postPendingAnanasInventory(40, actorId, started + 90000, new Date(policy.historyThrough) >= now);
     const waiting = await db.ananasDocument.count({ where: { inventoryPostedAt: null, inventoryError: null, issuedAt: { gte: new Date("2025-05-31T22:00:00.000Z") } } });
     let through = policy.historyThrough;
     // A source sync has its own 180s API + 90s storage bounds. If draining
@@ -28,7 +28,7 @@ export async function advanceAnanasInventoryHistory(actorId?: string, now = new 
       imported = (await syncAnanasDocuments(from, to, "INVENTORY_HISTORY")).count;
       through = to.toISOString();
     }
-    const after = await postPendingAnanasInventory(40, actorId, started + 210000);
+    const after = await postPendingAnanasInventory(40, actorId, started + 210000, new Date(through) >= now);
     await db.$transaction(async tx => {
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('ananas-inventory-policy'))::text`;
       const current = await tx.adminSetting.findUniqueOrThrow({ where: { key: ANANAS_INVENTORY_KEY } });
