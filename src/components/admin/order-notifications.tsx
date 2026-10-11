@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 async function requestPush(body?: unknown) {
@@ -19,6 +20,13 @@ function applicationKey(key: string) {
 }
 
 export function OrderNotifications({ adminId }: { adminId: string }) {
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const close = (event: PointerEvent) => { if (!detailsRef.current?.contains(event.target as Node) && detailsRef.current) detailsRef.current.open = false; };
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape" && detailsRef.current?.open) { detailsRef.current.open = false; detailsRef.current.querySelector("summary")?.focus(); } };
+    document.addEventListener("pointerdown", close); document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("pointerdown", close); document.removeEventListener("keydown", escape); };
+  }, []);
   const [registration, setRegistration] = useState<ServiceWorkerRegistration | null>(null);
   const [subscription, setSubscription] = useState<PushSubscription | null>(null);
   const [publicKey, setPublicKey] = useState<string | null>(null);
@@ -105,9 +113,13 @@ export function OrderNotifications({ adminId }: { adminId: string }) {
   }
 
   return (
-    <details className="border-b border-border/60 bg-surface px-4 py-3 md:px-8 print:hidden">
-      <summary className="cursor-pointer text-sm font-medium">{enabled ? "Obaveštenja o porudžbinama · uključena" : "Uključi obaveštenja o porudžbinama"}</summary>
-      <div className="mt-3 max-w-xl space-y-3">
+    <details ref={detailsRef} className="relative print:hidden">
+      <summary aria-label="Obaveštenja o porudžbinama" title={enabled ? "Obaveštenja o porudžbinama su uključena" : "Podesi obaveštenja o porudžbinama"} className="relative flex h-8 w-9 cursor-pointer list-none items-center justify-center rounded-lg border border-border bg-background transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+        <Bell className="size-4" aria-hidden />
+        {enabled && <span className="absolute right-1 top-1 size-1.5 rounded-full bg-green-500" aria-hidden />}
+      </summary>
+      <div className="fixed inset-x-4 top-20 z-50 mt-2 sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:w-[min(22rem,calc(100vw-2rem))] space-y-3 rounded-xl border border-border bg-surface p-4 shadow-xl">
+        <h2 className="text-sm font-semibold">Obaveštenja o porudžbinama</h2>
         <p className="text-sm text-ink-500" role="status">{message}</p>
         {registration && publicKey && (
           <div className="flex flex-wrap gap-2">

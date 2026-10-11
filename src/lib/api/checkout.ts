@@ -320,7 +320,7 @@ export async function createOrder(
   input: CreateOrderInput,
   userId: string | null,
   guestLoyalty: { email: string | null; consentVersion: string; consentAt: Date } | null = null,
-  options: { preserveCustomerPostalCode?: boolean; previewOnly?: boolean; expectedTotal?: number; customerReplyDraftOnly?: boolean; allowGuestWithoutEmail?: boolean; staffLoyaltyPrices?: readonly StaffLoyaltyPrice[] } = {},
+  options: { adminActorId?: string; preserveCustomerPostalCode?: boolean; previewOnly?: boolean; expectedTotal?: number; customerReplyDraftOnly?: boolean; allowGuestWithoutEmail?: boolean; staffLoyaltyPrices?: readonly StaffLoyaltyPrice[] } = {},
 ): Promise<
   { ok: true; data: CreateOrderResult } | { ok: false; error: CreateOrderError }
 > {
@@ -905,7 +905,7 @@ export async function createOrder(
           expiresAt,
           items: { createMany: { data: itemsForCreate } },
           events: {
-            create: { status: "KREIRANO", note: "Porudžbina kreirana" },
+            create: { status: "KREIRANO", note: options.adminActorId ? "Porudžbina kreirana iz chata/slike u ERP-u." : "Porudžbina kreirana", ...(options.adminActorId ? { actorId: options.adminActorId } : {}) },
           },
           payments: {
             create: {

@@ -17,6 +17,7 @@ describe("personal admin navigation", () => {
     columns: { showInSidebar: true },
     allowed: ["OPS"] as const,
   };
+  const importHref = "/admin/erp/porudzbina-iz-chata";
   const purchaseHref =
     "/admin/erp/nabavne-porudzbenice?savedView=purchase-view";
 
@@ -30,7 +31,7 @@ describe("personal admin navigation", () => {
     const customized = applyAdminNavPreferences(available, preferences);
     expect(
       customized.flatMap((group) => group.items.map((item) => item.href)),
-    ).toEqual(["/admin", purchaseHref, "/admin/checkouti"]);
+    ).toEqual(["/admin", purchaseHref, "/admin/checkouti", importHref]);
     expect(
       activeAdminNavHref(
         customized,
@@ -58,6 +59,7 @@ describe("personal admin navigation", () => {
     expect(items.map((item) => item.href)).toEqual([
       "/admin",
       "/admin/checkouti",
+      importHref,
       "/admin/erp/prodajni-nalozi?savedView=sales",
       purchaseHref,
     ]);
@@ -83,7 +85,14 @@ describe("personal admin navigation", () => {
       visibleHrefs: ["/admin", "/admin/erp/artikli?savedView=foreign"],
       order: [purchaseHref, "/admin/erp/artikli?savedView=foreign"],
     });
-    expect(customized[0]!.items.map((item) => item.href)).toEqual(["/admin"]);
+    expect(customized[0]!.items.map((item) => item.href)).toEqual(["/admin", importHref]);
+  });
+
+  it("honors an explicitly hidden order import tab after the menu is configured", () => {
+    const customized = applyAdminNavPreferences(allowedNavFor("OPS"), {
+      visibleHrefs: ["/admin"], order: ["/admin", importHref],
+    });
+    expect(customized[0]!.items.map(item => item.href)).toEqual(["/admin"]);
   });
 
   it("detaches a manually moved view from its collapsible parent", () => {
