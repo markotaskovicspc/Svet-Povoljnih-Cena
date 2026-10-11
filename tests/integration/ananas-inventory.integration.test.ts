@@ -13,6 +13,7 @@ it("posts historical Ananas sales/refunds once, permits a scoped minus, and pres
     issuedAt: new Date("2025-06-02T10:00:00Z"), invoicedAt: new Date("2025-06-02T10:00:00Z"), gross: 100, net: 100, vat: 0,
     paymentMethods: "COD", items: [{ sku, name: "Sto", quantity: qty, gross: 100 }],
   } });
+  let importedProductId: string | undefined;
   try {
     await configureAnanasInventory(true, true, "QA");
     const sale = await document("SALE", 20, "SALE");
@@ -41,6 +42,21 @@ it("posts historical Ananas sales/refunds once, permits a scoped minus, and pres
     expect(await db.stockMovement.count({ where: { idempotencyKey: { startsWith: `ananas-fiscal:${correction.id}:` } } })).toBe(1);
     await db.$transaction(tx => adjustInventory(tx, { idempotencyKey: `${prefix}-RECEIPT`, warehouseId: warehouse.id, productId: product.id, qtyDelta: 14, kind: "PURCHASE_RECEIPT", note: "QA" }));
     expect((await db.warehouseStock.findUniqueOrThrow({ where: { warehouseId_productId: { warehouseId: warehouse.id, productId: product.id } } })).qty).toBe(1);
+    const numericMissing = await document("SALE", 1, "MISSING-NUMERIC", "8765");
+    await postAnanasDocumentInventory(numericMissing.id);
+    const imported = await db.product.findUniqueOrThrow({ where: { sku: "810765" } });
+    importedProductId = imported.id;
+    expect(imported.name).toBe("Sto");
+    expect(imported.isActive).toBe(false);
+    expect(imported.availableWebManual).toBe(false);
+    expect(imported.availableWholesaleManual).toBe(false);
+    expect(imported.availableExportManual).toBe(false);
+    expect(imported.supplierId).toBeNull();
+    expect(Number(imported.fullPrice)).toBe(0);
+    expect(imported.dcAvailableQty).toBe(0);
+    expect((await db.warehouseStock.findUniqueOrThrow({ where: { warehouseId_productId: { warehouseId: warehouse.id, productId: imported.id } } })).qty).toBe(-1);
+    await postAnanasDocumentInventory(numericMissing.id);
+    expect(await db.stockMovement.count({ where: { productId: imported.id } })).toBe(1);
     await configureAnanasInventory(true, false, "QA");
     const tooMany = await document("SALE", 2, "STRICT");
     await expect(postAnanasDocumentInventory(tooMany.id)).rejects.toThrow(/Nema dovoljno/);
@@ -55,6 +71,11 @@ it("posts historical Ananas sales/refunds once, permits a scoped minus, and pres
     await db.stockMovement.deleteMany({ where: { productId: product.id } });
     await db.warehouseStock.deleteMany({ where: { productId: product.id } });
     await db.product.delete({ where: { id: product.id } });
+    if (importedProductId) {
+      await db.stockMovement.deleteMany({ where: { productId: importedProductId } });
+      await db.warehouseStock.deleteMany({ where: { productId: importedProductId } });
+      await db.product.delete({ where: { id: importedProductId } });
+    }
     await db.warehouse.delete({ where: { id: warehouse.id } });
   }
 });
