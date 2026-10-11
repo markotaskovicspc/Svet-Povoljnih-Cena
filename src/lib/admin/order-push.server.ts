@@ -71,13 +71,13 @@ export async function fanOutOrderPush(orderId: string) {
 
 export async function deliverOrderPush(orderId: string, subscriptionId: string, adminUserId: string) {
   const [order, subscription] = await Promise.all([
-    db.order.findUnique({ where: { id: orderId }, select: { number: true, createdAt: true } }),
+    db.order.findUnique({ where: { id: orderId }, select: { number: true, createdAt: true, total: true } }),
     db.adminPushSubscription.findUnique({ where: { id: subscriptionId }, select: { adminUserId: true } }),
   ]);
   if (!order || !subscription || subscription.adminUserId !== adminUserId || Date.now() - order.createdAt.getTime() > 3600_000) return;
   await sendAdminDevicePush(subscriptionId, {
     title: `Nova porudžbina ${order.number}`,
-    body: "Otvorite administraciju za pregled porudžbine.",
+    body: `Ukupno: ${new Intl.NumberFormat("sr-Latn-RS", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(order.total))} din. Otvorite porudžbinu za pregled.`,
     url: `/admin/erp/prodajni-nalozi/${encodeURIComponent(orderId)}`,
     tag: `order-${orderId}`,
   });

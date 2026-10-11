@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { Prisma } from "@prisma/client";
 const mocks = vi.hoisted(() => ({
   find: vi.fn(), subscriptions: vi.fn(), remove: vi.fn(), order: vi.fn(),
   enqueue: vi.fn(), process: vi.fn(), send: vi.fn(), configure: vi.fn(),
@@ -19,7 +20,7 @@ beforeEach(() => {
   vi.stubEnv("VAPID_PRIVATE_KEY", "private");
   vi.stubEnv("VAPID_SUBJECT", "mailto:admin@example.com");
   mocks.find.mockResolvedValue({ id: "s1", adminUserId: "a1", endpoint: "https://web.push.apple.com/device", p256dh: "key", auth: "auth", adminUser: { enabled: true, role: "OPS" } });
-  mocks.order.mockResolvedValue({ number: "SPC-123", createdAt: new Date() });
+  mocks.order.mockResolvedValue({ number: "SPC-123", createdAt: new Date(), total: new Prisma.Decimal("12345.67") });
   mocks.subscriptions.mockResolvedValue([{ id: "s1", adminUserId: "a1" }, { id: "s2", adminUserId: "a2" }]);
   mocks.enqueue.mockImplementation(async ({ idempotencyKey }) => ({ id: idempotencyKey }));
   mocks.send.mockResolvedValue({ statusCode: 201 });
@@ -69,7 +70,7 @@ it("never sends old orders, disabled users, removed permissions, or transferred 
 it("sends a private payload with a direct order link and bounded provider timeout", async () => {
   await deliverOrderPush("o1", "s1", "a1");
   const [, payload, options] = mocks.send.mock.calls[0];
-  expect(JSON.parse(payload)).toEqual({ title: "Nova porudžbina SPC-123", body: "Otvorite administraciju za pregled porudžbine.", url: "/admin/erp/prodajni-nalozi/o1", tag: "order-o1" });
+  expect(JSON.parse(payload)).toEqual({ title: "Nova porudžbina SPC-123", body: "Ukupno: 12.345,67 din. Otvorite porudžbinu za pregled.", url: "/admin/erp/prodajni-nalozi/o1", tag: "order-o1" });
   expect(options).toMatchObject({ timeout: 10_000, TTL: 3600, urgency: "high" });
 });
 
