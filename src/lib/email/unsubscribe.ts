@@ -147,7 +147,10 @@ export async function applyEmailUnsubscribe(payload: EmailUnsubscribePayload) {
       where: { id: payload.subscriptionId }, data: { status: "CANCELLED", cancelledAt: new Date() },
     });
     const row = await db.restockSubscription.findUnique({ where: { id: payload.subscriptionId } });
-    if (row?.userId) await db.backInStockAlert.deleteMany({ where: { userId: row.userId, productId: row.productId } });
+    if (row?.userId) await db.$transaction([
+      db.backInStockAlert.deleteMany({ where: { userId: row.userId, productId: row.productId } }),
+      db.wishlistItem.updateMany({ where: { userId: row.userId, productId: row.productId }, data: { notifyOnRestock: false } }),
+    ]);
     return { ok: true as const, email: null, kind: "alert" as const, changed: subscription.count };
   }
   if (payload.alert === "back_in_stock") await db.restockSubscription.updateMany({

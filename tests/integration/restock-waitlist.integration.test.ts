@@ -9,6 +9,7 @@ vi.mock("@/lib/api/catalog", () => { const read = async (sku: string) => {
   return p && { id: p.id, sku, slug: p.slug, name: p.name, fullPrice: Number(p.fullPrice), stock: p.stock,
     incomingStock: 0, dimensionsCm: { w: 10, d: 10, h: 10 }, media: { images: [{ url: "/test.jpg" }] }, deliveryDays: { min: 1, max: 2 } } as ProductDTO;
 }; return { getProductBySku: read, getProductsBySkus: async (skus: string[]) => (await Promise.all(skus.map(read))).filter(Boolean) }; });
+import { applyEmailUnsubscribe } from "@/lib/email/unsubscribe";
 import { subscribeToRestock, processRestockWaitlist } from "@/lib/email/restock";
 
 it("keeps consent scoped, serializes enrollment and manual/automatic sends, handles re-enrollment, suppression and uncertain sends", async () => {
@@ -38,7 +39,8 @@ it("keeps consent scoped, serializes enrollment and manual/automatic sends, hand
     await subscribeToRestock(prefix, email, user.id);
     row = await db.restockSubscription.findUniqueOrThrow({ where: { id: row.id } });
     expect(row.requestedAt.getTime()).toBeGreaterThan(firstGeneration.getTime());
-    await db.restockSubscription.update({ where: { id: row.id }, data: { status: "CANCELLED", cancelledAt: new Date() } });
+    await applyEmailUnsubscribe({ purpose: "restock", subscriptionId: row.id });
+    expect((await db.restockSubscription.findUniqueOrThrow({ where: { id: row.id } })).status).toBe("CANCELLED");
     await db.product.update({ where: { id: p.id }, data: { stock: 2 } });
     expect((await processRestockWaitlist(25, p.id)).sent).toBe(0);
     await db.restockSubscription.update({ where: { id: row.id }, data: { status: "PENDING" } });

@@ -18,7 +18,7 @@ export async function subscribeToRestock(sku: string, email: string, userId?: st
   await db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('restock-enroll'), hashtext(${email + ':' + productId}))::text`;
     const old = await tx.restockSubscription.findUnique({ where: { email_productId: { email, productId: productId } } });
-    if (old?.status === "SENDING" || old?.status === "REVIEW") return;
+    if (old?.status === "SENDING" || old?.status === "REVIEW") throw new Error("Prijava je već u obradi. Pokušajte kasnije ili kontaktirajte podršku.");
     await tx.restockSubscription.upsert({
       where: { email_productId: { email, productId: productId } },
       create: { email, productId: productId, userId, requestedAt: now },

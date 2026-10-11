@@ -24,7 +24,7 @@ export async function POST(req: Request) {
     await subscribeToRestock(parsed.data.sku, email, user?.id);
     return NextResponse.json({ ok: true });
   } catch (err) {
-    const message = err instanceof Error && /^(Artikal|Ova adresa)/.test(err.message) ? err.message : "Prijava trenutno nije uspela. Pokušajte ponovo.";
+    const message = err instanceof Error && /^(Artikal|Ova adresa|Prijava je već)/.test(err.message) ? err.message : "Prijava trenutno nije uspela. Pokušajte ponovo.";
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }
