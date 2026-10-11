@@ -13,6 +13,8 @@ import {
 } from "@/lib/channel-availability.server";
 
 const schemas = {
+  ADMIN_ORDER_PUSH: z.object({ orderId: z.string().min(1) }),
+  ADMIN_ORDER_PUSH_DEVICE: z.object({ orderId: z.string().min(1), subscriptionId: z.string().min(1), adminUserId: z.string().min(1) }),
   BANK_TRANSFER_RECONCILE: bankEntrySchema,
   BANK_PAYMENT_EMAIL: bankEntrySchema.extend({orderId:z.string().min(1)}),
   BANK_PAYMENT_REVIEW_EMAIL: bankEntrySchema.extend({reason:z.string().min(1).max(100)}),
@@ -135,6 +137,8 @@ const schemas = {
 export type BackgroundJobKind = keyof typeof schemas;
 
 const HIGH_PRIORITY_BACKGROUND_JOB_KINDS: BackgroundJobKind[] = [
+  "ADMIN_ORDER_PUSH",
+  "ADMIN_ORDER_PUSH_DEVICE",
   'BANK_TRANSFER_RECONCILE',
   'BANK_PAYMENT_EMAIL',
   'BANK_PAYMENT_REVIEW_EMAIL',
@@ -506,6 +510,17 @@ async function dispatchJob(job: JobRow) {
   const payload = schemas[kind].parse(job.payload);
 
   switch (kind) {
+    case "ADMIN_ORDER_PUSH": {
+      const { fanOutOrderPush } = await import("@/lib/admin/order-push.server");
+      await fanOutOrderPush((payload as z.infer<typeof schemas.ADMIN_ORDER_PUSH>).orderId);
+      return;
+    }
+    case "ADMIN_ORDER_PUSH_DEVICE": {
+      const { deliverOrderPush } = await import("@/lib/admin/order-push.server");
+      const args = payload as z.infer<typeof schemas.ADMIN_ORDER_PUSH_DEVICE>;
+      await deliverOrderPush(args.orderId, args.subscriptionId, args.adminUserId);
+      return;
+    }
     case "CHECKOUT_POST_COMMIT": {
       const { prepareCheckoutFollowUp } = await import("@/lib/checkout/follow-up");
       const args = payload as z.infer<typeof schemas.CHECKOUT_POST_COMMIT>;

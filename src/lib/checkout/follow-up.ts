@@ -18,6 +18,10 @@ export async function prepareCheckoutFollowUp(orderId: string, accessToken: stri
   });
   // Persist every child job before running any provider. If interrupted here,
   // retrying the parent repairs missing jobs using the same idempotency keys.
+  const push = await enqueueBackgroundJob({
+    kind: "ADMIN_ORDER_PUSH", payload: { orderId },
+    idempotencyKey: `admin-order-push:${orderId}`,
+  });
   const buyer = customerReplyDraftOnly || (order.guestEmail === null && !order.user?.email) ? null : await enqueueBackgroundJob({
     kind: "BUYER_RECEIPT", payload: { orderId, accessToken },
     idempotencyKey: `buyer-receipt:${orderId}`,
@@ -55,6 +59,6 @@ export async function prepareCheckoutFollowUp(orderId: string, accessToken: stri
   // These are independent jobs with their own retries. A broken supplier PDF
   // cannot prevent the buyer job from running. Documents retain their existing
   // courier schedule and supplier-order/payment prerequisites in the worker.
-  await Promise.allSettled([...(buyer ? [buyer] : []), ...supplierJobs].map(job => processBackgroundJob(job.id)));
+  await Promise.allSettled([push, ...(buyer ? [buyer] : []), ...supplierJobs].map(job => processBackgroundJob(job.id)));
   await Promise.allSettled(documentJobs.map(job => processBackgroundJob(job.id)));
 }

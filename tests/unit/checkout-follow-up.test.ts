@@ -32,7 +32,7 @@ it("email draft workflow skips automatic buyer receipt while retaining fulfillme
 
 it("persists all independent jobs before invoking any provider and runs buyer despite broken supplier PDF", async () => {
   mocks.process.mockImplementation(async (id: string) => {
-    expect(mocks.enqueue).toHaveBeenCalledTimes(4);
+    expect(mocks.enqueue).toHaveBeenCalledTimes(5);
     if (id.startsWith("supplier-order:")) throw new Error("Broken PDF");
     return { claimed: true, ok: true };
   });
@@ -55,5 +55,12 @@ it("preserves prepaid shipping-document timing: checkout does not queue courier 
     supplierFulfillments: [{ id: "supplier1" }], items: [],
   });
   await prepareCheckoutFollowUp("o1", "access-token-1234567890");
-  expect(mocks.enqueue.mock.calls.map(([args]) => args.kind)).toEqual(["BUYER_RECEIPT", "SUPPLIER_ORDER_EMAIL"]);
+  expect(mocks.enqueue.mock.calls.map(([args]) => args.kind)).toEqual(["ADMIN_ORDER_PUSH", "BUYER_RECEIPT", "SUPPLIER_ORDER_EMAIL"]);
+});
+
+it("queues admin push for orders without buyer email and processes it independently", async () => {
+  mocks.order.mockResolvedValue({ id: "o1", guestEmail: null, user: null, supplierFulfillments: [], items: [] });
+  await prepareCheckoutFollowUp("o1", "access-token-1234567890");
+  expect(mocks.enqueue).toHaveBeenCalledWith({ kind: "ADMIN_ORDER_PUSH", payload: { orderId: "o1" }, idempotencyKey: "admin-order-push:o1" });
+  expect(mocks.process).toHaveBeenCalledWith("admin-order-push:o1");
 });

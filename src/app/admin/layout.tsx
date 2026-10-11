@@ -17,9 +17,15 @@ import { withSavedViewLinks } from "@/lib/admin/nav";
 import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
 import { getErpModuleDefinition } from "@/lib/admin/erp";
 import { Button } from "@/components/ui/button";
+import { OrderNotifications } from "@/components/admin/order-notifications";
+import { canReceiveOrderPush } from "@/lib/admin/push-policy";
 import "./theme.css";
 
 export const dynamic = "force-dynamic";
+export const metadata = {
+  manifest: "/admin-manifest.webmanifest",
+  appleWebApp: { capable: true, title: "SPC Admin", statusBarStyle: "default" as const },
+};
 
 export default async function AdminLayout({
   children,
@@ -132,6 +138,7 @@ export default async function AdminLayout({
                 </form>
               </div>
             </div>
+            {canReceiveOrderPush(user.role) && <OrderNotifications adminId={user.id} />}
             {children}
           </div>
         </div>

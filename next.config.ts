@@ -192,6 +192,10 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       { source: "/:path*", headers: securityHeaders },
+      { source: "/admin-push-sw.js", headers: [
+        { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+        { key: "Content-Security-Policy", value: "default-src 'self'; script-src 'self'" },
+      ] },
       // Camera access is limited to the authenticated warehouse scanner document.
       { source: "/admin/erp/preuzimanja/:id/picking", headers: [{ key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()" }] },
       { source: "/models/:path*.glb", headers: [{ key: "Content-Type", value: "model/gltf-binary" }] },

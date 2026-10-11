@@ -3875,6 +3875,21 @@ model AdminUser {
   savedViews       AdminSavedView[]
   contentRevisions ContentPageRevision[]
   landingRevisions LandingPageRevision[]
+  pushSubscriptions AdminPushSubscription[]
+}
+
+/// Device-specific opt-in. Endpoints and encryption keys are private.
+model AdminPushSubscription {
+  id          String   @id @default(cuid())
+  adminUserId String
+  endpoint    String   @unique @db.VarChar(2048)
+  p256dh      String   @db.VarChar(100)
+  auth        String   @db.VarChar(40)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  adminUser   AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId])
 }
 
 model AdminSavedView {
