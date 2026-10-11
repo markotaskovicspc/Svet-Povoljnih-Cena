@@ -53,11 +53,16 @@ export function courierBaseCost(provider: Carrier, weightKg: number, parcels = 1
   return money(base + (cod ? 50 : 0));
 }
 
-export type MatchShipment = { id: string; orderNumber: string; trackingNo: string | null; parcelNumbers: unknown };
+export type MatchShipment = { id: string; orderNumber: string; trackingNo: string | null; parcelNumbers: unknown; invoiceCode?: string | null };
+function statementOrderReference(reference: string) {
+  // Carrier references for replacement/return shipments still belong to the
+  // original order. Keep the exact parcel match mandatory and reject other suffixes.
+  return reference.replace(/^(SPC-\d{4}-\d+)-(?:ZAMENA|POVRAT(?:-R[a-f0-9]{12})?|R\d+-PRS)$/, "$1");
+}
 export function matchStatementRow(row: StatementRow, shipments: MatchShipment[]) {
   const matches = shipments.filter(shipment => {
-    const numbers = [shipment.trackingNo, ...(Array.isArray(shipment.parcelNumbers) ? shipment.parcelNumbers : [])].map(String);
-    return numbers.includes(row.trackingNo) && (!row.orderNumber || shipment.orderNumber === row.orderNumber);
+    const numbers = [shipment.trackingNo, shipment.invoiceCode, ...(Array.isArray(shipment.parcelNumbers) ? shipment.parcelNumbers : [])].filter(value => value != null).map(String);
+    return numbers.includes(row.trackingNo) && (!row.orderNumber || shipment.orderNumber === statementOrderReference(row.orderNumber));
   });
   return { shipmentId: matches.length === 1 ? matches[0].id : null,
     status: matches.length === 1 ? "MATCHED" as const : matches.length ? "AMBIGUOUS" as const : "UNMATCHED" as const };

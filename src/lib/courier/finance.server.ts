@@ -16,10 +16,11 @@ async function shipmentMatches(input: StatementInput, database: Prisma.Transacti
   const orderNumbers = [...new Set(input.rows.flatMap(row => row.orderNumber ? [row.orderNumber] : []))];
   const shipments = await database.shipment.findMany({ where: { provider: input.provider, OR: [
     { trackingNo: { in: numbers } }, { order: { number: { in: orderNumbers } } },
+    ...(input.provider === "X_EXPRESS" ? [{ providerOrderId: { in: numbers } }] : []),
     ...numbers.flatMap(number => [ { providerParcelNumbers: { array_contains: [number] } },
       ...(/^\d+$/.test(number) ? [{ providerParcelNumbers: { array_contains: [Number(number)] } }] : []) ]),
-  ] }, select: { id: true, trackingNo: true, providerParcelNumbers: true, orderId: true, order: { select: { number: true } } } });
-  const candidates = shipments.map(shipment => ({ id: shipment.id, trackingNo: shipment.trackingNo, parcelNumbers: shipment.providerParcelNumbers, orderNumber: shipment.order.number }));
+  ] }, select: { id: true, trackingNo: true, providerOrderId: true, providerParcelNumbers: true, orderId: true, order: { select: { number: true } } } });
+  const candidates = shipments.map(shipment => ({ id: shipment.id, trackingNo: shipment.trackingNo, invoiceCode: input.provider === "X_EXPRESS" ? shipment.providerOrderId : null, parcelNumbers: shipment.providerParcelNumbers, orderNumber: shipment.order.number }));
   return input.rows.map(row => {
     const match = matchStatementRow(row, candidates);
     return { ...match, orderId: shipments.find(shipment => shipment.id === match.shipmentId)?.orderId ?? null };
@@ -63,7 +64,7 @@ export async function importStatement(raw: unknown, fingerprint: string, actorId
   const identity = statementIdentity(input);
   if (identity.fingerprint !== fingerprint) throw new Error("Specifikacija je promenjena. Ponovo otvorite pregled.");
   return db.$transaction(async tx => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`courier:${input.provider}`}))`;
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`courier:${input.provider}`}))::text`;
     const existing = await tx.courierStatement.findFirst({ where: { provider: input.provider, OR: [{ documentNo: input.documentNo }, { fingerprint }] } });
     if (existing) {
       if (existing.fingerprint !== fingerprint) throw new Error("Dokument sa ovim brojem već postoji sa drugačijim stavkama.");
