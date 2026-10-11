@@ -31,3 +31,25 @@ it("preserves the saved checkpoint once fiscal-number rescan has started", async
   await advanceAnanasInventoryHistory(undefined, new Date("2026-10-11Z"));
   expect(m.sync.mock.calls[0][0]).toEqual(new Date("2026-02-21T22:00:00.000Z"));
 });
+
+it("shortens timed-out provider windows without advancing or rewinding the checkpoint", async () => {
+  m.state.documentIdentityVersion = 2;
+  const checkpoint = m.state.historyThrough;
+  m.sync.mockRejectedValueOnce(new Error("Ananas nije odgovorio u predviđenom roku."));
+  await expect(advanceAnanasInventoryHistory(undefined, new Date("2026-10-11Z"))).rejects.toThrow("24 sati");
+  expect(m.state.historyThrough).toBe(checkpoint);
+  expect(m.state.historyWindowHours).toBe(24);
+  expect(new Date(m.state.leaseUntil as string).getTime()).toBe(0);
+  await advanceAnanasInventoryHistory(undefined, new Date("2026-10-11Z"));
+  expect(m.sync.mock.calls[1]).toEqual([new Date(checkpoint as string), new Date("2026-02-22T22:00:00.000Z"), "INVENTORY_HISTORY"]);
+});
+it("bounds retries at one hour and does not shrink non-timeout failures", async () => {
+  m.state.documentIdentityVersion = 2; m.state.historyWindowHours = 1;
+  m.sync.mockRejectedValue(new Error("Ananas nije odgovorio u predviđenom roku."));
+  await expect(advanceAnanasInventoryHistory()).rejects.toThrow("predviđenom roku");
+  expect(m.state.historyWindowHours).toBe(1);
+  m.state.historyWindowHours = 72;
+  m.sync.mockRejectedValue(new Error("Ananas stavke već knjiženog dokumenta su promenjene."));
+  await expect(advanceAnanasInventoryHistory()).rejects.toThrow("promenjene");
+  expect(m.state.historyWindowHours).toBe(72);
+});

@@ -11,7 +11,7 @@ export async function GET(req: Request) {
   if (new URL(req.url).searchParams.get("status") === "1") {
     const status = await getAnanasInventoryStatus();
     return NextResponse.json({ ok: true, posted: status.posted, pending: status.pending, errors: status.errors,
-      negatives: status.negatives, historyThrough: status.policy?.historyThrough ?? null });
+      negatives: status.negatives, historyThrough: status.policy?.historyThrough ?? null, windowHours: status.policy?.historyWindowHours ?? 72 });
   }
   const policy = await getAnanasInventoryPolicy();
   if (!policy?.enabled || (policy.leaseUntil && new Date(policy.leaseUntil) > new Date())) return NextResponse.json({ ok: true, skipped: true });

@@ -31,8 +31,25 @@ export async function advanceAnanasInventoryHistory(actorId?: string, now = new 
     // A source sync has its own 180s API + 90s storage bounds. If draining
     // inventory used time, fetch the next interval in a fresh invocation.
     if (!waiting && Date.now() - started < 20000 && new Date(through) < now) {
-      const from = new Date(through), to = new Date(Math.min(now.getTime(), from.getTime() + 3 * 86400000));
-      imported = (await syncAnanasDocuments(from, to, "INVENTORY_HISTORY")).count;
+      const hours = policy.historyWindowHours ?? 72;
+      const from = new Date(through), to = new Date(Math.min(now.getTime(), from.getTime() + hours * 3600000));
+      try {
+        imported = (await syncAnanasDocuments(from, to, "INVENTORY_HISTORY")).count;
+      } catch (error) {
+        // A provider timeout leaves the checkpoint intact. Shorten only the next
+        // request, rather than stacking several 180-second attempts in one run.
+        if (error instanceof Error && error.message.includes("predviđenom roku") && hours > 1) {
+          const smaller = hours === 72 ? 24 : hours === 24 ? 6 : 1;
+          await db.$transaction(async tx => {
+            await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('ananas-inventory-policy'))::text`;
+            const setting = await tx.adminSetting.findUniqueOrThrow({ where: { key: ANANAS_INVENTORY_KEY } });
+            const value = setting.value as Record<string, unknown>;
+            if (value.leaseToken === token) await tx.adminSetting.update({ where: { key: ANANAS_INVENTORY_KEY }, data: { value: { ...value, historyWindowHours: smaller } } });
+          });
+          throw new Error(`Ananas API nije odgovorio na vreme. Sledeći pokušaj koristi period od ${smaller} sati, sa istog mesta.`);
+        }
+        throw error;
+      }
       through = to.toISOString();
     }
     const after = await postPendingAnanasInventory(40, actorId, started + 210000, new Date(through) >= now);
