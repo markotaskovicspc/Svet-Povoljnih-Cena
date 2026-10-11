@@ -1609,6 +1609,7 @@ model Shipment {
   pickupBatchLines PickupBatchLine[]
 
   reshipment OrderReshipment?
+  courierStatementLines CourierStatementLine[]
 
   @@unique([reclamationId, purpose])
   @@index([orderId])
@@ -1619,6 +1620,42 @@ model Shipment {
   @@index([providerOrderId])
   @@index([providerShipmentId])
   @@index([trackingNo])
+}
+
+/// Imported carrier charges and COD remittances. Never replaces Payment or fiscal records.
+model CourierStatement {
+  id          String   @id @default(cuid())
+  provider    String
+  documentNo  String
+  filename    String
+  fingerprint String
+  actorId     String
+  createdAt   DateTime @default(now())
+  lines       CourierStatementLine[]
+
+  @@unique([provider, documentNo])
+  @@unique([provider, fingerprint])
+}
+
+model CourierStatementLine {
+  id           String   @id @default(cuid())
+  statementId  String
+  lineKey      String
+  kind         String
+  trackingNo   String
+  orderNumber  String?
+  bookedOn     DateTime @db.Date
+  amountNet    Decimal  @db.Decimal(12, 2)
+  amountGross  Decimal  @db.Decimal(12, 2)
+  weightKg     Decimal? @db.Decimal(10, 3)
+  description  String?
+  shipmentId   String?
+  statement    CourierStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+  shipment     Shipment? @relation(fields: [shipmentId], references: [id], onDelete: SetNull)
+
+  @@unique([statementId, lineKey])
+  @@index([bookedOn, kind])
+  @@index([shipmentId, kind])
 }
 
 /// Physical arrival is separate from courier status and from stock/fiscal receipt.
