@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { ImportReview } from "@/lib/admin/order-import/schema";
 
-type Totals = { subtotal: number; shipping: number; total: number; savings: number };
+type Totals = { subtotal: number; shipping: number; total: number };
 const confidenceLabel = { high: "Visoko poklapanje", medium: "Srednje poklapanje", low: "Slabo poklapanje — proverite" };
 const money = (n: number) => new Intl.NumberFormat("sr-RS", { style: "currency", currency: "RSD" }).format(n);
 const fields = [
@@ -109,7 +109,7 @@ export function OrderImportForm() {
       </section>
       <section className="rounded-xl border border-border bg-background p-5 md:p-6">
         {!quote ? <Button className="w-full sm:w-auto" disabled={!!busy || !draft.lines.length || draft.lines.some(l => !l.sku || !l.qty)} onClick={preview}>{busy === "preview" ? "Proveravam cene i dostavu…" : "Proveri iznose i dostavu"}</Button> : totals && <>
-          <div className="space-y-2 text-sm"><p className="flex justify-between gap-3"><span>Artikli (sa popustima)</span><strong>{money(totals.subtotal - totals.savings)}</strong></p><p className="flex justify-between gap-3"><span>Dostava</span><strong>{money(totals.shipping)}</strong></p><p className="flex justify-between gap-3 border-t border-border pt-3 text-lg"><span>Ukupno</span><strong>{money(totals.total)}</strong></p></div>
+          <div className="space-y-2 text-sm"><p className="flex justify-between gap-3"><span>Artikli (sa popustima)</span><strong>{money(totals.subtotal)}</strong></p><p className="flex justify-between gap-3"><span>Dostava</span><strong>{money(totals.shipping)}</strong></p><p className="flex justify-between gap-3 border-t border-border pt-3 text-lg"><span>Ukupno</span><strong>{money(totals.total)}</strong></p></div>
           {draft.totalAmount !== null && Math.abs(draft.totalAmount - totals.total) > 0.01 && <p className="mt-4 rounded-lg bg-amber-500/10 p-3 text-sm">U prepisci je navedeno {money(draft.totalAmount)}. Obračun u ERP-u je drugačiji — proverite dogovor pre kreiranja.</p>}
           <label className="mt-5 flex items-start gap-3 text-sm"><input type="checkbox" className="mt-1 size-4 shrink-0" checked={confirmed} disabled={!!busy || attempted} onChange={e => setConfirmed(e.target.checked)} />Proverio sam podatke, izabrane artikle i iznose. Kupac je potvrdio ovu porudžbinu.</label>
           <Button className="mt-5 w-full sm:w-auto" disabled={!!busy || !confirmed} onClick={create}>{busy === "create" ? "Kreiram porudžbinu…" : attempted ? "Ponovi isti pokušaj kreiranja" : "Kreiraj porudžbinu"}</Button>
