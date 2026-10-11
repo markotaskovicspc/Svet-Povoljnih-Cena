@@ -26,6 +26,7 @@ export async function cancelWebOrderByCustomer(input: {
       include: {
         reshipments: { select: { id: true } },
         fiscal: { select: { id: true } },
+        sefDocuments: { where: { direction: "OUT", environment: "production", status: { notIn: ["DRAFT", "ERROR"] } }, select: { id: true } },
         fiscalDocuments: {
           where: { kind: "SALE" },
           select: { id: true, status: true },
@@ -85,7 +86,7 @@ export async function cancelWebOrderByCustomer(input: {
         "NOT_ALLOWED",
       );
     }
-    if (order.fiscal || order.fiscalDocuments.length) {
+    if (order.fiscal || order.fiscalDocuments.length || order.sefDocuments?.length) {
       throw new OrderCancellationError(
         "Porudžbina je fiskalizovana i više se ne može otkazati ovim putem.",
         "FISCALIZED",

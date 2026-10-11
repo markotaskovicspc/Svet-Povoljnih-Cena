@@ -185,7 +185,7 @@ export async function issueFiscalSale(input: {
     );
     const currentOrder = await tx.order.findUnique({
       where: { id: order.id },
-      select: { updatedAt: true },
+      select: { updatedAt: true, sefDocuments: { where: { direction: "OUT", environment: "production", status: { notIn: ["DRAFT", "ERROR"] } }, select: { id: true }, take: 1 } },
     });
     if (
       !currentOrder ||
@@ -193,6 +193,7 @@ export async function issueFiscalSale(input: {
     ) {
       return { state: "changed" as const };
     }
+    if (currentOrder.sefDocuments?.length) throw new Error("Nalog ima aktivan SEF zahtev ili fakturu. Fiskalizacija istog prometa je blokirana.");
 
     await tx.$queryRaw(
       Prisma.sql`SELECT "id" FROM "FiscalDocument" WHERE "idempotencyKey" = ${idempotencyKey} FOR UPDATE`,

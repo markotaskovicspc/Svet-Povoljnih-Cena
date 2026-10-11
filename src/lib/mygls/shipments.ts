@@ -112,6 +112,7 @@ export async function createMyGlsShipmentForOrder(
       ...response,
       Labels: Array.from(label.bytes),
       myGlsPackageAssignments: packageAssignments,
+      courierFinancePackages: parcelList.map(parcel => ({ weightKg: parcel.ParcelPropertyList?.[0]?.Weight, codAmount: parcel.CODAmount ?? 0 })),
     };
 
     const data = {
@@ -675,6 +676,7 @@ async function createMyGlsReturnShipment(prepared: PreparedShipment, options: My
       ...response,
       myGlsReturn: { ...booking, state: "ACCEPTED", acceptedAt: new Date().toISOString() },
       myGlsPackageAssignments: buildPackageAssignments(parcelList, options.packages ?? [], info),
+      courierFinancePackages: parcelList.map(parcel => ({ weightKg: parcel.ParcelPropertyList?.[0]?.Weight, codAmount: parcel.CODAmount ?? 0 })),
     }, { orderItemIds: assignmentOrderItemIds, codAmount: 0 });
     // Save provider identity and confirmation BEFORE storage. A storage failure
     // can then be retried without calling PrintLabels / booking a second pickup.

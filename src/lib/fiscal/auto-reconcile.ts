@@ -42,6 +42,7 @@ export async function enqueueEligibleOrdersForFiscalization(
   const orders = await db.order.findMany({
     where: {
       channel: { in: [...ALL_SALES_CHANNELS] },
+      sefDocuments: { none: { direction: "OUT", environment: "production", status: { notIn: ["DRAFT", "ERROR"] } } },
       status: { notIn: ["OTKAZANO", "VRACENO"] },
       total: { gt: 0 },
       items: { some: {} },

@@ -266,7 +266,6 @@ export function getIntegrationReadiness(
         ...(eotpremnicaProduction
           ? [enabled("EOTPREMNICA_PRODUCTION_ACCEPTED")]
           : []),
-        present("EOTPREMNICA_BASE_URL"),
         present("EOTPREMNICA_API_KEY"),
       ],
     }),
@@ -338,7 +337,13 @@ export function externalMonitoringIsConnected(
   );
 }
 
-export async function getSefHealthSnapshot(): Promise<SefHealthSnapshot> {
+let sefHealthCache: { expires: number; value: Promise<SefHealthSnapshot> } | null = null;
+export function getSefHealthSnapshot(): Promise<SefHealthSnapshot> {
+  if (process.env.NODE_ENV === "test") return readSefHealthSnapshot();
+  if (!sefHealthCache || sefHealthCache.expires <= Date.now()) sefHealthCache = { expires: Date.now() + 60_000, value: readSefHealthSnapshot() };
+  return sefHealthCache.value;
+}
+async function readSefHealthSnapshot(): Promise<SefHealthSnapshot> {
   const readiness = getIntegrationReadiness().find((item) => item.id === "sef");
   if (!readiness?.ready) {
     return {
@@ -359,7 +364,7 @@ export async function getSefHealthSnapshot(): Promise<SefHealthSnapshot> {
     return {
       configured: true,
       ok: false,
-      message: status
+      message: status === 429 ? "SEF trenutno ograničava broj provera. Sačekajte; ovo nije odbijanje API ključa." : status === 200 && error instanceof SefApiError ? error.message : status
         ? `SEF provera nije prošla (HTTP ${status}).`
         : "SEF trenutno nije dostupan.",
     };

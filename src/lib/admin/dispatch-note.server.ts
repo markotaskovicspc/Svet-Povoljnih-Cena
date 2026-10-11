@@ -10,6 +10,7 @@ import {
 import { db } from "@/lib/db";
 import { envValue } from "@/lib/env";
 import { resolveEotpremnicaGate } from "@/lib/eotpremnica/config";
+import { requestChanges, EotpremnicaUnknownOutcome } from "@/lib/eotpremnica/client";
 import { adjustInventory } from "@/lib/inventory";
 import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 import {
@@ -143,6 +144,7 @@ export type DispatchNoteDetail = {
   postedAt: string;
   sefSentAt: string;
   sefStatus: string;
+  sefRequestId?: string;
   sefError: string;
   canEdit: boolean;
   canDelete: boolean;
@@ -1162,6 +1164,13 @@ export async function postDispatchNotes(ids: string[], actorId: string) {
             actorId,
           },
         });
+        if (process.env.EOTPREMNICA_AUTO_SEND === "true" && dispatch.type === DispatchNoteType.CUSTOMER && /^\d{9}$/.test(dispatch.receiverPib)) {
+          const sourceOrders = await tx.orderItem.findMany({ where: { id: { in: dispatch.items.flatMap(item => item.orderItemId ? [item.orderItemId] : []) } }, select: { order: { select: { channel: true } } } });
+          if (sourceOrders.every(item => item.order.channel === "VP")) {
+            const { enqueueBackgroundJob } = await import("@/lib/background-jobs");
+            await enqueueBackgroundJob({ kind: "EOTPREMNICA_SEND", payload: { id: dispatch.id }, idempotencyKey: `eotpremnica:${dispatch.id}`, maxAttempts: 3 }, tx);
+          }
+        }
         return dispatch.number;
       },
       { maxWait: 10_000, timeout: 30_000 },
@@ -1270,16 +1279,20 @@ export async function submitEotpremnicaDocument(
     new Blob([input.ubl], { type: "text/xml;charset=utf-8" }),
     `otpremnica-${input.number.replaceAll("/", "-")}.xml`,
   );
-  const response = await request(`${config.baseUrl}/public/documents/requests`, {
+  let response: Response;
+  try { response = await request(`${config.baseUrl}/public/documents/requests`, {
     method: "POST",
     headers: { accept: "*/*", "Api-key": config.apiKey },
     body: form,
     signal: AbortSignal.timeout(30_000),
     cache: "no-store",
-  });
-  const responseText = await response.text();
+    redirect: "error",
+  }); } catch { throw new EotpremnicaUnknownOutcome("Ishod slanja eOtpremnice nije potvrđen. Proverite zahtev pre ponavljanja."); }
+  let responseText: string;
+  try { responseText = await response.text(); } catch { throw new EotpremnicaUnknownOutcome("Odgovor slanja nije pročitan. Proverite ishod zahteva."); }
   const submission = safeResponse(responseText);
   if (!response.ok) {
+    if (response.status >= 500 || response.status === 408) throw new EotpremnicaUnknownOutcome(`eOtpremnica je vratila HTTP ${response.status}; proverite ishod zahteva.`);
     throw new Error(
       `eOtpremnica je vratila HTTP ${response.status}${
         responseText ? `: ${responseText.slice(0, 500)}` : ""
@@ -1294,7 +1307,8 @@ function sefConfiguration() {
   if (!gate.allowed) throw new Error(`eOtpremnica je isključena: ${gate.reason}`);
   const baseUrl =
     envValue("EOTPREMNICA_BASE_URL") ??
-    envValue("SEO_BASE_URL");
+    envValue("SEO_BASE_URL") ??
+    (gate.mode === "production" ? "https://api.eotpremnica.mfin.gov.rs" : "https://api.demoeotpremnica.mfin.gov.rs");
   const apiKey =
     envValue("EOTPREMNICA_API_KEY") ??
     envValue("SEO_API_KEY");
@@ -1303,6 +1317,8 @@ function sefConfiguration() {
       "eOtpremnica nije konfigurisana. Nedostaju EOTPREMNICA_BASE_URL i EOTPREMNICA_API_KEY.",
     );
   }
+  const url = new URL(baseUrl);
+  if (url.protocol !== "https:" || url.username || url.password || url.pathname !== "/" || url.search || url.hash) throw new Error("EOTPREMNICA_BASE_URL mora biti korenska HTTPS API adresa.");
   return { baseUrl: baseUrl.replace(/\/$/, ""), apiKey, mode: gate.mode };
 }
 
@@ -1321,6 +1337,8 @@ export async function sendDispatchNoteToSef(id: string) {
     throw new Error("Otpremnica mora prvo da bude proknjižena.");
   }
   if (dispatch.sefSentAt) return dispatch;
+  if (dispatch.sefStatus === "UNKNOWN") throw new Error("Prethodni zahtev nema potvrđen ishod. Najpre proverite eOtpremnica status.");
+  if (dispatch.sefStatus === "SENDING") throw new Error("Zahtev za eOtpremnicu je u toku. Proverite njegov status pre ponavljanja.");
   if (!dispatch.items.length) throw new Error("Otpremnica nema stavke.");
   assertDispatchTransportComplete(dispatch);
   if (dateOnly(dispatch.issueDate) !== belgradeDate(new Date())) {
@@ -1422,15 +1440,13 @@ export async function sendDispatchNoteToSef(id: string) {
       color2: item.color2,
     })),
   });
-  const staleSendingBefore = new Date(Date.now() - 5 * 60 * 1_000);
   const claimed = await db.dispatchNote.updateMany({
     where: {
       id,
       sefSentAt: null,
       OR: [
         { sefStatus: null },
-        { sefStatus: { not: "SENDING" } },
-        { sefStatus: "SENDING", updatedAt: { lt: staleSendingBefore } },
+        { sefStatus: { notIn: ["SENDING", "UNKNOWN"] } },
       ],
     },
     data: {
@@ -1469,12 +1485,26 @@ export async function sendDispatchNoteToSef(id: string) {
     await db.dispatchNote.update({
       where: { id },
       data: {
-        sefStatus: "ERROR",
+        sefStatus: error instanceof EotpremnicaUnknownOutcome ? "UNKNOWN" : "ERROR",
         sefError: message,
       },
     });
     throw new Error(message);
   }
+}
+
+export async function refreshDispatchNoteSef(id: string) {
+  const config = sefConfiguration();
+  const dispatch = await db.dispatchNote.findUniqueOrThrow({ where: { id } });
+  if (!dispatch.sefRequestId) throw new Error("Otpremnica još nema poslat zahtev.");
+  const dates = new Set([dateOnly(dispatch.sefSentAt ?? dispatch.updatedAt), dateOnly(new Date()), dateOnly(new Date(Date.now() - 86400000))]);
+  const events = [];
+  for (const date of dates) events.push(...await requestChanges(config, dispatch.sefRequestId, date));
+  const success = events.findLast(event => event.type === "DocumentRequest.Succeeded");
+  const failure = events.findLast(event => event.type === "DocumentRequest.Failed");
+  if (success) return db.dispatchNote.update({ where: { id }, data: { sefStatus: "CONFIRMED", sefDocumentId: success.documentId, sefSentAt: dispatch.sefSentAt ?? new Date(), sefError: null } });
+  if (failure) return db.dispatchNote.update({ where: { id }, data: { sefStatus: "REMOTE_ERROR", sefError: "eOtpremnica je odbila obradu zahteva. Proverite detalje na portalu." } });
+  throw new Error("eOtpremnica još nema potvrdu obrade ovog zahteva. Ponovite proveru kasnije; zahtev nije ponovo poslat.");
 }
 
 export async function getDispatchOrderLines(input: {
@@ -1657,9 +1687,6 @@ export async function getDispatchNoteDetail(
   });
   const editable =
     note.status === DocumentPostingStatus.DRAFT && !note.sefSentAt;
-  const sefSendingIsStale =
-    note.sefStatus === "SENDING" &&
-    note.updatedAt < new Date(Date.now() - 5 * 60 * 1_000);
   return {
     id: note.id,
     number: note.number,
@@ -1690,6 +1717,7 @@ export async function getDispatchNoteDetail(
     postedAt: dateTime(note.postedAt),
     sefSentAt: dateTime(note.sefSentAt),
     sefStatus: note.sefStatus ?? "",
+    sefRequestId: note.sefRequestId ?? "",
     sefError: note.sefError ?? "",
     canEdit: editable,
     canDelete: editable,
@@ -1697,7 +1725,7 @@ export async function getDispatchNoteDetail(
     canSendToSef:
       note.status === DocumentPostingStatus.POSTED &&
       !note.sefSentAt &&
-      (note.sefStatus !== "SENDING" || sefSendingIsStale),
+      ! ["SENDING", "UNKNOWN", "REMOTE_ERROR"].includes(note.sefStatus ?? ""),
     issuer: {
       id: note.issuerCustomerId ?? "",
       label: note.issuerName,

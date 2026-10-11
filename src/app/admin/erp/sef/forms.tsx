@@ -1,0 +1,29 @@
+"use client";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { prepareInvoice, submitInvoice, syncSef, previewSefCourierAttachment, refreshInvoice } from "./actions";
+import { confirmCourierFile } from "../kurirski-obracun/actions";
+import type { StatementPreview } from "@/lib/courier/finance.server";
+
+const style = "rounded-lg border border-border px-3 py-2 text-sm";
+const amount = (v: number) => v.toLocaleString("sr-RS", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+type Draft = Extract<Awaited<ReturnType<typeof prepareInvoice>>, { ok: true }>["result"];
+export function SefForms({ today }: { today: string }) {
+  const [pending, start] = useTransition(), router = useRouter();
+  const [message, setMessage] = useState(""), [draft, setDraft] = useState<Draft | null>(null);
+  return <div className="space-y-6"><section className="space-y-3 rounded-xl border border-border p-4"><h2 className="font-semibold">Preuzimanje ulaznih računa</h2><p>Preuzimamo račun i priloženu specifikaciju. Ovaj pregled ne prihvata, ne odbija i ne plaća račune.</p><form className="flex flex-wrap items-end gap-3" action={form => start(async () => { const r = await syncSef(form); setMessage(r.ok ? r.result.message : r.message); router.refresh(); })}><label>Od <input required className={style} type="date" name="from" defaultValue={today}/></label><label>Do <input required className={style} type="date" name="to" defaultValue={today}/></label><button className={style} disabled={pending}>Preuzmi račune</button><button type="button" className={style} onClick={() => router.refresh()}>Osveži pregled</button></form></section>
+  <section className="space-y-3 rounded-xl border border-border p-4"><h2 className="font-semibold">Faktura za firmu</h2><p>Pripremite fakturu iz domaće porudžbine u RSD. Nalog mora imati naziv firme, PIB i adresu. Nalozi sa već izdatim fiskalnim računom nisu dostupni ovim tokom.</p><form className="flex flex-wrap items-end gap-3" action={form => start(async () => { setDraft(null); const r = await prepareInvoice(form); if (r.ok) { setDraft(r.result); setMessage(""); } else setMessage(r.message); })}><label>Broj porudžbine <input className={style} required name="orderNumber"/></label><label>Broj fakture <input className={style} required name="number" maxLength={22}/></label><label>Datum <input className={style} required type="date" name="date" defaultValue={today}/></label><label>Rok plaćanja <input className={style} required type="date" name="due" defaultValue={today}/></label><button disabled={pending} className={style}>Pripremi pregled</button></form>
+  {draft && <div className="space-y-3 rounded-lg bg-muted p-4"><h3 className="font-semibold">Faktura {draft.number}</h3><p>{draft.customer} · PIB {draft.pib} · {draft.date} · Rok {draft.due}</p><p>Osnovica {amount(draft.net)} · PDV {amount(draft.vat)} · Za uplatu {amount(draft.gross)} RSD</p><a href={`/api/admin/sef/${draft.id}/download`} className="underline">Preuzmi XML za proveru</a><p>Potvrdom se faktura šalje firmi kroz SEF.</p><button disabled={pending} className={style} onClick={() => start(async () => { const r = await submitInvoice(draft.id, draft.fingerprint); setMessage(r.ok ? r.result.message : r.message); setDraft(null); router.refresh(); })}>Potvrdi i pošalji fakturu na SEF</button></div>}</section><p role="status">{message}</p></div>;
+}
+
+export function SefCourierAttachment({ id, index }: { id: string; index: number }) {
+  const [pending, start] = useTransition(), router = useRouter();
+  const [preview, setPreview] = useState<StatementPreview | null>(null), [message, setMessage] = useState("");
+  return <div className="space-y-2"><form className="flex gap-2" action={form => start(async () => { setPreview(null); const r = await previewSefCourierAttachment(form); if (r.ok) setPreview(r.result); else setMessage(r.message); })}><input type="hidden" name="id" value={id}/><input type="hidden" name="index" value={index}/><select className={style} name="provider" aria-label="Kurir"><option value="X_EXPRESS">X Express</option><option value="MYGLS">GLS</option></select><button className={style} disabled={pending}>Pregled troškova iz priloga</button></form>{preview && <div className="space-y-2"><p>{preview.rows.length} stavki · Ukupno bez PDV-a {amount(preview.costNet)} RSD · Nepovezano {preview.rows.filter(r => r.status !== "MATCHED").length}</p><div className="max-h-64 overflow-auto"><table><thead><tr><th>Pošiljka</th><th>Porudžbina</th><th>Iznos bez PDV-a</th><th>Povezivanje</th></tr></thead><tbody>{preview.rows.map((r, i) => <tr key={i}><td>{r.trackingNo}</td><td>{r.orderNumber}</td><td>{amount(r.net)}</td><td>{r.status}</td></tr>)}</tbody></table></div><button className={style} disabled={pending || preview.rows.some(r => r.status === "AMBIGUOUS") || !!preview.existing && !preview.existing.same} onClick={() => start(async () => { const r = await confirmCourierFile(preview.input, preview.fingerprint); setMessage(r.message); if (r.ok) { setPreview(null); router.refresh(); } })}>Potvrdi kurirski obračun</button></div>}<p role="status">{message}</p></div>;
+}
+
+export function SefStatusForm({ id, unknown }: { id: string; unknown: boolean }) {
+  const [pending, start] = useTransition(), router = useRouter();
+  const [message, setMessage] = useState("");
+  return <form className="flex flex-wrap gap-3" action={form => start(async () => { const r = await refreshInvoice(form); setMessage(r.ok ? r.result.message : r.message); router.refresh(); })}><input type="hidden" name="id" value={id}/>{unknown && <label>SEF ID sa portala <input className={style} name="remoteId" type="number" min="1" required/></label>}<button className={style} disabled={pending}>{unknown ? "Proveri postojeću fakturu na SEF-u" : "Osveži SEF status"}</button><p role="status">{message}</p></form>;
+}
