@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { adjustInventory } from "@/lib/inventory";
-import { ananasInventoryPlan, ANANAS_INVENTORY_START } from "./inventory-plan";
+import { ananasInventoryPlan, ananasInventorySku, ANANAS_INVENTORY_START } from "./inventory-plan";
 
 export const ANANAS_INVENTORY_KEY = "ananas-inventory";
 const policySchema = z.object({ enabled: z.boolean(), allowNegative: z.boolean(), warehouseId: z.string(),
@@ -44,14 +44,15 @@ export async function postAnanasDocumentInventory(documentId: string, actorId?: 
     }
     // Archived products still own their historical warehouse ledger. Posting
     // their fiscal documents must not require restoring them to the catalog.
-    const products = await tx.product.findMany({ where: { sku: { in: plan.lines.map(line => line.sku) } }, select: { id: true, sku: true } });
+    const products = await tx.product.findMany({ where: { sku: { in: plan.lines.map(line => ananasInventorySku(line.sku)) } }, select: { id: true, sku: true } });
     const bySku = new Map(products.map(product => [product.sku, product]));
-    const missing = plan.lines.filter(line => !bySku.has(line.sku));
-    if (missing.length) throw new Error(`Ananas artikli nisu pronađeni: ${missing.map(line => line.sku).join(", ").slice(0,400)}.`);
+    const missing = plan.lines.filter(line => !bySku.has(ananasInventorySku(line.sku)));
+    if (missing.length) throw new Error(`Ananas artikli nisu pronađeni: ${missing.map(line => ananasInventorySku(line.sku)).join(", ").slice(0,400)}.`);
     // One document is atomic: neither missing SKUs nor partial retries consume stock.
     for (const line of plan.lines) {
+      const product = bySku.get(ananasInventorySku(line.sku))!;
       await adjustInventory(tx, { idempotencyKey: `ananas-fiscal:${document.id}:${line.sku}`, warehouseId: policy.warehouseId,
-        productId: bySku.get(line.sku)!.id, sku: line.sku, qtyDelta: line.qtyDelta,
+        productId: product.id, sku: product.sku, qtyDelta: line.qtyDelta,
         kind: document.kind === "SALE" ? "SALE_RESERVATION" : "REFUND_RETURN", actorId,
         note: `Ananas ${document.kind === "SALE" ? "račun" : "refundacija"} ${document.fiscalNumber}; ${document.suborderNumber}`,
         ananasPosting: { allowNegative: policy.allowNegative, issuedAt: document.issuedAt } });
