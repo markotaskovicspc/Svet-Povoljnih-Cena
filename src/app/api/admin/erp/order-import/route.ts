@@ -9,21 +9,19 @@ import { envValue } from "@/lib/env";
 import { checkRateLimitForRequest, rateLimitJson } from "@/lib/security/rate-limit";
 import { createOrder } from "@/lib/api/checkout";
 import { channelOrderSchema } from "@/lib/checkout/order-schema";
-import { importDraftSchema, exactImportProduct, importProductSearchTerms, withImportDefaults, type ImportProduct } from "@/lib/admin/order-import/schema";
+import { importDraftSchema, withImportDefaults } from "@/lib/admin/order-import/schema";
+import { createImportMatcher } from "@/lib/admin/order-import/matching";
 import { readImportQuote, signImportQuote } from "@/lib/admin/order-import/quote";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 const fail = (error: string, status = 400) => NextResponse.json({ error }, { status });
-async function productsFor(query: string): Promise<ImportProduct[]> {
-  const words = importProductSearchTerms(query);
-  if (!words.length) return [];
-  return db.product.findMany({
-    where: { deletedAt: null, isActive: true, OR: [
-      { sku: { equals: query.trim(), mode: "insensitive" } },
-      { AND: words.map(word => ({ OR: [{ name: { contains: word, mode: "insensitive" as const } }, { sku: { contains: word, mode: "insensitive" as const } }] })) },
-    ] }, select: { sku: true, name: true }, take: 50, orderBy: { name: "asc" },
+async function catalogMatcher() {
+  const catalog = await db.product.findMany({
+    where: { deletedAt: null, isActive: true },
+    select: { sku: true, name: true, shortName: true, barcode: true, shortDescription: true, colorPrimary: true, colorSecondary: true, sizeLabel: true, attribute1: true, attribute2: true, attribute3: true, attribute4: true },
   });
+  return createImportMatcher(catalog);
 }
 export async function GET(req: NextRequest) {
   const admin = await getCurrentAdmin();
@@ -31,7 +29,7 @@ export async function GET(req: NextRequest) {
   if (!isAuthorized(admin.role, ["OPS"])) return fail("Nemate pristup.", 403);
   const query = req.nextUrl.searchParams.get("q")?.trim() ?? "";
   if (query.length < 2 || query.length > 200) return fail("Unesite naziv ili šifru artikla.");
-  return NextResponse.json({ products: await productsFor(query) });
+  return NextResponse.json({ products: (await catalogMatcher())({ name: query, sku: "", qty: null, unitPrice: null }) });
 }
 export async function POST(req: NextRequest) {
   const admin = await getCurrentAdmin();
@@ -68,11 +66,12 @@ export async function POST(req: NextRequest) {
       if (!response.ok) return fail(response.status === 429 ? "GPT trenutno obrađuje druge porudžbine. Pokušajte za nekoliko sekundi." : "GPT trenutno nije pročitao porudžbinu. Pokušajte ponovo.", response.status === 429 ? 429 : 502);
       const payload = await response.json();
       const draft = withImportDefaults(importDraftSchema.parse(payload.draft));
-      const lines = await Promise.all(draft.lines.map(async line => {
-        const candidates = await productsFor(line.sku || line.name);
-        const match = exactImportProduct(line, candidates);
-        return { ...line, sku: match?.sku ?? "", candidates };
-      }));
+      const match = await catalogMatcher();
+      const lines = draft.lines.map(line => {
+        const candidates = match(line);
+        const best = candidates[0];
+        return { ...line, sku: best?.sku ?? "", suggested: best?.matchKind === "suggested", candidates };
+      });
       return NextResponse.json({ draft: { ...draft, lines } });
     }
     const body = await req.json();

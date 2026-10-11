@@ -25,8 +25,8 @@ describe("operator import creation boundary", () => {
     expect(response.status).toBe(200);
     const { draft } = await response.json();
     expect(draft).toMatchObject({ paymentMethod: "POUZECE_GOTOVINA", shippingMethod: "KURIR", postalCode: "18207", lines: [{ sku: "210007" }] });
-    const search = mocks.products.mock.calls[0][0].where.OR[1].AND;
-    expect(search.map((term: {OR: {name: {contains:string}}[]}) => term.OR[0].name.contains)).toEqual(["bake", "master"]);
+    expect(draft.lines[0]).toMatchObject({ suggested: true, candidates: [{ sku: "210007", matchKind: "suggested" }] });
+    expect(mocks.products.mock.calls[0][0].where).toEqual({ deletedAt: null, isActive: true });
     expect(mocks.createOrder).not.toHaveBeenCalled();
   });
   it("rejects unauthenticated and cross-origin requests before creating anything", async () => {
