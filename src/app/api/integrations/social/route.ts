@@ -102,7 +102,7 @@ export async function POST(req: Request) {
       if (!["POUZECE_GOTOVINA", "UPLATA_NA_RACUN"].includes(input.paymentMethod)) {
         return NextResponse.json({ ok: false, error: { code: "CHAT_PAYMENT_UNSUPPORTED" } });
       }
-      const preview = await createOrder(input, null, loyalty, { previewOnly: true, allowGuestWithoutEmail: true, ...(staffPricing?{staffLoyaltyPrices:staffPricing.prices}:{}) });
+      const preview = await createOrder(input, null, loyalty, { previewOnly: true, allowGuestWithoutEmail: true, preserveCustomerPostalCode: true, ...(staffPricing?{staffLoyaltyPrices:staffPricing.prices}:{}) });
       if (!preview.ok) return NextResponse.json(preview);
       input.checkoutSessionId = `social_${randomUUID().replaceAll("-", "")}`;
       const expiresAt = Date.now() + 15 * 60_000;
@@ -118,7 +118,7 @@ export async function POST(req: Request) {
       if (quote.expiresAt < Date.now() && !existing?.orderId) return NextResponse.json({ ok: false, error: { code: "QUOTE_EXPIRED" } });
       const loyalty=existing?.orderId&&quote.loyalty?{...quote.loyalty,consentAt:new Date(quote.loyalty.consentAt)}:await channelLoyalty(quote.loyaltyProof,{...body,email:quote.input.guestEmail??null},secret);
       if(quote.input.guestLoyalty&&!loyalty)return NextResponse.json({ok:false,error:{code:'LOYALTY_CONSENT_REQUIRED'}});
-      const result = await createOrder(quote.input, null, loyalty, { expectedTotal: quote.total, allowGuestWithoutEmail: true, customerReplyDraftOnly: !quote.input.guestEmail, ...(quote.staffPricing?{staffLoyaltyPrices:quote.staffPricing.prices}:{}) });
+      const result = await createOrder(quote.input, null, loyalty, { expectedTotal: quote.total, allowGuestWithoutEmail: true, preserveCustomerPostalCode: true, customerReplyDraftOnly: !quote.input.guestEmail, ...(quote.staffPricing?{staffLoyaltyPrices:quote.staffPricing.prices}:{}) });
       if (result.ok) {
         after(async () => {
           try {

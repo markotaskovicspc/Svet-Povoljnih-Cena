@@ -320,7 +320,7 @@ export async function createOrder(
   input: CreateOrderInput,
   userId: string | null,
   guestLoyalty: { email: string | null; consentVersion: string; consentAt: Date } | null = null,
-  options: { previewOnly?: boolean; expectedTotal?: number; customerReplyDraftOnly?: boolean; allowGuestWithoutEmail?: boolean; staffLoyaltyPrices?: readonly StaffLoyaltyPrice[] } = {},
+  options: { preserveCustomerPostalCode?: boolean; previewOnly?: boolean; expectedTotal?: number; customerReplyDraftOnly?: boolean; allowGuestWithoutEmail?: boolean; staffLoyaltyPrices?: readonly StaffLoyaltyPrice[] } = {},
 ): Promise<
   { ok: true; data: CreateOrderResult } | { ok: false; error: CreateOrderError }
 > {
@@ -757,7 +757,7 @@ export async function createOrder(
     return { ok: false, error: { code: "DELIVERY_POINT_INVALID" } };
   }
 
-  const deliveryTownLabel = customerTownLabel(ship, xExpressTown);
+  const deliveryTownLabel = customerTownLabel(ship, xExpressTown, options);
   const shippingBuyerAddress = {
     firstName: ship.firstName,
     lastName: ship.lastName,

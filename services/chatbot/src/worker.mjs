@@ -1,5 +1,5 @@
 import {metaSendTarget} from './meta-send-target.mjs';
-import {receiveSupportContact,requestSupportContact,appendSupportContact} from './support-contact.mjs';
+import {receiveSupportContact,requestSupportContact,appendSupportContact,guardSupportContact} from './support-contact.mjs';
 import {staffSummary} from './support-summary.mjs';
 import {receiveAdContext} from './ad-context.mjs';
 import { orderErrorMessage } from './delivery.mjs';
@@ -294,8 +294,10 @@ export class Worker {
           }
           if(state.supportRequest){
             const question=requestSupportContact({state,event});
-            if(question){message=appendSupportContact(message,question);images=[];}
+            const handoffMessage=appendSupportContact(message,question,{channel:event.channel});
+            if(handoffMessage!==message){message=handoffMessage;images=[];}
           }
+          message=guardSupportContact({channel:event.channel,text:message,state});
           state.history.push({role:'user',content:/^\s*\d{6}\s*$/.test(event.text)&&Boolean(state.claimVerification||state.claimOrders)?'[Kod za proveru porudžbine]':event.text || '[Prilog kupca]',timestamp:event.timestamp},{role:'assistant',content:message,timestamp:Date.now()});
           state.history=state.history.slice(-HISTORY_LIMIT);
           await c.query('BEGIN');

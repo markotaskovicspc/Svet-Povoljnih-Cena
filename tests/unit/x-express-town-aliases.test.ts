@@ -21,3 +21,12 @@ describe('verified courier locality aliases',()=>{
   expect(customerTownLabel({city:'Batajnica',postalCode:'11273'},null)).toEqual({city:'Batajnica',postalCode:'11273'});
  });
 });
+
+describe('chat customer postcode preservation',()=>{
+ it('keeps buyer correction in stored address while retaining the resolved courier town',()=>{
+  const shipping={city:'Jasenovik',postalCode:'18207'};
+  const routing={id:321,name:'Jasenovik',postalCode:'18000'};
+  expect(customerTownLabel(shipping,routing,{preserveCustomerPostalCode:true})).toEqual(shipping);
+  expect(customerTownLabel(shipping,routing)).toEqual({city:'Jasenovik',postalCode:'18000'});
+ });
+});
