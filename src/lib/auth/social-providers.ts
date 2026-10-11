@@ -28,6 +28,9 @@ export function getConfiguredSocialAuthProviders(
 ): SocialAuthProvider[] {
   return (["google", "apple", "facebook"] as const).flatMap((id) => {
     const available = configured(id);
+    // Hide Facebook until its OAuth credentials are configured, even on forms
+    // that show placeholders for other unavailable sign-in methods.
+    if (id === "facebook" && !available) return [];
     if (!available && !options.includeUnavailable) return [];
     return [{ id, label: labels[id], action: available ? actions[id] : undefined }];
   });
