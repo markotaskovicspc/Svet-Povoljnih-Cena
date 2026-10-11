@@ -28,6 +28,21 @@ it("matches parcel identity and rejects an order mismatch or ambiguous identitie
  expect(matchStatementRow({...row,orderNumber:"SPC-2"},shipments).status).toBe("UNMATCHED");
  expect(matchStatementRow(row,[...shipments,{...shipments[0],id:"s2"}]).status).toBe("AMBIGUOUS");
 });
+it("matches known replacement references only with the exact parcel and original order", () => {
+ const shipments=[{id:"replacement",trackingNo:"9002766486",parcelNumbers:null,orderNumber:"SPC-2026-000636"}];
+ for (const suffix of ["ZAMENA", "R2-PRS", "POVRAT", "POVRAT-Rabcdef123456"]) {
+   expect(matchStatementRow({...row,trackingNo:"9002766486",orderNumber:`SPC-2026-000636-${suffix}`},shipments).shipmentId).toBe("replacement");
+ }
+ expect(matchStatementRow({...row,trackingNo:"wrong",orderNumber:"SPC-2026-000636-ZAMENA"},shipments).status).toBe("UNMATCHED");
+ expect(matchStatementRow({...row,trackingNo:"9002766486",orderNumber:"SPC-2026-000669-ZAMENA"},shipments).status).toBe("UNMATCHED");
+ expect(matchStatementRow({...row,trackingNo:"9002766486",orderNumber:"SPC-2026-000636-UNKNOWN"},shipments).status).toBe("UNMATCHED");
+ expect(matchStatementRow({...row,trackingNo:"9002766486",orderNumber:"SPC-2026-000636-ZAMENA"},[...shipments,{...shipments[0],id:"duplicate"}]).status).toBe("AMBIGUOUS");
+});
+it("matches X Express invoice codes saved by carrier webhooks without guessing from recipient names", () => {
+ const shipments=[{id:"x1",trackingNo:"AAA0850301369",invoiceCode:"26-0001261319",parcelNumbers:null,orderNumber:"SPC-2026-001068"}];
+ expect(matchStatementRow({...row,trackingNo:"26-0001261319"},shipments).shipmentId).toBe("x1");
+ expect(matchStatementRow({...row,trackingNo:"26-0001261320"},shipments).status).toBe("UNMATCHED");
+});
 it("fingerprints reordered duplicate uploads independently of file/document name",()=>{
  const a={provider:"MYGLS" as const,documentNo:"a",filename:"a.xlsx",rows:[row,{...row,trackingNo:"900002"}]};
  expect(statementIdentity(a).fingerprint).toBe(statementIdentity({...a,documentNo:"b",filename:"b.xlsx",rows:[...a.rows].reverse()}).fingerprint);

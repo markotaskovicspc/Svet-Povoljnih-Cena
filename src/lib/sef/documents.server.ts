@@ -80,7 +80,7 @@ export async function prepareSefInvoice(orderId: string, number: string, issueDa
   return db.$transaction(async tx => {
     await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId} FOR UPDATE`;
     const { attachments: _attachments, ...data } = await salesOrderData(orderId, number, issueDate, dueDate, tx);
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`sef-out:${config.environment}:${orderId}`}))`;
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`sef-out:${config.environment}:${orderId}`}))::text`;
     const existing = await tx.sefDocument.findUnique({ where: { environment_direction_orderId: { environment: config.environment, direction: "OUT", orderId } } });
     if (existing && !["DRAFT", "ERROR"].includes(existing.status)) throw new Error("Faktura je već poslata ili njen prethodni zahtev još nije potvrđen.");
     const requestId = `spc-${config.environment}-${orderId}-${digest(data.xml).slice(0, 12)}`;
