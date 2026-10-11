@@ -70,6 +70,7 @@ const oauthProviders = (() => {
       Google({
         clientId: google.clientId,
         clientSecret: google.clientSecret,
+        allowDangerousEmailAccountLinking: true,
       }),
     );
   }
@@ -78,6 +79,9 @@ const oauthProviders = (() => {
       Facebook({
         clientId: facebook.clientId,
         clientSecret: facebook.clientSecret,
+        // Trust the email returned by Facebook Graph API after OAuth consent.
+        // Match existing customers automatically, just like Apple and Google.
+        allowDangerousEmailAccountLinking: true,
       }),
     );
   }
@@ -282,15 +286,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     ...authConfig.callbacks,
-    async signIn({ user, account }) {
+    async signIn({ user, account, profile }) {
+      // OIDC providers explicitly assert verification. Never auto-link an
+      // unverified Google/Apple email to an existing customer.
+      if (account?.provider === "google" || account?.provider === "apple") {
+        const verified: unknown = profile?.email_verified;
+        if (verified !== true && verified !== "true") return false;
+      }
       // Block disabled / soft-deleted customers from OAuth re-entry.
       if (
         account?.provider &&
         !CREDENTIAL_PROVIDER_IDS.has(account.provider) &&
-        user?.id
+        (user?.id || user?.email)
       ) {
-        const dbUser = await db.user.findUnique({
-          where: { id: user.id },
+        const dbUser = await db.user.findFirst({
+          where: {
+            OR: [
+              ...(user.id ? [{ id: user.id }] : []),
+              ...(user.email ? [{ email: user.email }] : []),
+            ],
+          },
           select: { deletedAt: true },
         });
         if (dbUser?.deletedAt) return false;
