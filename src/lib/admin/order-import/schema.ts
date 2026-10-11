@@ -10,7 +10,7 @@ export const importDraftSchema = z.object({
   warnings: z.array(z.string().max(300)).max(15),
 });
 export type ImportDraft = z.infer<typeof importDraftSchema>;
-export type ImportProduct = { sku: string; name: string; confidence?: "high" | "medium" | "low"; matchKind?: "exact" | "suggested"; reason?: string; score?: number };
+export type ImportProduct = { sku: string; name: string; confidence?: "high" | "medium" | "low"; matchKind?: "exact" | "suggested"; reason?: string; variantLabel?: string; score?: number };
 export type ImportLine = ImportDraft["lines"][number] & { candidates: ImportProduct[]; suggested?: boolean };
 export type ImportReview = Omit<ImportDraft, "lines"> & { lines: ImportLine[] };
 const genericNameWords = new Set(["mini", "rerna", "pec", "stolica", "set", "za", "sa", "i", "od", "kom", "komad", "komada", "w", "kw", "l", "ml", "cm", "mm", "kg", "g"]);

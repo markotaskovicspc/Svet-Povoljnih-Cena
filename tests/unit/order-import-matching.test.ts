@@ -44,6 +44,7 @@ describe("catalog-wide order matching", () => {
   it("labels ties as uncertain and never claims that a suggestion is exact", () => {
     const found=createImportMatcher(products)(line("URBAN SEAT stolica"));
     expect(found[0].confidence).toBe("low");
+    expect(found[1].confidence).toBe("low");
     expect(found[0].matchKind).toBe("suggested");
     expect(createImportMatcher(products)(line("URBAN SEAT"))[0]).toMatchObject({ confidence: "low", matchKind: "suggested" });
   });

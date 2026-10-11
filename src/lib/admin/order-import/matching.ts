@@ -19,7 +19,8 @@ const units = new Set(["w","kw","l","ml","cm","mm","kg","g","v"]);
 const colors = new Set(["white","black","gray","crvena","plava","zelena","braon","bez","zuta","pink"]);
 export const normalizeImportText = (text: string) => text.toLowerCase().replace(/[а-яђјљњћџ]/g,c=>cyrillic[c]??c).normalize("NFD").replace(/\p{M}/gu,"").replace(/đ/g,"dj");
 function tokens(text: string) {
-  return [...new Set((normalizeImportText(text).replace(/(?<=[a-z])0(?=[a-z])/g,"o").replace(/(\d)([a-z])|([a-z])(\d)/g,"$1$3 $2$4").match(/[a-z0-9]+/g)??[]).filter(t=>!stop.has(t)&&!units.has(t)).map(t=>aliases[t]??t))];
+  const raw=(normalizeImportText(text).replace(/(?<=[a-z])0(?=[a-z])/g,"o").replace(/(\d)([a-z])|([a-z])(\d)/g,"$1$3 $2$4").match(/[a-z0-9]+/g)??[]).filter(t=>!stop.has(t)&&!units.has(t));
+  return [...new Set([...raw,...raw.map(t=>aliases[t]??t)])];
 }
 function distance(a: string, b: string) {
   let row=Array.from({length:b.length+1},(_,i)=>i);
@@ -64,8 +65,8 @@ export function createImportMatcher(catalog: ImportCatalogProduct[]) {
         if(strength){hits++;coverage+=weights[i]*strength;matched.push(query[i]);}
       }
       coverage/=totalWeight;
-      const compactQuery=query.join("");
-      const compactNames=[p.name,tokens(p.product.shortName??"")].filter(t=>t.length>=2).map(t=>t.join(""));
+      const compactQuery=normalizeImportText(line.name).replace(/[^a-z0-9]/g,"");
+      const compactNames=[p.product.name,p.product.shortName??""].filter(name=>tokens(name).length>=2).map(name=>normalizeImportText(name).replace(/[^a-z0-9]/g,""));
       const modelMatch=compactNames.some(name=>name.length>=6&&compactQuery.includes(name));
       if(modelMatch){coverage=Math.max(coverage,.85);hits=Math.max(hits,2);}
       const titleCoverage=p.name.filter(t=>query.includes(t)).length/(p.name.length||1);
@@ -78,7 +79,8 @@ export function createImportMatcher(catalog: ImportCatalogProduct[]) {
       const score=exactSku?100:exactName?98:Math.max(0,Math.round((coverage*.8+titleCoverage*.2)*90)-(conflict?45:0));
       const confidence: ImportCandidate["confidence"] = exactSku||exactName?"high":!conflict&&!unknownSku&&coverage>=.8&&hits>=2?"high":!conflict&&coverage>=.4?"medium":"low";
       const reason=exactSku?(conflict?"Tačna šifra, ali razlika u boji ili karakteristikama — proverite":"Tačna šifra / barkod"):exactName?"Tačan naziv":conflict?"Razlika u boji ili karakteristikama — proverite":unknownSku?"Šifra nije potvrđena; predlog prema nazivu":matched.length?"Poklapanje naziva, modela ili atributa":"";
-      return {sku:p.product.sku,name:p.product.name,score,matchKind:exactSku||exactName?"exact" as const:"suggested" as const,confidence,reason,hits};
+      const variantLabel=[...new Set([p.product.colorPrimary,p.product.colorSecondary,p.product.sizeLabel,p.product.attribute1,p.product.attribute2,p.product.attribute3,p.product.attribute4].filter(Boolean))].join(" · ").slice(0,200);
+      return {sku:p.product.sku,name:p.product.name,variantLabel,score,matchKind:exactSku||exactName?"exact" as const:"suggested" as const,confidence,reason,hits};
     }).filter(p=>p.matchKind==="exact"||(p.hits>0&&p.score>=15)).sort((a,b)=>b.score-a.score||a.name.localeCompare(b.name,"sr"));
     if(ranked[0] && ranked[1] && ranked[0].score === ranked[1].score && ranked[0].matchKind === "exact") {
       for(const result of ranked.filter(p=>p.score===ranked[0].score)) {
@@ -86,7 +88,11 @@ export function createImportMatcher(catalog: ImportCatalogProduct[]) {
       }
     }
     // A close alternative means that even the first result needs review.
-    if(ranked[0]?.matchKind==="suggested"&&ranked[1]&&ranked[0].score-ranked[1].score<8)ranked[0].confidence="low";
+    if(ranked[0]?.matchKind==="suggested"&&ranked[1]&&ranked[0].score-ranked[1].score<8) {
+      for(const result of ranked.filter(p=>p.matchKind==="suggested"&&ranked[0].score-p.score<8)) {
+        result.confidence="low";result.reason="Slični kandidati — proverite model i varijantu";
+      }
+    }
     return ranked.slice(0,12).map(({hits,...p})=>p);
   };
 }
