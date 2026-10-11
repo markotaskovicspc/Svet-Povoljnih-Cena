@@ -38,7 +38,12 @@ export async function advanceAnanasInventoryHistory(actorId?: string, now = new 
     });
     const remaining = await db.ananasDocument.count({ where: { inventoryPostedAt: null, issuedAt: { gte: new Date("2025-05-31T22:00:00.000Z") } } });
     const errors = await db.ananasDocument.count({ where: { inventoryPostedAt: null, inventoryError: { not: null }, issuedAt: { gte: new Date("2025-05-31T22:00:00.000Z") } } });
+    const [postedTotal, negatives] = await Promise.all([
+      db.ananasDocument.count({ where: { inventoryPostedAt: { not: null }, issuedAt: { gte: new Date("2025-05-31T22:00:00.000Z") } } }),
+      db.warehouseStock.count({ where: { warehouseId: policy.warehouseId, qty: { lt: 0 } } }),
+    ]);
     return { imported, posted: before.posted + after.posted, failed: before.failed + after.failed, through,
+      postedTotal, pendingTotal: remaining, negatives,
       complete: new Date(through) >= now && remaining === 0, needsReview: new Date(through) >= now && remaining > 0 && remaining === errors };
   } finally {
     await db.$transaction(async tx => {
