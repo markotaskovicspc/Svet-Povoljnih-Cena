@@ -1,6 +1,6 @@
 # Admin obaveštenja o porudžbinama
 
-Admini sa ulogom SUPER ili OPS mogu da uključe Web Push na svakom uređaju zasebno. Prijava sama ne uključuje obaveštenja. Poruke sadrže broj porudžbine i link, bez podataka kupca. Na iPhone-u (iOS 16.4+) prvo dodati administraciju na početni ekran iz Safarija, zatim otvoriti ikonicu, prijaviti se i uključiti obaveštenja.
+Admini sa ulogom SUPER ili OPS mogu da uključe Web Push na svakom uređaju zasebno. Prijava sama ne uključuje obaveštenja. Poruke sadrže broj porudžbine, ukupan iznos za plaćanje u dinarima (sa dostavom i primenjenim popustima) i link, bez podataka kupca. Na iPhone-u (iOS 16.4+) prvo dodati administraciju na početni ekran iz Safarija, zatim otvoriti ikonicu, prijaviti se i uključiti obaveštenja.
 
 ## Podešavanje servera
 
