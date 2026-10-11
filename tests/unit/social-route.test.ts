@@ -44,12 +44,12 @@ describe('SPC social order bridge',()=>{
   it('rejects unsigned requests before invoking any business operation',async()=>{expect((await POST(request({action:'search',query:'komoda'},false))).status).toBe(401);expect(mocks.create).not.toHaveBeenCalled();});
   it('quotes through checkout in preview mode and removes caller-controlled loyalty',async()=>{
     const r=await POST(request({action:'quote',channel:'facebook',conversationId:'fb:123:456',input:{...input,guestLoyalty:true,voucherCode:'UNTRUSTED'}}));const body=await r.json();
-    expect(body.ok).toBe(true);expect(body.quoteToken).toBeTruthy();expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({guestLoyalty:false,voucherCode:undefined,checkoutSessionId:expect.any(String)}),null,null,{previewOnly:true,allowGuestWithoutEmail:true});
+    expect(body.ok).toBe(true);expect(body.quoteToken).toBeTruthy();expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({guestLoyalty:false,voucherCode:undefined,checkoutSessionId:expect.any(String)}),null,null,{previewOnly:true,allowGuestWithoutEmail:true,preserveCustomerPostalCode:true});
   });
   it('binds order write to signed buyer, conversation and expected total',async()=>{
     const quote=await (await POST(request({action:'quote',channel:'facebook',conversationId:'fb:123:456',input}))).json();mocks.create.mockClear();
     const r=await POST(request({action:'create_order',channel:'instagram',conversationId:'ig:wrong',quoteToken:quote.quoteToken}));expect(r.status).toBe(403);expect(mocks.create).not.toHaveBeenCalled();
-    await POST(request({action:'create_order',channel:'facebook',conversationId:'fb:123:456',quoteToken:quote.quoteToken}));expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({guestEmail:'buyer@example.com'}),null,null,{expectedTotal:2000,allowGuestWithoutEmail:true,customerReplyDraftOnly:false});
+    await POST(request({action:'create_order',channel:'facebook',conversationId:'fb:123:456',quoteToken:quote.quoteToken}));expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({guestEmail:'buyer@example.com'}),null,null,{expectedTotal:2000,allowGuestWithoutEmail:true,preserveCustomerPostalCode:true,customerReplyDraftOnly:false});
   });
   it('keeps delivery instructions separate from street/house number through signed quote and creation',async()=>{
     const identity={channel:'facebook',conversationId:'fb:notes'};
@@ -102,7 +102,7 @@ describe('social cancellation and current availability',()=>{
   });
 });
 
-it('signed social checkout accepts no email and suppresses nonexistent buyer email, while missing address is rejected',async()=>{const noEmail={...input,guestEmail:undefined};const identity={channel:'facebook',conversationId:'fb:test:noemail'};const q=await(await POST(request({action:'quote',...identity,input:noEmail}))).json();expect(q.ok).toBe(true);mocks.create.mockClear();await POST(request({action:'create_order',...identity,quoteToken:q.quoteToken}));expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({shipping:expect.objectContaining(noEmail.shipping)}),null,null,{expectedTotal:2000,allowGuestWithoutEmail:true,customerReplyDraftOnly:true});expect((await POST(request({action:'quote',...identity,input:{...noEmail,shipping:{...input.shipping,phone:''}}}))).status).toBe(400);});
+it('signed social checkout accepts no email and suppresses nonexistent buyer email, while missing address is rejected',async()=>{const noEmail={...input,guestEmail:undefined};const identity={channel:'facebook',conversationId:'fb:test:noemail'};const q=await(await POST(request({action:'quote',...identity,input:noEmail}))).json();expect(q.ok).toBe(true);mocks.create.mockClear();await POST(request({action:'create_order',...identity,quoteToken:q.quoteToken}));expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({shipping:expect.objectContaining(noEmail.shipping)}),null,null,{expectedTotal:2000,allowGuestWithoutEmail:true,preserveCustomerPostalCode:true,customerReplyDraftOnly:true});expect((await POST(request({action:'quote',...identity,input:{...noEmail,shipping:{...input.shipping,phone:''}}}))).status).toBe(400);});
 
 it('support notification links to the ERP conversation and rejects foreign Meta destinations',async()=>{mocks.mail.mockResolvedValue({ok:true,provider:'test'});const payload={action:'support_handoff',channel:'facebook',conversationId:'facebook:123:456',id:'event',reason:'Test',transcript:'Sintetička poruka',conversationLink:'https://business.facebook.com/latest/inbox/all/?asset_id=123&selected_item_id=789'};expect((await(await POST(request(payload))).json()).ok).toBe(true);expect(mocks.mail.mock.calls.at(-1)[0].html).toContain('/admin/razgovori?conversation=facebook%3A123%3A456');expect(mocks.mail.mock.calls.at(-1)[0].html).not.toContain('selected_item_id=789');expect((await POST(request({...payload,conversationLink:'https://evil.test/latest/inbox/all/'}))).status).toBe(400);});
 
@@ -123,7 +123,7 @@ it('binds seller-approved catalog prices to the signed quote without granting me
  const payload={action:'staff_quote',...identity,input:{...input,guestEmail:undefined},staffPricing};
  expect((await POST(request(payload,false))).status).toBe(401);expect(mocks.create).not.toHaveBeenCalled();
  const q=await(await POST(request(payload))).json();expect(q.ok).toBe(true);expect(q.staffPricingApplied).toBe(true);expect(q.loyaltyApplied).toBe(false);
- expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({guestLoyalty:false,notes:expect.stringContaining('bez članstva')}),null,null,{previewOnly:true,allowGuestWithoutEmail:true,staffLoyaltyPrices:staffPricing.prices});
+ expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({guestLoyalty:false,notes:expect.stringContaining('bez članstva')}),null,null,{previewOnly:true,allowGuestWithoutEmail:true,preserveCustomerPostalCode:true,staffLoyaltyPrices:staffPricing.prices});
  mocks.create.mockClear();await POST(request({action:'create_order',...identity,quoteToken:q.quoteToken,staffPricing:{...staffPricing,prices:[{sku:input.lines[0].sku,price:1}]}}));
  expect(mocks.create).toHaveBeenCalledWith(expect.anything(),null,null,expect.objectContaining({staffLoyaltyPrices:staffPricing.prices,customerReplyDraftOnly:true}));
  mocks.create.mockClear();expect((await POST(request({action:'create_order',...identity,conversationId:'fb:other',quoteToken:q.quoteToken}))).status).toBe(403);expect(mocks.create).not.toHaveBeenCalled();
@@ -148,6 +148,6 @@ it('conversation consent flows through signed quote and confirmed order without 
  expect(quote).toMatchObject({ok:true,loyaltyApplied:true,input:{guestLoyalty:true}});
  mocks.create.mockClear();
  expect(await(await POST(request({action:'create_order',...identity,quoteToken:quote.quoteToken}))).json()).toMatchObject({ok:true});
- expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({guestLoyalty:true}),null,expect.objectContaining({email:null}),expect.objectContaining({allowGuestWithoutEmail:true,customerReplyDraftOnly:true}));
+ expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({guestLoyalty:true}),null,expect.objectContaining({email:null}),expect.objectContaining({allowGuestWithoutEmail:true,preserveCustomerPostalCode:true,customerReplyDraftOnly:true}));
  expect(await(await POST(request({action:'quote',...identity,conversationId:'web:spc:other',input:{...input,guestEmail:undefined},loyaltyProof:accepted.proof}))).json()).toMatchObject({ok:false,error:{code:'LOYALTY_CONSENT_REQUIRED'}});
 });

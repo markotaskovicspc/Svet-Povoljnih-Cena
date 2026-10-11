@@ -8,7 +8,7 @@ beforeEach(() => {
   vi.resetAllMocks(); m.create.mockResolvedValue({ id: "run" }); m.update.mockResolvedValue({}); m.latest.mockResolvedValue(null);
   m.documents.mockResolvedValue([{ id: "one" }]);
   m.normalize.mockImplementation((row, kind) => ({ externalId: row.id, kind, fiscalNumber: `${kind}-1` }));
-  m.transaction.mockImplementation(async fn => fn({ ananasDocument: { upsert: m.upsert }, ananasSyncRun: { update: m.update } }));
+  m.transaction.mockImplementation(async fn => fn({ $queryRaw: vi.fn(), ananasDocument: { upsert: m.upsert, findUnique: vi.fn().mockResolvedValue(null) }, ananasSyncRun: { update: m.update } }));
 });
 it("upserts identical provider keys on repeated imports and commits success with documents", async () => {
   await syncAnanasDocuments(new Date("2026-09-01Z"), new Date("2026-09-02Z"));

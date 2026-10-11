@@ -46,6 +46,8 @@ type InventoryAdjustment = {
   orderItemId?: string | null;
   fiscalDocumentId?: string | null;
   dispatchNoteId?: string | null;
+  // Restricted to the Ananas fiscal reconciliation caller, never checkout.
+  ananasPosting?: { allowNegative: boolean; issuedAt: Date };
 };
 
 /**
@@ -77,11 +79,22 @@ export async function adjustInventory(
     ? await tx.warehouse.findUnique({ where: { id: input.warehouseId } })
     : await ensureDefaultWarehouse(tx);
   if (!warehouse?.active) throw new Error("Aktivan magacin nije pronađen.");
+  if (input.ananasPosting && (!/^ananas$/i.test(warehouse.name.trim()) || !input.idempotencyKey.startsWith("ananas-fiscal:"))) {
+    throw new Error("Ananas knjiženje dozvoljeno je samo u magacinu Ananas.");
+  }
 
   const representedWarehouseStock = await tx.warehouseStock.findFirst({
     where: { productId: input.productId },
     select: { id: true },
   });
+  // Ananas must never inherit the old aggregate as its opening stock. Preserve
+  // that legacy quantity in DC before creating an empty Ananas balance.
+  if (input.ananasPosting && !representedWarehouseStock) {
+    const dc = await ensureDefaultWarehouse(tx);
+    if (dc.id === warehouse.id) throw new Error("Ananas ne može biti podrazumevani DC magacin.");
+    await tx.warehouseStock.upsert({ where: { warehouseId_productId: { warehouseId: dc.id, productId: input.productId } },
+      create: { warehouseId: dc.id, productId: input.productId, qty: product.stock }, update: {} });
+  }
   await tx.warehouseStock.upsert({
     where: {
       warehouseId_productId: {
@@ -94,7 +107,7 @@ export async function adjustInventory(
       productId: input.productId,
       // Product.stock predates per-warehouse rows and is only an opening
       // balance when this product has never been represented in any warehouse.
-      qty: representedWarehouseStock ? 0 : product.stock,
+      qty: representedWarehouseStock || input.ananasPosting ? 0 : product.stock,
     },
     update: {},
   });
@@ -106,12 +119,14 @@ export async function adjustInventory(
         where: {
           warehouseId: warehouse.id,
           productId: input.productId,
-          qty: { gte: required },
+          ...(input.ananasPosting?.allowNegative ? {} : { qty: { gte: required } }),
         },
         data: { qty: { decrement: required } },
       }),
       tx.product.updateMany({
-        where: { id: input.productId, stock: { gte: required } },
+        // The selected warehouse is authoritative. A temporary debt in Ananas
+        // can make the aggregate negative without consuming available DC stock.
+        where: { id: input.productId },
         data: { stock: { decrement: required } },
       }),
     ]);
@@ -169,6 +184,7 @@ export async function adjustInventory(
       actorId: input.actorId ?? null,
       balanceAfterWarehouse: warehouseBalance?.qty ?? null,
       balanceAfterTotal: productBalance?.stock ?? null,
+      ...(input.ananasPosting ? { createdAt: input.ananasPosting.issuedAt } : {}),
     },
   });
 }

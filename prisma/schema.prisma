@@ -4044,12 +4044,16 @@ model AnanasDocument {
   items          Json
   importedAt     DateTime @default(now())
   updatedAt      DateTime @updatedAt
+  inventoryPostedAt DateTime?
+  inventoryFingerprint String?
+  inventoryError String? @db.Text
 
   @@unique([kind, externalId])
   @@unique([kind, fiscalNumber])
   @@index([issuedAt, kind])
   @@index([suborderNumber])
   @@index([orderNumber])
+  @@index([inventoryPostedAt, issuedAt])
 }
 
 model AnanasSyncRun {
