@@ -25,10 +25,10 @@ export function OrderImportForm() {
   const [confirmed, setConfirmed] = useState(false);
   const [attempted, setAttempted] = useState(false);
   const [order, setOrder] = useState<{ id: string; number: string } | null>(null);
-  useEffect(() => { if (!file) { setImageUrl(""); return; } const url = URL.createObjectURL(file); setImageUrl(url); return () => URL.revokeObjectURL(url); }, [file]);
+  useEffect(() => () => { if (imageUrl) URL.revokeObjectURL(imageUrl); }, [imageUrl]);
   function pickImage(next: File) {
     if (next.size > 3000000 || !["image/png", "image/jpeg", "image/webp"].includes(next.type)) { setError("Dodajte PNG, JPG ili WebP screenshot do 3 MB."); return; }
-    setFile(next); setError("");
+    setFile(next); setImageUrl(URL.createObjectURL(next)); setError("");
   }
   function patch(next: ImportReview) { setDraft(next); setQuote(""); setTotals(null); setConfirmed(false); setError(""); }
   async function request(body: FormData | object) {
@@ -78,7 +78,7 @@ export function OrderImportForm() {
       setError(e instanceof Error ? e.message : "Ishod nije potvrđen. Proverite listu porudžbina ili ponovite isti pokušaj.");
     } finally { setBusy(""); }
   }
-  if (order) return <section className="rounded-xl border border-green-600/30 bg-green-500/10 p-6"><h2 className="text-xl font-semibold">Porudžbina {order.number} je kreirana</h2><p className="mt-2 text-sm">Sačuvana je u pregledu porudžbina.</p><div className="mt-5 flex flex-wrap gap-3"><Link className="underline" href={`/admin/erp/prodajni-nalozi/${order.id}`}>Otvori porudžbinu →</Link><Button variant="outline" onClick={() => { setOrder(null); setDraft(null); setFile(null); setText(""); setQuote(""); setTotals(null); setAttempted(false); setConfirmed(false); }}>Nova porudžbina iz chata</Button></div></section>;
+  if (order) return <section className="rounded-xl border border-green-600/30 bg-green-500/10 p-6"><h2 className="text-xl font-semibold">Porudžbina {order.number} je kreirana</h2><p className="mt-2 text-sm">Sačuvana je u pregledu porudžbina.</p><div className="mt-5 flex flex-wrap gap-3"><Link className="underline" href={`/admin/erp/prodajni-nalozi/${order.id}`}>Otvori porudžbinu →</Link><Button variant="outline" onClick={() => { setOrder(null); setDraft(null); setFile(null); setImageUrl(""); setText(""); setQuote(""); setTotals(null); setAttempted(false); setConfirmed(false); }}>Nova porudžbina iz chata</Button></div></section>;
   return <div className="mx-auto max-w-4xl space-y-6">
     {!draft ? <section className="rounded-xl border border-border bg-background p-5 md:p-6">
       <div className="grid gap-3 sm:grid-cols-2">
