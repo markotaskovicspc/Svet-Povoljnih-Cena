@@ -10,6 +10,6 @@ export async function GET(req: Request) {
   if (!isAuthorizedCronRequest(req, undefined)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const policy = await getAnanasInventoryPolicy();
   if (!policy?.enabled || (policy.leaseUntil && new Date(policy.leaseUntil) > new Date())) return NextResponse.json({ ok: true, skipped: true });
-  try { return NextResponse.json({ ok: true, ...await advanceAnanasInventoryHistory() }); }
+  try { const result = await advanceAnanasInventoryHistory(); console.info("ananas.inventory.progress", result); return NextResponse.json({ ok: true, ...result }); }
   catch (error) { return NextResponse.json({ ok: false, error: ananasError(error) }, { status: 502 }); }
 }

@@ -24,7 +24,7 @@ export async function RestockSegments() {
       send: <RestockSendButton productId={product.id} disabled={!available || !counts.PENDING} />,
     } };
   }));
-  return <Card><CardTitle description="Gosti, prijavljeni kupci i postojeće liste želja, grupisani po artiklu. Automatska provera radi svakog sata. Ručno slanje koristi isti zapis i preskače već obaveštene kupce.">Zainteresovani za artikal</CardTitle>
+  return <Card><CardTitle description="Gosti, prijavljeni kupci i postojeće liste želja, grupisani po artiklu. Automatska provera radi na svakih pet minuta. Ručno slanje koristi isti zapis i preskače već obaveštene kupce.">Zainteresovani za artikal</CardTitle>
     <p className="mb-4 text-xs text-ink-500">Postojeći newsletter kontakti dobijaju interest:šifra tag kada se prijave. Taj tag možete koristiti u filteru „Tag” za newsletter publiku. Lista čekanja uključuje i ljude koji su pristali samo na obaveštenje o ovom artiklu. „Za proveru” označava nezavršen pokušaj slanja; ne šaljemo ga ponovo naslepo.</p>
     <DataTable columns={[{ key: "product", label: "Artikal" }, { key: "availability", label: "Dostupnost" }, { key: "waiting", label: "Čeka", align: "right" }, { key: "sent", label: "Poslato", align: "right" }, { key: "review", label: "Za proveru", align: "right" }, { key: "send", label: "Obaveštenje" }]} rows={rows} />
   </Card>;

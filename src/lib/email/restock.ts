@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { getProductBySku } from "@/lib/api/catalog";
+import { getProductBySku, getProductsBySkus } from "@/lib/api/catalog";
 import { getProductAvailability } from "@/lib/product-availability";
 import { getEmailConfig } from "./config";
 import { isEmailSuppressed } from "./tracking";
@@ -67,9 +67,15 @@ export async function processRestockWaitlist(limit = 100, productId?: string) {
   if (getEmailConfig().provider === "none") return { ...summary, disabled: true };
   // An expired attempt is uncertain, not an invitation to send another email.
   await db.restockSubscription.updateMany({ where: { status: "SENDING", sendStartedAt: { lt: new Date(Date.now() - 15 * 60_000) } }, data: { status: "REVIEW" } });
+  const groups = await db.restockSubscription.groupBy({ by: ["productId"], where: { status: "PENDING", ...(productId ? { productId } : {}) },
+    _min: { checkedAt: true }, orderBy: { _min: { checkedAt: "asc" } }, take: 500 });
+  const ids = groups.map(g => g.productId);
+  const products = await db.product.findMany({ where: { id: { in: ids } }, select: { sku: true } });
+  const available = (await getProductsBySkus(products.map(p => p.sku))).filter(p => p.id && getProductAvailability(p).canAddToCart);
+  await db.restockSubscription.updateMany({ where: { status: "PENDING", productId: { in: ids } }, data: { checkedAt: new Date() } });
   const rows = await db.restockSubscription.findMany({
-    where: { status: "PENDING", ...(productId ? { productId } : {}) },
-    take: Math.min(200, Math.max(1, limit)), orderBy: [{ checkedAt: "asc" }, { requestedAt: "asc" }],
+    where: { status: "PENDING", productId: { in: available.flatMap(p => p.id ? [p.id] : []) } },
+    take: Math.min(200, Math.max(1, limit)), orderBy: { requestedAt: "asc" },
     include: { product: { select: { sku: true } } },
   });
   const deadline = Date.now() + 50_000;

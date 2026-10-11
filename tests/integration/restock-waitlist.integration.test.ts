@@ -4,11 +4,11 @@ import type { ProductDTO } from "@/lib/api/catalog";
 const sender = vi.hoisted(() => vi.fn(async () => ({ ok: true, id: "mock-message", provider: "resend" })));
 vi.mock("@/lib/email/send", () => ({ sendRestockWaitlistAlert: sender }));
 vi.mock("@/lib/email/config", () => ({ getEmailConfig: () => ({ provider: "resend" }) }));
-vi.mock("@/lib/api/catalog", () => ({ getProductBySku: async (sku: string) => {
+vi.mock("@/lib/api/catalog", () => { const read = async (sku: string) => {
   const p = await db.product.findUnique({ where: { sku } });
   return p && { id: p.id, sku, slug: p.slug, name: p.name, fullPrice: Number(p.fullPrice), stock: p.stock,
     incomingStock: 0, dimensionsCm: { w: 10, d: 10, h: 10 }, media: { images: [{ url: "/test.jpg" }] }, deliveryDays: { min: 1, max: 2 } } as ProductDTO;
-} }));
+}; return { getProductBySku: read, getProductsBySkus: async (skus: string[]) => (await Promise.all(skus.map(read))).filter(Boolean) }; });
 import { subscribeToRestock, processRestockWaitlist } from "@/lib/email/restock";
 
 it("keeps consent scoped, serializes enrollment and manual/automatic sends, handles re-enrollment, suppression and uncertain sends", async () => {

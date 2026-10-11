@@ -1,8 +1,10 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ProductCard } from "@/components/product/product-card";
 import type { Product } from "@/types";
+
+vi.mock("next-auth/react", () => ({ useSession: () => ({ data: null, status: "unauthenticated" }) }));
 
 const readyProduct: Product = {
   sku: "QA-IMAGE-001",
