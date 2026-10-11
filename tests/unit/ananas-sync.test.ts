@@ -32,9 +32,22 @@ it("upserts identical provider keys on repeated imports and commits success with
   await syncAnanasDocuments(new Date("2026-09-01Z"), new Date("2026-09-02Z"));
   await syncAnanasDocuments(new Date("2026-09-01Z"), new Date("2026-09-02Z"));
   expect(m.upsert).toHaveBeenCalledTimes(4);
+  expect(m.upsert.mock.calls[0][0].where).toEqual({ kind_fiscalNumber: { kind: "SALE", fiscalNumber: "SALE-1" } });
   expect(m.upsert.mock.calls[0][0].where).toEqual(m.upsert.mock.calls[2][0].where);
   expect(m.upsert.mock.calls[0][0].where).not.toEqual(m.upsert.mock.calls[1][0].where);
   expect(m.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "SUCCESS", count: 2 }) }));
+});
+it("keeps separate fiscal refunds even when Ananas reuses the original invoiceId", async () => {
+  m.documents.mockImplementation(async kind => kind === "SALE" ? [] : [
+    { id: "1411033866", fiscal: "K5CYLD29-GESE6HO0-597" },
+    { id: "1411033866", fiscal: "K5CYLD29-C38FDVO0-403" },
+  ]);
+  m.normalize.mockImplementation((row, kind) => ({ externalId: row.id, kind, fiscalNumber: row.fiscal }));
+  expect((await syncAnanasDocuments(new Date("2026-02-21Z"), new Date("2026-02-24Z"))).count).toBe(2);
+  expect(m.upsert.mock.calls.map(call => call[0].where)).toEqual([
+    { kind_fiscalNumber: { kind: "REFUND", fiscalNumber: "K5CYLD29-GESE6HO0-597" } },
+    { kind_fiscalNumber: { kind: "REFUND", fiscalNumber: "K5CYLD29-C38FDVO0-403" } },
+  ]);
 });
 it("writes no receipts when any incoming document fails validation", async () => {
   m.normalize.mockImplementationOnce(() => ({ kind: "SALE", externalId: "one" })).mockImplementationOnce(() => { throw new Error("PIB Ananas dokumenta ne odgovara"); });
