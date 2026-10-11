@@ -4,6 +4,7 @@ import { Prisma, type ShipmentStatus } from "@prisma/client";
 import { z } from "zod";
 import {bankEntrySchema} from '@/lib/payments/bank-statements';
 import { db } from "@/lib/db";
+import { SefApiError } from "@/lib/sef/client";
 import { BackgroundJobDeferredError } from "@/lib/background-job-deferral";
 import { rabaluxCourierAvailableAt } from "@/lib/rabalux/dispatch-policy";
 import { redactText } from "@/lib/monitoring";
@@ -516,13 +517,15 @@ async function dispatchJob(job: JobRow) {
     case "SEF_INBOX_DISCOVER": {
       const { discoverSefInvoices } = await import("@/lib/sef/documents.server");
       const args = payload as z.infer<typeof schemas.SEF_INBOX_DISCOVER>;
-      await discoverSefInvoices(args.day, args.environment, args.actorId);
+      try { await discoverSefInvoices(args.day, args.environment, args.actorId); }
+      catch (error) { if (error instanceof SefApiError && error.status === 429) throw new BackgroundJobDeferredError(new Date(Date.now() + (error.retryAfterSeconds ?? 60) * 1000)); throw error; }
       return;
     }
     case "SEF_INBOX_DOWNLOAD": {
       const { downloadSefInvoices } = await import("@/lib/sef/documents.server");
       const args = payload as z.infer<typeof schemas.SEF_INBOX_DOWNLOAD>;
-      await downloadSefInvoices(args.ids, args.environment, args.actorId);
+      try { await downloadSefInvoices(args.ids, args.environment, args.actorId); }
+      catch (error) { if (error instanceof SefApiError && error.status === 429) throw new BackgroundJobDeferredError(new Date(Date.now() + (error.retryAfterSeconds ?? 60) * 1000)); throw error; }
       return;
     }
     case "EOTPREMNICA_SEND": {

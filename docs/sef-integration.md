@@ -4,7 +4,7 @@ ERP → SEF fakture (`/admin/erp/sef`, OPS/SUPER). SEF eFaktura i eOtpremnica su
 
 ## Ulazni računi i zadatak 19
 
-Izabrati period do 31 dan. Svaki dan ide u zaseban background posao, a XML dokumenti u grupe po pet. Pregled pokazuje neuspele i aktivne poslove; ponovno preuzimanje istog SEF ID-a ažurira original umesto dupliranja. Računi se proveravaju prema PIB-u SPC. XML i ugrađeni prilozi dostupni su samo prijavljenom OPS administratoru, bez javnog storage URL-a. Spoljni linkovi iz XML-a ne preuzimaju se automatski.
+Izabrati period do 31 dan. Svaki dan ide u zaseban background posao, a XML dokumenti u grupe po pet. Pregled pokazuje neuspele i aktivne poslove; ponovni period ne duplira niti ponovo preuzima već sačuvan original istog SEF ID-a. SEF Retry-After odlaže pozadinski posao bez trošenja neuspelog pokušaja. Računi se proveravaju prema PIB-u SPC. XML i ugrađeni prilozi dostupni su samo prijavljenom OPS administratoru, bez javnog storage URL-a. Spoljni linkovi iz XML-a ne preuzimaju se automatski.
 
 CSV/XLSX kurirski prilog ide u postojeći pregled zadatka 19 i potvrđeni uvoz, uz proveru da zbir neto troškova odgovara SEF fakturi. PDF se preuzima i koristi za standardni kurirski obrazac; nema izmišljenih redova niti OCR pretpostavki. Preuzimanje ne prihvata/odbija ulazne račune i ne evidentira uplatu — Marko je rekao da uplate idu preko banke. Knjižna odobrenja i fakture drugačijeg UBL tipa zahtevaju zasebnu obradu.
 

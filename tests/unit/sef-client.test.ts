@@ -114,3 +114,10 @@ describe("SEF client", () => {
     ).rejects.toBeInstanceOf(SefApiError);
   });
 });
+
+it("respects a long Retry-After by returning a scheduled retry instead of retrying early", async () => {
+  const request = vi.fn(async () => new Response("", { status: 429, headers: { "retry-after": "120" } }));
+  const delay = vi.fn();
+  await expect(new SefClient({ environment: "production", baseUrl: "https://efaktura.mfin.gov.rs", apiKey: "test" }, request, delay).healthCheck()).rejects.toMatchObject({ status: 429, retryAfterSeconds: 120 });
+  expect(request).toHaveBeenCalledTimes(1); expect(delay).not.toHaveBeenCalled();
+});

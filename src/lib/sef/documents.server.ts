@@ -48,6 +48,8 @@ export async function downloadSefInvoices(ids: number[], environment: string, ac
   if (config.environment !== environment) throw new Error("SEF okruženje se promenilo; ponovite sinhronizaciju.");
   const client = new SefClient(config);
   for (const id of ids) {
+    const existing = await db.sefDocument.findUnique({ where: { environment_direction_remoteId: { environment, direction: "IN", remoteId: String(id) } }, select: { id: true } });
+    if (existing) continue;
     const xml = await client.purchaseInvoiceXml(id);
     const { attachments: _attachments, ...data } = readInvoiceXml(xml);
     if (data.customerPib !== MERCHANT_LEGAL_INFO.pib) throw new Error("SEF račun pripada drugoj firmi. Proverite API ključ za SPC.");

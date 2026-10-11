@@ -76,7 +76,7 @@ export class SefClient {
     const url = new URL(`/api/publicApi/${direction}-invoice/xml`, this.config.baseUrl);
     url.searchParams.set("invoiceId", String(id));
     const response = await this.request(url, { headers: { accept: "application/xml", ApiKey: this.config.apiKey }, cache: "no-store", signal: AbortSignal.timeout(15_000), redirect: "error" });
-    if (!response.ok) throw new SefApiError(`SEF XML je vratio HTTP ${response.status}.`, response.status);
+    if (!response.ok) throw new SefApiError(`SEF XML je vratio HTTP ${response.status}.`, response.status, parseRetryAfter(response.headers.get("retry-after")));
     const text = await response.text();
     if (Buffer.byteLength(text) > 10 * 1024 * 1024) throw new SefApiError("SEF dokument je veći od 10 MB.", 200);
     return text;
@@ -146,13 +146,13 @@ export class SefClient {
         response.headers.get("retry-after"),
       );
       if (
-        attempt < attempts &&
+        attempt < attempts && (retryAfterSeconds === null || retryAfterSeconds <= 2) &&
         (response.status === 429 || response.status >= 500)
       ) {
         await this.delay(
           retryAfterSeconds == null
             ? 250
-            : Math.min(retryAfterSeconds * 1000, 2_000),
+            : retryAfterSeconds * 1000,
         );
         continue;
       }
@@ -196,7 +196,9 @@ export function invoiceIds(value: unknown, key: "salesInvoiceIds" | "purchaseInv
 function parseRetryAfter(value: string | null) {
   if (!value) return null;
   const seconds = Number(value);
-  return Number.isFinite(seconds) && seconds >= 0 ? seconds : null;
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds;
+  const date = Date.parse(value);
+  return Number.isFinite(date) ? Math.max(0, Math.ceil((date - Date.now()) / 1000)) : null;
 }
 
 function sefErrorMessage(status: number, body: unknown) {
