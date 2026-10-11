@@ -22,8 +22,11 @@ it("posts historical Ananas sales/refunds once, permits a scoped minus, and pres
     expect((await db.warehouseStock.findUniqueOrThrow({ where: { warehouseId_productId: { warehouseId: dc.id, productId: product.id } } })).qty).toBe(10);
     // Negative aggregate must not prevent an ordinary sale from a stocked DC.
     await db.$transaction(tx => adjustInventory(tx, { idempotencyKey: `${prefix}-DC`, warehouseId: dc.id, productId: product.id, qtyDelta: -2, kind: "SALE_RESERVATION", note: "QA" }));
+    const archivedAt = new Date("2026-07-22T15:04:00Z");
+    await db.product.update({ where: { id: product.id }, data: { deletedAt: archivedAt } });
     const refund = await document("REFUND", 5, "REFUND");
     await postAnanasDocumentInventory(refund.id);
+    expect((await db.product.findUniqueOrThrow({ where: { id: product.id } })).deletedAt).toEqual(archivedAt);
     expect((await db.warehouseStock.findUniqueOrThrow({ where: { warehouseId_productId: { warehouseId: warehouse.id, productId: product.id } } })).qty).toBe(-15);
     await db.$transaction(tx => adjustInventory(tx, { idempotencyKey: `${prefix}-RECEIPT`, warehouseId: warehouse.id, productId: product.id, qtyDelta: 16, kind: "PURCHASE_RECEIPT", note: "QA" }));
     expect((await db.warehouseStock.findUniqueOrThrow({ where: { warehouseId_productId: { warehouseId: warehouse.id, productId: product.id } } })).qty).toBe(1);

@@ -42,7 +42,9 @@ export async function postAnanasDocumentInventory(documentId: string, actorId?: 
       if (document.inventoryFingerprint !== plan.fingerprint) throw new Error("Ananas stavke već knjiženog dokumenta su promenjene. Potrebna je kontrola.");
       return { posted: false, reason: "ALREADY_POSTED" };
     }
-    const products = await tx.product.findMany({ where: { sku: { in: plan.lines.map(line => line.sku) }, deletedAt: null }, select: { id: true, sku: true } });
+    // Archived products still own their historical warehouse ledger. Posting
+    // their fiscal documents must not require restoring them to the catalog.
+    const products = await tx.product.findMany({ where: { sku: { in: plan.lines.map(line => line.sku) } }, select: { id: true, sku: true } });
     const bySku = new Map(products.map(product => [product.sku, product]));
     const missing = plan.lines.filter(line => !bySku.has(line.sku));
     if (missing.length) throw new Error(`Ananas artikli nisu pronađeni: ${missing.map(line => line.sku).join(", ").slice(0,400)}.`);
