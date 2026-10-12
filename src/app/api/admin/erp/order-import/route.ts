@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
       });
       const locality = draft.shippingMethod === "KURIR" ? await resolveImportAlias(draft.city) : null;
       const warnings = locality && (draft.city !== locality.city || draft.postalCode !== locality.postalCode)
-        ? [...draft.warnings.filter(w => !/^Poštanski broj nije naveden\.?$/i.test(w.trim())), `Mesto i poštanski broj su dopunjeni: ${locality.city}, ${locality.postalCode}. Proverite adresu.`]
+        ? [...draft.warnings.filter(w => !(/po[šs]tanski broj/i.test(w) && /nedostaje|nije naveden|nije dat|nije unet|nepoznat/i.test(w))), `Mesto i poštanski broj su dopunjeni: ${locality.city}, ${locality.postalCode}. Proverite adresu.`]
         : draft.warnings;
       return NextResponse.json({ draft: { ...draft, ...(locality ?? {}), warnings, lines } });
     }
