@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { lockOrderReturn } from "@/lib/fiscal/return-lock";
 import { normalizeReturnParcelNumber } from "./return-parcels";
+import { myGlsBarcodeParcelNumber } from "@/lib/mygls/parcel-barcode";
 
 import { canonicalReturnParcel } from "./return-receipt-plan";
 
@@ -9,10 +10,16 @@ export async function findReturnParcel(input: string) {
   const code = normalizeReturnParcelNumber(input);
   if (!/^[A-Z0-9]{5,40}$/.test(code)) throw new Error("Unesite ili skenirajte važeći kod paketa.");
   const variants = [...new Set([code, /^\d+$/.test(code) ? code.padStart(11, "0") : code])];
+  const barcodeNumber = myGlsBarcodeParcelNumber(code);
   const matches = await db.shipment.findMany({
     where: { purpose: { in: ["ORDER_DELIVERY", "RECLAMATION_RETURN"] }, OR: [
       { trackingNo: { in: variants } },
       ...variants.map(value => ({ providerParcelNumbers: { array_contains: [value] } })),
+      ...(barcodeNumber ? [{ provider: "MYGLS", OR: [
+        { trackingNo: { in: [barcodeNumber, barcodeNumber.padStart(11, "0")] } },
+        ...[barcodeNumber, barcodeNumber.padStart(11, "0"), Number(barcodeNumber)]
+          .map(value => ({ providerParcelNumbers: { array_contains: [value] } })),
+      ] }] : []),
       ...(Number.isSafeInteger(Number(code)) ? [
         { providerParcelNumbers: { array_contains: [Number(code)] } },
         ...["PrintLabelsInfoList", "PrintDataInfoList"].flatMap(path => ["ParcelNumber", "ParcelNumberWithCheckdigit"].map(field => ({ provider: "MYGLS", rawCreateResponse: { path: [path], array_contains: [{ [field]: Number(code) }] } }))),

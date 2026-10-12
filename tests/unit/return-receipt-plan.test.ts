@@ -13,8 +13,10 @@ describe('scanned return contents', () => {
     expect(() => reclamationParcelQuantity(shipment, { id: 'other', sku: 'chair', qty: 2 }, '9002838514')).toThrow('pouzdano');
     expect(() => reclamationParcelQuantity(shipment, { id: 'i', sku: 'chair', qty: 2 }, '1234567')).toThrow('pripada');
   });
-  it('accepts a scanner control digit only with provider evidence', () => {
-    expect(canonicalReturnParcel(shipment, '090028385141')).toBeNull();
+  it('accepts a valid GLS control digit even when the API omitted the alias', () => {
+    expect(canonicalReturnParcel(shipment, '090028385141')).toBe('9002838514');
+    expect(canonicalReturnParcel(shipment, '090028385142')).toBeNull();
+    expect(canonicalReturnParcel({ ...shipment, provider: 'X_EXPRESS' }, '090028385141')).toBeNull();
     expect(canonicalReturnParcel({ ...shipment, rawCreateResponse: { PrintLabelsInfoList: [{ ParcelNumber: 9002838514, ParcelNumberWithCheckdigit: 90028385141 }] } }, '090028385141')).toBe('9002838514');
   });
   it('receives the whole quantity for a single identified parcel', () => {
