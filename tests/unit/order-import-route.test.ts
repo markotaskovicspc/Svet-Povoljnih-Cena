@@ -70,6 +70,13 @@ describe("operator import creation boundary", () => {
     expect((await POST(request({ action: "preview", input: { ...input, shippingMethod: "KAMION" } }))).status).toBe(200);
     expect(mocks.towns).not.toHaveBeenCalled();
   });
+  it("resolves the photographed Žarkovo locality through its verified active routing town", async () => {
+    mocks.towns.mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: 791113 }]);
+    mocks.createOrder.mockResolvedValue({ ok: true, data: { total: 1897 } });
+    expect((await POST(request({ action: "preview", input: { ...input, shipping: { ...input.shipping, city: "Zarkovo BG", postalCode: "11030" } } }))).status).toBe(200);
+    expect(mocks.createOrder.mock.calls[0][0].shipping.xExpressTownId).toBe(791113);
+    expect(mocks.towns.mock.calls[1][0].where).toEqual({ active: true, id: 791113, name: "Beograd (Čukarica)" });
+  });
   it("requires operator confirmation and an unchanged signed review", async () => {
     const token = signImportQuote({ input, actorId: "marko", expires: Date.now() + 60000, total: 998 }, "test-secret");
     expect((await POST(request({ action: "create", quote: token, confirmed: false }))).status).toBe(400);
