@@ -22,6 +22,7 @@ import {
 } from "@/data/serbian-places";
 
 export type CityAutocompletePlace = SerbianPlace & {
+  autoResolved?: boolean;
   aliases?: string[];
   code?: string;
   townId?: number;
@@ -49,9 +50,12 @@ export function resolveExactRemoteCity(
   query: string,
   postalCode?: string,
 ) {
+  const authoritative = items.filter(item => item.autoResolved === true);
+  if (authoritative.length === 1) return authoritative[0];
   const normalizedQuery = normalizedPlaceName(query);
   const exact = items.filter(
     (item) =>
+      item.autoResolved !== false &&
       (normalizedPlaceName(item.name) === normalizedQuery ||
         (item.aliases ?? []).some(name => normalizedPlaceName(name).replace(/[^\p{L}\p{N}]+/gu, " ").trim() === normalizedQuery.replace(/[^\p{L}\p{N}]+/gu, " ").trim())) &&
       Number.isInteger(item.townId) &&
@@ -88,6 +92,7 @@ interface CityAutocompleteProps {
   /** Minimum chars before suggestions appear (spec: 3). */
   minChars?: number;
   strictRemote?: boolean;
+  locationEndpoint?: string;
   /** Existing postal code, used to disambiguate an exact remote city match. */
   postalCode?: string;
   /** Existing provider town id; skips automatic resolution when already valid. */
@@ -108,6 +113,7 @@ export function CityAutocomplete({
   required,
   minChars = 3,
   strictRemote = false,
+  locationEndpoint = "/api/x-express/locations?q=",
   postalCode,
   selectedTownId,
   autoResolveExact = false,
@@ -126,7 +132,6 @@ export function CityAutocomplete({
   }>({ query: "", items: [] });
   const containerRef = useRef<HTMLDivElement>(null);
   const autoResolveRef = useRef({ onSelect, postalCode, selectedTownId });
-  const lastAutoResolvedKeyRef = useRef("");
 
   useEffect(() => {
     autoResolveRef.current = { onSelect, postalCode, selectedTownId };
@@ -154,11 +159,12 @@ export function CityAutocomplete({
     const timer = setTimeout(async () => {
       try {
         const res = await fetch(
-          `/api/x-express/locations?q=${encodeURIComponent(q)}&limit=8`,
+          `${locationEndpoint}${encodeURIComponent(q)}&limit=8&postalCode=${encodeURIComponent(postalCode ?? "")}`,
           { signal: controller.signal },
         );
-        if (!res.ok) return;
+        if (!res.ok || controller.signal.aborted) return;
         const json = (await res.json()) as { items?: CityAutocompletePlace[] };
+        if (controller.signal.aborted) return;
         const items = (json.items ?? []).filter(
           (item) => item.name && item.postalCode,
         );
@@ -177,9 +183,7 @@ export function CityAutocomplete({
           )
         ) {
           const exact = resolveExactRemoteCity(items, q, current.postalCode);
-          const resolutionKey = exact ? `${q}:${exact.townId}` : "";
-          if (exact && lastAutoResolvedKeyRef.current !== resolutionKey) {
-            lastAutoResolvedKeyRef.current = resolutionKey;
+          if (exact) {
             current.onSelect(exact);
           }
         }
@@ -192,7 +196,7 @@ export function CityAutocomplete({
       controller.abort();
       clearTimeout(timer);
     };
-  }, [autoResolveExact, minChars, strictRemote, value]);
+  }, [autoResolveExact, locationEndpoint, minChars, postalCode, selectedTownId, strictRemote, value]);
 
   // Close on outside click.
   useEffect(() => {

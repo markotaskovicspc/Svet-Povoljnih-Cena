@@ -12,7 +12,7 @@ import { channelOrderSchema } from "@/lib/checkout/order-schema";
 import { importDraftSchema, withImportDefaults } from "@/lib/admin/order-import/schema";
 import { createImportMatcher } from "@/lib/admin/order-import/matching";
 import { readImportQuote, signImportQuote } from "@/lib/admin/order-import/quote";
-import { resolveImportAddress, resolveImportAlias, IMPORT_TOWN_ERROR } from "@/lib/admin/order-import/address";
+import { resolveImportAddress, resolveImportAlias, importTowns, IMPORT_TOWN_ERROR } from "@/lib/admin/order-import/address";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -24,10 +24,17 @@ async function catalogMatcher() {
   });
   return createImportMatcher(catalog);
 }
+import { searchImportTowns } from "@/lib/admin/order-import/towns";
+
 export async function GET(req: NextRequest) {
   const admin = await getCurrentAdmin();
   if (!admin) return fail("Prijavite se u ERP ponovo.", 401);
   if (!isAuthorized(admin.role, ["OPS"])) return fail("Nemate pristup.", 403);
+  const townQuery = req.nextUrl.searchParams.get("town");
+  if (townQuery !== null) {
+    if (townQuery.trim().length < 2 || townQuery.length > 100) return fail("Unesite naziv mesta.");
+    return NextResponse.json({ items: searchImportTowns(await importTowns(), townQuery.trim(), req.nextUrl.searchParams.get("postalCode") ?? "") });
+  }
   const query = req.nextUrl.searchParams.get("q")?.trim() ?? "";
   if (query.length < 2 || query.length > 200) return fail("Unesite naziv ili šifru artikla.");
   return NextResponse.json({ products: (await catalogMatcher())({ name: query, sku: "", qty: null, unitPrice: null }) });
@@ -73,7 +80,7 @@ export async function POST(req: NextRequest) {
         const best = candidates[0];
         return { ...line, sku: best?.sku ?? "", suggested: best?.matchKind === "suggested", candidates };
       });
-      const locality = draft.shippingMethod === "KURIR" ? await resolveImportAlias(draft.city) : null;
+      const locality = draft.shippingMethod === "KURIR" ? await resolveImportAlias(draft.city, draft.postalCode) : null;
       const warnings = locality && (draft.city !== locality.city || draft.postalCode !== locality.postalCode)
         ? [...draft.warnings.filter(w => !(/po[šs]tanski broj/i.test(w) && /nedostaje|nije naveden|nije dat|nije unet|nepoznat/i.test(w))), `Mesto i poštanski broj su dopunjeni: ${locality.city}, ${locality.postalCode}. Proverite adresu.`]
         : draft.warnings;
@@ -81,7 +88,10 @@ export async function POST(req: NextRequest) {
     }
     const body = await req.json();
     if (body.action === "preview") {
-      const parsed = channelOrderSchema.safeParse(body.input);
+      const shipping = body.input?.shipping;
+      const locality = body.input?.shippingMethod === "KURIR" && !shipping?.xExpressTownId && typeof shipping?.city === "string"
+        ? await resolveImportAlias(shipping.city, typeof shipping.postalCode === "string" ? shipping.postalCode : "") : null;
+      const parsed = channelOrderSchema.safeParse(locality ? { ...body.input, shipping: { ...shipping, ...locality } } : body.input);
       if (!parsed.success) {
         const labels: Record<string, string> = { firstName: "ime", lastName: "prezime", phone: "telefon", street: "ulica", houseNumber: "kućni broj", city: "mesto", postalCode: "poštanski broj (5 cifara)", guestEmail: "e-pošta", paymentMethod: "plaćanje", shippingMethod: "dostava", sku: "artikal", qty: "količina" };
         return fail("Proverite ili dopunite: " + [...new Set(parsed.error.issues.map(i => labels[String(i.path.at(-1))] ?? "podatke porudžbine"))].join(", ") + ".");
