@@ -139,6 +139,72 @@ describe("operator import creation boundary", () => {
     expect((await response.json()).shipping).toMatchObject({ city: "Žarkovo", postalCode: "11030", xExpressTownId: 791113 });
     expect(mocks.createOrder).toHaveBeenCalledWith(expect.objectContaining({ shipping: expect.objectContaining({ city: "Žarkovo", postalCode: "11030" }) }), null, null, expect.objectContaining({ previewOnly: true }));
   });
+  it.each(["abcdefghij", "        ", "060123", "0601234567 ili 0611234567"])("rejects invalid phone %s before checkout", async phone => {
+    const response = await POST(request({ action: "preview", input: { ...input, shipping: { ...input.shipping, phone } } }));
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toContain("telefon");
+    expect(mocks.createOrder).not.toHaveBeenCalled();
+  });
+  it.each(["firstName", "lastName", "street"])("rejects whitespace-only %s before checkout", async field => {
+    const response = await POST(request({ action: "preview", input: { ...input, shipping: { ...input.shipping, [field]: "    " } } }));
+    expect(response.status).toBe(400);
+    expect(mocks.createOrder).not.toHaveBeenCalled();
+  });
+  it("normalizes harmless spaces and international phone notation without inventing email", async () => {
+    mocks.createOrder.mockResolvedValue({ ok: true, data: { total: 998 } });
+    const response = await POST(request({ action: "preview", input: { ...input, guestEmail: "  ", shipping: { ...input.shipping, firstName: " Test ", phone: "+381 (60) 000-0000" } } }));
+    expect(response.status).toBe(200);
+    expect(mocks.createOrder.mock.calls[0][0]).toMatchObject({ guestEmail: undefined, shipping: { firstName: "Test", phone: "0600000000" } });
+  });
+  it.each(["", "test@@example.com", "test.gmail.com"])("handles optional or invalid email %s", async email => {
+    mocks.createOrder.mockResolvedValue({ ok: true, data: { total: 998, id: "o1", number: "TEST" } });
+    const response = await POST(request({ action: "preview", input: { ...input, guestEmail: email } }));
+    if (email) {
+      expect(response.status).toBe(400);
+      expect((await response.json()).fields).toContain("guestEmail");
+      expect(mocks.createOrder).not.toHaveBeenCalled();
+    } else {
+      expect(response.status).toBe(200);
+      const { quote } = await response.json();
+      expect((await POST(request({ action: "create", quote, confirmed: true }))).status).toBe(200);
+      expect(mocks.createOrder.mock.calls.at(-1)[3]).toMatchObject({ allowGuestWithoutEmail: true, customerReplyDraftOnly: true });
+      expect(mocks.createOrder.mock.calls.at(-1)[0].guestEmail).toBeUndefined();
+    }
+  });
+  it.each(["firstName", "lastName", "phone", "street", "houseNumber", "city"])("identifies missing %s before checkout", async field => {
+    const response = await POST(request({ action: "preview", input: { ...input, shipping: { ...input.shipping, [field]: "" } } }));
+    expect(response.status).toBe(400);
+    expect((await response.json()).fields).toContain(field);
+    expect(mocks.createOrder).not.toHaveBeenCalled();
+  });
+  it.each([null, 0, 1.5, 100])("identifies invalid quantity %s before checkout", async qty => {
+    const response = await POST(request({ action: "preview", input: { ...input, lines: [{ sku: "MOP", qty }] } }));
+    expect(response.status).toBe(400);
+    expect((await response.json()).fields).toContain("qty");
+    expect(mocks.createOrder).not.toHaveBeenCalled();
+  });
+  it("does not suggest checking created orders when only reading fails", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("timeout")));
+    const form = new FormData(); form.set("text", "Test prepiska");
+    const response = await POST(new NextRequest("https://spc.test/api/admin/erp/order-import", { method: "POST", headers: { origin: "https://spc.test" }, body: form }));
+    expect(response.status).toBe(502);
+    expect((await response.json()).error).toContain("Čitanje slike ili prepiske");
+    expect(mocks.createOrder).not.toHaveBeenCalled();
+  });
+  it("identifies a damaged image without calling GPT", async () => {
+    const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
+    const form = new FormData(); form.set("image", new File(["not an image"], "bad.png", { type: "image/png" }));
+    const response = await POST(new NextRequest("https://spc.test/api/admin/erp/order-import", { method: "POST", headers: { origin: "https://spc.test" }, body: form }));
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toContain("Slika nije ispravna");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it("handles a preview outage without reporting an uncertain creation", async () => {
+    mocks.createOrder.mockRejectedValue(new Error("Database unavailable"));
+    const response = await POST(request({ action: "preview", input }));
+    expect(response.status).toBe(502);
+    expect((await response.json()).error).toContain("porudžbina još nije kreirana");
+  });
   it("requires operator confirmation and an unchanged signed review", async () => {
     const token = signImportQuote({ input, actorId: "marko", expires: Date.now() + 60000, total: 998 }, "test-secret");
     expect((await POST(request({ action: "create", quote: token, confirmed: false }))).status).toBe(400);

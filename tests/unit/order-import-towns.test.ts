@@ -35,6 +35,13 @@ describe("whole dictionary order-import addresses", () => {
     expect(searchImportTowns(towns, "Vetern")).toMatchObject([{ townId: 3, autoResolved: false }]);
     expect(matchImportTown(towns, "Nepoznato", "18000")).toBeNull();
   });
+  it("suggests short names and transposed letters but requires an operator choice", () => {
+    const dictionary = [...towns, { id: 100, name: "Beograd", postalCode: "11000" }];
+    for (const [query, id] of [["Niss", 1], ["Beogard", 100]] as const) {
+      expect(matchImportTown(dictionary, query)).toBeNull();
+      expect(searchImportTowns(dictionary, query)).toContainEqual(expect.objectContaining({ townId: id, autoResolved: false }));
+    }
+  });
   it("prefers an actual locality over a routing fallback and requires an active parent", () => {
     expect(matchImportTown([], "Žarkovo")).toBeNull();
     expect(matchImportTown([{ id: 791113, name: "Drugo mesto", postalCode: "11030" }], "Žarkovo")).toBeNull();
