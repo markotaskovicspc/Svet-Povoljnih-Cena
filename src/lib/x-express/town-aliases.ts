@@ -12,7 +12,14 @@ const ZEMUN_POLJE = {
   townId: 791059, townName: "Beograd (Zemun)",
   aliases: ["Zemun polje", "Земун поље", "Beograd Zemun polje", "Beograd (Zemun polje)"],
 };
-const aliases = [BATAJNICA, ZEMUN_POLJE];
+// Žarkovo is a Čukarica locality; the active courier dictionary exposes the
+// routing municipality as Beograd (Čukarica), 11030, id 791113.
+const ZARKOVO = {
+  name: "Žarkovo", postalCode: "11030",
+  townId: 791113, townName: "Beograd (Čukarica)",
+  aliases: ["Žarkovo", "Жарково", "Zarkovo", "Beograd Žarkovo", "Beograd Zarkovo", "Žarkovo BG", "Zarkovo BG", "Beograd (Žarkovo)"],
+};
+const aliases = [BATAJNICA, ZEMUN_POLJE, ZARKOVO];
 function key(value: string) {
   return value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/[^\p{L}\p{N}]+/gu, " ").trim();

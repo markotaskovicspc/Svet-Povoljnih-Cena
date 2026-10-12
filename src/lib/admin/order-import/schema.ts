@@ -12,7 +12,7 @@ export const importDraftSchema = z.object({
 export type ImportDraft = z.infer<typeof importDraftSchema>;
 export type ImportProduct = { sku: string; name: string; confidence?: "high" | "medium" | "low"; matchKind?: "exact" | "suggested"; reason?: string; variantLabel?: string; score?: number };
 export type ImportLine = ImportDraft["lines"][number] & { candidates: ImportProduct[]; suggested?: boolean };
-export type ImportReview = Omit<ImportDraft, "lines"> & { lines: ImportLine[] };
+export type ImportReview = Omit<ImportDraft, "lines"> & { lines: ImportLine[]; xExpressTownId?: number | null };
 const genericNameWords = new Set(["mini", "rerna", "pec", "stolica", "set", "za", "sa", "i", "od", "kom", "komad", "komada", "w", "kw", "l", "ml", "cm", "mm", "kg", "g"]);
 function nameTokens(value: string): string[] {
   return value.toLocaleLowerCase("sr-Latn-RS").replace(/(\d)(\p{L})|(\p{L})(\d)/gu, "$1$3 $2$4").match(/[\p{L}\p{N}]+/gu) ?? [];

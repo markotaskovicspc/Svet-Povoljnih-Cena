@@ -5,6 +5,7 @@ import { ImagePlus, MessageSquareText, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { ImportReview } from "@/lib/admin/order-import/schema";
+import { CityAutocomplete } from "@/components/forms/city-autocomplete";
 
 type Totals = { subtotal: number; shipping: number; total: number };
 const confidenceLabel = { high: "Visoko poklapanje", medium: "Srednje poklapanje", low: "Slabo poklapanje — proverite" };
@@ -62,7 +63,7 @@ export function OrderImportForm() {
     try {
       const { firstName, lastName, phone, street, houseNumber, city, postalCode, email, paymentMethod, shippingMethod } = draft;
       const result = await request({ action: "preview", input: {
-        shipping: { firstName, lastName, phone, street, houseNumber, city, postalCode, country: "RS" },
+        shipping: { firstName, lastName, phone, street, houseNumber, city, postalCode, country: "RS", xExpressTownId: draft.xExpressTownId },
         ...(email.trim() ? { guestEmail: email.trim() } : {}), paymentMethod, shippingMethod,
         lines: draft.lines.map(l => ({ sku: l.sku, qty: l.qty })), billingSameAsShipping: true, consent: true,
       } });
@@ -95,7 +96,7 @@ export function OrderImportForm() {
     </section> : <>
       <section className="rounded-xl border border-border bg-background p-5 md:p-6"><div className="flex items-center justify-between gap-3"><h2 className="text-xl font-semibold">Proveri podatke kupca</h2><Button variant="outline" disabled={!!busy || attempted} onClick={() => { setDraft(null); setQuote(""); setTotals(null); }}>Promeni izvor</Button></div>
         {!!draft.warnings.length && <ul className="mt-4 space-y-1 rounded-lg bg-amber-500/10 p-4 text-sm">{draft.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>}
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">{fields.map(([key, label]) => <label key={key} className="text-sm font-medium">{label}{!draft[key].trim() && key !== "email" && <span className="ml-2 text-destructive">Nedostaje</span>}<Input className={`mt-1 ${!draft[key].trim() && key !== "email" ? "border-destructive/50" : ""}`} type={key === "email" ? "email" : key === "phone" ? "tel" : "text"} disabled={!!busy || attempted} value={draft[key]} onChange={e => patch({ ...draft, [key]: e.target.value })} /></label>)}</div>
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">{fields.filter(([key]) => key !== "city" || draft.shippingMethod !== "KURIR").map(([key, label]) => <label key={key} className="text-sm font-medium">{label}{!draft[key].trim() && key !== "email" && <span className="ml-2 text-destructive">Nedostaje</span>}<Input className={`mt-1 ${!draft[key].trim() && key !== "email" ? "border-destructive/50" : ""}`} type={key === "email" ? "email" : key === "phone" ? "tel" : "text"} disabled={!!busy || attempted} value={draft[key]} onChange={e => patch({ ...draft, [key]: e.target.value, ...(key === "city" || key === "postalCode" ? { xExpressTownId: null } : {}) })} /></label>)}{draft.shippingMethod === "KURIR" && <fieldset disabled={!!busy || attempted} className="min-w-0"><CityAutocomplete label="Mesto iz kurirskog adresara" required strictRemote minChars={2} value={draft.city} postalCode={draft.postalCode} selectedTownId={draft.xExpressTownId} onValueChange={city => patch({ ...draft, city, xExpressTownId: null })} onSelect={place => patch({ ...draft, city: place.name, postalCode: place.postalCode, xExpressTownId: place.townId ?? null })} /><p className="mt-1 text-xs text-muted-foreground">Izaberite mesto iz liste ako pročitani naziv nije tačan ili jednoznačan.</p></fieldset>}</div>
         <div className="mt-4 grid gap-4 sm:grid-cols-2"><label className="text-sm font-medium">Plaćanje<select className="mt-1 h-11 w-full rounded-lg border border-border bg-background px-3" disabled={!!busy || attempted} value={draft.paymentMethod} onChange={e => patch({ ...draft, paymentMethod: e.target.value as ImportReview["paymentMethod"] })}><option value="">Izaberi plaćanje</option><option value="POUZECE_GOTOVINA">Pouzeće — gotovina</option><option value="POUZECE_KARTICA">Pouzeće — kartica</option><option value="UPLATA_NA_RACUN">Uplata na račun</option></select></label>
         <label className="text-sm font-medium">Dostava<select className="mt-1 h-11 w-full rounded-lg border border-border bg-background px-3" disabled={!!busy || attempted} value={draft.shippingMethod} onChange={e => patch({ ...draft, shippingMethod: e.target.value as ImportReview["shippingMethod"] })}><option value="">Izaberi dostavu</option><option value="KURIR">Kurir</option><option value="KAMION">Kamion</option></select></label></div>
       </section>

@@ -2,6 +2,13 @@ import {describe,it,expect} from 'vitest';
 import {customerTownLabel,exactTownAlias,searchTownAliases} from '@/lib/x-express/town-aliases';
 const town={id:791059,name:'Beograd (Zemun)',postalCode:'11080'};
 describe('verified courier locality aliases',()=>{
+ it('routes Žarkovo only with its verified postal code and preserves the locality label',()=>{
+  const routing={id:791113,name:'Beograd (Čukarica)',postalCode:'11030'};
+  for(const q of ['Žarkovo','Zarkovo BG','Жарково','Beograd Zarkovo'])expect(exactTownAlias(q,'11030')?.townId).toBe(791113);
+  expect(searchTownAliases('Žarkovo')[0]?.townId).toBe(791113);
+  expect(exactTownAlias('Žarkovo','11080')).toBeUndefined();
+  expect(customerTownLabel({city:'Zarkovo',postalCode:'11030'},routing,{preserveCustomerPostalCode:true})).toEqual({city:'Žarkovo',postalCode:'11030'});
+ });
  it('recognizes postal code, partial names and Cyrillic without guessing other localities',()=>{
   for(const q of ['11273','Bata','Батајница','Zemun - Batajnica']) expect(searchTownAliases(q)[0]?.townId).toBe(791059);
   expect(searchTownAliases('1127')).toEqual([]);
