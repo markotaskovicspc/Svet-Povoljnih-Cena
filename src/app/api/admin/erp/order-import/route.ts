@@ -12,6 +12,7 @@ import { channelOrderSchema } from "@/lib/checkout/order-schema";
 import { importDraftSchema, withImportDefaults } from "@/lib/admin/order-import/schema";
 import { createImportMatcher } from "@/lib/admin/order-import/matching";
 import { readImportQuote, signImportQuote } from "@/lib/admin/order-import/quote";
+import { resolveImportAddress, IMPORT_TOWN_ERROR } from "@/lib/admin/order-import/address";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -81,14 +82,18 @@ export async function POST(req: NextRequest) {
         const labels: Record<string, string> = { firstName: "ime", lastName: "prezime", phone: "telefon", street: "ulica", houseNumber: "kućni broj", city: "mesto", postalCode: "poštanski broj (5 cifara)", guestEmail: "e-pošta", paymentMethod: "plaćanje", shippingMethod: "dostava", sku: "artikal", qty: "količina" };
         return fail("Proverite ili dopunite: " + [...new Set(parsed.error.issues.map(i => labels[String(i.path.at(-1))] ?? "podatke porudžbine"))].join(", ") + ".");
       }
-      const input = { ...parsed.data, checkoutSessionId: randomUUID(), notes: "Porudžbina pripremljena iz chata/slike u ERP-u." };
+      const resolved = await resolveImportAddress(parsed.data);
+      if (!resolved) return fail(IMPORT_TOWN_ERROR);
+      const input = { ...resolved, checkoutSessionId: randomUUID(), notes: "Porudžbina pripremljena iz chata/slike u ERP-u." };
       const result = await createOrder(input, null, null, { previewOnly: true, allowGuestWithoutEmail: true, preserveCustomerPostalCode: true });
       if (!result.ok) return fail(orderError(result.error));
       return NextResponse.json({ quote: signImportQuote({ actorId: admin.id, expires: Date.now() + 15 * 60000, input, total: result.data.total }, secret), totals: result.data });
     }
     const create = z.object({ action: z.literal("create"), quote: z.string().max(60000), confirmed: z.literal(true) }).parse(body);
     const quote = readImportQuote(create.quote, secret, admin.id);
-    const result = await createOrder(quote.input, null, null, { expectedTotal: quote.total, allowGuestWithoutEmail: true, preserveCustomerPostalCode: true, customerReplyDraftOnly: !quote.input.guestEmail, adminActorId: admin.id });
+    const resolved = await resolveImportAddress(quote.input);
+    if (!resolved) return fail(IMPORT_TOWN_ERROR);
+    const result = await createOrder(resolved, null, null, { expectedTotal: quote.total, allowGuestWithoutEmail: true, preserveCustomerPostalCode: true, customerReplyDraftOnly: !quote.input.guestEmail, adminActorId: admin.id });
     if (!result.ok) return fail(orderError(result.error));
     await logAudit({ actorId: admin.id, action: "erp.order-import.create", entity: "Order", entityId: result.data.id, diff: { number: result.data.number } });
     return NextResponse.json({ order: { id: result.data.id, number: result.data.number } });
