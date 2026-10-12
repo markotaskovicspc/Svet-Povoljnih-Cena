@@ -50,9 +50,10 @@ describe("operator import creation boundary", () => {
     expect(response.status).toBe(200);
     const { quote } = await response.json();
     expect(mocks.createOrder.mock.calls[0][0].shipping.xExpressTownId).toBe(123);
-    expect(mocks.createOrder.mock.calls[0][3].previewOnly).toBe(true);
+    expect(mocks.createOrder.mock.calls[0][3]).toMatchObject({ previewOnly: true, staffLoyalty: true });
     expect((await POST(request({ action: "create", quote, confirmed: true }))).status).toBe(200);
     expect(mocks.createOrder.mock.calls[1][0]).toEqual(mocks.createOrder.mock.calls[0][0]);
+    expect(mocks.createOrder.mock.calls[1][3].staffLoyalty).toBe(true);
   });
   it.each([{ towns: [] }, { towns: [{ id: 1, name: "Jasenovik" }, { id: 2, name: "Jasenovik" }] }, { towns: [{ id: 1, name: "Drugo mesto" }] }])("blocks missing or ambiguous courier towns before preview or creation: %j", async ({ towns }) => {
     mocks.towns.mockResolvedValue(towns);

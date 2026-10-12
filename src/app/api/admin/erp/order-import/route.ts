@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
     }
     const body = await req.json();
     if (body.action === "preview") {
-      const staffLoyalty = z.boolean().optional().parse(body.staffLoyalty) ?? false;
+      const staffLoyalty = z.boolean().optional().parse(body.staffLoyalty) ?? true;
       const shipping = body.input?.shipping;
       const locality = body.input?.shippingMethod === "KURIR" && !shipping?.xExpressTownId && typeof shipping?.city === "string"
         ? await resolveImportAlias(shipping.city, typeof shipping.postalCode === "string" ? shipping.postalCode : "") : null;
