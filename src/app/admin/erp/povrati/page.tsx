@@ -78,6 +78,13 @@ async function receiveReturnAction(
         ...parsed.data,
         actorId,
       });
+      if (result.refundNoticeJobId) {
+        try {
+          after(() => processBackgroundJob(result.refundNoticeJobId!));
+        } catch {
+          // The durable queue/cron still sends the notice if scheduling is unavailable.
+        }
+      }
       revalidatePath("/admin/erp/povrati");
       revalidatePath("/admin/erp/preuzimanja/povrati");
       revalidatePath(

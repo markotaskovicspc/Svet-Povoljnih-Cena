@@ -10,6 +10,7 @@ import type {
   ProductVariantFamily,
 } from "@/types";
 import { BRAND } from "@/lib/brand";
+import { defaultOrderBumpSku, type CartOrderBumpOffer } from "@/lib/order-bump";
 import { num, numOrNull } from "@/lib/api/_helpers";
 import { isRenderableImageUrl } from "@/lib/media";
 import { resolveSupabaseStorageMedia } from "@/lib/supabase/storage";
@@ -2129,13 +2130,22 @@ export async function getCartRecommendationsForSkus(
   skus: string[],
   limit = 6,
 ): Promise<ProductDTO[]> {
+  return (await getCartOrderBumpOffersForSkus(skus, limit, false)).map(offer => offer.product);
+}
+
+/** Exact admin rules override group rules; curated defaults only fill unconfigured chair pairings. */
+export async function getCartOrderBumpOffersForSkus(
+  skus: string[],
+  limit = 2,
+  includeDefaults = true,
+): Promise<CartOrderBumpOffer[]> {
   if (!hasDatabaseConnection()) return [];
   const uniqueSkus = Array.from(new Set(skus.map((sku) => sku.trim()).filter(Boolean)));
   if (!uniqueSkus.length) return [];
 
   const cartProducts = await db.product.findMany({
     where: { sku: { in: uniqueSkus }, ...webStorefrontVisibleProductWhere() },
-    select: { id: true, sku: true, groupId: true },
+    select: { id: true, sku: true, name: true, groupId: true },
   });
   const cartProductBySku = new Map(
     cartProducts.map((product) => [product.sku, product]),
@@ -2159,7 +2169,7 @@ export async function getCartRecommendationsForSkus(
   const [rules, pricingRules, deliveryWindows, monthlyHeroSkus] = await Promise.all([
     db.recommendationRule.findMany({
       where: {
-        enabled: true,
+        ...(includeDefaults ? {} : { enabled: true }),
         OR: [
           { sourceProductId: { in: sourceProductIds } },
           ...(groupIds.length
@@ -2181,8 +2191,14 @@ export async function getCartRecommendationsForSkus(
   );
 
   const seenSkus = new Set(uniqueSkus);
-  const out: ProductDTO[] = [];
+  const out: CartOrderBumpOffer[] = [];
   for (const rule of selectedRules) {
+    if (!rule.enabled) continue;
+    const source = orderedCartProducts.find(product =>
+      rule.sourceProductId === product.id ||
+      (rule.sourceProductId === null && rule.groupId === product.groupId),
+    );
+    if (!source) continue;
     for (const product of rule.products) {
       if (
         seenSkus.has(product.sku) ||
@@ -2197,8 +2213,30 @@ export async function getCartRecommendationsForSkus(
         heroContext,
       );
       seenSkus.add(product.sku);
-      out.push(mapped);
+      out.push({ id: rule.id, sourceSku: source.sku, sourceName: source.name, product: mapped });
       if (out.length >= limit) return out;
+    }
+  }
+  if (includeDefaults) {
+    const defaults = orderedCartProducts.filter(source =>
+      defaultOrderBumpSku(source.name) && !selectedRules.some(rule =>
+        rule.sourceProductId === source.id ||
+        (rule.sourceProductId === null && source.groupId !== null && rule.groupId === source.groupId),
+      ),
+    );
+    const defaultSkus = [...new Set(defaults.map(source => defaultOrderBumpSku(source.name)!))].filter(sku => !seenSkus.has(sku));
+    if (defaultSkus.length) {
+      const products = await db.product.findMany({
+        where: { sku: { in: defaultSkus }, ...webStorefrontProductWhere() },
+        include: productInclude,
+      });
+      for (const source of defaults) {
+        const product = products.find(product => product.sku === defaultOrderBumpSku(source.name));
+        if (!product || seenSkus.has(product.sku) || !isProductAvailableOnWeb(product)) continue;
+        seenSkus.add(product.sku);
+        out.push({ id: "clean-home-v1", sourceSku: source.sku, sourceName: source.name, product: mapProduct(product, pricingRules, deliveryWindows, heroContext) });
+        if (out.length >= limit) return out;
+      }
     }
   }
   return out;

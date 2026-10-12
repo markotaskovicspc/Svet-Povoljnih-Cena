@@ -21,6 +21,7 @@ import { removeReclamationReplacementFromPicking } from "@/lib/admin/pickup-batc
 import { signReclamationPhotoUrls } from "@/lib/api/uploads";
 import { updateReclamationStatus } from "@/lib/api/reclamation-status";
 import { db } from "@/lib/db";
+import { queueReclamationRefundNotice } from "@/lib/admin/reclamation-refund-notice.server";
 import { SHIPMENT_STATUS_LABEL } from "@/lib/courier/status";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle } from "@/components/admin/card";
@@ -172,6 +173,7 @@ async function saveDetailsAction(_state: AdminActionState, formData: FormData) {
           } : {}),
         },
       });
+      await queueReclamationRefundNotice(tx, id);
       refresh(id);
       return {
         ok: true as const,
@@ -385,7 +387,7 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
               <input type="hidden" name="id" value={reclamation.id} />
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <Field label="Odluka"><select name="decision" defaultValue={reclamation.decision} className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm">{Object.values(ReclamationDecision).map((value) => <option key={value} value={value}>{DECISION_LABELS[value]}</option>)}</select></Field>
-                <Field label="Način rešavanja"><select name="resolution" defaultValue={reclamation.resolution ?? ""} className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm"><option value="">Nije određeno</option>{Object.values(ReclamationResolution).map((value) => <option key={value} value={value}>{RESOLUTION_LABELS[value]}</option>)}</select></Field>
+                <Field label="Način rešavanja" hint="Za prihvaćen povrat novca, office dobija mejl nakon proknjiženog prijema robe."><select name="resolution" defaultValue={reclamation.resolution ?? ""} className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm"><option value="">Nije određeno</option>{Object.values(ReclamationResolution).map((value) => <option key={value} value={value}>{RESOLUTION_LABELS[value]}</option>)}</select></Field>
                 <Field label="Celih artikala za slanje" hint="Unesite 0 kada se šalje samo deo."><input name="replacementQty" type="number" min={0} max={reclamation.quantity} step={1} defaultValue={reclamation.replacementQty ?? (reclamation.resolution === "ZAMENA_DELA" ? 0 : reclamation.quantity)} className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm" /></Field>
                 <Field label="Datum odgovora"><input name="respondedAt" type="date" defaultValue={dateOnly(reclamation.respondedAt)} className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm" /></Field>
               </div>

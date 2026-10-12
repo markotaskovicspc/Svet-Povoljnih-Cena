@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { SKU } from "@/types";
+import { normalizeOrderBump, type OrderBumpAttribution } from "@/lib/order-bump";
 
 export const MAX_CART_QTY = 99;
 
@@ -20,6 +21,7 @@ export interface CartLine {
   deliveryCategory?: 1 | 2;
   withAssembly?: boolean;
   assemblyPrice?: number;
+  orderBump?: OrderBumpAttribution;
 }
 
 export type CartPriceUpdate = Pick<
@@ -103,12 +105,17 @@ export function normalizeCartLines(lines: unknown): CartLine[] {
       withAssembly: Boolean(row.withAssembly),
       assemblyPrice:
         row.assemblyPrice == null ? undefined : normalizeMoney(row.assemblyPrice),
+      orderBump: normalizeOrderBump(row.orderBump, qty),
     };
 
     const existing = bySku.get(sku);
     bySku.set(
       sku,
-      existing ? { ...next, qty: normalizeQty(existing.qty + next.qty) } : next,
+      existing ? {
+        ...next,
+        qty: normalizeQty(existing.qty + next.qty),
+        orderBump: normalizeOrderBump(existing.orderBump ?? next.orderBump, normalizeQty(existing.qty + next.qty)),
+      } : next,
     );
   }
 
@@ -149,7 +156,7 @@ export function mergeRecoveredCartLines(
     const existing = bySku.get(line.sku);
     bySku.set(
       line.sku,
-      existing ? { ...line, qty: Math.max(existing.qty, line.qty) } : line,
+      existing ? { ...line, qty: Math.max(existing.qty, line.qty), orderBump: existing.orderBump ?? line.orderBump } : line,
     );
   }
   return normalizeCartLines(Array.from(bySku.values()));
@@ -173,7 +180,10 @@ export const useCart = create<CartState>()(
             return {
               lines: current.map((l) =>
                 l.sku === line.sku
-                  ? { ...l, ...line, qty: normalizeQty(l.qty + addQty) }
+                  ? {
+                    ...l, ...line, qty: normalizeQty(l.qty + addQty),
+                    orderBump: normalizeOrderBump(l.orderBump ?? line.orderBump, normalizeQty(l.qty + addQty)),
+                  }
                   : l,
               ),
             };
@@ -190,7 +200,7 @@ export const useCart = create<CartState>()(
             return { lines: current.filter((l) => l.sku !== sku) };
           }
           return {
-            lines: current.map((l) => (l.sku === sku ? { ...l, qty: nextQty } : l)),
+            lines: current.map((l) => (l.sku === sku ? { ...l, qty: nextQty, orderBump: normalizeOrderBump(l.orderBump, nextQty) } : l)),
           };
         }),
       toggleAssembly: (sku) =>

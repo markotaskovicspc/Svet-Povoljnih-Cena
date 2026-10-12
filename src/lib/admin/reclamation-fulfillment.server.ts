@@ -27,6 +27,7 @@ import {
 } from "@/lib/mygls/config";
 
 import { parseReclamationPackages } from "@/lib/admin/reclamation-packages";
+import { queueReclamationRefundNotice } from "@/lib/admin/reclamation-refund-notice.server";
 
 const RECLAMATION_PURPOSES: ShipmentPurpose[] = [
   "RECLAMATION_RETURN",
@@ -483,6 +484,7 @@ export async function receiveReclamationReturn(args: {
         status: reclamation.status === "PRIMLJENO" ? "U_OBRADI" : undefined,
       },
     });
-    return { movement, warehouse };
+    const refundNoticeJobId = await queueReclamationRefundNotice(tx, reclamation.id);
+    return { movement, warehouse, refundNoticeJobId };
   }, { maxWait: 10_000, timeout: 30_000 });
 }

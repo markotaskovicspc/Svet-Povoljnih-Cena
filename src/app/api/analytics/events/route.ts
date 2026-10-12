@@ -4,6 +4,7 @@ import { exitIntentMetadataSchema, exitIntentEventId } from "@/lib/analytics/exi
 import { productArMetadataSchema } from "@/lib/analytics/product-ar-events";
 import { getProductArAsset } from "@/lib/product-ar";
 import { db } from "@/lib/db";
+import { orderBumpViewMetadataSchema } from "@/lib/order-bump";
 import {
   checkRateLimitForRequest,
   rateLimitJson,
@@ -14,6 +15,7 @@ import {
 } from "@/lib/analytics/tracking-consent";
 
 const PUBLIC_EVENT_TYPES = new Set<AnalyticsEventType>([
+  "ORDER_BUMP",
   "EXIT_INTENT",
   "PRODUCT_AR",
   "PAGE_VIEW",
@@ -88,6 +90,14 @@ export async function POST(request: Request) {
     typeof body?.productId === "string" && body.productId ? body.productId : null;
   let arMetadata: ReturnType<typeof productArMetadataSchema.parse> | undefined;
   let exitMetadata: ReturnType<typeof exitIntentMetadataSchema.parse> | undefined;
+  let bumpMetadata: ReturnType<typeof orderBumpViewMetadataSchema.parse> | undefined;
+  if (type === "ORDER_BUMP") {
+    const parsed = orderBumpViewMetadataSchema.safeParse(body?.metadata);
+    if (!parsed.success || !productId || quantity !== null || value !== null) {
+      return NextResponse.json({ ok: false, error: "Neispravan događaj ponude." }, { status: 400 });
+    }
+    bumpMetadata = parsed.data;
+  }
   if (type === "EXIT_INTENT") {
     const parsed = exitIntentMetadataSchema.safeParse(body?.metadata);
     if (!parsed.success || productId || quantity !== null || value !== null) {
@@ -117,6 +127,7 @@ export async function POST(request: Request) {
     data: {
       ...(arMetadata ? { id: `ar:${arMetadata.eventId}` } : {}),
       ...(exitMetadata ? { id: exitIntentEventId(exitMetadata) } : {}),
+      ...(bumpMetadata ? { id: `bump:${bumpMetadata.eventId}` } : {}),
       type,
       anonymousId,
       sessionId:
@@ -126,7 +137,7 @@ export async function POST(request: Request) {
       quantity,
       value,
       consentVersion,
-      metadata: exitMetadata ?? arMetadata ?? (
+      metadata: bumpMetadata ?? exitMetadata ?? arMetadata ?? (
         body?.metadata &&
         typeof body.metadata === "object" &&
         !Array.isArray(body.metadata)
@@ -136,6 +147,7 @@ export async function POST(request: Request) {
     },
     select: { id: true },
   }).catch((error: unknown) => {
+    if (bumpMetadata && error && typeof error === "object" && "code" in error && error.code === "P2002") return { id: `bump:${bumpMetadata.eventId}` };
     if (exitMetadata && error && typeof error === "object" && "code" in error && error.code === "P2002") {
       return { id: exitIntentEventId(exitMetadata) };
     }

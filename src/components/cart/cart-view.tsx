@@ -24,6 +24,7 @@ import { LoyaltyReturnNotice } from "./loyalty-return-notice";
 import { useGuestLoyalty } from "@/lib/loyalty/use-guest-loyalty";
 import { appliedLoyaltySavings } from "@/lib/loyalty/shared";
 import { computeTotals } from "@/components/checkout/order-summary";
+import { CartOrderBumps } from "./cart-order-bumps";
 
 /**
  * Full /korpa page view. Hydration-aware so server renders the empty state
@@ -68,21 +69,24 @@ export function CartView() {
     <>
       <LoyaltyReturnNotice />
       <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_400px]">
-        <section
-          aria-label="Stavke u korpi"
-          className="bg-surface ring-border/60 divide-border/60 divide-y rounded-2xl px-4 ring-1 sm:px-6"
-        >
-          {lines.map((l) => (
-            <CartLineRow
-              key={l.sku}
-              line={l}
-              variant="page"
-              deliveryCategory={
-                quote ? quote.deliveryCategoriesBySku?.[l.sku] ?? null : undefined
-              }
-            />
-          ))}
-        </section>
+        <div className="min-w-0 space-y-6">
+          <section
+            aria-label="Stavke u korpi"
+            className="bg-surface ring-border/60 divide-border/60 divide-y rounded-2xl px-4 ring-1 sm:px-6"
+          >
+            {lines.map((l) => (
+              <CartLineRow
+                key={l.sku}
+                line={l}
+                variant="page"
+                deliveryCategory={
+                  quote ? quote.deliveryCategoriesBySku?.[l.sku] ?? null : undefined
+                }
+              />
+            ))}
+          </section>
+          <CartOrderBumps />
+        </div>
 
         <CartSummary
           subtotal={subtotal}

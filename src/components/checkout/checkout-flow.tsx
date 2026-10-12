@@ -1298,6 +1298,7 @@ function buildCreateOrderPayload(
       sku: line.sku,
       qty: line.qty,
       withAssembly: Boolean(data.perItemAssembly?.[line.sku]),
+      orderBump: line.orderBump,
     })),
     shipping,
     glsDeliveryPoint:

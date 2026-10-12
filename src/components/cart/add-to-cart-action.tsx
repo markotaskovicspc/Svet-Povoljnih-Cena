@@ -15,6 +15,7 @@ import {
   recordCommerceAddToCart,
 } from "@/components/analytics/first-party-analytics";
 import { deliveryCategory } from "@/lib/delivery-tariff";
+import type { OrderBumpAttribution } from "@/lib/order-bump";
 
 /**
  * Single entry-point used by every "Dodaj u korpu" trigger.
@@ -32,6 +33,9 @@ export async function commitAddToCart(
   options?: {
     availability?: ProductAvailability;
     deliveryCategory?: 1 | 2 | null;
+    orderBump?: OrderBumpAttribution;
+    /** Inline cart additions should not open another suggestion/confirmation. */
+    silent?: boolean;
   },
 ): Promise<number> {
   const price = effectiveUnitPrice(product);
@@ -76,6 +80,8 @@ export async function commitAddToCart(
   }
 
   const currentCartQty = useCart.getState().lines.find((item) => item.sku === product.sku)?.qty ?? 0;
+  // The source may have been removed while the availability request was pending.
+  if (options?.orderBump && (currentCartQty > 0 || !useCart.getState().lines.some(item => item.sku === options.orderBump?.sourceSku))) return sale;
   const line: Omit<CartLine, "qty"> = {
     sku: product.sku,
     slug: product.slug,
@@ -85,6 +91,7 @@ export async function commitAddToCart(
     thumbnailUrl: getMediaVariantUrl(product.media.images[0], "thumb") || undefined,
     variant: product.variantFamily?.options.find((option) => option.sku === product.sku)?.label,
     familyCode: product.variantFamily?.code,
+    orderBump: options?.orderBump,
     deliveryCategory:
       options?.deliveryCategory ??
       (product.unitPackageDimensionsCm
@@ -97,12 +104,13 @@ export async function commitAddToCart(
   };
   useCart.getState().add(line, qty);
   const addedLine = useCart.getState().lines.find((item) => item.sku === product.sku);
-  if (addedLine) useCartUi.getState().showAddedItem(addedLine, Math.max(0, addedLine.qty - currentCartQty));
+  if (addedLine && !options?.silent) useCartUi.getState().showAddedItem(addedLine, Math.max(0, addedLine.qty - currentCartQty));
   recordFirstPartyEvent({
     type: "ADD_TO_CART",
     productId: product.id,
     quantity: qty,
     value: sale * qty,
+    ...(options?.orderBump ? { metadata: { surface: "cart_order_bump", offerId: options.orderBump.offerId, sourceSku: options.orderBump.sourceSku } } : {}),
   });
   recordCommerceAddToCart({
     sku: product.sku,

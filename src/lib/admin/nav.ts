@@ -158,6 +158,7 @@ export const adminNav: AdminNavGroup[] = [
   {
     label: "Analitika",
     items: [
+      { href: "/admin/erp/order-bump", label: "Order bump", allowed: ["ADS", "OPS"] },
       { href: "/admin/preporuke", label: "Preporuke kupovine", allowed: C },
       { href: "/admin/izvestaji", label: "Izveštajni centar", allowed: ALL },
       {

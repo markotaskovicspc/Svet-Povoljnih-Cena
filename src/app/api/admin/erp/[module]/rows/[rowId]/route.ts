@@ -18,6 +18,7 @@ import {
   NewsletterCampaignStatus,
 } from "@prisma/client";
 import { db } from "@/lib/db";
+import { queueReclamationRefundNotice } from "@/lib/admin/reclamation-refund-notice.server";
 import { logAudit, requireAdminAction } from "@/lib/admin";
 import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
 import {
@@ -1312,7 +1313,12 @@ async function persistReclamationCell(
     default:
       return null;
   }
-  await db.reclamation.update({ where: { id: rowId }, data });
+  await db.$transaction(async (tx) => {
+    await tx.reclamation.update({ where: { id: rowId }, data });
+    if (columnKey === "decision" || columnKey === "resolution") {
+      await queueReclamationRefundNotice(tx, rowId);
+    }
+  });
   return { value };
 }
 

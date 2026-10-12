@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getCartRecommendationsForSkus } from "@/lib/api/catalog";
+import { getCartRecommendationsForSkus, getCartOrderBumpOffersForSkus } from "@/lib/api/catalog";
 import { logOperationalError } from "@/lib/monitoring";
 import {
   checkRateLimitForRequest,
@@ -14,6 +14,7 @@ export const dynamic = "force-dynamic";
 const bodySchema = z.object({
   skus: z.array(z.string().trim().min(1).max(64)).max(50).default([]),
   limit: z.number().int().min(1).max(12).optional(),
+  surface: z.literal("order_bump").optional(),
 });
 
 export async function POST(request: Request) {
@@ -35,6 +36,10 @@ export async function POST(request: Request) {
       );
     }
     const skus = Array.from(new Set(parsed.data.skus));
+    if (parsed.data.surface === "order_bump") {
+      const offers = await getCartOrderBumpOffersForSkus(skus, Math.min(parsed.data.limit ?? 2, 2));
+      return NextResponse.json({ ok: true, offers });
+    }
     const products = await getCartRecommendationsForSkus(
       skus,
       parsed.data.limit ?? 6,

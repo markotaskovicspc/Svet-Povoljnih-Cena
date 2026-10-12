@@ -10,6 +10,12 @@ export type ReportDestination = {
 
 export const REPORT_DESTINATIONS: readonly ReportDestination[] = [
   {
+    href: "/admin/erp/order-bump",
+    title: "Order bump",
+    description: "Porudžbine, isporuke i vrednost artikala dodatih preko ponude u korpi.",
+    allowed: ["ADS", "OPS"],
+  },
+  {
     href: "/admin/erp/dnevni-promet",
     title: "Dnevni promet",
     description:

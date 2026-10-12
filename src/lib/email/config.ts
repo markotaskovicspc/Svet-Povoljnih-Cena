@@ -30,6 +30,8 @@ export interface EmailConfig {
   commentsInbox: string;
   /** Internal recipient notified when the storefront contact form is submitted. */
   commentsNotificationTo: string;
+  /** Operations inbox for received returns requiring a money refund. */
+  refundNotificationTo: string;
   /** Shared secret for the inbound webhook (`x-webhook-secret` header). */
   inboundSecret: string | null;
   /** Resend webhook signing secret (`svix-*` headers over the raw body). */
@@ -90,6 +92,8 @@ export function getEmailConfig(): EmailConfig {
     commentsNotificationTo:
       envValue("EMAIL_COMMENTS_NOTIFICATION_TO") ??
       "office@svetpovoljnihcena.rs",
+    refundNotificationTo:
+      envValue("EMAIL_REFUND_NOTIFICATION_TO") ?? "office@svetpovoljnihcena.rs",
     inboundSecret: envValue("EMAIL_INBOUND_SECRET"),
     resendWebhookSecret: envValue("RESEND_WEBHOOK_SECRET"),
     promotionsTopicId: envValue("RESEND_TOPIC_PROMOTIONS_ID"),

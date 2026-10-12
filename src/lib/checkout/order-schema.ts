@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { missingBusinessAddressFields } from "./business-policy";
+import { orderBumpSchema } from "@/lib/order-bump";
 import {
   HOUSE_NUMBER_ERROR,
   isValidHouseNumber,
@@ -10,6 +11,7 @@ const lineSchema = z.object({
   sku: z.string().min(1),
   qty: z.int().min(1).max(99),
   withAssembly: z.boolean().optional(),
+  orderBump: orderBumpSchema.optional().catch(undefined),
 });
 
 const addressSchema = z

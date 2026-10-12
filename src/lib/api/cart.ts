@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { normalizeOrderBump, orderBumpSchema } from "@/lib/order-bump";
 
 /**
  * Server cart sync (Phase 3C — item 2).
@@ -26,6 +27,7 @@ export const cartLineSchema = z.object({
   deliveryCategory: z.union([z.literal(1), z.literal(2)]).optional(),
   withAssembly: z.boolean().optional(),
   assemblyPrice: z.number().nonnegative().optional(),
+  orderBump: orderBumpSchema.optional().catch(undefined),
 });
 
 export const cartPayloadSchema = z.object({
@@ -45,8 +47,8 @@ export function normalizeServerCartLines(
     bySku.set(
       line.sku,
       existing
-        ? { ...line, qty: Math.min(99, existing.qty + line.qty) }
-        : { ...line, qty: Math.min(99, line.qty) },
+        ? { ...line, qty: Math.min(99, existing.qty + line.qty), orderBump: normalizeOrderBump(existing.orderBump ?? line.orderBump, Math.min(99, existing.qty + line.qty)) }
+        : { ...line, qty: Math.min(99, line.qty), orderBump: normalizeOrderBump(line.orderBump, line.qty) },
     );
   }
 

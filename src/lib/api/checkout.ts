@@ -54,6 +54,7 @@ import { isFirstPurchaseDiscountEligible } from "@/lib/checkout/first-purchase.s
 import { resolveDocumentBuyerAddress } from "@/lib/document-buyer";
 import type { CreateOrderInput } from "@/lib/checkout/order-schema";
 import { formatStreetAddress } from "@/lib/address/house-number";
+import { checkoutOrderBump } from "@/lib/order-bump";
 export { createOrderSchema } from "@/lib/checkout/order-schema";
 export type { CreateOrderInput } from "@/lib/checkout/order-schema";
 
@@ -627,12 +628,17 @@ export async function createOrder(
       const p = bySku.get(r.sku)!;
       const assemblyPrice = assemblyBySku.get(r.sku) ?? null;
       const primaryCategory = p.categories.at(-1)?.category ?? null;
+      const inputLine = input.lines.find(line => line.sku === r.sku)!;
+      const orderBump = checkoutOrderBump(inputLine);
       return {
         productId: p.id,
         sku: p.sku,
         name: setBasket.names.has(p.sku) ? `${p.name} — set: ${setBasket.names.get(p.sku)}` : p.name,
         productSetName: setBasket.names.get(p.sku) ?? null,
         qty: r.qty,
+        orderBumpOfferId: orderBump?.offerId ?? null,
+        orderBumpSourceSku: orderBump?.sourceSku ?? null,
+        orderBumpQuantity: orderBump?.quantity ?? 0,
         unitPriceFull: new Prisma.Decimal(r.unitPriceFull),
         unitPriceSale: new Prisma.Decimal(r.unitPriceSale),
         withAssembly: assemblyPrice != null,
