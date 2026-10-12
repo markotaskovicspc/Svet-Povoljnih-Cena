@@ -39,7 +39,12 @@ export function matchImportTown(towns: ImportTown[], city: string, postalCode = 
   return alias && parent ? { city: alias.name, postalCode: alias.postalCode, xExpressTownId: parent.id } : null;
 }
 function nearby(a: string, b: string) {
-  if (a.length < 5 || Math.abs(a.length - b.length) > 1) return false;
+  if (a.length < 3 || b.length < 3 || Math.abs(a.length - b.length) > 1) return false;
+  // One adjacent transposition is a common typing error (Beogard).
+  if (a.length === b.length) {
+    const positions = [...a].flatMap((letter, i) => letter !== b[i] ? [i] : []);
+    if (positions.length === 2 && positions[1] === positions[0] + 1 && a[positions[0]] === b[positions[1]] && a[positions[1]] === b[positions[0]]) return true;
+  }
   let i = 0, j = 0, edits = 0;
   while (i < a.length && j < b.length) {
     if (a[i] === b[j]) { i++; j++; continue; }

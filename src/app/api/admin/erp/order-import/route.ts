@@ -8,7 +8,7 @@ import { db } from "@/lib/db";
 import { envValue } from "@/lib/env";
 import { checkRateLimitForRequest, rateLimitJson } from "@/lib/security/rate-limit";
 import { createOrder } from "@/lib/api/checkout";
-import { channelOrderSchema } from "@/lib/checkout/order-schema";
+import { importOrderInputSchema, normalizeImportInput, importValidationMessage } from "@/lib/admin/order-import/input";
 import { importDraftSchema, withImportDefaults } from "@/lib/admin/order-import/schema";
 import { createImportMatcher } from "@/lib/admin/order-import/matching";
 import { readImportQuote, signImportQuote } from "@/lib/admin/order-import/quote";
@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
   const secret = envValue("SOCIAL_INTEGRATION_SECRET");
   if (!secret) return fail("Veza sa chatbotom nije podešena.", 503);
   if (Number(req.headers.get("content-length") ?? 0) > 3500000) return fail("Slika je prevelika. Najviše 3 MB.", 413);
+  let phase: "read" | "preview" | "create" = "read";
   try {
     if (req.headers.get("content-type")?.includes("multipart/form-data")) {
       const form = await req.formData();
@@ -59,10 +60,13 @@ export async function POST(req: NextRequest) {
       if (file instanceof File && file.size) {
         if (file.size > 3000000 || !["image/png", "image/jpeg", "image/webp"].includes(file.type)) return fail("Dodajte PNG, JPG ili WebP sliku do 3 MB.");
         const bytes = Buffer.from(await file.arrayBuffer());
-        const processor = sharp(bytes, { limitInputPixels: 20000000 });
-        const metadata = await processor.metadata();
-        if (!["png", "jpeg", "webp"].includes(metadata.format ?? "")) return fail("Format slike nije podržan.");
-        const resized = await processor.rotate().resize({ width: 2200, height: 3000, fit: "inside", withoutEnlargement: true }).webp({ quality: 90 }).toBuffer();
+        let resized: Buffer;
+        try {
+          const processor = sharp(bytes, { limitInputPixels: 20000000 });
+          const metadata = await processor.metadata();
+          if (!["png", "jpeg", "webp"].includes(metadata.format ?? "")) return fail("Format slike nije podržan.");
+          resized = await processor.rotate().resize({ width: 2200, height: 3000, fit: "inside", withoutEnlargement: true }).webp({ quality: 90 }).toBuffer();
+        } catch { return fail("Slika nije ispravna ili ima previše piksela. Dodajte novi PNG, JPG ili WebP screenshot."); }
         if (resized.length > 2500000) return fail("Slika je prevelika. Dodajte kraći screenshot.", 413);
         image = `data:image/webp;base64,${resized.toString("base64")}`;
       }
@@ -87,16 +91,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ draft: { ...draft, ...(locality ?? {}), warnings, lines } });
     }
     const body = await req.json();
+    if (!body || typeof body !== "object" || Array.isArray(body)) return fail("Zahtev nije ispravan.");
+    if (body.action !== "preview" && body.action !== "create") return fail("Izaberite pregled ili kreiranje porudžbine.");
+    phase = body.action;
     if (body.action === "preview") {
       const staffLoyalty = z.boolean().optional().parse(body.staffLoyalty) ?? true;
-      const shipping = body.input?.shipping;
-      const locality = body.input?.shippingMethod === "KURIR" && !shipping?.xExpressTownId && typeof shipping?.city === "string"
+      const normalized = normalizeImportInput(body.input) as typeof body.input;
+      const shipping = normalized?.shipping;
+      const locality = normalized?.shippingMethod === "KURIR" && !shipping?.xExpressTownId && typeof shipping?.city === "string"
         ? await resolveImportAlias(shipping.city, typeof shipping.postalCode === "string" ? shipping.postalCode : "") : null;
-      const parsed = channelOrderSchema.safeParse(locality ? { ...body.input, shipping: { ...shipping, ...locality } } : body.input);
-      if (!parsed.success) {
-        const labels: Record<string, string> = { firstName: "ime", lastName: "prezime", phone: "telefon", street: "ulica", houseNumber: "kućni broj", city: "mesto", postalCode: "poštanski broj (5 cifara)", guestEmail: "e-pošta", paymentMethod: "plaćanje", shippingMethod: "dostava", sku: "artikal", qty: "količina" };
-        return fail("Proverite ili dopunite: " + [...new Set(parsed.error.issues.map(i => labels[String(i.path.at(-1))] ?? "podatke porudžbine"))].join(", ") + ".");
-      }
+      const parsed = importOrderInputSchema.safeParse(locality ? { ...normalized, shipping: { ...shipping, ...locality } } : normalized);
+      if (!parsed.success) return NextResponse.json(importValidationMessage(parsed.error.issues), { status: 400 });
       const resolved = await resolveImportAddress(parsed.data);
       if (!resolved) return fail(IMPORT_TOWN_ERROR);
       const input = { ...resolved, checkoutSessionId: randomUUID(), notes: "Porudžbina pripremljena iz chata/slike u ERP-u." + (staffLoyalty ? " Loyalty cene po nalogu prodavca; bez novog članstva." : "") };
@@ -113,8 +118,11 @@ export async function POST(req: NextRequest) {
     await logAudit({ actorId: admin.id, action: "erp.order-import.create", entity: "Order", entityId: result.data.id, diff: { number: result.data.number, staffLoyalty: Boolean(quote.staffLoyalty) } });
     return NextResponse.json({ order: { id: result.data.id, number: result.data.number } });
   } catch (error) {
+    if (error instanceof SyntaxError) return fail("Zahtev nije ispravan. Osvežite formu i pokušajte ponovo.");
     if (error instanceof z.ZodError) return fail("Podatke nije moguće pročitati. Proverite ih i pokušajte ponovo.");
     if (error instanceof Error && /Pregled/.test(error.message)) return fail(error.message);
+    if (phase === "read") return fail("Čitanje slike ili prepiske nije uspelo. Pokušajte ponovo ili nalepite tekst prepiske.", 502);
+    if (phase === "preview") return fail("Provera cena i dostave nije uspela. Pokušajte ponovo; porudžbina još nije kreirana.", 502);
     return fail("Zahtev nije potvrđen. Kod kreiranja porudžbine ponovite isti pokušaj; nemojte praviti novi pregled dok ne proverite listu porudžbina.", 502);
   }
 }
