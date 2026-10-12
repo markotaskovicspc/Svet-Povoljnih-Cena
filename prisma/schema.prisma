@@ -1622,6 +1622,9 @@ model Shipment {
   @@index([providerOrderId])
   @@index([providerShipmentId])
   @@index([trackingNo])
+  @@index([providerParcelNumbers(ops: JsonbPathOps)], type: Gin, map: "Shipment_providerParcelNumbers_gin_idx")
+  // PrintLabelsInfoList/PrintDataInfoList expression GIN indexes are maintained
+  // in 20261012165000_return_parcel_lookup_indexes (Prisma cannot model expressions).
 }
 
 /// Imported carrier charges and COD remittances. Never replaces Payment or fiscal records.
