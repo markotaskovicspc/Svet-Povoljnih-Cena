@@ -29,6 +29,19 @@ describe("operator import creation boundary", () => {
     expect(mocks.products.mock.calls[0][0].where).toEqual({ deletedAt: null, isActive: true });
     expect(mocks.createOrder).not.toHaveBeenCalled();
   });
+  it("prefills a verified locality and postal code when the chat provides no postcode", async () => {
+    mocks.products.mockResolvedValue([]);
+    mocks.towns.mockResolvedValue([{ id: 791113 }]);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ draft: {
+      firstName: "Test", lastName: "Kupac", phone: "0600000000", email: "", street: "Test", houseNumber: "35", city: "ZARKOVO-BG", postalCode: "",
+      paymentMethod: "", shippingMethod: "", lines: [], deliveryAmount: null, totalAmount: null, warnings: [],
+    } }))));
+    const form = new FormData(); form.set("text", "Test adresa ZARKOVO-BG");
+    const response = await POST(new NextRequest("https://spc.test/api/admin/erp/order-import", { method: "POST", headers: { origin: "https://spc.test" }, body: form }));
+    expect(response.status).toBe(200);
+    expect((await response.json()).draft).toMatchObject({ city: "Žarkovo", postalCode: "11030", xExpressTownId: 791113 });
+    expect(mocks.createOrder).not.toHaveBeenCalled();
+  });
   it("resolves the courier town before signing a review and preserves it on create", async () => {
     mocks.createOrder.mockResolvedValue({ ok: true, data: { total: 998 } });
     const response = await POST(request({ action: "preview", input }));
@@ -45,7 +58,7 @@ describe("operator import creation boundary", () => {
     const quote = signImportQuote({ input, actorId: "marko", expires: Date.now() + 60000, total: 998 }, "test-secret");
     const response = await POST(request({ action: "create", quote, confirmed: true }));
     expect(response.status).toBe(400);
-    expect((await response.json()).error).toContain("kurirskog adresara");
+    expect((await response.json()).error).toContain("Mesto nije jednoznačno prepoznato");
     expect(mocks.createOrder).not.toHaveBeenCalled();
   });
   it("rejects unauthenticated and cross-origin requests before creating anything", async () => {
@@ -71,11 +84,19 @@ describe("operator import creation boundary", () => {
     expect(mocks.towns).not.toHaveBeenCalled();
   });
   it("resolves the photographed Žarkovo locality through its verified active routing town", async () => {
-    mocks.towns.mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: 791113 }]);
+    mocks.towns.mockResolvedValue([{ id: 791113 }]);
     mocks.createOrder.mockResolvedValue({ ok: true, data: { total: 1897 } });
     expect((await POST(request({ action: "preview", input: { ...input, shipping: { ...input.shipping, city: "Zarkovo BG", postalCode: "11030" } } }))).status).toBe(200);
     expect(mocks.createOrder.mock.calls[0][0].shipping.xExpressTownId).toBe(791113);
-    expect(mocks.towns.mock.calls[1][0].where).toEqual({ active: true, id: 791113, name: "Beograd (Čukarica)" });
+    expect(mocks.towns.mock.calls[0][0].where).toEqual({ active: true, id: 791113, name: "Beograd (Čukarica)" });
+  });
+  it("corrects the photographed exact locality's inferred postal code and returns it for review", async () => {
+    mocks.towns.mockResolvedValue([{ id: 791113 }]);
+    mocks.createOrder.mockResolvedValue({ ok: true, data: { total: 1897 } });
+    const response = await POST(request({ action: "preview", input: { ...input, shipping: { ...input.shipping, city: "ZARKOVO-BG", postalCode: "11000" } } }));
+    expect(response.status).toBe(200);
+    expect((await response.json()).shipping).toMatchObject({ city: "Žarkovo", postalCode: "11030", xExpressTownId: 791113 });
+    expect(mocks.createOrder).toHaveBeenCalledWith(expect.objectContaining({ shipping: expect.objectContaining({ city: "Žarkovo", postalCode: "11030" }) }), null, null, expect.objectContaining({ previewOnly: true }));
   });
   it("requires operator confirmation and an unchanged signed review", async () => {
     const token = signImportQuote({ input, actorId: "marko", expires: Date.now() + 60000, total: 998 }, "test-secret");

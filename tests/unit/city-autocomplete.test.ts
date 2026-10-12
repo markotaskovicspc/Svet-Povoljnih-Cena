@@ -41,6 +41,12 @@ describe("resolveExactRemoteCity", () => {
     expect(resolveExactRemoteCity(places, "nis")?.townId).toBe(792047);
   });
 
+  it("resolves a verified locality alias without treating a partial name as exact", () => {
+    const locality = [{ name: "Žarkovo", postalCode: "11030", townId: 791113, aliases: ["Zarkovo BG", "Žarkovo BG"] }];
+    expect(resolveExactRemoteCity(locality, "Zarkovo BG", "11000")?.postalCode).toBe("11030");
+    expect(resolveExactRemoteCity(locality, "Zark")).toBeNull();
+  });
+
   it("does not resolve a partial city name", () => {
     expect(resolveExactRemoteCity(places, "Pazova")).toBeNull();
   });

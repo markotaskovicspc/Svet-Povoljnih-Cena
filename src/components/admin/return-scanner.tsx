@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Field } from "./field";
 import { startBarcodeCamera } from "@/lib/barcode-camera";
@@ -26,10 +26,20 @@ function ReturnCamera({ onCode, onClose }: { onCode: (code: string) => void; onC
   </div>;
 }
 
-export function ReturnScanner({ initialCode = "", children }: { initialCode?: string; children?: ReactNode }) {
+function subscribePointer(callback: () => void) {
+  const media = window.matchMedia("(pointer: coarse)");
+  media.addEventListener("change", callback);
+  return () => media.removeEventListener("change", callback);
+}
+const coarsePointer = () => window.matchMedia("(pointer: coarse)").matches;
+const serverPointer = () => false;
+
+export function ReturnScanner({ initialCode = "", initialCamera = false, warehouseId = "", children }: { initialCode?: string; initialCamera?: boolean; warehouseId?: string; children?: ReactNode }) {
   const form = useRef<HTMLFormElement>(null);
   const input = useRef<HTMLInputElement>(null);
-  const [camera, setCamera] = useState(false);
+  const [cameraOverride, setCamera] = useState<boolean | null>(null);
+  const isCoarsePointer = useSyncExternalStore(subscribePointer, coarsePointer, serverPointer);
+  const camera = cameraOverride ?? (initialCamera && isCoarsePointer);
   const [error, setError] = useState("");
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -57,7 +67,7 @@ export function ReturnScanner({ initialCode = "", children }: { initialCode?: st
       setError(""); setCamera(false);
       startTransition(() => {
         if (code === initialCode) router.refresh();
-        else router.push(`/admin/erp/povrati?q=${encodeURIComponent(code)}`, { scroll: false });
+        else router.push(`/admin/erp/povrati?q=${encodeURIComponent(code)}${warehouseId ? `&warehouse=${encodeURIComponent(warehouseId)}` : ""}`, { scroll: false });
       });
     }} className="flex flex-wrap items-end gap-3" aria-busy={pending}>
       <Field label="Skeniraj paket ili unesi broj porudžbine">
@@ -65,7 +75,7 @@ export function ReturnScanner({ initialCode = "", children }: { initialCode?: st
       </Field>
       <button disabled={pending} className="rounded-lg bg-foreground px-4 py-3 text-background">{pending ? "Pronalazim paket…" : "Pronađi paket"}</button>
       <button type="button" disabled={pending} aria-expanded={camera} onClick={() => { input.current?.blur(); setError(""); setCamera(!camera); }} className="rounded-lg border border-border px-4 py-3">Skeniraj kamerom</button>
-      {initialCode ? <Link href="/admin/erp/povrati" className="text-sm underline">Sledeći paket</Link> : null}
+      {initialCode ? <Link href={`/admin/erp/povrati?camera=1${warehouseId ? `&warehouse=${encodeURIComponent(warehouseId)}` : ""}`} className="text-sm underline">Sledeći paket</Link> : null}
     </form>
     {camera && <ReturnCamera onCode={scanned} onClose={() => setCamera(false)} />}
     {error && <p role="alert" className="mt-3 text-warning">{error}</p>}

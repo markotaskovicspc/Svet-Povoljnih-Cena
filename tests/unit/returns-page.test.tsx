@@ -1,9 +1,10 @@
+import { isValidElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   resolutions: vi.fn(), orders: vi.fn(), count: vi.fn(), reclamations: vi.fn(), reshipments: vi.fn(),
-  scan: vi.fn(), jobs: vi.fn(), warehouses: vi.fn(), movements: vi.fn(), authorize: vi.fn(),
+  state: vi.fn(), redirect: vi.fn(), scan: vi.fn(), jobs: vi.fn(), warehouses: vi.fn(), movements: vi.fn(), authorize: vi.fn(),
 }));
 vi.mock("@/lib/db", () => ({ db: {
   returnResolution: { findMany: mocks.resolutions },
@@ -14,11 +15,11 @@ vi.mock("@/lib/db", () => ({ db: {
   stockMovement: { findMany: mocks.movements },
   backgroundJob: { findMany: mocks.jobs },
 } }));
-vi.mock("@/lib/admin", () => ({ requireAdminAction: mocks.authorize, withAdminState: vi.fn() }));
+vi.mock("@/lib/admin", () => ({ requireAdminAction: mocks.authorize, withAdminState: () => mocks.state }));
 vi.mock("@/lib/admin/scanned-return.server", () => ({ scannedReturnPlan: mocks.scan, receiveScannedReturn: vi.fn() }));
 vi.mock("@/lib/admin/reclamation-fulfillment.server", () => ({ receiveReclamationReturn: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ redirect: mocks.redirect, RedirectType: { replace: "replace" }, useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 
 import ReturnsPage from "@/app/admin/erp/povrati/page";
 
@@ -34,6 +35,8 @@ const returnedOrder = (id: string, shipments = [{
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.state.mockResolvedValue({ ok: false, message: "Prijem nije potvrđen." });
+  mocks.redirect.mockImplementation(() => { throw new Error("NEXT_REDIRECT"); });
   mocks.scan.mockRejectedValue(new Error("Paket nije pronađen."));
   mocks.resolutions.mockResolvedValue([]);
   mocks.jobs.mockResolvedValue([]);
@@ -280,4 +283,39 @@ it("filters opened evidence using the validated GLS parcel rather than the scann
   const html = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ evidence: "1", q: "090028529538" }) }));
   expect(html).toContain('data-return-key="order:barcode"');
   expect(html).not.toContain("Nema povrata za uneti kod");
+});
+
+function receiptAction(node: ReactNode): ((state: unknown, data: FormData) => Promise<unknown>) | undefined {
+  if (Array.isArray(node)) {
+    for (const child of node) { const found = receiptAction(child); if (found) return found; }
+  } else if (isValidElement<{ action?: (state: unknown, data: FormData) => Promise<unknown>; children?: ReactNode }>(node)) {
+    if (node.props.action?.name === "receiveScannedAction") return node.props.action;
+    return receiptAction(node.props.children);
+  }
+}
+
+describe("next return after receipt", () => {
+  async function action() {
+    mocks.scan.mockResolvedValue({ kind: "order", code: "9002838514", received: false,
+      shipment: { orderId: "o", order: { number: "SPC-TEST" }, provider: "MYGLS", status: "FAILED", packageCount: 1, providerParcelNumbers: [9002838514] },
+      lines: [{ id: "i", sku: "110085", name: "Stolica", totalQuantity: 1, units: [1] }],
+    });
+    const found = receiptAction(await ReturnsPage({ searchParams: Promise.resolve({ q: "09002838514" }) }));
+    expect(found).toBeDefined();
+    return found!;
+  }
+  it("opens the next scan with camera intent and the same warehouse only on successful receipt", async () => {
+    const receive = await action();
+    mocks.state.mockResolvedValue({ ok: true, message: "Paket je primljen." });
+    const data = new FormData(); data.set("warehouseId", "ananas-test");
+    await expect(receive({}, data)).rejects.toThrow("NEXT_REDIRECT");
+    expect(mocks.redirect).toHaveBeenCalledWith("/admin/erp/povrati?camera=1&warehouse=ananas-test", "replace");
+  });
+  it("keeps the parcel and error visible when receipt or audit fails", async () => {
+    const receive = await action();
+    const failure = { ok: false, message: "Audit nije potvrđen." };
+    mocks.state.mockResolvedValue(failure);
+    expect(await receive({}, new FormData())).toEqual(failure);
+    expect(mocks.redirect).not.toHaveBeenCalled();
+  });
 });

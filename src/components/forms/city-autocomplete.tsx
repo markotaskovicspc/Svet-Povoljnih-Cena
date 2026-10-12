@@ -22,6 +22,7 @@ import {
 } from "@/data/serbian-places";
 
 export type CityAutocompletePlace = SerbianPlace & {
+  aliases?: string[];
   code?: string;
   townId?: number;
   municipalityId?: number | null;
@@ -51,7 +52,7 @@ export function resolveExactRemoteCity(
   const normalizedQuery = normalizedPlaceName(query);
   const exact = items.filter(
     (item) =>
-      normalizedPlaceName(item.name) === normalizedQuery &&
+      [item.name, ...(item.aliases ?? [])].some(name => normalizedPlaceName(name) === normalizedQuery) &&
       Number.isInteger(item.townId) &&
       Number(item.townId) > 0,
   );
