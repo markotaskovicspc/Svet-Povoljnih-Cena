@@ -23,8 +23,8 @@ beforeEach(() => {
   mocks.granularity.mockReturnValue("week");
   mocks.authorize.mockResolvedValue(undefined);
   mocks.daily.mockResolvedValue([
-    { day: "2026-09-11", visits: 0, pageViews: 0 },
-    { day: "2026-09-10", visits: 2, pageViews: 5 },
+    { day: "2026-09-11", visits: 0, pageViews: 0, orderValue: 0 },
+    { day: "2026-09-10", visits: 2, pageViews: 5, orderValue: 12345.67 },
   ]);
   mocks.summary.mockResolvedValue({
     visitors: 2, purchasers: 0, purchaseValue: 0, cartBuyers: 0, convertedCartBuyers: 0,
@@ -63,9 +63,11 @@ it("exports daily site totals and zero days even when page details use weekly gr
     "Posete po danu", "Sažetak", "Stranice",
   ]);
   const daily = workbook.getWorksheet("Posete po danu")!;
-  expect(daily.getRow(1).values).toEqual([, "Dan", "Ukupno poseta", "Pregledi stranica"]);
-  expect(daily.getRow(2).values).toEqual([, "2026-09-11", 0, 0]);
-  expect(daily.getRow(3).values).toEqual([, "2026-09-10", 2, 5]);
+  expect(daily.getRow(1).values).toEqual([, "Dan", "Ukupno poseta", "Pregledi stranica", "Vrednost porudžbina (RSD)"]);
+  expect(daily.getRow(2).values).toEqual([, "2026-09-11", 0, 0, 0]);
+  expect(daily.getRow(3).values).toEqual([, "2026-09-10", 2, 5, 12345.67]);
+  expect(daily.getCell("D3").numFmt).toBe('#,##0.00 "RSD"');
+  expect(daily.autoFilter).toBe("A1:D3");
 });
 
 it("does not read analytics or export when authorization fails", async () => {

@@ -8,9 +8,10 @@ export type DailyVisitsReportRow = {
   day: string;
   visits: number;
   pageViews: number;
+  orderValue: number;
 };
 
-/** Count each session once across the entire site for each Belgrade day. */
+/** Daily site sessions and web order totals, using Belgrade calendar days. */
 export async function getDailyVisitsReport(
   period: ReportPeriod,
 ): Promise<DailyVisitsReportRow[]> {
@@ -27,7 +28,15 @@ export async function getDailyVisitsReport(
     SELECT
       to_char(d.day, 'YYYY-MM-DD') AS day,
       COUNT(DISTINCT COALESCE(a."sessionId", a."anonymousId"))::int AS visits,
-      COUNT(a.id)::int AS "pageViews"
+      COUNT(a.id)::int AS "pageViews",
+      (
+        SELECT COALESCE(SUM(o.total), 0)::double precision
+        FROM "Order" o
+        WHERE o.channel = 'WEB'
+          AND o.status NOT IN ('OTKAZANO', 'VRACENO')
+          AND o."createdAt" >= (d.day AT TIME ZONE ${REPORT_TIME_ZONE}) AT TIME ZONE 'UTC'
+          AND o."createdAt" < ((d.day + interval '1 day') AT TIME ZONE ${REPORT_TIME_ZONE}) AT TIME ZONE 'UTC'
+      ) AS "orderValue"
     FROM days d
     LEFT JOIN "AnalyticsEvent" a
       ON a.type = 'PAGE_VIEW'

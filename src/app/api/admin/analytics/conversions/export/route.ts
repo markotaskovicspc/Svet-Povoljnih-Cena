@@ -50,17 +50,20 @@ export async function GET(request: Request) {
     { header: "Dan", key: "day", width: 16 },
     { header: "Ukupno poseta", key: "visits", width: 20 },
     { header: "Pregledi stranica", key: "pageViews", width: 22 },
+    { header: "Vrednost porudžbina (RSD)", key: "orderValue", width: 28 },
   ];
   daily.addRows(dailyRows);
   styleHeader(daily.getRow(1));
   daily.getCell("A1").note = "Kalendarski dan po vremenu u Srbiji. Današnji podaci još nisu konačni.";
   daily.getCell("B1").note = "Ista sesija računa se jednom dnevno na celom sajtu. Samo posete uz saglasnost za analitiku.";
+  daily.getCell("D1").note = "Sve web porudžbine po datumu kreiranja u Srbiji, sa dostavom i montažom, bez otkazanih i vraćenih. Ne zavisi od saglasnosti za analitiku.";
   daily.autoFilter = {
     from: { row: 1, column: 1 },
-    to: { row: Math.max(1, dailyRows.length + 1), column: 3 },
+    to: { row: Math.max(1, dailyRows.length + 1), column: daily.columns.length },
   };
   daily.getColumn("visits").numFmt = "#,##0";
   daily.getColumn("pageViews").numFmt = "#,##0";
+  daily.getColumn("orderValue").numFmt = '#,##0.00 "RSD"';
 
   const overview = workbook.addWorksheet("Sažetak");
   overview.columns = [

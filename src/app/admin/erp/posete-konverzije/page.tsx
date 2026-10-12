@@ -250,7 +250,7 @@ export default async function AnalyticsConversionPage({
         </div>
 
         <Card>
-          <CardTitle description={`${period.label} · Vreme u Srbiji. Ista sesija računa se jednom dnevno na celom sajtu. Prikazuju se samo posete uz saglasnost za analitiku; današnji podaci još nisu konačni.`}>
+          <CardTitle description={`${period.label} · Vreme u Srbiji. Ista sesija računa se jednom dnevno na celom sajtu. Prikazuju se samo posete uz saglasnost za analitiku. Vrednost uključuje sve web porudžbine po datumu kreiranja, sa dostavom i montažom, bez otkazanih i vraćenih. Današnji podaci još nisu konačni.`}>
             Posete po danu
           </CardTitle>
           <DataTable
@@ -258,6 +258,7 @@ export default async function AnalyticsConversionPage({
               { key: "day", label: "Dan" },
               { key: "visits", label: "Ukupno poseta", align: "right" },
               { key: "pageViews", label: "Pregledi stranica", align: "right" },
+              { key: "orderValue", label: "Vrednost porudžbina", align: "right" },
             ]}
             rows={dailyVisits.map((row) => ({
               id: row.day,
@@ -265,6 +266,7 @@ export default async function AnalyticsConversionPage({
                 day: row.day.split("-").reverse().join(".") + ".",
                 visits: row.visits.toLocaleString("sr-Latn-RS"),
                 pageViews: row.pageViews.toLocaleString("sr-Latn-RS"),
+                orderValue: <span className="whitespace-nowrap tabular-nums">{formatRsd(row.orderValue, true)}</span>,
               },
             }))}
             empty="Nema dana u izabranom periodu."
