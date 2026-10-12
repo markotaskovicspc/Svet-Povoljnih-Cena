@@ -46,6 +46,15 @@ describe("physical return parcel evidence", () => {
     await expect(confirmReturnParcelArrival({ code: "AAA12345", actorId: "admin" })).rejects.toThrow("više pošiljki");
     expect(m.transaction).not.toHaveBeenCalled();
   });
+  it("reuses a server-validated receipt plan while retaining the return lock and idempotent arrival", async () => {
+    m.find.mockResolvedValue([{ id: "s", orderId: "o", provider: "MYGLS", providerParcelNumbers: [9002852953] }]);
+    const resolved = await findReturnParcel("090028529538");
+    m.find.mockClear();
+    await expect(confirmReturnParcelArrival({ code: "090028529538", actorId: "admin" }, resolved)).resolves.toMatchObject({ orderId: "o" });
+    expect(m.find).not.toHaveBeenCalled();
+    expect(m.lock).toHaveBeenCalledWith(expect.anything(), "o");
+    expect(m.upsert).toHaveBeenCalledWith(expect.objectContaining({ where: { shipmentId_parcelNumber: { shipmentId: "s", parcelNumber: "9002852953" } }, update: {} }));
+  });
   it("validates scanner input before querying", async () => {
     await expect(confirmReturnParcelArrival({ code: "<x>", actorId: "admin" })).rejects.toThrow("važeći kod");
     expect(m.find).not.toHaveBeenCalled();

@@ -44,7 +44,7 @@ export async function receiveScannedReturn(input: { code: string; warehouseId: s
   if (plan.received) return { warehouse, orderId: plan.shipment.orderId, alreadyReceived: true, jobIds: [] as string[] };
   // Physical arrival remains valid evidence if a later stock/fiscal step fails.
   // Each receipt has a stable key, so retry cannot post a unit twice.
-  await confirmReturnParcelArrival({ code: input.code, actorId: input.actorId });
+  await confirmReturnParcelArrival({ code: input.code, actorId: input.actorId }, plan);
   const jobIds: string[] = [];
   if (plan.kind === 'reclamation') {
     await receiveReclamationReturn({ reclamationId: plan.shipment.reclamation!.id, parcelNumber: plan.code, warehouseId: warehouse.id, actorId: input.actorId });

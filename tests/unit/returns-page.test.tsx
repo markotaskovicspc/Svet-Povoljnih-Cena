@@ -61,7 +61,7 @@ describe("ERP returns page", () => {
       ] } } },
       lines: [{ id: "i", sku: "110085", name: "Stolica", totalQuantity: 2, units: [2] }],
     });
-    const html = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ q: "09002838515" }) }));
+    const html = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ evidence: "1", q: "09002838515" }) }));
     expect(html).toContain("Paket 2/2");
     expect(html).toContain("MYGLS · Neuspešna isporuka");
     expect(html).not.toContain("MYGLS · Isporučeno");
@@ -71,7 +71,7 @@ describe("ERP returns page", () => {
       shipment: { orderId: "o", order: { number: "SPC-2026-001117" }, reclamation: { id: "r", number: "R-1-SPC-2026-001117" }, provider: "MYGLS", status: "DELIVERED", packageCount: 2, providerParcelNumbers: [9002838514, 9002838515] },
       lines: [{ id: "i", sku: "110085", name: "CONFERENCE MASTER", totalQuantity: 2, units: [1], description: "123456789 · Stolice · crna" }],
     });
-    const html = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ q: "09002838514" }) }));
+    const html = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ evidence: "1", q: "09002838514" }) }));
     expect(html).toContain("Artikli u povratu");
     expect(html).toContain("Skenirani paket i status");
     expect(html).toContain("× 2</strong>");
@@ -90,7 +90,7 @@ describe("ERP returns page", () => {
         { Code: "AAA2", sku: "SKU-parcel", packedQuantity: 1 },
       ] },
     }] }]);
-    const html = renderToStaticMarkup(await ReturnsPage());
+    const html = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ evidence: "1" }) }));
     expect(html).toMatch(/Komad 1\/2<\/p><p[^>]*>Paket: AAA1 \(dolazak nije potvrđen\)/);
     expect(html).toMatch(/Komad 2\/2<\/p><p[^>]*>Paket: AAA2 \(dolazak potvrđen\)/);
     expect(html).toContain("Skeniraj paket ili unesi broj porudžbine");
@@ -98,7 +98,7 @@ describe("ERP returns page", () => {
 
   it("shows the unresolved old shipment for stock-only receipt while the new picking stays linked", async () => {
     mocks.reshipments.mockResolvedValue([{ id: "r", orderId: "o", batchId: "b", reason: "Kurir ne nalazi robu", order: { number: "SPC-RETRY" }, batch: { number: "PRE-NEW" }, sourceShipmentId: "s", sourceShipment: { provider: "X_EXPRESS", trackingNo: "OLD-TRACK", status: "IN_TRANSIT" }, items: [{ id: "ri", sku: "SKU", name: "Sto", quantity: 2, receivedQty: 1 }] }]);
-    const html = renderToStaticMarkup(await ReturnsPage());
+    const html = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ evidence: "1" }) }));
     expect(html).toContain("OLD-TRACK");
     expect(html).toContain("Primljeno 1/2 kom");
     expect(html).toContain("Primi 1 kom na lager");
@@ -117,7 +117,7 @@ describe("ERP returns page", () => {
     mocks.orders.mockResolvedValue([returnedOrder("1")]);
     mocks.movements.mockResolvedValue([{ id: "receipt", idempotencyKey: "order-return:SPC-1:item-1:1", warehouseId: "warehouse", createdAt: new Date(), warehouse: { code: "MAG-004", name: "Povrati" } }]);
     mocks.jobs.mockImplementation(({ where }) => where.kind ? [] : [{ idempotencyKey: "return-fiscal:receipt", status: "RETRY", lastError: "Refundacija čeka identifikaciju kupca." }]);
-    const html = renderToStaticMarkup(await ReturnsPage());
+    const html = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ evidence: "1" }) }));
     expect(html).toContain("Refundacija čeka identifikaciju kupca.");
     expect(html).toContain("Dopuni / ponovi refundaciju");
     expect(html).toContain('name="buyerId"');
@@ -129,7 +129,7 @@ describe("ERP returns page", () => {
     mocks.orders.mockResolvedValue([{ ...order, items: [{ ...order.items[0], fiscalLines: [{ refundedQty: 1 }] }],
       paymentRefunds: [{ status: "PENDING", error: "Povraćaj novca zahteva ručnu potvrdu." }] }]);
     mocks.movements.mockResolvedValue([{ id: "receipt", idempotencyKey: "order-return:SPC-1:item-1:1", warehouseId: "warehouse", createdAt: new Date(), warehouse: { code: "MAG-004", name: "Povrati" } }]);
-    const html = renderToStaticMarkup(await ReturnsPage());
+    const html = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ evidence: "1" }) }));
     expect(html).toContain("Fiskalna refundacija obrađena.");
     expect(html).toContain("Povraćaj novca zahteva ručnu potvrdu.");
     expect(html).not.toContain("Dopuni / ponovi refundaciju");
@@ -138,7 +138,7 @@ describe("ERP returns page", () => {
   it("shows the seven courier returns even when no reclamation return exists", async () => {
     mocks.orders.mockResolvedValue(Array.from({ length: 7 }, (_, index) => returnedOrder(String(index))));
     mocks.count.mockResolvedValue(7);
-    const html = renderToStaticMarkup(await ReturnsPage());
+    const html = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ evidence: "1" }) }));
     expect(mocks.authorize).toHaveBeenCalledWith(["OPS"]);
     for (let index = 0; index < 7; index++) {
       expect(html).toContain(`SPC-${index}`);
@@ -173,7 +173,7 @@ describe("ERP returns page", () => {
     order.shipments.push({ ...order.shipments[0], id: "second", trackingNo: "SECOND-PARCEL" });
     mocks.orders.mockResolvedValue([order]);
     mocks.count.mockResolvedValue(501);
-    const html = renderToStaticMarkup(await ReturnsPage());
+    const html = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ evidence: "1" }) }));
     expect(html.match(/SPC-multiple/g)).toHaveLength(1);
     expect(html).toContain("SECOND-PARCEL");
     expect(html).toContain("Prikazano poslednjih 1 od 501 vraćenih porudžbina.");
@@ -189,7 +189,7 @@ describe("ERP returns page", () => {
       idempotencyKey: "reclamation-return:claim", createdAt: new Date("2026-09-10T10:00:00Z"),
       warehouse: { code: "POV", name: "Povratna roba" },
     }]);
-    const active = renderToStaticMarkup(await ReturnsPage());
+    const active = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ evidence: "1" }) }));
     expect(active).not.toContain("R-1-SPC-1");
     const html = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ view: "completed" }) }));
     expect(html).toContain("R-1-SPC-1");
@@ -203,7 +203,7 @@ describe("ERP returns page", () => {
 it("moves lost returns out of the active queue and preserves their reason in completed", async () => {
   mocks.orders.mockResolvedValue([returnedOrder("lost")]);
   mocks.resolutions.mockResolvedValue([{ key: "order:lost", reason: "Kurir potvrdio gubitak", createdAt: new Date() }]);
-  const active = renderToStaticMarkup(await ReturnsPage());
+  const active = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ evidence: "1" }) }));
   expect(active).not.toContain("SPC-lost");
   expect(active).toContain("Nema aktivnih povrata");
   const completed = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ view: "completed" }) }));
@@ -215,19 +215,19 @@ it("moves lost returns out of the active queue and preserves their reason in com
 it("removes fully received reshipment returns but keeps partial receipts active", async () => {
   const retry = { id: "r", orderId: "o", batchId: null, batch: null, reason: "Ponovno slanje", order: { number: "SPC-RETRY" }, sourceShipmentId: "s", sourceShipment: { provider: "X_EXPRESS", trackingNo: "OLD", status: "RETURNED" }, items: [{ id: "ri", sku: "SKU", name: "Sto", quantity: 2, receivedQty: 2 }] };
   mocks.reshipments.mockResolvedValue([retry]);
-  expect(renderToStaticMarkup(await ReturnsPage())).not.toContain("SPC-RETRY");
+  expect(renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ evidence: "1" }) }))).not.toContain("SPC-RETRY");
   const completed = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ view: "completed" }) }));
   expect(completed).toContain("SPC-RETRY");
   expect(completed).not.toContain("Primi 1 kom");
   mocks.reshipments.mockResolvedValue([{ ...retry, items: [{ ...retry.items[0], receivedQty: 1 }] }]);
-  expect(renderToStaticMarkup(await ReturnsPage())).toContain("Primi 1 kom");
+  expect(renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ evidence: "1" }) }))).toContain("Primi 1 kom");
 });
 
 it("separates unconfirmed courier returns without hiding or completing them", async () => {
   const order = returnedOrder("unconfirmed");
   order.shipments[0].returnArrivals = [];
   mocks.orders.mockResolvedValue([order]);
-  const active = renderToStaticMarkup(await ReturnsPage());
+  const active = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ evidence: "1" }) }));
   expect(active).not.toContain("SPC-unconfirmed");
   expect(active).toContain("Za proveru (1)");
   const verification = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ view: "verification" }) }));
@@ -240,7 +240,7 @@ it("shows all four parcel codes and finds a non-primary GLS code with a leading 
   mocks.orders.mockResolvedValue([{ ...order, shipments: [{ ...order.shipments[0], provider: "MYGLS", trackingNo: "9002829867", packageCount: 4,
     providerParcelNumbers: [9002829867, 9002829868, 9002829869, 9002829870], returnArrivals: [{ parcelNumber: "9002829869" }] }],
     items: [{ ...order.items[0], qty: 7, productId: "product" }] }]);
-  const html = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ q: "09002829869" }) }));
+  const html = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ evidence: "1", q: "09002829869" }) }));
   for (const code of ["09002829867", "09002829868", "09002829869", "09002829870"]) expect(html).toContain(code);
   expect(html).toContain("Broj paketa: 4");
   expect(html).toContain("Komad 7/7");
@@ -250,5 +250,34 @@ it("shows all four parcel codes and finds a non-primary GLS code with a leading 
 it("keeps unrelated delivered supplier items out of the returned goods", async () => {
   const order = returnedOrder("mixed");
   mocks.orders.mockResolvedValue([{ ...order, shipments: [{ ...order.shipments[0], rawCreateResponse: { assignment: { orderItemIds: ["item-mixed"] } } }], items: [...order.items, { id: "other", sku: "UNRELATED-DELIVERED", name: "Other", qty: 1 }] }]);
-  expect(renderToStaticMarkup(await ReturnsPage())).not.toContain("UNRELATED-DELIVERED");
+  expect(renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ evidence: "1" }) }))).not.toContain("UNRELATED-DELIVERED");
+});
+
+
+it("keeps closed evidence off the scanner's database path", async () => {
+  const html = renderToStaticMarkup(await ReturnsPage());
+  expect(html).toContain("Učitaj evidenciju povrata");
+  expect(mocks.orders).not.toHaveBeenCalled();
+  expect(mocks.count).not.toHaveBeenCalled();
+  expect(mocks.reshipments).not.toHaveBeenCalled();
+  expect(mocks.reclamations).not.toHaveBeenCalled();
+  expect(mocks.movements).not.toHaveBeenCalled();
+  expect(mocks.resolutions).not.toHaveBeenCalled();
+  expect(mocks.jobs).not.toHaveBeenCalled();
+});
+it("looks up a scanner code without waiting for full return reports", async () => {
+  mocks.orders.mockImplementation(() => new Promise(() => {}));
+  const html = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ q: "090028529538" }) }));
+  expect(mocks.scan).toHaveBeenCalledWith("90028529538");
+  expect(html).toContain("Paket nije pronađen.");
+  expect(mocks.orders).not.toHaveBeenCalled();
+});
+it("filters opened evidence using the validated GLS parcel rather than the scanner check digit", async () => {
+  const order = returnedOrder("barcode");
+  const shipment = { ...order.shipments[0], orderId: order.id, order, provider: "MYGLS", trackingNo: "9002852950", packageCount: 4, providerParcelNumbers: [9002852950, 9002852951, 9002852952, 9002852953] };
+  mocks.orders.mockResolvedValue([{ ...order, shipments: [shipment] }]);
+  mocks.scan.mockResolvedValue({ shipment, kind: "order", code: "9002852953", received: true, lines: [] });
+  const html = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ evidence: "1", q: "090028529538" }) }));
+  expect(html).toContain('data-return-key="order:barcode"');
+  expect(html).not.toContain("Nema povrata za uneti kod");
 });

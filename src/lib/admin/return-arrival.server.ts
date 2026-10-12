@@ -39,8 +39,10 @@ export async function findReturnParcel(input: string) {
 export async function confirmReturnParcelArrival(input: {
   code: string;
   actorId: string;
-}) {
-  const { shipment, code } = await findReturnParcel(input.code);
+}, resolved?: Awaited<ReturnType<typeof findReturnParcel>>) {
+  // Only a trusted server-side receipt plan may supply the already validated
+  // parcel. Other callers still perform the full identity/ambiguity check.
+  const { shipment, code } = resolved ?? await findReturnParcel(input.code);
   return db.$transaction(async (tx) => {
     await lockOrderReturn(tx, shipment.orderId);
     const arrival = await tx.returnParcelArrival.upsert({
