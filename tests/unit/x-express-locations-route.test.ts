@@ -32,6 +32,12 @@ describe("X Express location search", () => {
     findMany.mockResolvedValue([]);
     expect(await(await GET(new Request('http://localhost/api/x-express/locations?q=Batajnica'))).json()).toEqual({items:[]});
   });
+  it('displays the verified Čukarica municipality for Žarkovo', async () => {
+    findMany.mockImplementation(async ({where}) => where.OR?.some((x: {id?:number}) => x.id===791113)
+      ? [{id:791113,name:'Beograd (Čukarica)',postalCode:'11030',municipalityId:70254}] : []);
+    const result=await(await GET(new Request('http://localhost/api/x-express/locations?q=Zarkovo'))).json();
+    expect(result.items[0]).toMatchObject({townId:791113,name:'Žarkovo',postalCode:'11030',displayName:'Žarkovo (Čukarica) - 11030'});
+  });
   it('prefers a provider-specific Batajnica record if one is later added',async()=>{
     findMany.mockResolvedValueOnce([{id:123,name:'Batajnica',postalCode:'11273',municipalityId:70157}]).mockResolvedValue([]);
     const result=await(await GET(new Request('http://localhost/api/x-express/locations?q=Batajnica'))).json();

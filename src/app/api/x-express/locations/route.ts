@@ -103,7 +103,7 @@ export async function GET(req: Request) {
     const aliasItems = aliases.flatMap(a => {
       const parent = parents.find(p => p.id === a.townId && p.name === a.townName);
       return parent ? [{code: String(parent.id), townId: parent.id, municipalityId: parent.municipalityId,
-        name: a.name, postalCode: a.postalCode, displayName: `${a.name} (Zemun) - ${a.postalCode}`,
+        name: a.name, postalCode: a.postalCode, displayName: `${a.name} (${parent.name.replace(/^Beograd \((.+)\)$/, "$1")}) - ${a.postalCode}`,
         aliases: a.aliases}] : [];
     });
     if (aliasItems.length) return NextResponse.json({items: aliasItems});
