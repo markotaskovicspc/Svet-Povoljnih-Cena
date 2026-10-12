@@ -7,11 +7,11 @@ vi.mock("@/lib/api/checkout", () => ({ createOrder: mocks.createOrder }));
 vi.mock("@/lib/db", () => ({ db: { product: { findMany: mocks.products }, xExpressTown: { findMany: mocks.towns } } }));
 vi.mock("@/lib/env", () => ({ envValue: () => "test-secret" }));
 vi.mock("@/lib/security/rate-limit", () => ({ checkRateLimitForRequest: async () => ({ ok: true }), rateLimitJson: vi.fn() }));
-import { POST } from "@/app/api/admin/erp/order-import/route";
+import { GET, POST } from "@/app/api/admin/erp/order-import/route";
 import { signImportQuote, type ImportQuote } from "@/lib/admin/order-import/quote";
 const input: ImportQuote["input"] = { checkoutSessionId: "same-retry-12345", lines: [{ sku: "MOP", qty: 1 }], shipping: { firstName: "Test", lastName: "Kupac", phone: "0600000000", street: "Test ulica", houseNumber: "2", city: "Jasenovik", postalCode: "18207", country: "RS" }, billingSameAsShipping: true, shippingMethod: "KURIR", paymentMethod: "POUZECE_GOTOVINA", consent: true };
 const request = (body: unknown, origin = "https://spc.test") => new NextRequest("https://spc.test/api/admin/erp/order-import", { method: "POST", headers: { "content-type": "application/json", origin }, body: JSON.stringify(body) });
-beforeEach(() => { vi.resetAllMocks(); mocks.admin.mockResolvedValue({ id: "marko", role: "OPS" }); mocks.towns.mockResolvedValue([{ id: 123, name: "Jasenovik", displayName: null }]); });
+beforeEach(() => { vi.resetAllMocks(); mocks.admin.mockResolvedValue({ id: "marko", role: "OPS" }); mocks.towns.mockResolvedValue([{ id: 123, name: "Jasenovik", displayName: null, postalCode: "18207" }]); });
 afterEach(() => vi.unstubAllGlobals());
 describe("operator import creation boundary", () => {
   it("reads a chat, searches by model, links the catalog product and sets operator defaults", async () => {
@@ -31,7 +31,7 @@ describe("operator import creation boundary", () => {
   });
   it("prefills a verified locality and postal code when the chat provides no postcode", async () => {
     mocks.products.mockResolvedValue([]);
-    mocks.towns.mockResolvedValue([{ id: 791113 }]);
+    mocks.towns.mockResolvedValue([{ id: 791113, name: "Beograd (Čukarica)", postalCode: "11030" }]);
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ draft: {
       firstName: "Test", lastName: "Kupac", phone: "0600000000", email: "", street: "Test", houseNumber: "35", city: "ZARKOVO-BG", postalCode: "",
       paymentMethod: "", shippingMethod: "", lines: [], deliveryAmount: null, totalAmount: null, warnings: ["Nedostaje poštanski broj.", "Poštanski broj nije naveden.", "Proverite telefon."],
@@ -70,15 +70,38 @@ describe("operator import creation boundary", () => {
     expect(mocks.createOrder).not.toHaveBeenCalled();
   });
   it("accepts a unique exact town with omitted diacritics, and checks an operator-selected town", async () => {
-    mocks.towns.mockResolvedValue([{ id: 456, name: "Žarkovo", displayName: null }]);
+    mocks.towns.mockResolvedValue([{ id: 456, name: "Žarkovo", displayName: null, postalCode: "11030" }]);
     mocks.createOrder.mockResolvedValue({ ok: true, data: { total: 1897 } });
     const shipping = { ...input.shipping, city: "Zarkovo", postalCode: "11030" };
     expect((await POST(request({ action: "preview", input: { ...input, shipping } }))).status).toBe(200);
     expect(mocks.createOrder.mock.calls[0][0].shipping.xExpressTownId).toBe(456);
-    expect((await POST(request({ action: "preview", input: { ...input, shipping: { ...shipping, xExpressTownId: 456 } } }))).status).toBe(200);
-    expect(mocks.towns.mock.calls[1][0].where).toEqual({ active: true, id: 456 });
+    expect((await POST(request({ action: "preview", input: { ...input, shipping: { ...shipping, city: "Žarkovo", xExpressTownId: 456 } } }))).status).toBe(200);
+    expect(mocks.towns.mock.calls.at(-1)[0].where).toEqual({ active: true, id: 456 });
     mocks.towns.mockResolvedValue([]);
-    expect((await POST(request({ action: "preview", input: { ...input, shipping: { ...shipping, xExpressTownId: 456 } } }))).status).toBe(400);
+    expect((await POST(request({ action: "preview", input: { ...input, shipping: { ...shipping, city: "Žarkovo", xExpressTownId: 456 } } }))).status).toBe(400);
+  });
+  it("fills a missing postcode for any exact active town before schema validation", async () => {
+    mocks.towns.mockResolvedValue([{ id: 777, name: "Niš", postalCode: "18000" }]);
+    mocks.createOrder.mockResolvedValue({ ok: true, data: { total: 998 } });
+    const response = await POST(request({ action: "preview", input: { ...input, shipping: { ...input.shipping, city: "НИШ", postalCode: "" } } }));
+    expect(response.status).toBe(200);
+    expect((await response.json()).shipping).toMatchObject({ city: "Niš", postalCode: "18000", xExpressTownId: 777 });
+    expect(mocks.createOrder.mock.calls[0][3].previewOnly).toBe(true);
+  });
+  it("blocks a selected town whose address changed since the signed review", async () => {
+    mocks.towns.mockResolvedValue([{ id: 123, name: "Jasenovik", postalCode: "99999" }]);
+    const quote = signImportQuote({ input: { ...input, shipping: { ...input.shipping, xExpressTownId: 123 } }, actorId: "marko", expires: Date.now() + 60000, total: 998 }, "test-secret");
+    expect((await POST(request({ action: "create", quote, confirmed: true }))).status).toBe(400);
+    expect(mocks.createOrder).not.toHaveBeenCalled();
+  });
+  it("serves whole-dictionary suggestions only to authorized operators", async () => {
+    mocks.towns.mockResolvedValue([{ id: 777, name: "Niš", postalCode: "18000" }]);
+    const req = new NextRequest("https://spc.test/api/admin/erp/order-import?town=" + encodeURIComponent("НИШ"));
+    expect(await (await GET(req)).json()).toMatchObject({ items: [{ townId: 777, name: "Niš", autoResolved: true }] });
+    expect(mocks.towns.mock.calls[0][0]).toMatchObject({ where: { active: true }, select: { postalCode: true } });
+    mocks.admin.mockResolvedValue(null);
+    expect((await GET(req)).status).toBe(401);
+    expect(mocks.products).not.toHaveBeenCalled();
   });
   it("does not require a courier dictionary for truck deliveries", async () => {
     mocks.createOrder.mockResolvedValue({ ok: true, data: { total: 998 } });
@@ -86,14 +109,14 @@ describe("operator import creation boundary", () => {
     expect(mocks.towns).not.toHaveBeenCalled();
   });
   it("resolves the photographed Žarkovo locality through its verified active routing town", async () => {
-    mocks.towns.mockResolvedValue([{ id: 791113 }]);
+    mocks.towns.mockResolvedValue([{ id: 791113, name: "Beograd (Čukarica)", postalCode: "11030" }]);
     mocks.createOrder.mockResolvedValue({ ok: true, data: { total: 1897 } });
     expect((await POST(request({ action: "preview", input: { ...input, shipping: { ...input.shipping, city: "Zarkovo BG", postalCode: "11030" } } }))).status).toBe(200);
     expect(mocks.createOrder.mock.calls[0][0].shipping.xExpressTownId).toBe(791113);
-    expect(mocks.towns.mock.calls[0][0].where).toEqual({ active: true, id: 791113, name: "Beograd (Čukarica)" });
+    expect(mocks.towns.mock.calls[0][0].where).toEqual({ active: true });
   });
   it("corrects the photographed exact locality's inferred postal code and returns it for review", async () => {
-    mocks.towns.mockResolvedValue([{ id: 791113 }]);
+    mocks.towns.mockResolvedValue([{ id: 791113, name: "Beograd (Čukarica)", postalCode: "11030" }]);
     mocks.createOrder.mockResolvedValue({ ok: true, data: { total: 1897 } });
     const response = await POST(request({ action: "preview", input: { ...input, shipping: { ...input.shipping, city: "ZARKOVO-BG", postalCode: "11000" } } }));
     expect(response.status).toBe(200);

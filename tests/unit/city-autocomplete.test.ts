@@ -72,3 +72,8 @@ describe("visibleCityError", () => {
     ).toBe("Unesite grad");
   });
 });
+
+it("does not auto-select an explicitly ambiguous or fuzzy server suggestion", () => {
+  expect(resolveExactRemoteCity([{ name: "Novo Selo", postalCode: "18250", townId: 1, autoResolved: false }], "Novo Selo", "18250")).toBeNull();
+  expect(resolveExactRemoteCity([{ name: "Novi Sad (Veternik)", postalCode: "21203", townId: 3, autoResolved: true }], "Veternik-NS")).toMatchObject({ townId: 3 });
+});
