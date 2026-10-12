@@ -3,13 +3,27 @@ import { displayReturnParcelNumber, normalizeReturnParcelNumber, returnParcelNum
 const m = vi.hoisted(() => ({ find: vi.fn(), transaction: vi.fn(), upsert: vi.fn(), lock: vi.fn() }));
 vi.mock("@/lib/db", () => ({ db: { shipment: { findMany: m.find }, $transaction: m.transaction } }));
 vi.mock("@/lib/fiscal/return-lock", () => ({ lockOrderReturn: m.lock }));
-import { confirmReturnParcelArrival } from "@/lib/admin/return-arrival.server";
+import { confirmReturnParcelArrival, findReturnParcel } from "@/lib/admin/return-arrival.server";
 beforeEach(() => {
   vi.clearAllMocks();
   m.transaction.mockImplementation((run) => run({ returnParcelArrival: { upsert: m.upsert } }));
   m.upsert.mockResolvedValue({ id: "arrival" });
 });
 describe("physical return parcel evidence", () => {
+  it.each([['090028529507', '9002852950'], ['090028529538', '9002852953']])('looks up the complete warehouse barcode %s using the saved GLS number', async (input, canonical) => {
+    m.find.mockResolvedValue([{ id: 's', provider: 'MYGLS', providerParcelNumbers: [9002852950, 9002852951, 9002852952, 9002852953] }]);
+    await expect(findReturnParcel(input)).resolves.toMatchObject({ code: canonical });
+    expect(m.find.mock.calls[0][0].where.OR).toContainEqual({ provider: 'MYGLS', OR: [
+      { trackingNo: { in: [canonical, canonical.padStart(11, '0')] } },
+      ...[canonical, canonical.padStart(11, '0'), Number(canonical)].map(value => ({ providerParcelNumbers: { array_contains: [value] } })),
+    ] });
+    expect(m.transaction).not.toHaveBeenCalled();
+  });
+  it('does not drop an invalid control digit to query a different parcel', async () => {
+    m.find.mockResolvedValue([]);
+    await expect(findReturnParcel('090028529506')).rejects.toThrow('nije pronađen');
+    expect(m.find.mock.calls[0][0].where.OR).not.toContainEqual(expect.objectContaining({ provider: 'MYGLS', OR: expect.any(Array) }));
+  });
   it("shows every X Express code exactly once, preserving parcel order", () => {
     expect(returnParcelNumbers({ id: "s", trackingNo: "AAA0850300957", providerParcelNumbers: ["AAA0850300957", "AAA0850300958", "AAA0850300959", "AAA0850300960"] })).toEqual(["AAA0850300957", "AAA0850300958", "AAA0850300959", "AAA0850300960"]);
   });

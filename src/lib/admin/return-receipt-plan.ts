@@ -1,4 +1,5 @@
 import { normalizeReturnParcelNumber, returnParcelNumbers, returnUnitParcelNumbers, type ReturnShipment } from './return-parcels';
+import { myGlsBarcodeParcelNumber } from '@/lib/mygls/parcel-barcode';
 
 export function reclamationParcelQuantity(shipment: ReturnShipment, item: { id: string; sku: string; qty: number }, code: string) {
   const canonical = normalizeReturnParcelNumber(code);
@@ -16,12 +17,14 @@ export function reclamationParcelQuantity(shipment: ReturnShipment, item: { id: 
   return quantity;
 }
 
-/** Scanner suffixes are accepted only when the provider response proves the alias. */
+/** Accept provider aliases or a validated GLS barcode of a saved parcel. */
 export function canonicalReturnParcel(shipment: ReturnShipment, input: string) {
   const code = normalizeReturnParcelNumber(input);
   const numbers = returnParcelNumbers(shipment);
   if (numbers.includes(code)) return code;
   if (shipment.provider !== 'MYGLS') return null;
+  const barcodeNumber = myGlsBarcodeParcelNumber(code);
+  if (barcodeNumber && numbers.includes(barcodeNumber)) return barcodeNumber;
   const raw = shipment.rawCreateResponse;
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const data = raw as Record<string, unknown>;
