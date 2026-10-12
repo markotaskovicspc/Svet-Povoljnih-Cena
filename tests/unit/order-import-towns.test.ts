@@ -4,7 +4,7 @@ import { matchImportTown, searchImportTowns } from "@/lib/admin/order-import/tow
 const towns = [
   { id: 1, name: "Niš", postalCode: "18000" },
   { id: 2, name: "Beograd (Novi Beograd)", postalCode: "11070" },
-  { id: 3, name: "Novi Sad (Veternik)", postalCode: "21203" },
+  { id: 3, name: "Veternik", displayName: "Veternik (Novi Sad) - 21203", postalCode: "21203" },
   { id: 4, name: "Aranđelovac", postalCode: "34300" },
   { id: 5, name: "Novo Selo", postalCode: "18250" },
   { id: 6, name: "Novo Selo", postalCode: "36216" },

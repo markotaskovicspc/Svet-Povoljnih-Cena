@@ -12,10 +12,13 @@ export function importTownKey(value: string) {
 }
 const placeAliases = new Map(SERBIAN_PLACES.map(place => [importTownKey(place.name), (place.aliases ?? []).map(importTownKey)]));
 function keys(town: ImportTown) {
-  const names = [town.name, town.displayName].filter((n): n is string => !!n).map(importTownKey);
+  const labels = [town.name, town.displayName?.replace(/\s*[-–—]\s*\d{5}\s*$/, "")].filter((n): n is string => !!n);
+  const names = labels.map(importTownKey);
   // Reorder only hierarchy components, not words inside the locality name.
-  const hierarchy = town.name.match(/^(.+?)\s*(?:\((.+)\)|[—–-]\s*(.+))$/);
-  if (hierarchy) names.push(importTownKey(`${hierarchy[2] ?? hierarchy[3]} ${hierarchy[1]}`));
+  for (const label of labels) {
+    const hierarchy = label.match(/^(.+?)\s*(?:\((.+)\)|[—–-]\s*(.+))$/);
+    if (hierarchy) names.push(importTownKey(`${hierarchy[2] ?? hierarchy[3]} ${hierarchy[1]}`));
+  }
   for (const name of [...names]) names.push(...(placeAliases.get(name) ?? []));
   return names;
 }
