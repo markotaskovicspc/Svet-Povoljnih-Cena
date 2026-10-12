@@ -24,6 +24,7 @@ export function OrderImportForm() {
   const [error, setError] = useState("");
   const [quote, setQuote] = useState("");
   const [totals, setTotals] = useState<Totals | null>(null);
+  const [staffLoyalty, setStaffLoyalty] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [attempted, setAttempted] = useState(false);
   const [order, setOrder] = useState<{ id: string; number: string } | null>(null);
@@ -46,7 +47,7 @@ export function OrderImportForm() {
   }
   async function read() {
     setBusy("read"); setError("");
-    try { const form = new FormData(); if (mode === "image" && file) form.set("image", file); else form.set("text", text); const result = await request(form); setDraft(result.draft); setQuote(""); setTotals(null); setAttempted(false); }
+    try { const form = new FormData(); if (mode === "image" && file) form.set("image", file); else form.set("text", text); const result = await request(form); setDraft(result.draft); setQuote(""); setTotals(null); setAttempted(false); setStaffLoyalty(false); setConfirmed(false); }
     catch (e) { setError(e instanceof Error ? e.message : "Čitanje nije uspelo."); }
     finally { setBusy(""); }
   }
@@ -62,7 +63,7 @@ export function OrderImportForm() {
     setBusy("preview"); setError("");
     try {
       const { firstName, lastName, phone, street, houseNumber, city, postalCode, email, paymentMethod, shippingMethod } = draft;
-      const result = await request({ action: "preview", input: {
+      const result = await request({ action: "preview", staffLoyalty, input: {
         shipping: { firstName, lastName, phone, street, houseNumber, city, postalCode, country: "RS", xExpressTownId: draft.xExpressTownId },
         ...(email.trim() ? { guestEmail: email.trim() } : {}), paymentMethod, shippingMethod,
         lines: draft.lines.map(l => ({ sku: l.sku, qty: l.qty })), billingSameAsShipping: true, consent: true,
@@ -81,7 +82,7 @@ export function OrderImportForm() {
       setError(e instanceof Error ? e.message : "Ishod nije potvrđen. Proverite listu porudžbina ili ponovite isti pokušaj.");
     } finally { setBusy(""); }
   }
-  if (order) return <section className="rounded-xl border border-green-600/30 bg-green-500/10 p-6"><h2 className="text-xl font-semibold">Porudžbina {order.number} je kreirana</h2><p className="mt-2 text-sm">Sačuvana je u pregledu porudžbina.</p><div className="mt-5 flex flex-wrap gap-3"><Link className="underline" href={`/admin/erp/prodajni-nalozi/${order.id}`}>Otvori porudžbinu →</Link><Button variant="outline" onClick={() => { setOrder(null); setDraft(null); setFile(null); setImageUrl(""); setText(""); setQuote(""); setTotals(null); setAttempted(false); setConfirmed(false); }}>Nova porudžbina iz chata</Button></div></section>;
+  if (order) return <section className="rounded-xl border border-green-600/30 bg-green-500/10 p-6"><h2 className="text-xl font-semibold">Porudžbina {order.number} je kreirana</h2><p className="mt-2 text-sm">Sačuvana je u pregledu porudžbina.</p><div className="mt-5 flex flex-wrap gap-3"><Link className="underline" href={`/admin/erp/prodajni-nalozi/${order.id}`}>Otvori porudžbinu →</Link><Button variant="outline" onClick={() => { setOrder(null); setDraft(null); setFile(null); setImageUrl(""); setText(""); setQuote(""); setTotals(null); setAttempted(false); setConfirmed(false); setStaffLoyalty(false); }}>Nova porudžbina iz chata</Button></div></section>;
   return <div className="mx-auto max-w-4xl space-y-6">
     {!draft ? <section className="rounded-xl border border-border bg-background p-5 md:p-6">
       <div className="grid gap-3 sm:grid-cols-2">
@@ -111,6 +112,7 @@ export function OrderImportForm() {
         <Button variant="outline" className="mt-4 gap-2" disabled={!!busy || attempted || draft.lines.length >= 50} onClick={() => patch({ ...draft, lines: [...draft.lines, { name: "", sku: "", qty: null, unitPrice: null, candidates: [] }] })}><Plus className="size-4" />Dodaj artikal</Button>
       </section>
       <section className="rounded-xl border border-border bg-background p-5 md:p-6">
+        <label className="mb-4 flex items-start gap-3 text-sm"><input type="checkbox" className="mt-1 size-4 shrink-0" checked={staffLoyalty} disabled={!!busy || attempted} onChange={e => { setStaffLoyalty(e.target.checked); setQuote(""); setTotals(null); setConfirmed(false); setError(""); }} /><span><strong>Primeni loyalty cene</strong><span className="mt-1 block text-muted-foreground">Po izboru prodavca, i za kupca bez naloga. Važeći popusti se obračunavaju iz cenovnika; loyalty se ne dodaje na aktivnu akciju ili fiksnu cenu seta. Ovo ne učlanjuje kupca.</span></span></label>
         {!quote ? <Button className="w-full sm:w-auto" disabled={!!busy || !draft.lines.length || draft.lines.some(l => !l.sku || !l.qty)} onClick={preview}>{busy === "preview" ? "Proveravam cene i dostavu…" : "Proveri iznose i dostavu"}</Button> : totals && <>
           <div className="space-y-2 text-sm"><p className="flex justify-between gap-3"><span>Artikli (sa popustima)</span><strong>{money(totals.subtotal)}</strong></p><p className="flex justify-between gap-3"><span>Dostava</span><strong>{money(totals.shipping)}</strong></p><p className="flex justify-between gap-3 border-t border-border pt-3 text-lg"><span>Ukupno</span><strong>{money(totals.total)}</strong></p></div>
           {draft.totalAmount !== null && Math.abs(draft.totalAmount - totals.total) > 0.01 && <p className="mt-4 rounded-lg bg-amber-500/10 p-3 text-sm">U prepisci je navedeno {money(draft.totalAmount)}. Obračun u ERP-u je drugačiji — proverite dogovor pre kreiranja.</p>}

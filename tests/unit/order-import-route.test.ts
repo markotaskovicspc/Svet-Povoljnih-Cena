@@ -103,6 +103,21 @@ describe("operator import creation boundary", () => {
     expect((await GET(req)).status).toBe(401);
     expect(mocks.products).not.toHaveBeenCalled();
   });
+  it("binds the operator loyalty choice to the signed preview and reuses it on create", async () => {
+    mocks.createOrder.mockResolvedValue({ ok: true, data: { total: 700 } });
+    const preview = await POST(request({ action: "preview", input, staffLoyalty: true }));
+    expect(preview.status).toBe(200);
+    const { quote } = await preview.json();
+    expect(mocks.createOrder.mock.calls[0][3]).toMatchObject({ previewOnly: true, staffLoyalty: true, adminActorId: "marko" });
+    expect((await POST(request({ action: "create", quote, confirmed: true, staffLoyalty: false }))).status).toBe(200);
+    expect(mocks.createOrder.mock.calls[1][3]).toMatchObject({ staffLoyalty: true, expectedTotal: 700, adminActorId: "marko" });
+    expect(mocks.createOrder.mock.calls[1][1]).toBeNull();
+    expect(mocks.createOrder.mock.calls[1][2]).toBeNull();
+  });
+  it("does not treat a client supplied string as permission for loyalty prices", async () => {
+    expect((await POST(request({ action: "preview", input, staffLoyalty: "true" }))).status).toBe(400);
+    expect(mocks.createOrder).not.toHaveBeenCalled();
+  });
   it("does not require a courier dictionary for truck deliveries", async () => {
     mocks.createOrder.mockResolvedValue({ ok: true, data: { total: 998 } });
     expect((await POST(request({ action: "preview", input: { ...input, shippingMethod: "KAMION" } }))).status).toBe(200);

@@ -1,7 +1,7 @@
 import "server-only";
 import { resolveSetBasket, lockSetVersions } from "@/lib/product-sets/server";
 import { ProductSetError } from "@/lib/product-sets/core";
-import {staffLoyaltyPricesMatch, type StaffLoyaltyPrice} from "@/lib/checkout/staff-loyalty-pricing";
+import {currentStaffLoyaltyPrices, staffLoyaltyPricesMatch, type StaffLoyaltyPrice} from "@/lib/checkout/staff-loyalty-pricing";
 import { customerTownLabel } from "@/lib/x-express/town-aliases";
 import {
   Prisma,
@@ -320,7 +320,7 @@ export async function createOrder(
   input: CreateOrderInput,
   userId: string | null,
   guestLoyalty: { email: string | null; consentVersion: string; consentAt: Date } | null = null,
-  options: { adminActorId?: string; preserveCustomerPostalCode?: boolean; previewOnly?: boolean; expectedTotal?: number; customerReplyDraftOnly?: boolean; allowGuestWithoutEmail?: boolean; staffLoyaltyPrices?: readonly StaffLoyaltyPrice[] } = {},
+  options: { staffLoyalty?: boolean; adminActorId?: string; preserveCustomerPostalCode?: boolean; previewOnly?: boolean; expectedTotal?: number; customerReplyDraftOnly?: boolean; allowGuestWithoutEmail?: boolean; staffLoyaltyPrices?: readonly StaffLoyaltyPrice[] } = {},
 ): Promise<
   { ok: true; data: CreateOrderResult } | { ok: false; error: CreateOrderError }
 > {
@@ -530,7 +530,7 @@ export async function createOrder(
         discountPct: p.discountPct,
         loyaltyPrice: null,
         loyaltyDiscountPct: ruleInputs.loyaltyDiscountPct,
-        loyaltyEligible: Boolean(userId || guestLoyalty || options.staffLoyaltyPrices?.some(approved => approved.sku === line.sku)),
+        loyaltyEligible: Boolean(userId || guestLoyalty || options.staffLoyalty || options.staffLoyaltyPrices?.some(approved => approved.sku === line.sku)),
         action: p.action ?? null,
         actionPrices: p.actionPrices.map((entry) => ({
           price: num(entry.salePrice),
@@ -546,6 +546,12 @@ export async function createOrder(
     };
   });
 
+  if (options.staffLoyalty) {
+    // Only an authenticated operator can grant a price, never membership.
+    if (!options.adminActorId || userId || guestLoyalty) return { ok: false, error: { code: "PRICE_CHANGED" } };
+    const approved = currentStaffLoyaltyPrices(pricingLines);
+    options = { ...options, staffLoyaltyPrices: approved.length ? approved : undefined };
+  }
   if (options.staffLoyaltyPrices && (userId || guestLoyalty || !staffLoyaltyPricesMatch(pricingLines, options.staffLoyaltyPrices))) {
     return {ok:false, error:{code:"PRICE_CHANGED"}};
   }

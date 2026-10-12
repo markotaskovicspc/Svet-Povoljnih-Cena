@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { channelOrderSchema } from "@/lib/checkout/order-schema";
-const quoteSchema = z.object({ actorId: z.string(), expires: z.number(), input: channelOrderSchema, total: z.number().nonnegative() });
+const quoteSchema = z.object({ actorId: z.string(), expires: z.number(), input: channelOrderSchema, total: z.number().nonnegative(), staffLoyalty: z.boolean().optional() });
 export type ImportQuote = z.infer<typeof quoteSchema>;
 export function signImportQuote(quote: ImportQuote, secret: string) {
   const body = Buffer.from(JSON.stringify(quote)).toString("base64url");
