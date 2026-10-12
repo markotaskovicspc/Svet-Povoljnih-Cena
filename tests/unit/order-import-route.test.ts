@@ -34,12 +34,14 @@ describe("operator import creation boundary", () => {
     mocks.towns.mockResolvedValue([{ id: 791113 }]);
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ draft: {
       firstName: "Test", lastName: "Kupac", phone: "0600000000", email: "", street: "Test", houseNumber: "35", city: "ZARKOVO-BG", postalCode: "",
-      paymentMethod: "", shippingMethod: "", lines: [], deliveryAmount: null, totalAmount: null, warnings: [],
+      paymentMethod: "", shippingMethod: "", lines: [], deliveryAmount: null, totalAmount: null, warnings: ["Nedostaje poštanski broj.", "Poštanski broj nije naveden.", "Proverite telefon."],
     } }))));
     const form = new FormData(); form.set("text", "Test adresa ZARKOVO-BG");
     const response = await POST(new NextRequest("https://spc.test/api/admin/erp/order-import", { method: "POST", headers: { origin: "https://spc.test" }, body: form }));
     expect(response.status).toBe(200);
-    expect((await response.json()).draft).toMatchObject({ city: "Žarkovo", postalCode: "11030", xExpressTownId: 791113 });
+    const { draft } = await response.json();
+    expect(draft.warnings).toEqual(["Proverite telefon.", "Mesto i poštanski broj su dopunjeni: Žarkovo, 11030. Proverite adresu."]);
+    expect(draft).toMatchObject({ city: "Žarkovo", postalCode: "11030", xExpressTownId: 791113 });
     expect(mocks.createOrder).not.toHaveBeenCalled();
   });
   it("resolves the courier town before signing a review and preserves it on create", async () => {
