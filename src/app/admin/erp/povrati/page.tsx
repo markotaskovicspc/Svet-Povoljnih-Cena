@@ -1,4 +1,5 @@
 import { SHIPMENT_STATUS_LABEL } from "@/lib/courier/status";
+import { ReturnEvidenceDisclosure } from "@/components/admin/return-evidence-disclosure";
 import { ReturnScanner } from "@/components/admin/return-scanner";
 import { scannedReturnPlan, receiveScannedReturn } from "@/lib/admin/scanned-return.server";
 import { returnUnitParcelNumbers, returnItemParcelNumbers, returnParcelNumbers, returnParcelArrived, displayReturnParcelNumber, normalizeReturnParcelNumber, type ReturnShipment } from "@/lib/admin/return-parcels";
@@ -138,11 +139,17 @@ async function receiveOrderUnitAction(
 
 export default async function ReturnsPage({
   searchParams,
-}: { searchParams?: Promise<{ view?: string; q?: string }> } = {}) {
+}: { searchParams?: Promise<{ view?: string; q?: string; evidence?: string }> } = {}) {
   await requireAdminAction(["OPS"]);
   const params = await searchParams;
   const view = params?.view === "completed" ? "completed" : params?.view === "verification" ? "verification" : "active";
   const query = normalizeReturnParcelNumber(params?.q ?? "");
+  const loadEvidence = params?.evidence === "1" || Boolean(params?.view);
+  const scanResult = (async () => {
+    if (!query || !/^[A-Z0-9]{5,40}$/.test(query)) return { scanPlan: null, scanError: "" };
+    try { return { scanPlan: await scannedReturnPlan(query), scanError: "" }; }
+    catch (error) { return { scanPlan: null, scanError: error instanceof Error ? error.message : "Paket nije pronađen." }; }
+  })();
   const [
     reshipments,
     returnedOrders,
@@ -150,8 +157,9 @@ export default async function ReturnsPage({
     warehouses,
     movements,
     resolutions,
+    { scanPlan, scanError },
   ] = await Promise.all([
-    db.orderReshipment.findMany({
+    loadEvidence ? db.orderReshipment.findMany({
       orderBy: { createdAt: "desc" },
       take: 500,
       include: {
@@ -160,9 +168,9 @@ export default async function ReturnsPage({
         sourceShipment: { include: { returnArrivals: true } },
         batch: true,
       },
-    }),
-    listReturnedOrders(),
-    db.reclamation.findMany({
+    }) : [],
+    loadEvidence ? listReturnedOrders() : { orders: [], total: 0 },
+    loadEvidence ? db.reclamation.findMany({
       where: { shipments: { some: { purpose: "RECLAMATION_RETURN" } } },
       orderBy: { createdAt: "desc" },
       take: 500,
@@ -176,13 +184,13 @@ export default async function ReturnsPage({
           include: { returnArrivals: true },
         },
       },
-    }),
+    }) : [],
     db.warehouse.findMany({
       where: { active: true },
       orderBy: { code: "asc" },
       select: { id: true, code: true, name: true, isDefault: true },
     }),
-    db.stockMovement.findMany({
+    loadEvidence ? db.stockMovement.findMany({
       where: {
         OR: [
           { idempotencyKey: { startsWith: "reclamation-return:" } },
@@ -197,15 +205,10 @@ export default async function ReturnsPage({
         createdAt: true,
         warehouse: { select: { code: true, name: true } },
       },
-    }),
-    db.returnResolution.findMany(),
+    }) : [],
+    loadEvidence ? db.returnResolution.findMany() : [],
+    scanResult,
   ]);
-  let scanPlan: Awaited<ReturnType<typeof scannedReturnPlan>> | null = null;
-  let scanError = "";
-  if (query && /^[A-Z0-9]{5,40}$/.test(query)) {
-    try { scanPlan = await scannedReturnPlan(query); }
-    catch (error) { scanError = error instanceof Error ? error.message : "Paket nije pronađen."; }
-  }
   const receiptByKey = new Map(movements.map((m) => [m.idempotencyKey, m]));
   const lostByKey = new Map(resolutions.map((r) => [r.key, r]));
   const jobs = movements.length
@@ -579,9 +582,10 @@ export default async function ReturnsPage({
   const activeCount = rows.filter((row) => !completed(row) && row.arrived).length;
   const verificationCount = rows.filter((row) => !completed(row) && !row.arrived).length;
   const completedCount = rows.filter(completed).length;
+  const filterQuery = scanPlan?.code ?? query;
   const visible = rows
     .filter((row) => query || (view === "completed" ? completed(row) : !completed(row) && row.arrived === (view === "active")))
-    .filter((row) => !query || normalizeReturnParcelNumber(row.number).includes(query) || row.codes.some((code) => code.includes(query)))
+    .filter((row) => !query || normalizeReturnParcelNumber(row.number).includes(query) || row.codes.some((code) => code.includes(filterQuery)))
     .sort((a, b) => b.date - a.date || a.key.localeCompare(b.key));
   return (
     <>
@@ -602,7 +606,7 @@ export default async function ReturnsPage({
       <main className="space-y-6 px-4 py-6 md:px-8">
         <Card>
           <CardTitle>Prijem povratnog paketa</CardTitle>
-          <ReturnScanner key={params?.q ?? ""} initialCode={params?.q ?? ""} />
+          <ReturnScanner key={params?.q ?? ""} initialCode={params?.q ?? ""}>
           {scanError ? <p role="alert" className="mt-4 text-warning">{scanError}</p> : null}
           {scanPlan ? <div className="mt-5 space-y-3 rounded-xl border border-border p-4">
             <div className="overflow-x-auto">
@@ -645,7 +649,7 @@ export default async function ReturnsPage({
                 </tbody>
               </table>
             </div>
-            {scanPlan.received ? <p className="text-success">Već primljeno. Ponovni sken ne uvećava lager.</p> : <AdminActionForm action={receiveScannedAction} refreshOnSuccess preserveValues className="flex flex-wrap items-end gap-3">
+            {scanPlan.received ? <p className="text-success">Već primljeno. Ponovni sken ne uvećava lager.</p> : <AdminActionForm action={receiveScannedAction} preserveValues className="flex flex-wrap items-end gap-3">
               <input type="hidden" name="code" value={params?.q ?? ""} />
               {warehouseSelect}
               {scanPlan.kind === "order" ? <Field label="Identifikacija kupca (ako nije na računu)"><input name="buyerId" maxLength={100} className="h-9 rounded-lg border border-input px-2" /></Field> : null}
@@ -653,9 +657,9 @@ export default async function ReturnsPage({
               <p className="w-full text-xs text-ink-500">Potvrdom prijema potvrđujete da ste pregledali sadržaj paketa. Ako je roba oštećena, izaberite magacin za proveru vraćene robe.</p>
             </AdminActionForm>}
           </div> : null}
+          </ReturnScanner>
         </Card>
-        <details open={Boolean(query)}>
-          <summary className="cursor-pointer py-3 font-medium">Evidencija povrata i ručna provera</summary>
+        <ReturnEvidenceDisclosure loaded={loadEvidence} href={`/admin/erp/povrati?evidence=1${query ? `&q=${encodeURIComponent(params?.q ?? "")}` : ""}`} >
         <div className="grid gap-4 sm:grid-cols-4">
           <StatCard
             label="Pristigli povrati"
@@ -790,7 +794,7 @@ export default async function ReturnsPage({
             </p>
           ) : null}
         </Card>
-        </details>
+        </ReturnEvidenceDisclosure>
       </main>
     </>
   );

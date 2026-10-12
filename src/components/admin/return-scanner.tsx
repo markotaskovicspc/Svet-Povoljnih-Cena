@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { Field } from "./field";
 import { startBarcodeCamera } from "@/lib/barcode-camera";
 
@@ -25,11 +26,13 @@ function ReturnCamera({ onCode, onClose }: { onCode: (code: string) => void; onC
   </div>;
 }
 
-export function ReturnScanner({ initialCode = "" }: { initialCode?: string }) {
+export function ReturnScanner({ initialCode = "", children }: { initialCode?: string; children?: ReactNode }) {
   const form = useRef<HTMLFormElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const [camera, setCamera] = useState(false);
   const [error, setError] = useState("");
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
   useEffect(() => {
     // Keep keyboard-wedge scanners ready without opening the phone keyboard.
     if (window.matchMedia("(pointer: fine)").matches) input.current?.focus();
@@ -47,16 +50,26 @@ export function ReturnScanner({ initialCode = "" }: { initialCode?: string }) {
     form.current.requestSubmit();
   }
   return <>
-    <form ref={form} action="/admin/erp/povrati" method="get" className="flex flex-wrap items-end gap-3">
+    <form ref={form} action="/admin/erp/povrati" method="get" onSubmit={event => {
+      event.preventDefault();
+      const code = input.current?.value.trim() ?? "";
+      if (!code || code.length > 40) { setError("Unesite ili skenirajte kod paketa."); return; }
+      setError(""); setCamera(false);
+      startTransition(() => {
+        if (code === initialCode) router.refresh();
+        else router.push(`/admin/erp/povrati?q=${encodeURIComponent(code)}`, { scroll: false });
+      });
+    }} className="flex flex-wrap items-end gap-3" aria-busy={pending}>
       <Field label="Skeniraj paket ili unesi broj porudžbine">
-        <input ref={input} name="q" defaultValue={initialCode} maxLength={40} autoComplete="off" placeholder="Kod sa adresnice" className="h-11 w-80 max-w-full rounded-lg border border-input px-3" />
+        <input ref={input} name="q" defaultValue={initialCode} disabled={pending} maxLength={40} autoComplete="off" placeholder="Kod sa adresnice" className="h-11 w-80 max-w-full rounded-lg border border-input px-3" />
       </Field>
-      <button className="rounded-lg bg-foreground px-4 py-3 text-background">Pronađi paket</button>
-      <button type="button" aria-expanded={camera} onClick={() => { input.current?.blur(); setError(""); setCamera(!camera); }} className="rounded-lg border border-border px-4 py-3">Skeniraj kamerom</button>
+      <button disabled={pending} className="rounded-lg bg-foreground px-4 py-3 text-background">{pending ? "Pronalazim paket…" : "Pronađi paket"}</button>
+      <button type="button" disabled={pending} aria-expanded={camera} onClick={() => { input.current?.blur(); setError(""); setCamera(!camera); }} className="rounded-lg border border-border px-4 py-3">Skeniraj kamerom</button>
       {initialCode ? <Link href="/admin/erp/povrati" className="text-sm underline">Sledeći paket</Link> : null}
     </form>
     {camera && <ReturnCamera onCode={scanned} onClose={() => setCamera(false)} />}
     {error && <p role="alert" className="mt-3 text-warning">{error}</p>}
     <p className="mt-3 text-xs text-ink-500">Na telefonu kliknite „Skeniraj kamerom“. Barkod čitačem skenirajte u polje iznad ili unesite broj ručno.</p>
+    {pending ? <p role="status" className="mt-4 text-sm">Pronalazim paket…</p> : children}
   </>;
 }
