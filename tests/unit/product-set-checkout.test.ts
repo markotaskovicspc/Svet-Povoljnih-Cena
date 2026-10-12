@@ -93,3 +93,29 @@ it("preserves the ordinary quote path and its existing quantity limits", async (
   expect(resolved.prices.size).toBe(0);
   expect(mocks.set).not.toHaveBeenCalled();
 });
+
+describe("operator loyalty checkout", () => {
+  it("uses current loyalty prices in preview and keeps action prices in a mixed basket", async () => {
+    mocks.product.mockResolvedValue([{ ...products[0], salePrice: null }, products[1]]);
+    const request = input(); request.lines = [{sku:"TABLE",qty:2},{sku:"CHAIR",qty:1}];
+    const regular = await createOrder(request, null, null, { previewOnly: true });
+    expect(regular).toMatchObject({ ok: true, data: { subtotal: 25000 } });
+    const loyalty = await createOrder(request, null, null, { previewOnly: true, staffLoyalty: true, adminActorId: "marko" });
+    expect(loyalty).toMatchObject({ ok: true, data: { subtotal: 23000, total: 23000 } });
+    expect(mocks.quote).toHaveBeenLastCalledWith(expect.objectContaining({loggedIn:false,staffLoyaltySkus:["TABLE"]}));
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+  it("keeps fixed set allocations unchanged when staff loyalty is selected", async () => {
+    const result = await createOrder(input(), null, null, { previewOnly: true, staffLoyalty: true, adminActorId: "marko" });
+    expect(result).toMatchObject({ok:true,data:{subtotal:4001.02}});
+    expect(mocks.quote).toHaveBeenLastCalledWith(expect.objectContaining({loggedIn:false,staffLoyaltySkus:undefined}));
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+  it("requires a staff actor and rejects price changes before writing an order", async () => {
+    mocks.product.mockResolvedValue([{ ...products[0], salePrice: null }]);
+    const request = input(); request.lines = [{sku:"TABLE",qty:1}];
+    expect(await createOrder(request,null,null,{previewOnly:true,staffLoyalty:true})).toMatchObject({ok:false,error:{code:"PRICE_CHANGED"}});
+    expect(await createOrder(request,null,null,{staffLoyalty:true,adminActorId:"marko",expectedTotal:8000})).toMatchObject({ok:false,error:{code:"PRICE_CHANGED"}});
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+});

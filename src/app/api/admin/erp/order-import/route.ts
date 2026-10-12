@@ -88,6 +88,7 @@ export async function POST(req: NextRequest) {
     }
     const body = await req.json();
     if (body.action === "preview") {
+      const staffLoyalty = z.boolean().optional().parse(body.staffLoyalty) ?? false;
       const shipping = body.input?.shipping;
       const locality = body.input?.shippingMethod === "KURIR" && !shipping?.xExpressTownId && typeof shipping?.city === "string"
         ? await resolveImportAlias(shipping.city, typeof shipping.postalCode === "string" ? shipping.postalCode : "") : null;
@@ -98,18 +99,18 @@ export async function POST(req: NextRequest) {
       }
       const resolved = await resolveImportAddress(parsed.data);
       if (!resolved) return fail(IMPORT_TOWN_ERROR);
-      const input = { ...resolved, checkoutSessionId: randomUUID(), notes: "Porudžbina pripremljena iz chata/slike u ERP-u." };
-      const result = await createOrder(input, null, null, { previewOnly: true, allowGuestWithoutEmail: true, preserveCustomerPostalCode: true });
+      const input = { ...resolved, checkoutSessionId: randomUUID(), notes: "Porudžbina pripremljena iz chata/slike u ERP-u." + (staffLoyalty ? " Loyalty cene po nalogu prodavca; bez novog članstva." : "") };
+      const result = await createOrder(input, null, null, { previewOnly: true, adminActorId: admin.id, staffLoyalty, allowGuestWithoutEmail: true, preserveCustomerPostalCode: true });
       if (!result.ok) return fail(orderError(result.error));
-      return NextResponse.json({ quote: signImportQuote({ actorId: admin.id, expires: Date.now() + 15 * 60000, input, total: result.data.total }, secret), totals: result.data, shipping: input.shipping });
+      return NextResponse.json({ quote: signImportQuote({ actorId: admin.id, expires: Date.now() + 15 * 60000, input, total: result.data.total, staffLoyalty }, secret), totals: result.data, shipping: input.shipping });
     }
     const create = z.object({ action: z.literal("create"), quote: z.string().max(60000), confirmed: z.literal(true) }).parse(body);
     const quote = readImportQuote(create.quote, secret, admin.id);
     const resolved = await resolveImportAddress(quote.input);
     if (!resolved) return fail(IMPORT_TOWN_ERROR);
-    const result = await createOrder(resolved, null, null, { expectedTotal: quote.total, allowGuestWithoutEmail: true, preserveCustomerPostalCode: true, customerReplyDraftOnly: !quote.input.guestEmail, adminActorId: admin.id });
+    const result = await createOrder(resolved, null, null, { expectedTotal: quote.total, staffLoyalty: quote.staffLoyalty, allowGuestWithoutEmail: true, preserveCustomerPostalCode: true, customerReplyDraftOnly: !quote.input.guestEmail, adminActorId: admin.id });
     if (!result.ok) return fail(orderError(result.error));
-    await logAudit({ actorId: admin.id, action: "erp.order-import.create", entity: "Order", entityId: result.data.id, diff: { number: result.data.number } });
+    await logAudit({ actorId: admin.id, action: "erp.order-import.create", entity: "Order", entityId: result.data.id, diff: { number: result.data.number, staffLoyalty: Boolean(quote.staffLoyalty) } });
     return NextResponse.json({ order: { id: result.data.id, number: result.data.number } });
   } catch (error) {
     if (error instanceof z.ZodError) return fail("Podatke nije moguće pročitati. Proverite ih i pokušajte ponovo.");

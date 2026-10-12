@@ -2,6 +2,16 @@ import { effectiveUnitPrice, type PricingLine } from '@/lib/pricing';
 
 export type StaffLoyaltyPrice = { sku: string; price: number };
 
+/** Derive staff-approved offers from checkout's current rules, including sets. */
+export function currentStaffLoyaltyPrices(lines: PricingLine[]): StaffLoyaltyPrice[] {
+  const offers = lines.flatMap(line => {
+    const regular = effectiveUnitPrice({ ...line.product, loyaltyEligible: false }).effective;
+    const offered = effectiveUnitPrice({ ...line.product, loyaltyEligible: true }).effective;
+    return offered > 0 && offered < regular ? [{ sku: line.sku, price: offered }] : [];
+  });
+  return [...new Map(offers.map(offer => [offer.sku, offer])).values()];
+}
+
 // Trusted server option, never a checkout form field. Staff can honor the
 // current advertised loyalty price without enrolling the buyer in membership.
 export function staffLoyaltyPricesMatch(lines: PricingLine[], approved: readonly StaffLoyaltyPrice[]) {
