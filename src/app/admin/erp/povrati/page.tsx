@@ -13,6 +13,7 @@ import type { ReactNode } from "react";
 import { markReturnLost } from "@/lib/admin/return-resolution.server";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
+import { redirect, RedirectType } from "next/navigation";
 import { processBackgroundJob } from "@/lib/background-jobs";
 import { z } from "zod";
 import {
@@ -139,7 +140,7 @@ async function receiveOrderUnitAction(
 
 export default async function ReturnsPage({
   searchParams,
-}: { searchParams?: Promise<{ view?: string; q?: string; evidence?: string }> } = {}) {
+}: { searchParams?: Promise<{ view?: string; q?: string; evidence?: string; camera?: string; warehouse?: string }> } = {}) {
   await requireAdminAction(["OPS"]);
   const params = await searchParams;
   const view = params?.view === "completed" ? "completed" : params?.view === "verification" ? "verification" : "active";
@@ -242,7 +243,7 @@ export default async function ReturnsPage({
         name="warehouseId"
         required
         className="h-9 max-w-full rounded-lg border border-input bg-background px-2"
-        defaultValue=""
+        defaultValue={warehouses.some(w => w.id === params?.warehouse) ? params?.warehouse : ""}
       >
         <option value="" disabled>
           Izaberite magacin
@@ -606,7 +607,7 @@ export default async function ReturnsPage({
       <main className="space-y-6 px-4 py-6 md:px-8">
         <Card>
           <CardTitle>Prijem povratnog paketa</CardTitle>
-          <ReturnScanner key={params?.q ?? ""} initialCode={params?.q ?? ""}>
+          <ReturnScanner key={`${params?.q ?? ""}:${params?.camera ?? ""}`} initialCode={params?.q ?? ""} initialCamera={params?.camera === "1"} warehouseId={params?.warehouse ?? ""}>
           {scanError ? <p role="alert" className="mt-4 text-warning">{scanError}</p> : null}
           {scanPlan ? <div className="mt-5 space-y-3 rounded-xl border border-border p-4">
             <div className="overflow-x-auto">
@@ -875,7 +876,7 @@ function ReturnShipmentCodes({ shipment, received = false }: { shipment: ReturnS
 
 async function receiveScannedAction(_state: AdminActionState, formData: FormData) {
   "use server";
-  return withAdminState(
+  const state = await withAdminState(
     { allowed: ["OPS"], action: "return.parcel.receive", entity: "Shipment" },
     async (actorId, data: FormData) => {
       const result = await receiveScannedReturn({ code: String(data.get("code") ?? ""), warehouseId: String(data.get("warehouseId") ?? ""), buyerId: String(data.get("buyerId") ?? "").trim() || undefined, actorId });
@@ -887,6 +888,9 @@ async function receiveScannedAction(_state: AdminActionState, formData: FormData
       return { ok: true as const, entityId: result.orderId, message: result.alreadyReceived ? "Paket je već primljen." : `Paket je primljen u ${result.warehouse.code} · ${result.warehouse.name}.`, diff: { warehouseId: result.warehouse.id } };
     },
   )(formData);
+  // Redirect only after receipt AND its audit have succeeded; errors stay on the parcel.
+  if (state.ok) redirect(`/admin/erp/povrati?camera=1&warehouse=${encodeURIComponent(String(formData.get("warehouseId") ?? ""))}`, RedirectType.replace);
+  return state;
 }
 
 function ReturnItemCodes({ item, shipments, unitNo }: {

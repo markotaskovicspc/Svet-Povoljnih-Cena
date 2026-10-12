@@ -12,7 +12,7 @@ import { channelOrderSchema } from "@/lib/checkout/order-schema";
 import { importDraftSchema, withImportDefaults } from "@/lib/admin/order-import/schema";
 import { createImportMatcher } from "@/lib/admin/order-import/matching";
 import { readImportQuote, signImportQuote } from "@/lib/admin/order-import/quote";
-import { resolveImportAddress, IMPORT_TOWN_ERROR } from "@/lib/admin/order-import/address";
+import { resolveImportAddress, resolveImportAlias, IMPORT_TOWN_ERROR } from "@/lib/admin/order-import/address";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -73,7 +73,11 @@ export async function POST(req: NextRequest) {
         const best = candidates[0];
         return { ...line, sku: best?.sku ?? "", suggested: best?.matchKind === "suggested", candidates };
       });
-      return NextResponse.json({ draft: { ...draft, lines } });
+      const locality = draft.shippingMethod === "KURIR" ? await resolveImportAlias(draft.city) : null;
+      const warnings = locality && (draft.city !== locality.city || draft.postalCode !== locality.postalCode)
+        ? [...draft.warnings.filter(w => !/^Poštanski broj nije naveden\.?$/i.test(w.trim())), `Mesto i poštanski broj su dopunjeni: ${locality.city}, ${locality.postalCode}. Proverite adresu.`]
+        : draft.warnings;
+      return NextResponse.json({ draft: { ...draft, ...(locality ?? {}), warnings, lines } });
     }
     const body = await req.json();
     if (body.action === "preview") {
@@ -87,7 +91,7 @@ export async function POST(req: NextRequest) {
       const input = { ...resolved, checkoutSessionId: randomUUID(), notes: "Porudžbina pripremljena iz chata/slike u ERP-u." };
       const result = await createOrder(input, null, null, { previewOnly: true, allowGuestWithoutEmail: true, preserveCustomerPostalCode: true });
       if (!result.ok) return fail(orderError(result.error));
-      return NextResponse.json({ quote: signImportQuote({ actorId: admin.id, expires: Date.now() + 15 * 60000, input, total: result.data.total }, secret), totals: result.data });
+      return NextResponse.json({ quote: signImportQuote({ actorId: admin.id, expires: Date.now() + 15 * 60000, input, total: result.data.total }, secret), totals: result.data, shipping: input.shipping });
     }
     const create = z.object({ action: z.literal("create"), quote: z.string().max(60000), confirmed: z.literal(true) }).parse(body);
     const quote = readImportQuote(create.quote, secret, admin.id);
