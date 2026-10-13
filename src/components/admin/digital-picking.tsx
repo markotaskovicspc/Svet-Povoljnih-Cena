@@ -97,8 +97,7 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
     if (!Number.isSafeInteger(quantity) || quantity < 1) { setMessage("Unesite pozitivnu celu količinu."); return; }
     record(row.key, quantity);
   }
-  function renderArticles() {
-    return (<div className="space-y-3">
+  const articles = (<div className="space-y-3">
       {warehouseMode && currentRow && <div className="flex items-center justify-between gap-2" aria-label="Kretanje kroz artikle">
         <button type="button" disabled={busy || !!retry || currentIndex === 0} onClick={() => moveTo(currentIndex - 1)} className="rounded-lg border px-3 py-2">← Prethodni</button>
         <p className="text-sm tabular-nums">Artikal {currentIndex + 1} / {session.rows.length}</p>
@@ -113,7 +112,6 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
         {session.editable && (!warehouseMode || count < row.quantity) && <div className="mt-3 flex flex-wrap gap-2 print:hidden">{!warehouseMode && <><button disabled={!editable} onClick={() => setSelected(row.key)} className="rounded border px-3 py-2">{selected === row.key ? "Izabran red" : "Izaberi za sken"}</button><button disabled={!editable || count >= row.quantity} onClick={() => record(row.key, 1, "Ručna potvrda odvajanja")} className="rounded border px-4 py-2">+1</button><button disabled={!editable || count === 0} onClick={() => record(row.key, -1, "Ispravka količine")} className="rounded border px-4 py-2">−1</button></>}<button disabled={!editable} onClick={() => { setSelected(row.key); setNoteKey(row.key); setNote(`Nedostaje ${row.quantity - count} kom. za ${row.sku}. `); }} className="rounded border px-3 py-2">Nedostaje / napomena</button></div>}
       </article>;
     })}</div>);
-  }
   return <div className="space-y-5 p-4 md:p-8">
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4">
       <div><strong className="text-2xl">{done} / {total} kom.</strong><p>{total > 0 && done === total ? warehouseMode ? "Odvajanje je završeno." : "Roba je odvojena. Nastavite sa proverom pakovanja i dimenzija." : "Odvojeno / potrebno"}</p></div>
@@ -122,7 +120,7 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
     {!warehouseMode && <p className="text-sm text-muted-foreground">Redosled je po magacinu i podešenom redosledu pozicija. Kod više pozicija proverite raspoloživu robu. Stavke bez pozicije su na kraju svakog magacina. Odvajanje ne zamenjuje potvrdu spakovanih paketa.</p>}
     {session.previousPlan && <p className="rounded border border-amber-400 bg-amber-50 p-3 text-amber-950">Sadržaj naloga je menjan posle ranijih skeniranja. Za sadašnji sadržaj roba mora ponovo da se proveri; prethodni zapisi ostaju u istoriji.</p>}
     {!session.editable && <p className="rounded border p-3">Nalog je zaključen ili su adresnice već pokrenute. Pregled je dostupan, novo skeniranje je zaključano.</p>}
-    {warehouseMode && renderArticles()}
+    {warehouseMode && articles}
     {session.editable && <section className="space-y-3 rounded-xl border bg-muted/20 p-4 print:hidden">
       <form onSubmit={e => { e.preventDefault(); scan(); }} className="flex flex-wrap items-end gap-3">
         <label className="min-w-48 flex-1">Skenirajte barkod ili unesite šifru<input ref={input} autoComplete="off" value={code} onChange={e => setCode(e.target.value)} disabled={!canScan} className="mt-1 w-full rounded border bg-background p-3" /></label>
@@ -136,7 +134,7 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
     <div role="status" aria-live="polite" className="print:hidden">{message}</div>
     {retry && <div className="flex flex-wrap gap-3 rounded border border-amber-400 p-3 print:hidden"><button disabled={busy} onClick={() => void send(retry)} className="rounded border px-3 py-2">Ponovi isti zahtev</button><button disabled={busy} onClick={() => window.location.reload()} className="rounded border px-3 py-2">Učitaj stanje sa servera</button></div>}
     {!session.rows.length && <p>Nema aktivnih stavki za odvajanje u ovom nalogu.</p>}
-    {!warehouseMode && renderArticles()}
+    {!warehouseMode && articles}
     {note && <form className="space-y-2 rounded border p-4 print:hidden" onSubmit={e => { e.preventDefault(); record(noteKey, 0, note); }}><label className="block">Napomena za izabrani red<textarea value={note} onChange={e => setNote(e.target.value)} maxLength={1000} required className="mt-1 w-full rounded border p-3" /></label><button disabled={!editable} className="rounded bg-foreground px-4 py-2 text-background">Sačuvaj napomenu</button><button type="button" onClick={() => setNote("")} className="ml-3">Odustani</button></form>}
     {!warehouseMode && <details className="rounded border p-4 print:hidden"><summary>Istorija odvajanja (poslednjih 100 zapisa)</summary><ul className="mt-3 space-y-2 text-sm">{session.events.map(e => <li key={e.id}>{new Date(e.createdAt).toLocaleString("sr-RS", { timeZone: "Europe/Belgrade" })} · {e.actorName} · {session.rows.find(r => r.key === e.rowKey)?.sku ?? e.rowKey} · {e.delta > 0 ? "+" : ""}{e.delta} kom. {e.note} {e.planHash !== session.planHash ? "(prethodni sadržaj naloga)" : ""}</li>)}</ul></details>}
   </div>;
