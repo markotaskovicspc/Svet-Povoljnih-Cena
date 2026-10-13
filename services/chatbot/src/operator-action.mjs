@@ -19,12 +19,13 @@ export async function operatorAction({store,worker,body}){
   await c.query('BEGIN');
   try{
    if(body.action==='resume'){
-    delete state.pending;delete state.reclamation;delete state.cancellation;delete state.handedOff;delete state.historyVersion;
+    delete state.pending;delete state.reclamation;delete state.cancellation;delete state.handedOff;delete state.historyVersion;delete state.metaInboxControl;
     await c.query("UPDATE spc_chat_events SET status='skipped' WHERE conversation=$1 AND status='pending'",[row.id]);
     // Resume only the latest unanswered customer message, never the whole backlog.
     // Delivered staff/bot replies and later order commands count as an answer.
     const recent=await c.query("SELECT id,payload,created_at,'event' AS kind FROM spc_chat_events WHERE conversation=$1 UNION ALL SELECT id,payload,created_at,'reply' AS kind FROM spc_chat_outbox WHERE conversation=$1 AND status IN ('sent','sending','uncertain') ORDER BY created_at DESC LIMIT 30",[row.id]);
-    const latest=recent.rows.find(item=>{const p=store.decode(item.payload);return !p.botEcho&&!p.referralOnly;});
+    const ordered=recent.rows.map(item=>{const p=store.decode(item.payload);return {...item,time:item.kind==='event'&&Number.isFinite(p.timestamp)?p.timestamp:new Date(item.created_at).getTime()};}).sort((a,b)=>b.time-a.time||String(b.id).localeCompare(String(a.id)));
+    const latest=ordered.find(item=>{const p=store.decode(item.payload);return !p.botEcho&&!p.referralOnly;});
     if(latest?.kind==='event'){
      const p=store.decode(latest.payload);
      if(!p.echo&&inWindow(p.timestamp)){
