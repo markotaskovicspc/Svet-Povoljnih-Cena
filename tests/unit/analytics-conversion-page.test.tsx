@@ -7,6 +7,7 @@ vi.mock("@/components/admin/erp-grid", () => ({ ErpGrid: () => null }));
 vi.mock("@/components/admin/analytics-filters", () => ({ AnalyticsFilters: () => null }));
 vi.mock("@/lib/db", () => ({ db: {
   analyticsEvent: { findMany: vi.fn().mockResolvedValue([]) },
+  siteVisitorPresence: { count: vi.fn().mockResolvedValue(0) },
   product: { findMany: vi.fn().mockResolvedValue([{ slug: "stolica", name: "Stolica" }]) },
   $queryRaw: vi.fn().mockResolvedValue([]),
 } }));
