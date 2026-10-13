@@ -36,3 +36,15 @@ it.each([['2026-03-29',23],['2026-10-25',25]])('handles Serbia DST day %s withou
  const row=calculateProductPerformance({...input,stock:10,latestBalance:10,movements:[],sales:[]},p,new Date(p.endExclusive.getTime()+1000));
  expect(row.availableDays).toBe(1);expect(row.averageStockQty).toBe(10);
 });
+
+it('separates calendar-day revenue from in-stock days and weights MPC by units',()=>{
+ const row=calculateProductPerformance({...input,baseline:null,movements:[{at:'2026-10-01T22:00:00Z',qty:5,balance:5}],sales:[{day:'2026-10-02',qty:2,revenue:600,cogs:200},{day:'2026-10-02',qty:3,revenue:300,cogs:300},{day:'2026-10-02',qty:-1,revenue:-100,cogs:-100}]},period,now);
+ expect(row).toMatchObject({periodDays:2,dailyRevenue:800,netRevenuePerDay:400,averageRetailPrice:200});
+});
+it('uses elapsed calendar dates for the current period and leaves no-sale MPC unknown',()=>{
+ const row=calculateProductPerformance({...input,sales:[]},period,new Date('2026-10-01T10:00:00Z'));
+ expect(row).toMatchObject({periodDays:1,netRevenuePerDay:0,averageRetailPrice:null});
+ const refunded=calculateProductPerformance({...input,sales:[{day:'2026-10-02',qty:-1,revenue:-200,cogs:-100}]},period,now);
+ expect(refunded).toMatchObject({netRevenuePerDay:-100,averageRetailPrice:null});
+ expect(sortProductPerformance([row,{...row,sku:'B',averageRetailPrice:200}],'averageRetailPrice','desc').map(r=>r.sku)).toEqual(['B','A']);
+});

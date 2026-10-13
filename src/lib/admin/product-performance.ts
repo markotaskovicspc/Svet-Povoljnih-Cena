@@ -60,6 +60,11 @@ export function calculateProductPerformance(product: PerformanceInput, period: R
   const availableSales = sales.filter(sale => available.has(sale.day));
   const quantity = product.sales.reduce((sum, sale) => sum + sale.qty, 0);
   const revenue = product.sales.reduce((sum, sale) => sum + sale.revenue, 0);
+  const firstDay = Date.parse(dayAt(start) + 'T00:00:00Z');
+  const lastDay = Date.parse(dayAt(end - 1) + 'T00:00:00Z');
+  const periodDays = end > start ? Math.round((lastDay - firstDay) / 86400_000) + 1 : 0;
+  const netRevenuePerDay = periodDays > 0 ? revenue / periodDays : null;
+  const averageRetailPrice = quantity > 0 && revenue >= 0 ? revenue / quantity : null;
   const cogs = sales.some(sale => sale.cogs === null) ? null : sales.reduce((sum, sale) => sum + (sale.cogs ?? 0), 0);
   const availableDays = consistent && knownMs > 0 ? available.size : null;
   const dailyQty = availableDays ? availableSales.reduce((sum, sale) => sum + sale.qty, 0) / availableDays : null;
@@ -72,7 +77,7 @@ export function calculateProductPerformance(product: PerformanceInput, period: R
     : valuationSources.has('purchase-price') ? 'purchase-prices' : valuationSources.has('booking') ? 'booking' : 'fiscal';
   const estimatedValuation = valuationSources.has('purchase-price') || valuationSources.has('booking');
   return { id: product.id, sku: product.sku, name: product.name, stock: product.stock, quantity, revenue, cogs,
-    availableDays, dailyQty, dailyRevenue, averageStockQty, averageStockValue, completeHistory, completeCostHistory,
+    periodDays, netRevenuePerDay, averageRetailPrice, availableDays, dailyQty, dailyRevenue, averageStockQty, averageStockValue, completeHistory, completeCostHistory,
     valuationBasis, estimatedValuation, estimatedSalesCogs,
     estimatedKoz: cogs !== null && averageStockValue !== null && averageStockValue > 0 ? cogs / averageStockValue : null,
     coverageDays: dailyQty !== null && dailyQty > 0 ? Math.max(0, product.stock) / dailyQty : null };
@@ -89,7 +94,7 @@ export function summarizeProductPerformance(rows: ProductPerformance[]) {
     estimatedCogsCount: rows.filter(row => row.estimatedSalesCogs).length,
     estimatedKoz: cogs !== null && averageStockValue !== null && averageStockValue > 0 ? cogs / averageStockValue : null };
 }
-export const PERFORMANCE_SORTS = ['sku','name','stock','quantity','revenue','cogs','availableDays','dailyQty','dailyRevenue','averageStockValue','estimatedKoz','coverageDays'] as const;
+export const PERFORMANCE_SORTS = ['sku','name','stock','quantity','revenue','cogs','availableDays','dailyQty','dailyRevenue','netRevenuePerDay','averageRetailPrice','averageStockValue','estimatedKoz','coverageDays'] as const;
 export type PerformanceSort = typeof PERFORMANCE_SORTS[number];
 export function sortProductPerformance(rows: ProductPerformance[], sort: PerformanceSort, direction: 'asc'|'desc') {
   return [...rows].sort((a,b) => {
