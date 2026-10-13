@@ -88,15 +88,11 @@ export default async function AnalyticsConversionPage({
     now,
   );
   const granularity = normalizeAnalyticsGranularity(params.group);
-  const activeStart = new Date(now.getTime() - 5 * 60_000);
+  const activeStart = new Date(now.getTime() - 90_000);
   const [dailyVisits, activeSessions, funnel, pageConversions, products, cartConversions, rawModule] =
     await Promise.all([
       getDailyVisitsReport(period),
-      db.analyticsEvent.findMany({
-        where: { type: "PAGE_VIEW", occurredAt: { gte: activeStart } },
-        distinct: ["sessionId", "anonymousId"],
-        select: { id: true },
-      }),
+      db.siteVisitorPresence.count({ where: { lastSeenAt: { gte: activeStart, lte: now } } }),
       getAnalyticsFunnelSummary(period),
       getPageConversionReport(period, granularity),
       db.$queryRaw<ProductPerformanceRow[]>(Prisma.sql`
@@ -250,7 +246,7 @@ export default async function AnalyticsConversionPage({
         </div>
 
         <Card>
-          <CardTitle description={`${period.label} · Vreme u Srbiji. Ista sesija računa se jednom dnevno na celom sajtu. Prikazuju se samo posete uz saglasnost za analitiku. Vrednost uključuje sve web porudžbine po datumu kreiranja, sa dostavom i montažom, bez otkazanih i vraćenih. Današnji podaci još nisu konačni.`}>
+          <CardTitle description={`${period.label} · Vreme u Srbiji. Ista sesija računa se jednom dnevno na celom sajtu. Prikazuju se samo posete uz saglasnost za analitiku. Konverzija sajta = praćene sesije sa web kupovinom ÷ praćene sesije tog dana; Ananas ne ulazi u konverziju. Vrednosti su po datumu kreiranja, sa dostavom i montažom, bez otkazanih i vraćenih. Ananas se prikazuje odvojeno i u ukupnom zbiru. Današnji podaci još nisu konačni.`}>
             Posete po danu
           </CardTitle>
           <DataTable
@@ -258,7 +254,13 @@ export default async function AnalyticsConversionPage({
               { key: "day", label: "Dan" },
               { key: "visits", label: "Ukupno poseta", align: "right" },
               { key: "pageViews", label: "Pregledi stranica", align: "right" },
-              { key: "orderValue", label: "Vrednost porudžbina", align: "right" },
+              { key: "webOrders", label: "Porudžbine sajta", align: "right" },
+              { key: "orderValue", label: "Vrednost sajta", align: "right" },
+              { key: "ananasOrders", label: "Ananas porudžbine", align: "right" },
+              { key: "ananasValue", label: "Ananas vrednost", align: "right" },
+              { key: "totalOrders", label: "Ukupno porudžbina", align: "right" },
+              { key: "totalValue", label: "Ukupna vrednost", align: "right" },
+              { key: "siteConversion", label: "Konverzija sajta", align: "right" },
             ]}
             rows={dailyVisits.map((row) => ({
               id: row.day,
@@ -266,6 +268,12 @@ export default async function AnalyticsConversionPage({
                 day: row.day.split("-").reverse().join(".") + ".",
                 visits: row.visits.toLocaleString("sr-Latn-RS"),
                 pageViews: row.pageViews.toLocaleString("sr-Latn-RS"),
+                webOrders: row.webOrders,
+                ananasOrders: row.ananasOrders,
+                ananasValue: formatRsd(row.ananasOrderValue, true),
+                totalOrders: row.totalOrders,
+                totalValue: formatRsd(row.totalOrderValue, true),
+                siteConversion: row.conversionPct == null ? "—" : `${row.conversionPct.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 2 })}%`,
                 orderValue: <span className="whitespace-nowrap tabular-nums">{formatRsd(row.orderValue, true)}</span>,
               },
             }))}
@@ -274,7 +282,7 @@ export default async function AnalyticsConversionPage({
         </Card>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="Trenutne posete" value={String(activeSessions.length)} hint="Jedinstvene aktivne sesije u poslednjih 5 minuta" />
+          <StatCard label="Trenutne posete" value={String(activeSessions)} hint="Vidljivi tabovi uz saglasnost · signal u poslednjih 90 sekundi" />
           <StatCard label="Poseta → kupovina" value={`${conversion.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 2 })}%`} hint={`${funnel.purchasers} kupaca / ${funnel.visitors} posetilaca · ${period.label}`} />
           <StatCard label="Poseta → vrednost" value={formatRsd(valuePerVisit)} hint={`${formatRsd(funnel.purchaseValue)} atribuirane vrednosti · ${period.label}`} />
           <StatCard label="Korpa → kupovina" value={`${cartConversion.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 2 })}%`} hint={`${funnel.convertedCartBuyers} / ${funnel.cartBuyers} anonimizovanih kupaca · ${period.label}`} />

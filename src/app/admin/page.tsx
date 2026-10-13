@@ -1,3 +1,4 @@
+import { getAnanasTopProducts } from "@/lib/ananas/report";
 import { AnanasSummary } from "@/components/admin/ananas-summary";
 import { AnanasOrdersHealth } from "@/components/admin/ananas-orders-health";
 import { db } from "@/lib/db";
@@ -292,7 +293,7 @@ async function AnalyticsCards({ data, periodLabel }: {
   return <div className="space-y-4">
     <p className="text-xs text-ink-500">Analitika: presek u {checkedAtLabel} · podaci mogu kasniti do 30 sekundi.</p>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <StatCard label="Trenutni broj poseta" value={String(visits.active_now)} hint="Jedinstvene consented sesije u poslednjih 5 minuta" />
+            <StatCard label="Trenutni broj poseta" value={String(visits.active_now)} hint="Jedinstveni posetioci uz saglasnost · vidljivi tabovi u poslednjih 90 sekundi" />
             <StatCard label="Današnji broj poseta" value={String(visits.today)} hint="Jedinstvene consented sesije danas" />
             <StatCard label="Prosečan dnevni broj poseta" value={visits.daily_average_30d.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 1 })} hint="Poslednjih 30 kalendarskih dana, uključujući dane bez poseta" />
           </div>
@@ -307,7 +308,7 @@ async function AnalyticsCards({ data, periodLabel }: {
 
 async function OperationalTables({ data, input, warehouseLabel }: OperationalSectionProps) {
   const { warehouseId, topProductsPeriod } = input;
-  const { warehouseStockRows, topProducts, lowStock } = await data;
+  const [{ warehouseStockRows, topProducts }, ananasTopProducts] = await Promise.all([data, getAnanasTopProducts(topProductsPeriod.start, topProductsPeriod.endExclusive)]);
   const visibleWarehouseStock = warehouseId
     ? warehouseStockRows.filter((row) => row.id === warehouseId)
     : warehouseStockRows;
@@ -370,27 +371,17 @@ async function OperationalTables({ data, input, warehouseLabel }: OperationalSec
           </Card>
 
           <Card>
-            <CardTitle description={`Aktivni artikli sa stanjem ≤ 2 · ${warehouseLabel}`}>
-              Niske zalihe
+            <CardTitle description={`${topProductsPeriod.label} · Svi Ananas magacini · Po vrednosti artikala, bez dostave. Bez otkazanih; uvezene porudžbine se ne broje dvaput.`}>
+              Ananas top proizvodi
             </CardTitle>
-            <DataTable
-              columns={[
-                { key: "sku", label: "SKU" },
-                { key: "name", label: "Naziv" },
-                { key: "stock", label: "Stanje", align: "right" },
-                { key: "incoming", label: "Ulazi", align: "right" },
-              ]}
-              rows={lowStock.map((product) => ({
-                id: product.id,
-                cells: {
-                  sku: <span className="font-mono text-xs">{product.sku}</span>,
-                  name: product.name,
-                  stock: <span className={product.qty === 0 ? "text-danger" : ""}>{product.qty}</span>,
-                  incoming: product.incoming_stock,
-                },
-              }))}
-              empty="Nema artikala sa niskim zalihama."
-            />
+            <DataTable columns={[
+              { key: "sku", label: "SKU" }, { key: "name", label: "Naziv" },
+              { key: "qty", label: "Komada", align: "right" },
+              { key: "value", label: "Finansijska vrednost", align: "right" },
+            ]} rows={ananasTopProducts.map(product => ({ id: product.sku, cells: {
+              sku: <span className="font-mono text-xs">{product.sku}</span>, name: product.name,
+              qty: product.qty, value: formatRsd(product.value_rsd),
+            } }))} empty="Nema Ananas porudžbina u periodu." />
           </Card>
         </div>
   </>;

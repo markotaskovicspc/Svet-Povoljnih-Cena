@@ -23,7 +23,7 @@ function styleHeader(row: ExcelJS.Row) {
 }
 
 export async function GET(request: Request) {
-  await requireAdminAction(["ADS"]);
+  await requireAdminAction(["ADS", "OPS"]);
   const search = new URL(request.url).searchParams;
   const period = resolveReportPeriod({
     range: search.get("range") ?? undefined,
@@ -50,7 +50,13 @@ export async function GET(request: Request) {
     { header: "Dan", key: "day", width: 16 },
     { header: "Ukupno poseta", key: "visits", width: 20 },
     { header: "Pregledi stranica", key: "pageViews", width: 22 },
-    { header: "Vrednost porudžbina (RSD)", key: "orderValue", width: 28 },
+    { header: "Vrednost sajta (RSD)", key: "orderValue", width: 28 },
+    { header: "Porudžbine sajta", key: "webOrders", width: 22 },
+    { header: "Ananas porudžbine", key: "ananasOrders", width: 22 },
+    { header: "Ananas vrednost (RSD)", key: "ananasOrderValue", width: 28 },
+    { header: "Ukupno porudžbina", key: "totalOrders", width: 22 },
+    { header: "Ukupna vrednost (RSD)", key: "totalOrderValue", width: 28 },
+    { header: "Konverzija sajta (%)", key: "conversionPct", width: 22 },
   ];
   daily.addRows(dailyRows);
   styleHeader(daily.getRow(1));
@@ -63,6 +69,10 @@ export async function GET(request: Request) {
   };
   daily.getColumn("visits").numFmt = "#,##0";
   daily.getColumn("pageViews").numFmt = "#,##0";
+  daily.getColumn("ananasOrderValue").numFmt = '#,##0.00 "RSD"';
+  daily.getColumn("totalOrderValue").numFmt = '#,##0.00 "RSD"';
+  daily.getColumn("conversionPct").numFmt = '0.00"%"';
+  daily.getCell("J1").note = "Praćene sesije sa web kupovinom / praćene sesije tog dana. Ananas nije deo konverzije; prazno kada nema praćenih poseta.";
   daily.getColumn("orderValue").numFmt = '#,##0.00 "RSD"';
 
   const overview = workbook.addWorksheet("Sažetak");

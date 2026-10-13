@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { AdminRefreshButton } from "@/components/admin/refresh-button";
 import { usePathname } from "next/navigation";
 import { PackageCheck, Undo2, LogOut } from "lucide-react";
 import { warehouseSignOut } from "@/app/admin/magacin/actions";
@@ -13,7 +14,7 @@ export function WarehouseShell({ name, children }: { name: string; children: Rea
       <header className="border-b border-border/60 bg-surface px-4 py-3">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
           <div className="min-w-0"><p className="text-lg font-semibold">Magacin</p><p className="truncate text-sm text-ink-500">{name}</p></div>
-          <form action={warehouseSignOut}><button className="flex min-h-11 items-center gap-2 rounded-lg border px-3 text-sm"><LogOut size={16} />Odjavi se</button></form>
+          <div className="flex items-center gap-2 [&>button]:h-11 [&>button]:w-11"><AdminRefreshButton /><form action={warehouseSignOut}><button className="flex min-h-11 items-center gap-2 rounded-lg border px-3 text-sm"><LogOut size={16} />Odjavi se</button></form></div>
         </div>
       </header>
       <nav aria-label="Poslovi u magacinu" className="sticky top-0 z-30 border-b border-border/60 bg-surface p-3 print:hidden">

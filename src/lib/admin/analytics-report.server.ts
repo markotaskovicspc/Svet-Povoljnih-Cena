@@ -5,46 +5,51 @@ import { db } from "@/lib/db";
 import { REPORT_TIME_ZONE, type ReportPeriod } from "@/lib/admin/report-period";
 
 export type DailyVisitsReportRow = {
-  day: string;
-  visits: number;
-  pageViews: number;
-  orderValue: number;
+  day: string; visits: number; pageViews: number; orderValue: number;
+  webOrders: number; ananasOrders: number; ananasOrderValue: number;
+  totalOrders: number; totalOrderValue: number; convertedVisits: number;
+  conversionPct: number | null;
 };
 
-/** Daily site sessions and web order totals, using Belgrade calendar days. */
-export async function getDailyVisitsReport(
-  period: ReportPeriod,
-): Promise<DailyVisitsReportRow[]> {
-  // Prisma stores occurredAt as a UTC timestamp without time zone. Convert
-  // local midnight boundaries to UTC explicitly, including DST transitions.
-  return db.$queryRaw<DailyVisitsReportRow[]>(Prisma.sql`
+/** Site conversion counts converted tracked sessions; marketplace orders never enter its denominator. */
+export async function getDailyVisitsReport(period: ReportPeriod): Promise<DailyVisitsReportRow[]> {
+  const rows = await db.$queryRaw<Omit<DailyVisitsReportRow, "conversionPct">[]>(Prisma.sql`
     WITH days AS (
-      SELECT generate_series(
-        ${period.fromInput}::date::timestamp,
-        ${period.toInput}::date::timestamp,
-        interval '1 day'
-      ) AS day
+      SELECT generate_series(${period.fromInput}::date::timestamp, ${period.toInput}::date::timestamp, interval '1 day') AS day
+    ), orders AS (
+      SELECT o.id, o."createdAt", o.channel::text AS channel, o.total
+      FROM "Order" o WHERE o.status NOT IN ('OTKAZANO', 'VRACENO')
+        AND o.channel IN ('WEB', 'ANANAS')
+        AND NOT (o.channel = 'ANANAS' AND EXISTS (SELECT 1 FROM "AnanasOrder" a WHERE a.id = COALESCE(o."externalOrderNo", o.number)))
+      UNION ALL
+      SELECT a.id, a."createdAt", 'ANANAS', a.total FROM "AnanasOrder" a WHERE a.status <> 'Otkazano'
     )
-    SELECT
-      to_char(d.day, 'YYYY-MM-DD') AS day,
-      COUNT(DISTINCT COALESCE(a."sessionId", a."anonymousId"))::int AS visits,
-      COUNT(a.id)::int AS "pageViews",
-      (
-        SELECT COALESCE(SUM(o.total), 0)::double precision
-        FROM "Order" o
-        WHERE o.channel = 'WEB'
-          AND o.status NOT IN ('OTKAZANO', 'VRACENO')
-          AND o."createdAt" >= (d.day AT TIME ZONE ${REPORT_TIME_ZONE}) AT TIME ZONE 'UTC'
-          AND o."createdAt" < ((d.day + interval '1 day') AT TIME ZONE ${REPORT_TIME_ZONE}) AT TIME ZONE 'UTC'
-      ) AS "orderValue"
+    SELECT to_char(d.day, 'YYYY-MM-DD') AS day, visits.visits, visits."pageViews",
+      totals."orderValue", totals."webOrders", totals."ananasOrders", totals."ananasOrderValue",
+      totals."totalOrders", totals."totalOrderValue",
+      (SELECT COUNT(DISTINCT COALESCE(c."sessionId", c."anonymousId"))::int
+        FROM "AnalyticsEvent" c JOIN "Order" o ON o.id = c."orderId"
+        WHERE c.type = 'CHECKOUT_COMPLETED' AND o.channel = 'WEB' AND o.status NOT IN ('OTKAZANO', 'VRACENO')
+          AND c."occurredAt" >= bounds.start_at AND c."occurredAt" < bounds.end_at
+          AND EXISTS (SELECT 1 FROM "AnalyticsEvent" v WHERE v.type = 'PAGE_VIEW'
+            AND COALESCE(v."sessionId", v."anonymousId") = COALESCE(c."sessionId", c."anonymousId")
+            AND v."occurredAt" >= bounds.start_at AND v."occurredAt" <= c."occurredAt")
+      ) AS "convertedVisits"
     FROM days d
-    LEFT JOIN "AnalyticsEvent" a
-      ON a.type = 'PAGE_VIEW'
-      AND a."occurredAt" >= (d.day AT TIME ZONE ${REPORT_TIME_ZONE}) AT TIME ZONE 'UTC'
-      AND a."occurredAt" < ((d.day + interval '1 day') AT TIME ZONE ${REPORT_TIME_ZONE}) AT TIME ZONE 'UTC'
-    GROUP BY d.day
+    CROSS JOIN LATERAL (SELECT (d.day AT TIME ZONE ${REPORT_TIME_ZONE}) AT TIME ZONE 'UTC' AS start_at,
+      ((d.day + interval '1 day') AT TIME ZONE ${REPORT_TIME_ZONE}) AT TIME ZONE 'UTC' AS end_at) bounds
+    CROSS JOIN LATERAL (SELECT COUNT(DISTINCT COALESCE(a."sessionId", a."anonymousId"))::int AS visits,
+      COUNT(*)::int AS "pageViews" FROM "AnalyticsEvent" a WHERE a.type = 'PAGE_VIEW'
+        AND a."occurredAt" >= bounds.start_at AND a."occurredAt" < bounds.end_at) visits
+    CROSS JOIN LATERAL (SELECT COUNT(*) FILTER (WHERE channel = 'WEB')::int AS "webOrders",
+      COALESCE(SUM(total) FILTER (WHERE channel = 'WEB'), 0)::double precision AS "orderValue",
+      COUNT(*) FILTER (WHERE channel = 'ANANAS')::int AS "ananasOrders",
+      COALESCE(SUM(total) FILTER (WHERE channel = 'ANANAS'), 0)::double precision AS "ananasOrderValue",
+      COUNT(*)::int AS "totalOrders", COALESCE(SUM(total), 0)::double precision AS "totalOrderValue"
+      FROM orders WHERE "createdAt" >= bounds.start_at AND "createdAt" < bounds.end_at) totals
     ORDER BY d.day DESC
   `);
+  return rows.map(row => ({ ...row, conversionPct: row.visits > 0 ? row.convertedVisits / row.visits * 100 : null }));
 }
 
 export const ANALYTICS_GRANULARITIES = ["day", "week", "month", "period"] as const;

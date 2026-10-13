@@ -31,6 +31,7 @@ export function OrderNotifications({ adminId }: { adminId: string }) {
   const [subscription, setSubscription] = useState<PushSubscription | null>(null);
   const [publicKey, setPublicKey] = useState<string | null>(null);
   const [enabled, setEnabled] = useState(false);
+  const [trafficAlerts, setTrafficAlerts] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("Proveravam obaveštenja…");
 
@@ -62,6 +63,7 @@ export function OrderNotifications({ adminId }: { adminId: string }) {
       setRegistration(worker);
       setPublicKey(config.publicKey);
       setSubscription(sub);
+      setTrafficAlerts(status.trafficAlerts ?? false);
       setEnabled(status.subscribed && Notification.permission === "granted");
       setMessage(Notification.permission === "denied"
         ? "Obaveštenja su blokirana. Dozvolite ih u podešavanjima pregledača ili telefona, pa ponovo otvorite ovu stranu."
@@ -95,6 +97,14 @@ export function OrderNotifications({ adminId }: { adminId: string }) {
     } finally { setBusy(false); }
   }
 
+  async function toggleTraffic(value: boolean) {
+    if (!subscription) return;
+    setBusy(true);
+    try { await requestPush({ operation: "preferences", endpoint: subscription.endpoint, trafficAlerts: value }); setTrafficAlerts(value); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "Podešavanje nije sačuvano."); }
+    finally { setBusy(false); }
+  }
+
   async function change(operation: "test" | "unsubscribe") {
     if (!subscription) return;
     setBusy(true);
@@ -121,6 +131,7 @@ export function OrderNotifications({ adminId }: { adminId: string }) {
       <div className="fixed inset-x-4 top-20 z-50 mt-2 sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:w-[min(22rem,calc(100vw-2rem))] space-y-3 rounded-xl border border-border bg-surface p-4 shadow-xl">
         <h2 className="text-sm font-semibold">Obaveštenja o porudžbinama</h2>
         <p className="text-sm text-ink-500" role="status">{message}</p>
+        {enabled && <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={trafficAlerts} disabled={busy} onChange={event => void toggleTraffic(event.target.checked)} className="mt-1" /><span>20+ aktivnih posetilaca na sajtu<span className="block text-xs text-ink-500">Najviše jednom na sat · posetioci uz saglasnost za analitiku</span></span></label>}
         {registration && publicKey && (
           <div className="flex flex-wrap gap-2">
             {enabled ? <>

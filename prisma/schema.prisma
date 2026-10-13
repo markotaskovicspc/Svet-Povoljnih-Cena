@@ -3970,6 +3970,7 @@ model AdminPushSubscription {
   id          String   @id @default(cuid())
   adminUserId String
   endpoint    String   @unique @db.VarChar(2048)
+  trafficAlerts Boolean @default(false)
   p256dh      String   @db.VarChar(100)
   auth        String   @db.VarChar(40)
   createdAt   DateTime @default(now())
@@ -4162,4 +4163,11 @@ model RestockSubscription {
   @@index([status, checkedAt])
   @@index([productId, status])
   @@index([userId])
+}
+
+/// Consented presence; one row per visitor, shared across tabs, pruned after 24h.
+model SiteVisitorPresence {
+  anonymousId String @id @db.VarChar(96)
+  lastSeenAt DateTime @default(now())
+  @@index([lastSeenAt])
 }

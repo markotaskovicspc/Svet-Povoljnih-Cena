@@ -14,6 +14,7 @@ import {
 } from "@/lib/channel-availability.server";
 
 const schemas = {
+  ADMIN_TRAFFIC_PUSH_DEVICE: z.object({ subscriptionId: z.string().min(1), count: z.number().int().min(20), measuredAt: z.string().datetime() }),
   ADMIN_ORDER_PUSH: z.object({ orderId: z.string().min(1) }),
   ADMIN_ORDER_PUSH_DEVICE: z.object({ orderId: z.string().min(1), subscriptionId: z.string().min(1), adminUserId: z.string().min(1) }),
   BANK_TRANSFER_RECONCILE: bankEntrySchema,
@@ -142,6 +143,7 @@ const schemas = {
 export type BackgroundJobKind = keyof typeof schemas;
 
 const HIGH_PRIORITY_BACKGROUND_JOB_KINDS: BackgroundJobKind[] = [
+  "ADMIN_TRAFFIC_PUSH_DEVICE",
   "ADMIN_ORDER_PUSH",
   "ADMIN_ORDER_PUSH_DEVICE",
   'BANK_TRANSFER_RECONCILE',
@@ -539,6 +541,12 @@ async function dispatchJob(job: JobRow) {
         if (doc?.sefStatus === "UNKNOWN") throw new PermanentBackgroundJobError("Ishod eOtpremnica zahteva nije potvrđen. Potrebna je provera statusa.");
         throw error;
       }
+      return;
+    }
+    case "ADMIN_TRAFFIC_PUSH_DEVICE": {
+      const { deliverTrafficPush } = await import("@/lib/admin/traffic-push.server");
+      const args = payload as z.infer<typeof schemas.ADMIN_TRAFFIC_PUSH_DEVICE>;
+      await deliverTrafficPush(args.subscriptionId, args.count, args.measuredAt);
       return;
     }
     case "ADMIN_ORDER_PUSH": {

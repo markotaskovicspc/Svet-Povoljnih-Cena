@@ -164,13 +164,14 @@ export const adminNav: AdminNavGroup[] = [
   {
     label: "Analitika",
     items: [
+      { href: "/admin/erp/performans-artikala", label: "Performans artikala", allowed: O },
       { href: "/admin/erp/order-bump", label: "Order bump", allowed: ["ADS", "OPS"] },
       { href: "/admin/preporuke", label: "Preporuke kupovine", allowed: C },
       { href: "/admin/izvestaji", label: "Izveštajni centar", allowed: ALL },
       {
         href: "/admin/erp/posete-konverzije",
         label: "Posete i konverzije",
-        allowed: A,
+        allowed: ["ADS", "OPS"],
       },
       {
         href: "/admin/erp/exit-intent",
