@@ -492,7 +492,7 @@ test.describe("Admin analitika reklamacija", () => {
       await expect(kpiSection.getByRole("heading", { name: "Zalihe za magacin" })).toHaveCount(0);
       await expect(page.getByRole("heading", { name: "Zalihe za magacin" })).toBeVisible();
       await expect(page.getByRole("heading", { name: "Top proizvodi" })).toBeVisible();
-      await expect(page.getByRole("heading", { name: "Niske zalihe" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Ananas top proizvodi" })).toBeVisible();
       await expect(page.getByText("Otvorene operacije", { exact: true })).toHaveCount(0);
       await expect(page.getByRole("heading", { name: "Status feed-a" })).toHaveCount(0);
 
