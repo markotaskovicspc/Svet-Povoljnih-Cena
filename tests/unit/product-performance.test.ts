@@ -3,7 +3,7 @@ import { calculateProductPerformance, summarizeProductPerformance, sortProductPe
 import { resolveReportPeriod } from '@/lib/admin/report-period';
 const period=resolveReportPeriod({range:'custom',from:'2026-10-01',to:'2026-10-02'});
 const now=new Date('2026-10-05T10:00:00Z');
-const input:PerformanceInput={id:'a',sku:'A',name:'Artikal',stock:5,unitCogs:100,baseline:10,latestBalance:5,
+const input:PerformanceInput={id:'a',sku:'A',name:'Artikal',stock:5,purchasePrices:[],costEvents:[{at:"2026-09-01T00:00:00Z",unitCost:100,source:"fiscal"}],baseline:10,latestBalance:5,
  movements:[{at:'2026-10-01T22:00:00Z',qty:-5,balance:5}],sales:[{day:'2026-10-02',qty:5,revenue:1000,cogs:500}]};
 it('uses available calendar days and weighted average stock, not current stock, for turnover',()=>{
  const row=calculateProductPerformance(input,period,now);
