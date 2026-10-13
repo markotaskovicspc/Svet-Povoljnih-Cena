@@ -62,7 +62,7 @@ export async function GET(request: Request) {
   styleHeader(daily.getRow(1));
   daily.getCell("A1").note = "Kalendarski dan po vremenu u Srbiji. Današnji podaci još nisu konačni.";
   daily.getCell("B1").note = "Ista sesija računa se jednom dnevno na celom sajtu. Samo posete uz saglasnost za analitiku.";
-  daily.getCell("D1").note = "Sve web porudžbine po datumu kreiranja u Srbiji, sa dostavom i montažom, bez otkazanih i vraćenih. Ne zavisi od saglasnosti za analitiku.";
+  daily.getCell("D1").note = "Sve web porudžbine po datumu kreiranja u Srbiji, sa dostavom i montažom, bez otkazanih. Ne zavisi od saglasnosti za analitiku.";
   daily.autoFilter = {
     from: { row: 1, column: 1 },
     to: { row: Math.max(1, dailyRows.length + 1), column: daily.columns.length },
@@ -129,7 +129,7 @@ export async function GET(request: Request) {
       : granularity === "month" ? row.bucket.slice(0, 7) : row.bucket,
   })));
   styleHeader(detail.getRow(1));
-  detail.getCell("E1").note = "Proizvodi: broj web porudžbina koje sadrže artikal, svaka jednom; bez otkazanih i vraćenih, uključujući porudžbine bez saglasnosti za analitiku. Ostale stranice: poslednja poseta pre checkout-a. Jedna porudžbina može se prikazati uz više proizvoda.";
+  detail.getCell("E1").note = "Proizvodi: broj web porudžbina koje sadrže artikal, svaka jednom; bez otkazanih, uključujući porudžbine bez saglasnosti za analitiku. Ostale stranice: poslednja poseta pre checkout-a. Jedna porudžbina može se prikazati uz više proizvoda.";
   detail.getCell("F1").note = "Kod proizvoda: odnos svih porudžbina artikla i poseta uz saglasnost za analitiku; nije praćenje istog kupca.";
   detail.getCell("G1").note = "Proizvodi: zbir stavki artikla bez dostave i montaže, pre popusta na celu porudžbinu. Ostale stranice: ukupna vrednost pripisanih porudžbina.";
   detail.autoFilter = {

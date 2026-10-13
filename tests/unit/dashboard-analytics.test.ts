@@ -29,7 +29,7 @@ describe("dashboard analytics freshness", () => {
       now, warehouseId: "", todayPeriod: expect.objectContaining({ fromInput: "2026-09-20" }),
       analyticsPeriod: expect.objectContaining({ start: period.start, endExclusive: period.endExclusive }),
     }));
-    expect(mocks.cacheOptions).toEqual({ key: ["admin-dashboard-analytics-v2"], options: { revalidate: 30, tags: ["admin-dashboard-analytics"] } });
+    expect(mocks.cacheOptions).toEqual({ key: ["admin-dashboard-analytics-v3"], options: { revalidate: 30, tags: ["admin-dashboard-analytics"] } });
   });
   it("does not turn a database failure into zero-valued analytics", async () => {
     mocks.load.mockRejectedValueOnce(new Error("Database unavailable"));

@@ -32,7 +32,7 @@ const readAnalytics = unstable_cache(
     });
     return { ...data, checkedAt: now.toISOString() };
   },
-  ["admin-dashboard-analytics-v2"],
+  ["admin-dashboard-analytics-v3"],
   { revalidate: 30, tags: ["admin-dashboard-analytics"] },
 );
 

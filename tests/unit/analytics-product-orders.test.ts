@@ -51,16 +51,16 @@ afterAll(async () => { await sql.close(); });
 
 it("counts each real web order once per product, including orders without analytics consent", async () => {
   const rows = await report();
-  expect(rows.find(row => row.path === "/p/stolica")).toMatchObject({ page_views: 2, visits: 1, purchases: 2, purchase_value: 3900 });
+  expect(rows.find(row => row.path === "/p/stolica")).toMatchObject({ page_views: 2, visits: 1, purchases: 3, purchase_value: 4000 });
   expect(rows.find(row => row.path === "/p/lampa")).toMatchObject({ page_views: 0, visits: 0, purchases: 2, purchase_value: 600 });
   expect(rows.filter(row => row.path.startsWith("/p/"))).toHaveLength(2);
 });
 
 it("drilldown has the same orders and value as the summary and aggregates duplicate product lines", async () => {
   const rows = await orders("/p/stolica");
-  expect(rows.map(row => row.number)).toEqual(["WEB-2", "WEB-1"]);
-  expect(rows.map(row => row.quantity)).toEqual([1, 3]);
-  expect(rows.every(row => row.totalCount === 2)).toBe(true);
+  expect(rows.map(row => row.number)).toEqual(["WEB-2", "WEB-R", "WEB-1"]);
+  expect(rows.find(row => row.id === "one")?.quantity).toBe(3);
+  expect(rows.every(row => row.totalCount === 3)).toBe(true);
   const summary = (await report()).find(row => row.path === "/p/stolica")!;
   expect(rows).toHaveLength(summary.purchases);
   expect(rows.reduce((sum, row) => sum + row.value, 0)).toBe(summary.purchase_value);
@@ -81,8 +81,8 @@ it("uses order creation date in Belgrade and keeps day/week/month drilldowns in 
   expect(days.find(row => row.path === "/p/lampa" && row.bucket === "2026-10-01")?.purchases).toBe(2);
   expect((await orders("/p/stolica", "2026-10-02", "day")).map(row => row.id)).toEqual(["two"]);
   expect(await orders("/p/stolica", "2026-10-03", "day")).toEqual([]);
-  expect((await orders("/p/stolica", "2026-09-28", "week"))).toHaveLength(2);
-  expect((await orders("/p/stolica", "2026-10-01", "month"))).toHaveLength(2);
+  expect((await orders("/p/stolica", "2026-09-28", "week"))).toHaveLength(3);
+  expect((await orders("/p/stolica", "2026-10-01", "month"))).toHaveLength(3);
 });
 
 it("paginates without losing the total and treats paths as query parameters", async () => {
@@ -91,8 +91,8 @@ it("paginates without losing the total and treats paths as query parameters", as
   const first = await orders("/p/stolica");
   const second = await orders("/p/stolica", "2026-10-01", "period", 2);
   expect(first).toHaveLength(50);
-  expect(second).toHaveLength(3);
-  expect(first[0].totalCount).toBe(53);
-  expect(new Set([...first, ...second].map(row => row.id)).size).toBe(53);
+  expect(second).toHaveLength(4);
+  expect(first[0].totalCount).toBe(54);
+  expect(new Set([...first, ...second].map(row => row.id)).size).toBe(54);
   expect(await orders("/p/stolica' OR 1=1 --")).toEqual([]);
 });

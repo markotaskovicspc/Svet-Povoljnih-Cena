@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { analyticsFunnelSummaryQuery } from "./analytics-report.server";
 import { PRESENCE_WINDOW_MS } from "@/lib/analytics/presence";
 import { db } from "@/lib/db";
 import { getReportDayPeriods, resolveReportPeriod, type ReportPeriod } from "./report-period";
@@ -50,6 +51,7 @@ type LowStockRow = {
 };
 
 type DashboardTopProduct = {
+  orders: number;
   sku: string;
   name: string;
   qty: number;
@@ -208,6 +210,7 @@ export function buildDashboardDataQuery(input: DashboardDataInput, section: "all
       SELECT
         oi.sku,
         oi.name,
+        COUNT(DISTINCT o.id)::int AS orders,
         COALESCE(SUM(oi.qty), 0)::int AS qty,
         COALESCE(SUM(oi.qty * oi."unitPriceSale"), 0)::double precision AS value_rsd
       FROM "OrderItem" oi
@@ -322,55 +325,7 @@ export function buildDashboardDataQuery(input: DashboardDataInput, section: "all
         (COALESCE((SELECT SUM(visits) FROM daily), 0) / 30.0)::double precision AS daily_average_30d
     ) result) AS "visitRows",
     (SELECT COALESCE(json_agg(result), '[]'::json) FROM (
-      WITH visitors AS (
-        SELECT DISTINCT a."anonymousId"
-        FROM "AnalyticsEvent" a
-        WHERE a.type = 'PAGE_VIEW'
-          AND a."occurredAt" >= ${analyticsPeriod.start}
-          AND a."occurredAt" < ${analyticsPeriod.endExclusive}
-      ), attributed AS (
-        SELECT DISTINCT ON (c."orderId")
-          c."orderId",
-          c."anonymousId",
-          COALESCE(c.value, 0)::double precision AS value
-        FROM "AnalyticsEvent" c
-        WHERE c.type = 'CHECKOUT_COMPLETED'
-          AND c."orderId" IS NOT NULL
-          AND c."occurredAt" >= ${analyticsPeriod.start}
-          AND c."occurredAt" < ${analyticsPeriod.endExclusive}
-          AND EXISTS (
-            SELECT 1
-            FROM "AnalyticsEvent" v
-            WHERE v.type = 'PAGE_VIEW'
-              AND v."anonymousId" = c."anonymousId"
-              AND v."occurredAt" <= c."occurredAt"
-              AND v."occurredAt" >= c."occurredAt" - interval '30 days'
-          )
-        ORDER BY c."orderId", c."occurredAt" ASC
-      ), cart_buyers AS (
-        SELECT
-          a."anonymousId",
-          MIN(a."occurredAt") AS first_cart_at
-        FROM "AnalyticsEvent" a
-        WHERE a.type = 'ADD_TO_CART'
-          AND a."occurredAt" >= ${analyticsPeriod.start}
-          AND a."occurredAt" < ${analyticsPeriod.endExclusive}
-        GROUP BY a."anonymousId"
-      ), converted_cart_buyers AS (
-        SELECT DISTINCT carts."anonymousId"
-        FROM cart_buyers carts
-        JOIN "AnalyticsEvent" c
-          ON c."anonymousId" = carts."anonymousId"
-          AND c.type = 'CHECKOUT_COMPLETED'
-          AND c."occurredAt" >= carts.first_cart_at
-          AND c."occurredAt" <= carts.first_cart_at + interval '30 days'
-      )
-      SELECT
-        (SELECT COUNT(*) FROM visitors)::int AS visitors,
-        (SELECT COUNT(DISTINCT "anonymousId") FROM attributed)::int AS purchasers,
-        COALESCE((SELECT SUM(value) FROM attributed), 0)::double precision AS purchase_value,
-        (SELECT COUNT(*) FROM cart_buyers)::int AS cart_buyers,
-        (SELECT COUNT(*) FROM converted_cart_buyers)::int AS converted_cart_buyers
+      ${analyticsFunnelSummaryQuery(analyticsPeriod)}
     ) result) AS "conversionRows"
   `;
   return Prisma.sql`SELECT ${section === "operations" ? operations : section === "analytics" ? analytics : Prisma.sql`${operations}, ${analytics}`}`;

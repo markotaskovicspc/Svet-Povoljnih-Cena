@@ -156,22 +156,21 @@ export default async function AnalyticsConversionPage({
             AND a."occurredAt" >= ${period.start}
             AND a."occurredAt" < ${period.endExclusive}
           GROUP BY a."anonymousId", a."productId"
-        ), purchases AS (
-          SELECT
-            carts."anonymousId",
-            oi."productId",
-            COALESCE(SUM(oi.qty), 0)::int AS purchased_qty,
-            COALESCE(SUM(oi.qty * oi."unitPriceSale"), 0)::double precision AS purchase_value
-          FROM carts
-          JOIN "AnalyticsEvent" c
-            ON c."anonymousId" = carts."anonymousId"
+        ), purchased_orders AS (
+          SELECT DISTINCT carts."anonymousId", carts."productId", c."orderId"
+          FROM carts JOIN "AnalyticsEvent" c ON c."anonymousId" = carts."anonymousId"
             AND c.type = 'CHECKOUT_COMPLETED'
             AND c."occurredAt" >= carts.first_cart_at
             AND c."occurredAt" <= carts.first_cart_at + interval '30 days'
-          JOIN "OrderItem" oi ON oi."orderId" = c."orderId"
-            AND oi."productId" = carts."productId"
-          WHERE c."orderId" IS NOT NULL
-          GROUP BY carts."anonymousId", oi."productId"
+          JOIN "Order" o ON o.id = c."orderId"
+            AND o.channel = 'WEB' AND o.status <> 'OTKAZANO'
+        ), purchases AS (
+          SELECT p."anonymousId", oi."productId",
+            COALESCE(SUM(oi.qty), 0)::int AS purchased_qty,
+            COALESCE(SUM(oi.qty * oi."unitPriceSale"), 0)::double precision AS purchase_value
+          FROM purchased_orders p JOIN "OrderItem" oi ON oi."orderId" = p."orderId"
+            AND oi."productId" = p."productId"
+          GROUP BY p."anonymousId", oi."productId"
         )
         SELECT
           carts."anonymousId" AS anonymous_id,
@@ -246,7 +245,7 @@ export default async function AnalyticsConversionPage({
         </div>
 
         <Card>
-          <CardTitle description={`${period.label} · Vreme u Srbiji. Ista sesija računa se jednom dnevno na celom sajtu. Prikazuju se samo posete uz saglasnost za analitiku. Konverzija sajta = praćene sesije sa web kupovinom ÷ praćene sesije tog dana; Ananas ne ulazi u konverziju. Vrednosti su po datumu kreiranja, sa dostavom i montažom, bez otkazanih i vraćenih. Ananas se prikazuje odvojeno i u ukupnom zbiru. Današnji podaci još nisu konačni.`}>
+          <CardTitle description={`${period.label} · Vreme u Srbiji. Ista sesija računa se jednom dnevno na celom sajtu. Prikazuju se samo posete uz saglasnost za analitiku. Konverzija sajta = praćene sesije sa web kupovinom ÷ praćene sesije tog dana; Ananas ne ulazi u konverziju. Vrednosti su po datumu kreiranja, sa dostavom i montažom, bez otkazanih. Ananas se prikazuje odvojeno i u ukupnom zbiru. Današnji podaci još nisu konačni.`}>
             Posete po danu
           </CardTitle>
           <DataTable
@@ -289,7 +288,7 @@ export default async function AnalyticsConversionPage({
         </div>
 
         <Card>
-          <CardTitle description={`${period.label}; za proizvode se broje web porudžbine koje sadrže artikal, bez otkazanih i vraćenih. Za ostale stranice koristi se poslednja poseta pre checkout-a. Klik na broj kupovina otvara porudžbine.`}>
+          <CardTitle description={`${period.label}; za proizvode se broje web porudžbine koje sadrže artikal, bez otkazanih. Za ostale stranice koristi se poslednja poseta pre checkout-a. Klik na broj kupovina otvara porudžbine.`}>
             Posete i konverzije po stranici
           </CardTitle>
           <DataTable

@@ -88,8 +88,8 @@ export default async function AnalyticsOrdersPage({ searchParams }: {
       <div className="px-4 py-6 md:px-8">
         <Card>
           <CardTitle description={productSlug
-            ? "Web porudžbine koje sadrže artikal, svaka jednom. Vrednost je zbir stavki artikla bez dostave i montaže, pre popusta na celu porudžbinu. Otkazane i vraćene porudžbine su izuzete."
-            : "Web porudžbine pripisane poslednjoj posećenoj stranici pre checkout-a. Otkazane i vraćene porudžbine su izuzete."}>
+            ? "Web porudžbine koje sadrže artikal, svaka jednom. Vrednost je zbir stavki artikla bez dostave i montaže, pre popusta na celu porudžbinu. Otkazane porudžbine su izuzete."
+            : "Web porudžbine pripisane poslednjoj posećenoj stranici pre checkout-a. Otkazane porudžbine su izuzete."}>
             {totalCount.toLocaleString("sr-Latn-RS")} porudžbina
           </CardTitle>
           <DataTable

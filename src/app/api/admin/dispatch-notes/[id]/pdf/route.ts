@@ -18,7 +18,7 @@ export async function GET(
   if (!note) {
     return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
   }
-  const pdf = buildDispatchNotePdf(note);
+  const pdf = await buildDispatchNotePdf(note);
   return new NextResponse(new Uint8Array(pdf), {
     headers: {
       "content-type": "application/pdf",

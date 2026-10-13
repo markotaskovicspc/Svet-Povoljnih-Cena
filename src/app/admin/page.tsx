@@ -347,13 +347,14 @@ async function OperationalTables({ data, input, warehouseLabel }: OperationalSec
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
           <Card>
-            <CardTitle description={`${topProductsPeriod.label} · ${warehouseLabel} · Po finansijskoj vrednosti, opadajuće. Prodajna cena × količina, pre dodatnih popusta na porudžbinu, bez dostave i montaže.`}>
+            <CardTitle description={`${topProductsPeriod.label} · ${warehouseLabel} · Po finansijskoj vrednosti, opadajuće. Bez otkazanih. Porudžbine se broje jednom po artiklu; komada je zbir količina. Prodajna cena × količina, pre dodatnih popusta na porudžbinu, bez dostave i montaže.`}>
               Top proizvodi
             </CardTitle>
             <DataTable
               columns={[
                 { key: "sku", label: "SKU" },
                 { key: "name", label: "Naziv" },
+                { key: "orders", label: "Porudžbine", align: "right" },
                 { key: "qty", label: "Komada", align: "right" },
                 { key: "value", label: "Finansijska vrednost", align: "right" },
               ]}
@@ -362,6 +363,7 @@ async function OperationalTables({ data, input, warehouseLabel }: OperationalSec
                 cells: {
                   sku: <span className="font-mono text-xs">{product.sku}</span>,
                   name: product.name,
+                  orders: product.orders,
                   qty: product.qty,
                   value: <span className="whitespace-nowrap font-semibold tabular-nums">{formatRsd(product.value_rsd)}</span>,
                 },

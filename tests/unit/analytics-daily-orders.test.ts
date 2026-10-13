@@ -29,7 +29,7 @@ async function order(id: string, at: string, total: number, status = "KREIRANO",
   await sql.query('INSERT INTO "Order" (id,"createdAt",channel,status,total) VALUES ($1, $2, $3, $4, $5)', [id, at, channel, status, total]);
 }
 
-it("sums web orders once independently of visits, excluding cancelled, returned and other channels", async () => {
+it("sums web orders once independently of visits, excluding cancelled and other channels", async () => {
   await sql.exec(`INSERT INTO "AnalyticsEvent" (id,type,"occurredAt","sessionId","anonymousId") VALUES
     ('view-1', 'PAGE_VIEW', '2026-10-10 10:00:00', 'same-session', 'visitor'),
     ('view-2', 'PAGE_VIEW', '2026-10-10 11:00:00', 'same-session', 'visitor'),
@@ -43,7 +43,7 @@ it("sums web orders once independently of visits, excluding cancelled, returned 
 
   expect(await getDailyVisitsReport(resolveReportPeriod({ range: "custom", from: "2026-10-09", to: "2026-10-11" }))).toEqual([
     { day: "2026-10-11", visits: 0, pageViews: 0, orderValue: 750.75, webOrders: 1, ananasOrders: 0, ananasOrderValue: 0, totalOrders: 1, totalOrderValue: 750.75, convertedVisits: 0, conversionPct: null },
-    { day: "2026-10-10", visits: 2, pageViews: 3, orderValue: 3000.75, webOrders: 2, ananasOrders: 1, ananasOrderValue: 10000, totalOrders: 3, totalOrderValue: 13000.75, convertedVisits: 0, conversionPct: 0 },
+    { day: "2026-10-10", visits: 2, pageViews: 3, orderValue: 12000.75, webOrders: 3, ananasOrders: 1, ananasOrderValue: 10000, totalOrders: 4, totalOrderValue: 22000.75, convertedVisits: 0, conversionPct: 0 },
     { day: "2026-10-09", visits: 0, pageViews: 0, orderValue: 0, webOrders: 0, ananasOrders: 0, ananasOrderValue: 0, totalOrders: 0, totalOrderValue: 0, convertedVisits: 0, conversionPct: null },
   ]);
 });

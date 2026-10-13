@@ -18,7 +18,7 @@ export async function getDailyVisitsReport(period: ReportPeriod): Promise<DailyV
       SELECT generate_series(${period.fromInput}::date::timestamp, ${period.toInput}::date::timestamp, interval '1 day') AS day
     ), orders AS (
       SELECT o.id, o."createdAt", o.channel::text AS channel, o.total
-      FROM "Order" o WHERE o.status NOT IN ('OTKAZANO', 'VRACENO')
+      FROM "Order" o WHERE o.status <> 'OTKAZANO'
         AND o.channel IN ('WEB', 'ANANAS')
         AND NOT (o.channel = 'ANANAS' AND EXISTS (SELECT 1 FROM "AnanasOrder" a WHERE a.id = COALESCE(o."externalOrderNo", o.number)))
       UNION ALL
@@ -29,7 +29,7 @@ export async function getDailyVisitsReport(period: ReportPeriod): Promise<DailyV
       totals."totalOrders", totals."totalOrderValue",
       (SELECT COUNT(DISTINCT COALESCE(c."sessionId", c."anonymousId"))::int
         FROM "AnalyticsEvent" c JOIN "Order" o ON o.id = c."orderId"
-        WHERE c.type = 'CHECKOUT_COMPLETED' AND o.channel = 'WEB' AND o.status NOT IN ('OTKAZANO', 'VRACENO')
+        WHERE c.type = 'CHECKOUT_COMPLETED' AND o.channel = 'WEB' AND o.status <> 'OTKAZANO'
           AND c."occurredAt" >= bounds.start_at AND c."occurredAt" < bounds.end_at
           AND EXISTS (SELECT 1 FROM "AnalyticsEvent" v WHERE v.type = 'PAGE_VIEW'
             AND COALESCE(v."sessionId", v."anonymousId") = COALESCE(c."sessionId", c."anonymousId")
@@ -119,7 +119,7 @@ function pagePurchaseOrdersSql(period: ReportPeriod, granularity: AnalyticsGranu
     eligible_orders AS (
       SELECT o.id, o."createdAt", o.total
       FROM "Order" o
-      WHERE o.channel = 'WEB' AND o.status NOT IN ('OTKAZANO', 'VRACENO')
+      WHERE o.channel = 'WEB' AND o.status <> 'OTKAZANO'
         AND o."createdAt" >= ${period.start}
         AND o."createdAt" < ${period.endExclusive}
     ), product_orders AS (
@@ -265,10 +265,10 @@ type AnalyticsFunnelDatabaseRow = {
   converted_cart_buyers: number;
 };
 
-export async function getAnalyticsFunnelSummary(
+export function analyticsFunnelSummaryQuery(
   period: ReportPeriod,
-): Promise<AnalyticsFunnelSummary> {
-  const rows = await db.$queryRaw<AnalyticsFunnelDatabaseRow[]>(Prisma.sql`
+) {
+  return Prisma.sql`
     WITH visitors AS (
       SELECT DISTINCT a."anonymousId"
       FROM "AnalyticsEvent" a
@@ -279,12 +279,13 @@ export async function getAnalyticsFunnelSummary(
       SELECT DISTINCT ON (c."orderId")
         c."orderId",
         c."anonymousId",
-        COALESCE(c.value, 0)::double precision AS value
+        o.total::double precision AS value
       FROM "AnalyticsEvent" c
+      JOIN "Order" o ON o.id = c."orderId"
       WHERE c.type = 'CHECKOUT_COMPLETED'
-        AND c."orderId" IS NOT NULL
-        AND c."occurredAt" >= ${period.start}
-        AND c."occurredAt" < ${period.endExclusive}
+        AND o.channel = 'WEB' AND o.status <> 'OTKAZANO'
+        AND o."createdAt" >= ${period.start}
+        AND o."createdAt" < ${period.endExclusive}
         AND EXISTS (
           SELECT 1
           FROM "AnalyticsEvent" v
@@ -311,6 +312,8 @@ export async function getAnalyticsFunnelSummary(
         AND c.type = 'CHECKOUT_COMPLETED'
         AND c."occurredAt" >= carts.first_cart_at
         AND c."occurredAt" <= carts.first_cart_at + interval '30 days'
+      JOIN "Order" o ON o.id = c."orderId"
+        AND o.channel = 'WEB' AND o.status <> 'OTKAZANO'
     )
     SELECT
       (SELECT COUNT(*) FROM visitors)::int AS visitors,
@@ -318,7 +321,11 @@ export async function getAnalyticsFunnelSummary(
       COALESCE((SELECT SUM(value) FROM attributed), 0)::double precision AS purchase_value,
       (SELECT COUNT(*) FROM cart_buyers)::int AS cart_buyers,
       (SELECT COUNT(*) FROM converted_cart_buyers)::int AS converted_cart_buyers
-  `);
+  `;
+}
+
+export async function getAnalyticsFunnelSummary(period: ReportPeriod): Promise<AnalyticsFunnelSummary> {
+  const rows = await db.$queryRaw<AnalyticsFunnelDatabaseRow[]>(analyticsFunnelSummaryQuery(period));
   const row = rows[0] ?? {
     visitors: 0,
     purchasers: 0,

@@ -9,7 +9,7 @@ beforeAll(async () => {
   await sql.exec(`CREATE TABLE "AnalyticsEvent" (
     type text, "occurredAt" timestamp, "sessionId" text, "anonymousId" text,
     "orderId" text, value numeric
-  ); CREATE INDEX ON "AnalyticsEvent" (type, "occurredAt"); CREATE TABLE "SiteVisitorPresence" ("anonymousId" text primary key, "lastSeenAt" timestamp);`);
+  ); CREATE INDEX ON "AnalyticsEvent" (type, "occurredAt"); CREATE TABLE "Order" (id text primary key, channel text, status text, total numeric, "createdAt" timestamp); CREATE TABLE "SiteVisitorPresence" ("anonymousId" text primary key, "lastSeenAt" timestamp);`);
 }, 30_000);
 afterAll(async () => { await sql.close(); });
 

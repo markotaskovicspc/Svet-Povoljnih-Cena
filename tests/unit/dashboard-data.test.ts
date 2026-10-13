@@ -68,7 +68,7 @@ it("keeps analytics scans out of the operational query and operational tables ou
   expect(operations.text).toContain('AS "lowStock"');
   expect(analytics.text).toContain('AS "visitRows"');
   expect(analytics.text).toContain('AS "conversionRows"');
-  expect(analytics.text).not.toContain('FROM "Order"');
+  expect(analytics.text).toContain('JOIN "Order"');
   expect(analytics.text).not.toContain('FROM "Warehouse"');
 });
 
