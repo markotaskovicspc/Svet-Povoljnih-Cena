@@ -52,8 +52,8 @@ export async function requireUser(returnTo?: string) {
 export async function requireAdmin(roles?: AdminRoleName[]) {
   const admin = await getCurrentAdmin();
   if (!admin) redirect("/admin/prijava");
-  if (roles && admin.role !== "SUPER" && !roles.includes(admin.role)) {
-    redirect("/admin?forbidden=1");
+  if ((admin.role === "WAREHOUSE" && !roles?.includes("WAREHOUSE")) || (roles && admin.role !== "SUPER" && !roles.includes(admin.role))) {
+    redirect(admin.role === "WAREHOUSE" ? "/admin/magacin?forbidden=1" : "/admin?forbidden=1");
   }
   return admin;
 }

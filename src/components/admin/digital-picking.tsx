@@ -33,7 +33,7 @@ function Camera({ onCode, onClose }: { onCode: (code: string) => void; onClose: 
   return <div className="rounded-xl border bg-black p-3 text-white"><video ref={video} muted playsInline className="max-h-64 w-full" /><p role="status">{error || "Usmerite kameru ka barkodu. Posle očitavanja potvrdite količinu."}</p><button type="button" onClick={onClose} className="mt-2 rounded border px-4 py-2">Zatvori kameru</button></div>;
 }
 
-export function DigitalPicking({ initial }: { initial: Session }) {
+export function DigitalPicking({ initial, warehouseMode = false }: { initial: Session; warehouseMode?: boolean }) {
   const [session, setSession] = useState(initial);
   const [code, setCode] = useState("");
   const [camera, setCamera] = useState(false);
@@ -46,7 +46,7 @@ export function DigitalPicking({ initial }: { initial: Session }) {
   const [quantity, setQuantity] = useState(1);
   const [note, setNote] = useState("");
   const [noteKey, setNoteKey] = useState("");
-  useEffect(() => { if (!busy && !retry) input.current?.focus(); }, [busy, retry]);
+  useEffect(() => { if (!warehouseMode && !busy && !retry) input.current?.focus(); }, [busy, retry, warehouseMode]);
   const total = session.rows.reduce((sum, r) => sum + r.quantity, 0);
   const done = session.rows.reduce((sum, r) => sum + (session.progress[r.key] ?? 0), 0);
   const editable = session.editable && !busy && !retry;
@@ -77,10 +77,10 @@ export function DigitalPicking({ initial }: { initial: Session }) {
   }
   return <div className="space-y-5 p-4 md:p-8">
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4">
-      <div><strong className="text-2xl">{done} / {total} kom.</strong><p>{total > 0 && done === total ? "Roba je odvojena. Nastavite sa proverom pakovanja i dimenzija na nalogu." : "Odvojeno / potrebno"}</p></div>
-      <div className="flex gap-2 print:hidden"><Link href="/admin/erp/picking-pozicije" className="rounded border px-3 py-2">Pozicije</Link><button onClick={() => window.print()} className="rounded border px-3 py-2">Štampaj putanju</button><button disabled={busy || !!retry} onClick={() => { window.location.reload(); }} className="rounded border px-3 py-2">Osveži</button></div>
+      <div><strong className="text-2xl">{done} / {total} kom.</strong><p>{total > 0 && done === total ? "Roba je odvojena. Nastavite sa proverom pakovanja i dimenzija." : "Odvojeno / potrebno"}</p></div>
+      <div className="flex gap-2 print:hidden">{!warehouseMode && <><Link href="/admin/erp/picking-pozicije" className="rounded border px-3 py-2">Pozicije</Link><button onClick={() => window.print()} className="rounded border px-3 py-2">Štampaj putanju</button></>}<button disabled={busy || !!retry} onClick={() => { window.location.reload(); }} className="rounded border px-3 py-2">Osveži</button></div>
     </div>
-    <p className="text-sm text-muted-foreground">Redosled je po magacinu i podešenom redosledu pozicija. Kod više pozicija proverite raspoloživu robu. Stavke bez pozicije su na kraju svakog magacina. Odvajanje ne zamenjuje potvrdu spakovanih paketa.</p>
+    <p className="text-sm text-muted-foreground">{warehouseMode ? "Pronađite poziciju i potvrdite količinu. Odvajanje ne zamenjuje potvrdu pakovanja." : "Redosled je po magacinu i podešenom redosledu pozicija. Kod više pozicija proverite raspoloživu robu. Stavke bez pozicije su na kraju svakog magacina. Odvajanje ne zamenjuje potvrdu spakovanih paketa."}</p>
     {session.previousPlan && <p className="rounded border border-amber-400 bg-amber-50 p-3 text-amber-950">Sadržaj naloga je menjan posle ranijih skeniranja. Za sadašnji sadržaj roba mora ponovo da se proveri; prethodni zapisi ostaju u istoriji.</p>}
     {!session.editable && <p className="rounded border p-3">Nalog je zaključen ili su adresnice već pokrenute. Pregled je dostupan, novo skeniranje je zaključano.</p>}
     {session.editable && <section className="space-y-3 rounded-xl border bg-muted/20 p-4 print:hidden">
@@ -91,7 +91,7 @@ export function DigitalPicking({ initial }: { initial: Session }) {
         <button type="button" disabled={!editable} onClick={() => setCamera(!camera)} className="rounded border px-4 py-3">Kamera</button>
       </form>
       {camera && <Camera onClose={() => setCamera(false)} onCode={value => { setCode(value); setCamera(false); setMessage(`Očitano: ${value}. Proverite količinu i kliknite Evidentiraj.`); }} />}
-      <p className="text-sm">Ručni skener šalje šifru i Enter. Jedan sken dodaje izabranu količinu (podrazumevano 1). Za pogrešan unos koristite −1 na odgovarajućem redu.</p>
+      <p className="text-sm">{warehouseMode ? "Unesite ili skenirajte šifru i potvrdite količinu. Pogrešan unos ispravite sa −1." : "Ručni skener šalje šifru i Enter. Jedan sken dodaje izabranu količinu (podrazumevano 1). Za pogrešan unos koristite −1 na odgovarajućem redu."}</p>
     </section>}
     <div role="status" aria-live="polite" className="print:hidden">{message}</div>
     {retry && <div className="flex flex-wrap gap-3 rounded border border-amber-400 p-3 print:hidden"><button disabled={busy} onClick={() => void send(retry)} className="rounded border px-3 py-2">Ponovi isti zahtev</button><button disabled={busy} onClick={() => window.location.reload()} className="rounded border px-3 py-2">Učitaj stanje sa servera</button></div>}
@@ -100,13 +100,13 @@ export function DigitalPicking({ initial }: { initial: Session }) {
       const count = session.progress[row.key] ?? 0;
       return <article key={row.key} className={`break-inside-avoid rounded-xl border p-4 ${count === row.quantity ? "border-emerald-300 bg-emerald-50 text-emerald-950" : ""} ${selected === row.key ? "ring-2 ring-blue-500" : ""}`}>
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex gap-4"><div className="min-w-16 text-center"><span className="text-xs">POZICIJA</span><div className="text-2xl font-bold">{row.positions.join(", ") || "—"}</div></div><div><h2 className="font-semibold">{row.sku} · {row.name}</h2><p className="text-sm">{row.warehouseName} · Barkod: {row.barcode || "Nije upisan"}</p><p className="mt-2 text-sm">{row.allocations.map(a => `${a.orderNumber}: ${a.quantity} kom.`).join(" · ")}</p></div></div>
+          <div className="flex min-w-0 flex-1 gap-4"><div className="min-w-16 text-center"><span className="text-xs">POZICIJA</span><div className="text-2xl font-bold">{row.positions.join(", ") || "—"}</div></div><div className="min-w-0 break-words"><h2 className="font-semibold">{row.sku} · {row.name}</h2><p className="text-sm">{row.warehouseName} · Barkod: {row.barcode || "Nije upisan"}</p><p className="mt-2 text-sm">{row.allocations.map(a => `${a.orderNumber}: ${a.quantity} kom.`).join(" · ")}</p></div></div>
           <strong className="text-xl">{count} / {row.quantity}</strong>
         </div>
         {session.editable && <div className="mt-3 flex flex-wrap gap-2 print:hidden"><button disabled={!editable} onClick={() => setSelected(row.key)} className="rounded border px-3 py-2">{selected === row.key ? "Izabran red" : "Izaberi za sken"}</button><button disabled={!editable || count >= row.quantity} onClick={() => record(row.key, 1, "Ručna potvrda odvajanja")} className="rounded border px-4 py-2">+1</button><button disabled={!editable || count === 0} onClick={() => record(row.key, -1, "Ispravka količine")} className="rounded border px-4 py-2">−1</button><button disabled={!editable} onClick={() => { setSelected(row.key); setNoteKey(row.key); setNote(`Nedostaje ${row.quantity - count} kom. za ${row.sku}. `); }} className="rounded border px-3 py-2">Nedostaje / napomena</button></div>}
       </article>;
     })}</div>
     {note && <form className="space-y-2 rounded border p-4 print:hidden" onSubmit={e => { e.preventDefault(); record(noteKey, 0, note); }}><label className="block">Napomena za izabrani red<textarea value={note} onChange={e => setNote(e.target.value)} maxLength={1000} required className="mt-1 w-full rounded border p-3" /></label><button disabled={!editable} className="rounded bg-foreground px-4 py-2 text-background">Sačuvaj napomenu</button><button type="button" onClick={() => setNote("")} className="ml-3">Odustani</button></form>}
-    <details className="rounded border p-4 print:hidden"><summary>Istorija odvajanja (poslednjih 100 zapisa)</summary><ul className="mt-3 space-y-2 text-sm">{session.events.map(e => <li key={e.id}>{new Date(e.createdAt).toLocaleString("sr-RS", { timeZone: "Europe/Belgrade" })} · {e.actorName} · {session.rows.find(r => r.key === e.rowKey)?.sku ?? e.rowKey} · {e.delta > 0 ? "+" : ""}{e.delta} kom. {e.note} {e.planHash !== session.planHash ? "(prethodni sadržaj naloga)" : ""}</li>)}</ul></details>
+    {!warehouseMode && <details className="rounded border p-4 print:hidden"><summary>Istorija odvajanja (poslednjih 100 zapisa)</summary><ul className="mt-3 space-y-2 text-sm">{session.events.map(e => <li key={e.id}>{new Date(e.createdAt).toLocaleString("sr-RS", { timeZone: "Europe/Belgrade" })} · {e.actorName} · {session.rows.find(r => r.key === e.rowKey)?.sku ?? e.rowKey} · {e.delta > 0 ? "+" : ""}{e.delta} kom. {e.note} {e.planHash !== session.planHash ? "(prethodni sadržaj naloga)" : ""}</li>)}</ul></details>}
   </div>;
 }

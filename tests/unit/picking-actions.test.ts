@@ -9,9 +9,9 @@ const request = { id: "9aab9d6c-7f2c-4af5-aef4-efb4c532adcf", batchId: "b1", pla
 const session = { editable: true, planHash: request.planHash, rows: [{ key: "sku1", sku: "001", quantity: 2 }], progress: { sku1: 1 } };
 beforeEach(() => { vi.clearAllMocks(); mock.tx.pickingScanEvent.findUnique.mockResolvedValue(null); mock.session.mockResolvedValue(structuredClone(session)); });
 describe("picking write safety", () => {
- it("requires OPS and locks the batch before reading quantities", async () => {
+ it("allows warehouse operations and locks the batch before reading quantities", async () => {
   await recordPicking(request);
-  expect(mock.auth).toHaveBeenCalledWith(expect.objectContaining({ allowed: ["OPS"] }));
+  expect(mock.auth).toHaveBeenCalledWith(expect.objectContaining({ allowed: ["OPS", "WAREHOUSE"] }));
   expect(mock.tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(mock.session.mock.invocationCallOrder[0]);
   expect(mock.tx.pickingScanEvent.create).toHaveBeenCalledWith({ data: { ...request, actorId: "admin-1" } });
  });

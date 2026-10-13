@@ -18,6 +18,7 @@ describe("personal admin navigation", () => {
     allowed: ["OPS"] as const,
   };
   const importHref = "/admin/erp/porudzbina-iz-chata";
+  const warehouseHrefs = ["/admin/erp/operativci", "/admin/magacin"];
   const purchaseHref =
     "/admin/erp/nabavne-porudzbenice?savedView=purchase-view";
 
@@ -31,7 +32,7 @@ describe("personal admin navigation", () => {
     const customized = applyAdminNavPreferences(available, preferences);
     expect(
       customized.flatMap((group) => group.items.map((item) => item.href)),
-    ).toEqual(["/admin", purchaseHref, "/admin/checkouti", importHref]);
+    ).toEqual(["/admin", purchaseHref, "/admin/checkouti", importHref, ...warehouseHrefs]);
     expect(
       activeAdminNavHref(
         customized,
@@ -60,6 +61,7 @@ describe("personal admin navigation", () => {
       "/admin",
       "/admin/checkouti",
       importHref,
+      ...warehouseHrefs,
       "/admin/erp/prodajni-nalozi?savedView=sales",
       purchaseHref,
     ]);
@@ -85,12 +87,12 @@ describe("personal admin navigation", () => {
       visibleHrefs: ["/admin", "/admin/erp/artikli?savedView=foreign"],
       order: [purchaseHref, "/admin/erp/artikli?savedView=foreign"],
     });
-    expect(customized[0]!.items.map((item) => item.href)).toEqual(["/admin", importHref]);
+    expect(customized[0]!.items.map((item) => item.href)).toEqual(["/admin", importHref, ...warehouseHrefs]);
   });
 
   it("honors an explicitly hidden order import tab after the menu is configured", () => {
     const customized = applyAdminNavPreferences(allowedNavFor("OPS"), {
-      visibleHrefs: ["/admin"], order: ["/admin", importHref],
+      visibleHrefs: ["/admin"], order: ["/admin", importHref, ...warehouseHrefs],
     });
     expect(customized[0]!.items.map(item => item.href)).toEqual(["/admin"]);
   });

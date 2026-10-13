@@ -20,6 +20,7 @@ import { getErpModuleDefinition } from "@/lib/admin/erp";
 import { Button } from "@/components/ui/button";
 import { OrderNotifications } from "@/components/admin/order-notifications";
 import { canReceiveOrderPush } from "@/lib/admin/push-policy";
+import { WarehouseShell } from "@/components/admin/warehouse-shell";
 import "./theme.css";
 
 export const dynamic = "force-dynamic";
@@ -34,12 +35,13 @@ export default async function AdminLayout({
   children: React.ReactNode;
 }) {
   const pathname = (await headers()).get("x-pathname") ?? "/admin";
+  const warehousePath = pathname === "/admin/magacin" || pathname.startsWith("/admin/magacin/");
   const initialTheme = (await cookies()).get("spc-admin-theme")?.value === "dark"
     ? "dark"
     : "light";
 
   // Login page renders without the shell.
-  if (pathname === "/admin/prijava") {
+  if (pathname === "/admin/prijava" || pathname === "/admin/magacin/prijava") {
     return (
       <AdminThemeProvider initialTheme={initialTheme}>
         <div className="absolute right-4 top-4 print:hidden">
@@ -52,7 +54,13 @@ export default async function AdminLayout({
 
   const user = await getCurrentAdmin();
   if (!user) {
-    redirect(`/admin/prijava?callbackUrl=${encodeURIComponent(pathname)}`);
+    redirect(`${warehousePath ? "/admin/magacin/prijava" : "/admin/prijava"}?callbackUrl=${encodeURIComponent(pathname)}`);
+  }
+
+  if (user.role === "WAREHOUSE" && !warehousePath) redirect("/admin/magacin");
+  if (warehousePath) {
+    if (!isAuthorized(user.role, ["OPS", "WAREHOUSE"])) redirect("/admin?forbidden=1");
+    return <AdminThemeProvider initialTheme={initialTheme}><WarehouseShell name={user.name}>{children}</WarehouseShell></AdminThemeProvider>;
   }
 
   const availableNav = allowedNavFor(user.role);

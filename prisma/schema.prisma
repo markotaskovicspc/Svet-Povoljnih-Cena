@@ -3939,6 +3939,7 @@ model ContentPageRevision {
 // ──────────────────────────────────────────────────────────────────────
 
 enum AdminRoleName {
+  WAREHOUSE
   SUPER
   CONTENT
   OPS

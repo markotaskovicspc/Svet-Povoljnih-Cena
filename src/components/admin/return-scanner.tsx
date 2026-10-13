@@ -34,7 +34,7 @@ function subscribePointer(callback: () => void) {
 const coarsePointer = () => window.matchMedia("(pointer: coarse)").matches;
 const serverPointer = () => false;
 
-export function ReturnScanner({ initialCode = "", initialCamera = false, warehouseId = "", children }: { initialCode?: string; initialCamera?: boolean; warehouseId?: string; children?: ReactNode }) {
+export function ReturnScanner({ initialCode = "", initialCamera = false, warehouseId = "", basePath = "/admin/erp/povrati", children }: { initialCode?: string; initialCamera?: boolean; warehouseId?: string; basePath?: "/admin/erp/povrati" | "/admin/magacin/povrat"; children?: ReactNode }) {
   const form = useRef<HTMLFormElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const [cameraOverride, setCamera] = useState<boolean | null>(null);
@@ -60,22 +60,22 @@ export function ReturnScanner({ initialCode = "", initialCamera = false, warehou
     form.current.requestSubmit();
   }
   return <>
-    <form ref={form} action="/admin/erp/povrati" method="get" onSubmit={event => {
+    <form ref={form} action={basePath} method="get" onSubmit={event => {
       event.preventDefault();
       const code = input.current?.value.trim() ?? "";
       if (!code || code.length > 40) { setError("Unesite ili skenirajte kod paketa."); return; }
       setError(""); setCamera(false);
       startTransition(() => {
         if (code === initialCode) router.refresh();
-        else router.push(`/admin/erp/povrati?q=${encodeURIComponent(code)}${warehouseId ? `&warehouse=${encodeURIComponent(warehouseId)}` : ""}`, { scroll: false });
+        else router.push(`${basePath}?q=${encodeURIComponent(code)}${warehouseId ? `&warehouse=${encodeURIComponent(warehouseId)}` : ""}`, { scroll: false });
       });
     }} className="flex flex-wrap items-end gap-3" aria-busy={pending}>
-      <Field label="Skeniraj paket ili unesi broj porudžbine">
+      <Field label="Skeniraj paket ili unesi broj porudžbine" className="min-w-0 max-w-full">
         <input ref={input} name="q" defaultValue={initialCode} disabled={pending} maxLength={40} autoComplete="off" placeholder="Kod sa adresnice" className="h-11 w-80 max-w-full rounded-lg border border-input px-3" />
       </Field>
       <button disabled={pending} className="rounded-lg bg-foreground px-4 py-3 text-background">{pending ? "Pronalazim paket…" : "Pronađi paket"}</button>
       <button type="button" disabled={pending} aria-expanded={camera} onClick={() => { input.current?.blur(); setError(""); setCamera(!camera); }} className="rounded-lg border border-border px-4 py-3">Skeniraj kamerom</button>
-      {initialCode ? <Link href={`/admin/erp/povrati?camera=1${warehouseId ? `&warehouse=${encodeURIComponent(warehouseId)}` : ""}`} className="text-sm underline">Sledeći paket</Link> : null}
+      {initialCode ? <Link href={`${basePath}?camera=1${warehouseId ? `&warehouse=${encodeURIComponent(warehouseId)}` : ""}`} className="text-sm underline">Sledeći paket</Link> : null}
     </form>
     {camera && <ReturnCamera onCode={scanned} onClose={() => setCamera(false)} />}
     {error && <p role="alert" className="mt-3 text-warning">{error}</p>}
