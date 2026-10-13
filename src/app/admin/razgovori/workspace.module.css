@@ -1,0 +1,44 @@
+@media (max-width: 1023px) {
+  /* Also remove covered controls from keyboard and screen-reader navigation. */
+  :global(body):has(.openConversation) :global([data-admin-toolbar]),
+  :global(body):has(.openConversation) :global([data-admin-page-header]),
+  :global([data-admin-shell]):has(.openConversation) > aside {
+    display: none;
+  }
+
+  .openConversation {
+    position: fixed;
+    inset-inline: 0;
+    top: var(--conversation-top, 0px);
+    z-index: 40;
+    height: var(--conversation-height, 100dvh);
+    padding: 0;
+    background: var(--surface);
+  }
+
+  .openConversation .frame {
+    height: 100%;
+    min-height: 0;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .chatHeader {
+    min-height: 64px;
+    padding-top: max(0.5rem, env(safe-area-inset-top));
+  }
+
+  .details {
+    position: absolute;
+    inset-inline: 0;
+    top: max(64px, calc(56px + env(safe-area-inset-top)));
+    z-index: 10;
+    max-height: 60%;
+    overscroll-behavior: contain;
+    box-shadow: 0 12px 24px #0002;
+  }
+
+  .composer {
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
+}
