@@ -129,6 +129,12 @@ export const adminNav: AdminNavGroup[] = [
         allowed: O,
       },
       {
+        href: "/admin/erp/operativci",
+        label: "Nalozi magacionera",
+        allowed: O,
+      },
+      { href: "/admin/magacin", label: "Prostor za magacin", allowed: O },
+      {
         href: "/admin/erp/preuzimanja",
         label: "Picking i preuzimanja",
         allowed: O,
@@ -304,6 +310,11 @@ export function applyAdminNavPreferences(
   // Show the new order-import tab in menus saved before this feature existed.
   const importHref = "/admin/erp/porudzbina-iz-chata";
   if (byHref.has(importHref) && !preferences.order.includes(importHref)) visible.add(importHref);
+
+  // Include warehouse tools in menus saved before those tools existed.
+  for (const href of ["/admin/erp/operativci", "/admin/magacin"]) {
+    if (byHref.has(href) && !preferences.order.includes(href)) visible.add(href);
+  }
 
   // Existing menus predate saved shortcuts, and newly pinned views must appear
   // without requiring another menu save. Keep their default placement until

@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import {
   EMPTY_ADMIN_ACTION_STATE,
@@ -81,6 +82,7 @@ export function AdminActionForm({
   id,
   preserveValues = false,
   refreshOnSuccess = false,
+  toastOnSuccess = false,
   successPopupUrl,
   popupWindowName,
   testId,
@@ -91,13 +93,18 @@ export function AdminActionForm({
   id?: string;
   preserveValues?: boolean;
   refreshOnSuccess?: boolean;
+  toastOnSuccess?: boolean;
   successPopupUrl?: string;
   popupWindowName?: string;
   testId?: string;
 }) {
   const router = useRouter();
   const [state, formAction] = useActionState(
-    action,
+    async (previousState: AdminActionState, formData: FormData) => {
+      const result = await action(previousState, formData);
+      if (toastOnSuccess && result.ok && result.message) toast.success(result.message);
+      return result;
+    },
     EMPTY_ADMIN_ACTION_STATE,
   );
   const [clientValidationMessage, setClientValidationMessage] = useState("");

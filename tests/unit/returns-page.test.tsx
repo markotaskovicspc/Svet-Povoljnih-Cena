@@ -21,6 +21,7 @@ vi.mock("@/lib/admin/reclamation-fulfillment.server", () => ({ receiveReclamatio
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect, RedirectType: { replace: "replace" }, useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 
+import { ReturnsWorkspace } from "@/components/admin/returns-workspace";
 import ReturnsPage from "@/app/admin/erp/povrati/page";
 
 const returnedOrder = (id: string, shipments = [{
@@ -35,6 +36,7 @@ const returnedOrder = (id: string, shipments = [{
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.authorize.mockResolvedValue({ id: "ops", role: "OPS" });
   mocks.state.mockResolvedValue({ ok: false, message: "Prijem nije potvrđen." });
   mocks.redirect.mockImplementation(() => { throw new Error("NEXT_REDIRECT"); });
   mocks.scan.mockRejectedValue(new Error("Paket nije pronađen."));
@@ -317,5 +319,29 @@ describe("next return after receipt", () => {
     mocks.state.mockResolvedValue(failure);
     expect(await receive({}, new FormData())).toEqual(failure);
     expect(mocks.redirect).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("warehouse returns workspace", () => {
+  it("keeps scanner lookup and evidence links inside the restricted workspace", async () => {
+    const html = renderToStaticMarkup(await ReturnsWorkspace({ warehouseMode: true }));
+    expect(mocks.authorize).toHaveBeenCalledWith(["OPS", "WAREHOUSE"]);
+    expect(html).toContain('action="/admin/magacin/povrat"');
+    expect(html).toContain('/admin/magacin/povrat?evidence=1');
+    expect(html).not.toContain('href="/admin/erp/');
+  });
+  it("returns warehouse users to their scanner even if an ERP return target is submitted", async () => {
+    mocks.scan.mockResolvedValue({ kind: "reshipment", code: "9002838514", received: false,
+      shipment: { orderId: "o", order: { number: "SPC-TEST" }, provider: "MYGLS", status: "FAILED", packageCount: 1, providerParcelNumbers: [9002838514] },
+      lines: [{ id: "i", sku: "110085", name: "Stolica", totalQuantity: 1, units: [1] }],
+    });
+    const found = receiptAction(await ReturnsWorkspace({ warehouseMode: true, searchParams: Promise.resolve({ q: "9002838514" }) }));
+    expect(found).toBeDefined();
+    mocks.state.mockResolvedValue({ ok: true, message: "Paket je primljen." });
+    mocks.authorize.mockResolvedValue({ id: "worker", role: "WAREHOUSE" });
+    const data = new FormData(); data.set("warehouseId", "qa"); data.set("returnTo", "/admin/erp/povrati");
+    await expect(found!({}, data)).rejects.toThrow("NEXT_REDIRECT");
+    expect(mocks.redirect).toHaveBeenCalledWith("/admin/magacin/povrat?camera=1&warehouse=qa&received=1", "replace");
   });
 });

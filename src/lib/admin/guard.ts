@@ -15,6 +15,7 @@ import { isAuthorized } from "./authorization";
 export { isAuthorized } from "./authorization";
 
 export const ADMIN_ROLE_LABEL: Record<AdminRoleName, string> = {
+  WAREHOUSE: "Magacioner",
   SUPER: "Super admin",
   CONTENT: "Sadržaj",
   OPS: "Operativa",
@@ -32,9 +33,9 @@ export const ADMIN_ROLE_LABEL: Record<AdminRoleName, string> = {
  */
 export async function requireAdminAction(allowed?: readonly AdminRoleName[]) {
   const admin = await getCurrentAdmin();
-  if (!admin) redirect("/admin/prijava");
-  if (allowed && !isAuthorized(admin.role, allowed)) {
-    redirect("/admin?forbidden=1");
+  if (!admin) redirect(allowed?.includes("WAREHOUSE") ? "/admin/magacin/prijava" : "/admin/prijava");
+  if ((admin.role === "WAREHOUSE" && !allowed?.includes("WAREHOUSE")) || (allowed && !isAuthorized(admin.role, allowed))) {
+    redirect(admin.role === "WAREHOUSE" ? "/admin/magacin?forbidden=1" : "/admin?forbidden=1");
   }
   return admin;
 }

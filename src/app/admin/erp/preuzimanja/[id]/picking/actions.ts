@@ -7,7 +7,7 @@ import { getPickingSession } from "@/lib/admin/picking.server";
 import { validatePickingDelta } from "@/lib/admin/picking-plan";
 const schema = z.object({ id: z.string().uuid(), batchId: z.string().min(1), planHash: z.string().length(64), rowKey: z.string().min(1).max(500), delta: z.number().int().min(-10000).max(10000), note: z.string().max(1000) });
 export async function recordPicking(input: z.infer<typeof schema>) {
-  return withAdminState({ allowed: ["OPS"], action: "picking.scan", entity: "PickupBatch" }, async actorId => {
+  return withAdminState({ allowed: ["OPS", "WAREHOUSE"], action: "picking.scan", entity: "PickupBatch" }, async actorId => {
     const data = schema.parse(input);
     const result = await db.$transaction(async tx => {
       await tx.$queryRaw`SELECT id FROM "PickupBatch" WHERE id = ${data.batchId} FOR UPDATE`;
@@ -27,6 +27,7 @@ export async function recordPicking(input: z.infer<typeof schema>) {
       return getPickingSession(data.batchId, tx);
     }, { timeout: 20000 });
     revalidatePath(`/admin/erp/preuzimanja/${data.batchId}/picking`);
+    revalidatePath(`/admin/magacin/picking/${data.batchId}`);
     return { ok: true, entityId: data.batchId, diff: data, result, message: data.delta ? "Količina je evidentirana." : "Napomena je sačuvana." };
   })();
 }
