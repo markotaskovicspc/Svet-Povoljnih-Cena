@@ -113,11 +113,15 @@ export async function GET(request: Request) {
   ];
   detail.addRows(rows.map((row) => ({
     ...row,
+    conversionPct: row.visits > 0 ? row.conversionPct : null,
     bucket: granularity === "period"
       ? `${period.fromInput} – ${period.toInput}`
       : granularity === "month" ? row.bucket.slice(0, 7) : row.bucket,
   })));
   styleHeader(detail.getRow(1));
+  detail.getCell("E1").note = "Proizvodi: broj web porudžbina koje sadrže artikal, svaka jednom; bez otkazanih i vraćenih, uključujući porudžbine bez saglasnosti za analitiku. Ostale stranice: poslednja poseta pre checkout-a. Jedna porudžbina može se prikazati uz više proizvoda.";
+  detail.getCell("F1").note = "Kod proizvoda: odnos svih porudžbina artikla i poseta uz saglasnost za analitiku; nije praćenje istog kupca.";
+  detail.getCell("G1").note = "Proizvodi: zbir stavki artikla bez dostave i montaže, pre popusta na celu porudžbinu. Ostale stranice: ukupna vrednost pripisanih porudžbina.";
   detail.autoFilter = {
     from: { row: 1, column: 1 },
     to: { row: Math.max(1, rows.length + 1), column: detail.columns.length },

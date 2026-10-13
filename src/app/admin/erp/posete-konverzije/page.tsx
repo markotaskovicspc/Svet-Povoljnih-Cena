@@ -281,7 +281,7 @@ export default async function AnalyticsConversionPage({
         </div>
 
         <Card>
-          <CardTitle description={`${period.label}; kupovina se pripisuje poslednjem PAGE_VIEW događaju pre checkout-a.`}>
+          <CardTitle description={`${period.label}; za proizvode se broje web porudžbine koje sadrže artikal, bez otkazanih i vraćenih. Za ostale stranice koristi se poslednja poseta pre checkout-a. Klik na broj kupovina otvara porudžbine.`}>
             Posete i konverzije po stranici
           </CardTitle>
           <DataTable
@@ -321,14 +321,24 @@ export default async function AnalyticsConversionPage({
                   ) : <span className="break-all font-mono text-xs">{row.path}</span>,
                   pageViews: row.pageViews,
                   visits: row.visits,
-                  purchases: row.purchases,
-                  conversion: `${row.conversionPct.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 2 })}%`,
+                  purchases: row.purchases > 0 ? (
+                    <Link
+                      href={`/admin/erp/posete-konverzije/porudzbine?${new URLSearchParams({ range: "custom", from: period.fromInput, to: period.toInput, group: granularity, bucket: row.bucket, path: row.path })}`}
+                      prefetch={false}
+                      aria-label={`Prikaži ${row.purchases} porudžbina za ${productName ?? row.path}`}
+                      className="font-semibold text-brand-blue underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4"
+                    >
+                      {row.purchases.toLocaleString("sr-Latn-RS")}
+                    </Link>
+                  ) : 0,
+                  conversion: row.visits > 0 ? `${row.conversionPct.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 2 })}%` : "—",
                   value: formatRsd(row.purchaseValue),
                 },
               };
             })}
-            empty="Nema consented poseta u izabranom periodu."
+            empty="Nema poseta ili porudžbina u izabranom periodu."
           />
+          <p className="mt-3 text-sm text-ink-500">Kod proizvoda, vrednost je zbir stavki artikla bez dostave i montaže, pre popusta na celu porudžbinu. Posete se beleže uz saglasnost za analitiku; konverzija je odnos svih porudžbina artikla i zabeleženih poseta, pa nije praćenje istog kupca. Jedna porudžbina može biti prikazana uz više proizvoda.</p>
         </Card>
 
         <Card>

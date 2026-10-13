@@ -97,54 +97,81 @@ function bucketSql(
   return Prisma.sql`date_trunc('day', ${local})`;
 }
 
-export async function getPageConversionReport(
+/** Collapse product URL query strings and trailing slashes into one product row. */
+function analyticsPagePath(alias: "a" | "v") {
+  const path = alias === "a" ? Prisma.sql`a.path` : Prisma.sql`v.path`;
+  return Prisma.sql`CASE
+    WHEN ${path} ~ '^/p/[^/?#]+/?([?#].*)?$'
+      THEN rtrim(split_part(split_part(${path}, '?', 1), '#', 1), '/')
+    ELSE COALESCE(NULLIF(${path}, ''), '/')
+  END`;
+}
+
+/** Shared by the table, Excel export, and order drilldown so their totals agree. */
+function pagePurchaseOrdersSql(period: ReportPeriod, granularity: AnalyticsGranularity) {
+  const purchaseBucket = bucketSql(granularity, Prisma.sql`o."createdAt"`, period);
+  return Prisma.sql`
+    eligible_orders AS (
+      SELECT o.id, o."createdAt", o.total
+      FROM "Order" o
+      WHERE o.channel = 'WEB' AND o.status NOT IN ('OTKAZANO', 'VRACENO')
+        AND o."createdAt" >= ${period.start}
+        AND o."createdAt" < ${period.endExclusive}
+    ), product_orders AS (
+      SELECT o.id AS order_id,
+        to_char(${purchaseBucket}, 'YYYY-MM-DD') AS bucket,
+        '/p/' || p.slug AS path,
+        SUM(oi.qty * oi."unitPriceSale")::double precision AS value,
+        SUM(oi.qty)::int AS quantity
+      FROM eligible_orders o
+      JOIN "OrderItem" oi ON oi."orderId" = o.id
+      JOIN "Product" p ON p.id = oi."productId"
+      GROUP BY o.id, ${purchaseBucket}, p.slug
+    ), attributed_orders AS (
+      SELECT DISTINCT ON (o.id) o.id AS order_id,
+        to_char(${purchaseBucket}, 'YYYY-MM-DD') AS bucket,
+        last_page.path, o.total::double precision AS value, NULL::int AS quantity
+      FROM eligible_orders o
+      JOIN "AnalyticsEvent" c ON c."orderId" = o.id AND c.type = 'CHECKOUT_COMPLETED'
+      JOIN LATERAL (
+        SELECT ${analyticsPagePath("v")} AS path
+        FROM "AnalyticsEvent" v
+        WHERE v.type = 'PAGE_VIEW' AND v."anonymousId" = c."anonymousId"
+          AND v."occurredAt" <= c."occurredAt"
+          AND v."occurredAt" >= c."occurredAt" - interval '30 days'
+        ORDER BY v."occurredAt" DESC, v.id DESC LIMIT 1
+      ) last_page ON true
+      ORDER BY o.id, c."occurredAt" ASC, c.id ASC
+    ), page_orders AS (
+      SELECT * FROM product_orders
+      UNION ALL
+      SELECT * FROM attributed_orders WHERE path !~ '^/p/'
+    )
+  `;
+}
+
+export function pageConversionReportQuery(
   period: ReportPeriod,
   granularity: AnalyticsGranularity,
-): Promise<PageConversionReportRow[]> {
+) {
   const visitBucket = bucketSql(granularity, Prisma.sql`a."occurredAt"`, period);
-  const purchaseBucket = bucketSql(granularity, Prisma.sql`c."occurredAt"`, period);
-  const rows = await db.$queryRaw<PageConversionDatabaseRow[]>(Prisma.sql`
-    WITH page_visits AS (
+  const path = analyticsPagePath("a");
+  return Prisma.sql`
+    WITH ${pagePurchaseOrdersSql(period, granularity)}, page_visits AS (
       SELECT
         to_char(${visitBucket}, 'YYYY-MM-DD') AS bucket,
-        COALESCE(NULLIF(a.path, ''), '/') AS path,
+        ${path} AS path,
         COUNT(*)::int AS page_views,
         COUNT(DISTINCT COALESCE(a."sessionId", a."anonymousId"))::int AS visits
       FROM "AnalyticsEvent" a
       WHERE a.type = 'PAGE_VIEW'
         AND a."occurredAt" >= ${period.start}
         AND a."occurredAt" < ${period.endExclusive}
-      GROUP BY ${visitBucket}, COALESCE(NULLIF(a.path, ''), '/')
-    ), attributed_orders AS (
-      SELECT DISTINCT ON (c."orderId")
-        c."orderId",
-        to_char(${purchaseBucket}, 'YYYY-MM-DD') AS bucket,
-        last_page.path,
-        COALESCE(c.value, 0)::double precision AS value
-      FROM "AnalyticsEvent" c
-      JOIN LATERAL (
-        SELECT COALESCE(NULLIF(v.path, ''), '/') AS path
-        FROM "AnalyticsEvent" v
-        WHERE v.type = 'PAGE_VIEW'
-          AND v."anonymousId" = c."anonymousId"
-          AND v."occurredAt" <= c."occurredAt"
-          AND v."occurredAt" >= c."occurredAt" - interval '30 days'
-        ORDER BY v."occurredAt" DESC, v.id DESC
-        LIMIT 1
-      ) last_page ON true
-      WHERE c.type = 'CHECKOUT_COMPLETED'
-        AND c."orderId" IS NOT NULL
-        AND c."occurredAt" >= ${period.start}
-        AND c."occurredAt" < ${period.endExclusive}
-      ORDER BY c."orderId", c."occurredAt" ASC
+      GROUP BY ${visitBucket}, ${path}
     ), purchases AS (
-      SELECT
-        bucket,
-        path,
-        COUNT(*)::int AS purchases,
+      SELECT bucket, path, COUNT(*)::int AS purchases,
         COALESCE(SUM(value), 0)::double precision AS purchase_value
-      FROM attributed_orders
-      GROUP BY bucket, path
+      FROM page_orders GROUP BY bucket, path
     )
     SELECT
       COALESCE(v.bucket, p.bucket) AS bucket,
@@ -154,11 +181,16 @@ export async function getPageConversionReport(
       COALESCE(p.purchases, 0)::int AS purchases,
       COALESCE(p.purchase_value, 0)::double precision AS purchase_value
     FROM page_visits v
-    FULL OUTER JOIN purchases p
-      ON p.bucket = v.bucket AND p.path = v.path
+    FULL OUTER JOIN purchases p ON p.bucket = v.bucket AND p.path = v.path
     ORDER BY bucket DESC, page_views DESC, path ASC
-  `);
+  `;
+}
 
+export async function getPageConversionReport(
+  period: ReportPeriod,
+  granularity: AnalyticsGranularity,
+): Promise<PageConversionReportRow[]> {
+  const rows = await db.$queryRaw<PageConversionDatabaseRow[]>(pageConversionReportQuery(period, granularity));
   return rows.map((row) => ({
     bucket: row.bucket,
     path: row.path,
@@ -166,11 +198,50 @@ export async function getPageConversionReport(
     visits: row.visits,
     purchases: row.purchases,
     purchaseValue: row.purchase_value,
-    conversionPct:
-      row.visits > 0
-        ? Math.round((row.purchases / row.visits) * 10_000) / 100
-        : 0,
+    conversionPct: row.visits > 0
+      ? Math.round((row.purchases / row.visits) * 10_000) / 100
+      : 0,
   }));
+}
+
+export const PAGE_PURCHASE_ORDERS_SIZE = 50;
+export type PagePurchaseOrderRow = {
+  id: string;
+  number: string;
+  status: string;
+  createdAt: Date;
+  quantity: number | null;
+  value: number;
+  totalCount: number;
+};
+
+export function pagePurchaseOrdersQuery(
+  period: ReportPeriod,
+  granularity: AnalyticsGranularity,
+  path: string,
+  bucket: string,
+  page = 1,
+) {
+  return Prisma.sql`
+    WITH ${pagePurchaseOrdersSql(period, granularity)}
+    SELECT o.id, o.number, o.status, o."createdAt", p.quantity, p.value,
+      COUNT(*) OVER()::int AS "totalCount"
+    FROM page_orders p JOIN "Order" o ON o.id = p.order_id
+    WHERE p.path = ${path} AND p.bucket = ${bucket}
+    ORDER BY o."createdAt" DESC, o.id DESC
+    LIMIT ${PAGE_PURCHASE_ORDERS_SIZE}
+    OFFSET ${(page - 1) * PAGE_PURCHASE_ORDERS_SIZE}
+  `;
+}
+
+export async function getPagePurchaseOrders(
+  period: ReportPeriod,
+  granularity: AnalyticsGranularity,
+  path: string,
+  bucket: string,
+  page = 1,
+) {
+  return db.$queryRaw<PagePurchaseOrderRow[]>(pagePurchaseOrdersQuery(period, granularity, path, bucket, page));
 }
 
 export type AnalyticsFunnelSummary = {

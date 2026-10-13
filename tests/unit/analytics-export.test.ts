@@ -77,3 +77,16 @@ it("does not read analytics or export when authorization fails", async () => {
   expect(mocks.daily).not.toHaveBeenCalled();
   expect(mocks.pages).not.toHaveBeenCalled();
 });
+
+it("exports product order counts and amounts with an undefined conversion when no visits were tracked", async () => {
+  mocks.pages.mockResolvedValue([{ bucket: "2026-09-01", path: "/p/stolica", pageViews: 0, visits: 0, purchases: 2, conversionPct: 0, purchaseValue: 3900 }]);
+  const response = await GET(new Request("http://localhost/api/admin/analytics/conversions/export"));
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(await response.arrayBuffer());
+  const detail = workbook.getWorksheet("Stranice")!;
+  expect(detail.getCell("E2").value).toBe(2);
+  expect(detail.getCell("F2").value).toBeNull();
+  expect(detail.getCell("G2").value).toBe(3900);
+  expect(detail.getCell("E1").note).toContain("broj web porudžbina");
+  expect(detail.getCell("G1").note).toContain("bez dostave i montaže");
+});
