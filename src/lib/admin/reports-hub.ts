@@ -10,6 +10,14 @@ export type ReportDestination = {
 
 export const REPORT_DESTINATIONS: readonly ReportDestination[] = [
   {
+    href: "/admin/erp/ananas", title: "Ananas porudžbine",
+    description: "Preuzete Ananas porudžbine, statusi i vrednost artikala.", allowed: ["OPS"],
+  },
+  {
+    href: "/admin/erp/performans-artikala", title: "Performans artikala",
+    description: "Prodaja sajta, raspoloživost lagera, COGS, KOZ i dani pokrića zaliha.", allowed: ["OPS"],
+  },
+  {
     href: "/admin/erp/order-bump",
     title: "Order bump",
     description: "Porudžbine, isporuke i vrednost artikala dodatih preko ponude u korpi.",
@@ -33,8 +41,8 @@ export const REPORT_DESTINATIONS: readonly ReportDestination[] = [
     href: "/admin/erp/posete-konverzije",
     title: "Posete i konverzije",
     description:
-      "Detaljna analiza consented poseta, proizvoda, korpi, kupovina i first-party događaja.",
-    allowed: ["ADS"],
+      "Dnevne porudžbine sajta i Ananasa, ukupna vrednost, konverzija sajta i analiza poseta.",
+    allowed: ["ADS", "OPS"],
   },
   {
     href: "/admin/erp/3d-ar",

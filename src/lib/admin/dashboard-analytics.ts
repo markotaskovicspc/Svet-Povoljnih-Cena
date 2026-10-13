@@ -15,9 +15,11 @@ export function dashboardAnalyticsCacheArgs(input: DashboardDataInput) {
 
 const readAnalytics = unstable_cache(
   async (window: number, start: string, endExclusive: string) => {
-    // Anchor relative periods to this request window, including midnight/DST.
-    const now = new Date(window * DASHBOARD_ANALYTICS_WINDOW_MS);
-    const today = resolveReportPeriod({ range: "today" }, now);
+    // Keep the request's day stable at midnight, but let a manual cache
+    // invalidation include visitors who arrived within this same 30s window.
+    const anchor = window * DASHBOARD_ANALYTICS_WINDOW_MS;
+    const now = new Date(Math.max(anchor, Math.min(Date.now(), anchor + DASHBOARD_ANALYTICS_WINDOW_MS - 1)));
+    const today = resolveReportPeriod({ range: "today" }, new Date(anchor));
     const data = await getDashboardAnalyticsData({
       now,
       warehouseId: "",
@@ -30,8 +32,8 @@ const readAnalytics = unstable_cache(
     });
     return { ...data, checkedAt: now.toISOString() };
   },
-  ["admin-dashboard-analytics-v1"],
-  { revalidate: 30 },
+  ["admin-dashboard-analytics-v2"],
+  { revalidate: 30, tags: ["admin-dashboard-analytics"] },
 );
 
 // Only aggregate analytics is shared. The rotating key prevents an old window

@@ -1,4 +1,5 @@
 "use client";
+import { PRESENCE_HEARTBEAT_MS } from "@/lib/analytics/presence";
 import { captureCampaign } from "@/lib/analytics/campaign-attribution";
 
 import { useEffect, useRef } from "react";
@@ -138,10 +139,19 @@ export function FirstPartyAnalytics() {
   const pathname = usePathname();
   useEffect(() => {
     recordFirstPartyEvent({ type: "PAGE_VIEW", path: pathname });
-    const onConsent = () =>
-      recordFirstPartyEvent({ type: "PAGE_VIEW", path: pathname });
+    const heartbeat = () => {
+      if (document.visibilityState !== "visible") return;
+      const context = getConsentedAnalyticsContext();
+      if (!context) return;
+      void fetch("/api/analytics/presence", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ anonymousId: context.anonymousId }), keepalive: true }).catch(() => {});
+    };
+    heartbeat();
+    const timer = window.setInterval(heartbeat, PRESENCE_HEARTBEAT_MS);
+    const onConsent = () => { recordFirstPartyEvent({ type: "PAGE_VIEW", path: pathname }); heartbeat(); };
     window.addEventListener("spc-cookie-consent", onConsent);
-    return () => window.removeEventListener("spc-cookie-consent", onConsent);
+    document.addEventListener("visibilitychange", heartbeat);
+    return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", heartbeat); window.removeEventListener("spc-cookie-consent", onConsent); };
   }, [pathname]);
   return null;
 }

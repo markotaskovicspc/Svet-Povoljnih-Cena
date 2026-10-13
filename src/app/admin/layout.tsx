@@ -18,6 +18,7 @@ import { withSavedViewLinks } from "@/lib/admin/nav";
 import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
 import { getErpModuleDefinition } from "@/lib/admin/erp";
 import { Button } from "@/components/ui/button";
+import { AdminRefreshButton } from "@/components/admin/refresh-button";
 import { OrderNotifications } from "@/components/admin/order-notifications";
 import { canReceiveOrderPush } from "@/lib/admin/push-policy";
 import "./theme.css";
@@ -124,6 +125,7 @@ export default async function AdminLayout({
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
+                <AdminRefreshButton />
                 <AdminThemeToggle />
                 {canReceiveOrderPush(user.role) && <OrderNotifications adminId={user.id} />}
                 <Link

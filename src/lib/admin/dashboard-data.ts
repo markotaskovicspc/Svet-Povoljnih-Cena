@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { PRESENCE_WINDOW_MS } from "@/lib/analytics/presence";
 import { db } from "@/lib/db";
 import { getReportDayPeriods, resolveReportPeriod, type ReportPeriod } from "./report-period";
 
@@ -314,10 +315,9 @@ export function buildDashboardDataQuery(input: DashboardDataInput, section: "all
         FROM day_bounds bounds
       )
       SELECT
-        (SELECT COUNT(DISTINCT COALESCE("sessionId", "anonymousId"))
-          FROM "AnalyticsEvent"
-          WHERE type = 'PAGE_VIEW'
-            AND "occurredAt" >= ${new Date(now.getTime() - 300_000)})::int AS active_now,
+        (SELECT COUNT(*) FROM "SiteVisitorPresence"
+          WHERE "lastSeenAt" >= ${new Date(now.getTime() - PRESENCE_WINDOW_MS)}
+            AND "lastSeenAt" <= ${now})::int AS active_now,
         COALESCE((SELECT visits FROM daily WHERE day = ${todayPeriod.fromInput}::date), 0)::int AS today,
         (COALESCE((SELECT SUM(visits) FROM daily), 0) / 30.0)::double precision AS daily_average_30d
     ) result) AS "visitRows",

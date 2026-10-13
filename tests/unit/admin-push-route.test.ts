@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ admin: vi.fn(), find: vi.fn(), save: vi.fn(), remove: vi.fn(), config: vi.fn(), send: vi.fn(), limit: vi.fn() }));
+const mocks = vi.hoisted(() => ({ admin: vi.fn(), find: vi.fn(), save: vi.fn(), remove: vi.fn(), update: vi.fn(), config: vi.fn(), send: vi.fn(), limit: vi.fn() }));
 vi.mock("@/lib/auth/session", () => ({ getCurrentAdmin: mocks.admin }));
-vi.mock("@/lib/db", () => ({ db: { adminPushSubscription: { findFirst: mocks.find, upsert: mocks.save, deleteMany: mocks.remove } } }));
+vi.mock("@/lib/db", () => ({ db: { adminPushSubscription: { findFirst: mocks.find, upsert: mocks.save, deleteMany: mocks.remove, updateMany: mocks.update } } }));
 vi.mock("@/lib/admin/order-push.server", () => ({ getPushConfiguration: mocks.config, sendAdminDevicePush: mocks.send }));
 vi.mock("@/lib/security/rate-limit", () => ({ checkRateLimit: mocks.limit, rateLimitJson: () => new Response(null, { status: 429 }) }));
 import { GET, POST } from "@/app/api/admin/push/route";
@@ -47,4 +47,12 @@ it("binds the subscription to the session and scopes status, test and deletion t
   expect(mocks.send).not.toHaveBeenCalled();
   expect((await POST(request({ operation: "unsubscribe", endpoint }))).status).toBe(200);
   expect(mocks.remove).toHaveBeenCalledWith({ where: { endpoint, adminUserId: "admin1" } });
+});
+
+it('scopes traffic-alert opt-in to the authenticated device owner',async()=>{
+ mocks.update.mockResolvedValue({count:1});
+ expect((await POST(request({operation:'preferences',endpoint,trafficAlerts:true}))).status).toBe(200);
+ expect(mocks.update).toHaveBeenCalledWith({where:{endpoint,adminUserId:'admin1'},data:{trafficAlerts:true}});
+ mocks.update.mockResolvedValue({count:0});
+ expect((await POST(request({operation:'preferences',endpoint,trafficAlerts:true}))).status).toBe(404);
 });

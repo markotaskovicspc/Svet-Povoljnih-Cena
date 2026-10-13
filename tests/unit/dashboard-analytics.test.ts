@@ -24,12 +24,12 @@ describe("dashboard analytics freshness", () => {
     vi.useFakeTimers(); vi.setSystemTime(now);
     mocks.load.mockResolvedValue({ visitRows: [{ today: 2 }], conversionRows: [] });
     const result = await getDashboardAnalytics(input);
-    expect(result.checkedAt).toBe("2026-09-19T22:00:00.000Z");
+    expect(result.checkedAt).toBe(now.toISOString());
     expect(mocks.load).toHaveBeenCalledWith(expect.objectContaining({
-      now: new Date("2026-09-19T22:00:00.000Z"), warehouseId: "", todayPeriod: expect.objectContaining({ fromInput: "2026-09-20" }),
+      now, warehouseId: "", todayPeriod: expect.objectContaining({ fromInput: "2026-09-20" }),
       analyticsPeriod: expect.objectContaining({ start: period.start, endExclusive: period.endExclusive }),
     }));
-    expect(mocks.cacheOptions).toEqual({ key: ["admin-dashboard-analytics-v1"], options: { revalidate: 30 } });
+    expect(mocks.cacheOptions).toEqual({ key: ["admin-dashboard-analytics-v2"], options: { revalidate: 30, tags: ["admin-dashboard-analytics"] } });
   });
   it("does not turn a database failure into zero-valued analytics", async () => {
     mocks.load.mockRejectedValueOnce(new Error("Database unavailable"));
@@ -44,4 +44,12 @@ it("does not switch the request's day if a cache miss executes after midnight", 
   expect(mocks.load).toHaveBeenLastCalledWith(expect.objectContaining({
     todayPeriod: expect.objectContaining({ fromInput: "2026-09-19" }),
   }));
+});
+
+it("includes arrivals within the current window after manual cache invalidation",async()=>{
+ vi.useFakeTimers();vi.setSystemTime(new Date("2026-09-19T22:00:20Z"));
+ mocks.load.mockResolvedValue({visitRows:[],conversionRows:[]});
+ const result=await getDashboardAnalytics(input);
+ expect(result.checkedAt).toBe("2026-09-19T22:00:20.000Z");
+ expect(mocks.load).toHaveBeenLastCalledWith(expect.objectContaining({now:new Date("2026-09-19T22:00:20Z")}));
 });

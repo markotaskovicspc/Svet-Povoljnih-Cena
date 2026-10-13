@@ -50,7 +50,7 @@ it("exports daily site totals and zero days even when page details use weekly gr
   const response = await GET(new Request(
     "http://localhost/api/admin/analytics/conversions/export?range=custom&from=2026-09-10&to=2026-09-11&group=week",
   ));
-  expect(mocks.authorize).toHaveBeenCalledWith(["ADS"]);
+  expect(mocks.authorize).toHaveBeenCalledWith(["ADS", "OPS"]);
   expect(mocks.daily).toHaveBeenCalledWith(expect.objectContaining({
     fromInput: "2026-09-10", toInput: "2026-09-11",
   }));
@@ -63,11 +63,11 @@ it("exports daily site totals and zero days even when page details use weekly gr
     "Posete po danu", "Sažetak", "Stranice",
   ]);
   const daily = workbook.getWorksheet("Posete po danu")!;
-  expect(daily.getRow(1).values).toEqual([, "Dan", "Ukupno poseta", "Pregledi stranica", "Vrednost porudžbina (RSD)"]);
+  expect(daily.getRow(1).values).toEqual([, "Dan", "Ukupno poseta", "Pregledi stranica", "Vrednost sajta (RSD)", "Porudžbine sajta", "Ananas porudžbine", "Ananas vrednost (RSD)", "Ukupno porudžbina", "Ukupna vrednost (RSD)", "Konverzija sajta (%)"]);
   expect(daily.getRow(2).values).toEqual([, "2026-09-11", 0, 0, 0]);
   expect(daily.getRow(3).values).toEqual([, "2026-09-10", 2, 5, 12345.67]);
   expect(daily.getCell("D3").numFmt).toBe('#,##0.00 "RSD"');
-  expect(daily.autoFilter).toBe("A1:D3");
+  expect(daily.autoFilter).toBe("A1:J3");
 });
 
 it("does not read analytics or export when authorization fails", async () => {

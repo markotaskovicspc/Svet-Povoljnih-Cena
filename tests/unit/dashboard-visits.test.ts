@@ -9,7 +9,7 @@ beforeAll(async () => {
   await sql.exec(`CREATE TABLE "AnalyticsEvent" (
     type text, "occurredAt" timestamp, "sessionId" text, "anonymousId" text,
     "orderId" text, value numeric
-  ); CREATE INDEX ON "AnalyticsEvent" (type, "occurredAt");`);
+  ); CREATE INDEX ON "AnalyticsEvent" (type, "occurredAt"); CREATE TABLE "SiteVisitorPresence" ("anonymousId" text primary key, "lastSeenAt" timestamp);`);
 }, 30_000);
 afterAll(async () => { await sql.close(); });
 
@@ -19,7 +19,7 @@ it.each([
   "2026-09-19T21:59:59Z", // before Belgrade midnight
   "2026-09-19T22:00:01Z", // after Belgrade midnight
 ])("preserves visit counts, session deduplication and empty days at %s", async (instant) => {
-  await sql.exec('TRUNCATE "AnalyticsEvent"');
+  await sql.exec('TRUNCATE "AnalyticsEvent", "SiteVisitorPresence"');
   const now = new Date(instant);
   const today = resolveReportPeriod({ range: "today" }, now);
   const period = resolveReportPeriod({ range: "30d" }, now);
@@ -44,6 +44,7 @@ it.each([
   await event(period.endExclusive, "excluded-after", "after");
   await event(today.start, "not-a-view", "other", "ADD_TO_CART");
 
+  await sql.query('INSERT INTO "SiteVisitorPresence" VALUES ($1,$2),($3,$4),($5,$6)', ['now',now.toISOString(),'stale',new Date(now.getTime()-90001).toISOString(),'future',new Date(now.getTime()+1).toISOString()]);
   const query = buildDashboardDataQuery({ now, warehouseId: "", todayPeriod: today,
     ordersPeriod: period, fiscalPeriod: period, reclamationsPeriod: period,
     topProductsPeriod: period, analyticsPeriod: period }, "analytics");
@@ -61,10 +62,10 @@ it.each([
     (COALESCE((SELECT SUM(visits) FROM daily), 0) / 30.0)::double precision AS daily_average_30d`,
     [period.start.toISOString(), period.endExclusive.toISOString(),
       new Date(now.getTime() - 300_000).toISOString(), today.fromInput])).rows[0];
-  expect(revised).toEqual(original);
+  expect(revised).toEqual({...original,active_now:1});
   expect(revised).toMatchObject({ today: 3, daily_average_30d: 4 / 30 });
 
-  await sql.exec('TRUNCATE "AnalyticsEvent"');
+  await sql.exec('TRUNCATE "AnalyticsEvent", "SiteVisitorPresence"');
   const empty = (await sql.query<{ visitRows: unknown[] }>(query.text,
     query.values.map((v) => v instanceof Date ? v.toISOString() : v))).rows[0];
   expect(empty.visitRows).toEqual([{ active_now: 0, today: 0, daily_average_30d: 0 }]);

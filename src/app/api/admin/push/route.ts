@@ -22,6 +22,7 @@ const commandSchema = z.discriminatedUnion("operation", [
   z.object({ operation: z.literal("status"), endpoint: pushEndpointSchema }),
   z.object({ operation: z.literal("unsubscribe"), endpoint: pushEndpointSchema }),
   z.object({ operation: z.literal("test"), endpoint: pushEndpointSchema }),
+  z.object({ operation: z.literal("preferences"), endpoint: pushEndpointSchema, trafficAlerts: z.boolean() }),
 ]);
 
 export async function POST(request: Request) {
@@ -36,8 +37,12 @@ export async function POST(request: Request) {
     return response({ ok: true });
   }
   if (data.operation === "status") {
-    const subscription = await db.adminPushSubscription.findFirst({ where: { endpoint: data.endpoint, adminUserId: admin.id }, select: { id: true } });
-    return response({ subscribed: Boolean(subscription) });
+    const subscription = await db.adminPushSubscription.findFirst({ where: { endpoint: data.endpoint, adminUserId: admin.id }, select: { id: true, trafficAlerts: true } });
+    return response({ subscribed: Boolean(subscription), trafficAlerts: subscription?.trafficAlerts ?? false });
+  }
+  if (data.operation === "preferences") {
+    const result = await db.adminPushSubscription.updateMany({ where: { endpoint: data.endpoint, adminUserId: admin.id }, data: { trafficAlerts: data.trafficAlerts } });
+    return result.count ? response({ ok: true }) : response({ error: "Prvo uključite obaveštenja na ovom uređaju." }, 404);
   }
   const limited = await checkRateLimit(`admin-push:${admin.id}`, { limit: 20, windowMs: 60_000 });
   if (!limited.ok) return rateLimitJson(limited);

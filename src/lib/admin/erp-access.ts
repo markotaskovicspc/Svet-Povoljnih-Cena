@@ -29,6 +29,7 @@ const SHARED_MODULES = new Set([
 ]);
 
 export function allowedRolesForErpModule(module: string): readonly AdminRoleName[] {
+  if (module === "posete-konverzije") return ["ADS", "OPS"];
   if (module === "order-bump") return ["ADS", "OPS"];
   if (module === "integracije" || module === "admin-podesavanja") return [];
   if (OPS_CONTENT_MODULES.has(module)) return ["CONTENT", "OPS"];

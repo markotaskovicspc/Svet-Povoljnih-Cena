@@ -8,6 +8,7 @@ vi.mock("@/lib/admin/dashboard-analytics", () => ({ getDashboardAnalytics: mocks
 vi.mock("@/components/admin/dashboard-filters", () => ({ DashboardFilters: () => <div>FILTERS_READY</div> }));
 vi.mock("@/components/admin/page-header", () => ({ PageHeader: ({title}: {title: string}) => <h1>{title}</h1> }));
 vi.mock("@/components/admin/ananas-orders-health", () => ({ AnanasOrdersHealth: () => null }));
+vi.mock("@/lib/ananas/report", () => ({ getAnanasTopProducts: vi.fn().mockResolvedValue([]) }));
 import AdminDashboard from "@/app/admin/page";
 const data = { orderSummary: { today_count: 1234, today_total: 50, today_shipping: 5, period_count: 1234, period_total: 50, period_shipping: 5 }, fiscalRows: [], reclamationCount: 0, reclamationQuantity: 0, reclamationDeliveredQuantity: 0, topProducts: [], warehouseStockRows: [], incomingRows: [], lowStock: [] };
 function deferred<T>() {
