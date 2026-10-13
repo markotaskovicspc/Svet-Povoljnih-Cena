@@ -14,7 +14,7 @@ export function PageHeader({
   actions?: React.ReactNode;
 }) {
   return (
-    <header className="border-b border-border/60 bg-surface/80 backdrop-blur">
+    <header data-admin-page-header className="border-b border-border/60 bg-surface/80 backdrop-blur">
       <div className="flex flex-col gap-2 px-8 py-6 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-1">
           {crumbs && crumbs.length > 0 ? (

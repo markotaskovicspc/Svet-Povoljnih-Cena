@@ -107,7 +107,7 @@ export default async function AdminLayout({
             <AdminSidebar nav={nav} availableNav={availableNavWithViews} />
           </aside>
           <div className="flex min-w-0 flex-col print:block">
-            <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-surface/80 px-4 py-3 backdrop-blur md:px-8 print:hidden">
+            <div data-admin-toolbar className="relative z-30 flex items-center justify-between gap-2 border-b border-border/60 bg-surface px-4 py-3 md:px-8 print:hidden">
               <div className="flex min-w-0 items-center gap-2">
                 <div className="h-10 w-10 shrink-0 md:hidden">
                   <AdminMobileNav
