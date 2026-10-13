@@ -35,18 +35,19 @@ it("preserves price visibility and internal transfers always hide prices", () =>
   expect(internal).not.toContain("Cena (RSD)");
 });
 
-it("paginates long descriptions, long unbroken fields and notes without dropping any text or items", async () => {
+it("paginates long names and notes without dropping any printed text or items", async () => {
   const note = dispatchNoteFixture({ showPrices: true });
   note.notes = "Napomena sa srpskim slovima čćšžđ. ".repeat(55) + "KRAJ_NAPOMENE";
   note.items = Array.from({ length: 35 }, (_, i) => ({ ...note.items[0],
-    sku: `ART-${i + 1}`, name: `Stolica ${i + 1} čćšžđ Љубичаста`,
+    sku: `ART-${i + 1}`, name: i === 0 ? "Dugačak naziv ".repeat(250) + "KRAJ_NAZIVA" : `Stolica ${i + 1} čćšžđ Љубичаста`,
     shortDescription: i === 0 ? "Dugačak opis ".repeat(250) + "KRAJ_OPISA" : null,
   }));
   const svgs = dispatchNotePagesSvg(note);
   const joined = svgs.join("");
   expect(svgs.length).toBeGreaterThan(3);
   expect(joined).toContain("KRAJ_NAPOMENE");
-  expect(joined).toContain("KRAJ_OPISA");
+  expect(joined).toContain("KRAJ_NAZIVA");
+  expect(joined).not.toContain("KRAJ_OPISA");
   expect(joined).toContain("ART-35");
   expect(joined).toContain("Љубичаста");
   expect(joined).toContain("1. nast.");
@@ -66,4 +67,21 @@ it("paginates long descriptions, long unbroken fields and notes without dropping
 it("escapes document values instead of allowing SVG markup", () => {
   const note = dispatchNoteFixture({ receiverName: '<script>&"' });
   expect(dispatchNotePagesSvg(note).join("")).toContain("&lt;script&gt;&amp;&quot;");
+});
+
+it("uses compact names instead of long catalog descriptions and attributes", async () => {
+  const note = dispatchNoteFixture();
+  note.items = [
+    { ...note.items[0], shortName: "BON APPETIT", name: "3u1 set za doručak BON APPETIT", subgroup: "Kuvanje i pečenje", shortDescription: "Snaga 1050 W / Kapacitet rerne 7 L", attribute1: "DUGAČKI_ATRIBUT", color1: "CRNA" },
+    { ...note.items[0], shortName: "   ", name: "Kancelarijska stolica FLEX SEAT" },
+  ];
+  const [svg] = dispatchNotePagesSvg(note);
+  expect(svg).toContain("BON APPETIT");
+  expect(svg).toContain("FLEX SEAT");
+  expect(svg).not.toContain("Podgrupa:");
+  expect(svg).not.toContain("Snaga 1050");
+  expect(svg).not.toContain("DUGAČKI_ATRIBUT");
+  const nameRows = [...svg.matchAll(/<rect x="245" y="[\d.]+" width="245" height="([\d.]+)" fill="#fff" stroke=/g)];
+  expect(nameRows.slice(0, 2).map(match => Number(match[1]))).toEqual([25, 25]);
+  if (process.env.DISPATCH_PREVIEW_DIR) writeFileSync(join(process.env.DISPATCH_PREVIEW_DIR, "otpremnica-kratki-nazivi.pdf"), await buildDispatchNotePdf(note));
 });

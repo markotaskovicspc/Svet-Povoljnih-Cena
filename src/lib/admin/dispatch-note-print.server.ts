@@ -91,18 +91,6 @@ function metadata(note: DispatchNotePrintData) {
   return { content, tableY: y + 9 };
 }
 
-function itemDescription(item: DispatchNotePrintData["items"][number]) {
-  return [
-    item.subgroup ? `Podgrupa: ${item.subgroup}` : "",
-    item.collection ? `Kolekcija: ${item.collection}` : "",
-    item.shortDescription ? `Opis: ${item.shortDescription}` : "",
-    [item.attribute1, item.attribute2, item.attribute3, item.attribute4].filter(Boolean).join(" / "),
-    [item.color1, item.color2].filter(Boolean).join(" / "),
-    item.palletQty ? `Komada na paleti: ${item.palletQty}` : "",
-    item.sourceOrderNumber ? `Porudžbina: ${item.sourceOrderNumber}` : "",
-  ].filter(Boolean).join(" | ");
-}
-
 /** A4 table layout inspired by the supplied assortment dispatch note. */
 export function dispatchNotePagesSvg(note: DispatchNotePrintData) {
   const prices = note.type !== "INTERNAL" && note.showPrices;
@@ -128,9 +116,8 @@ export function dispatchNotePagesSvg(note: DispatchNotePrintData) {
   const nextPage = () => pages.push({ header: "", tableY: 100, rows: [], tail: [], tailY: 0 });
 
   for (const [index, item] of note.items.entries()) {
-    const description = itemDescription(item);
     const values = [String(index + 1), item.product?.barcode ?? "", item.sku,
-      [item.shortName ?? item.name, description].filter(Boolean).join("\n"), String(item.qty),
+      item.shortName?.trim() || item.name, String(item.qty),
       ...(prices ? [money(item.unitPriceGross), money(item.totalGross)] : [])];
     const cells = values.map((value, column) => value.split("\n").flatMap(part => wrap(part, columns[column]!.width - 12, 8)));
     let remaining = Math.max(...cells.map(cell => cell.length));
