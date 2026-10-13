@@ -18,7 +18,7 @@ test("operations creates a restricted mobile warehouse account, picking and retu
   const email = `${tag.toLowerCase()}@example.invalid`; const password = "WarehouseQa!234";
   const ops = await db.adminUser.create({ data: { email: opsEmail, passwordHash: await bcrypt.hash(password, 10), role: "OPS", firstName: "QA Operations" } });
   const warehouse = await db.warehouse.create({ data: { code: tag.slice(0,30), name: "Test magacin", active: true, isDefault: true } });
-  const product = await db.product.create({ data: { sku: tag, slug: tag.toLowerCase(), name: "Test artikal sa dugim nazivom za proveru prikaza na telefonu", description: tag, fullPrice: 1000, isActive: false } });
+  const product = await db.product.create({ data: { sku: tag, barcode: `000${Date.now()}`, slug: tag.toLowerCase(), name: "Test artikal sa dugim nazivom za proveru prikaza na telefonu", description: tag, fullPrice: 1000, isActive: false } });
   const nextProduct = await db.product.create({ data: { sku: `${tag}-NEXT`, slug: `${tag.toLowerCase()}-next`, name: "Sledeći test artikal", description: tag, fullPrice: 1000, isActive: false } });
   const order = await db.order.create({ data: { number: `${tag}-ORDER`, status: "KREIRANO", channel: "WEB", subtotal: 1000, total: 1000, shippingMethod: "KURIR", paymentMethod: "POUZECE_GOTOVINA", shipFirstName: "QA", shipLastName: "Kupac", shipPhone: "+381641112223", shipStreet: "Test 10", shipCity: "Novi Sad", shipPostalCode: "21000", termsAcceptedAt: new Date(), items: { create: [{ productId: product.id, sku: tag, name: product.name, qty: 1, warehouseId: warehouse.id, unitPriceFull: 1000, unitPriceSale: 1000 }, { productId: nextProduct.id, sku: nextProduct.sku, name: nextProduct.name, qty: 2, warehouseId: warehouse.id, unitPriceFull: 1000, unitPriceSale: 1000 }] } }, include: { items: true } });
   const batch = await db.pickupBatch.create({ data: { number: `${tag}-P`, courier: "COURIER_SMALL", provider: "X_EXPRESS", lines: { create: order.items.map((item, index) => ({ orderId: order.id, orderItemId: item.id, lineGroupKey: `order:${order.id}`, quantity: 1, packageNo: index + 1, packedQuantity: item.qty })) } } });
@@ -36,9 +36,13 @@ test("operations creates a restricted mobile warehouse account, picking and retu
   if (process.env.WAREHOUSE_QA_SCREENSHOT_DIR) await page.screenshot({ path: `${process.env.WAREHOUSE_QA_SCREENSHOT_DIR}/nalozi-desktop.png`, fullPage: true });
   const operator = await db.adminUser.findUniqueOrThrow({ where: { email } }); expect(operator.role).toBe("WAREHOUSE");
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await context.addInitScript(() => {
+    Object.defineProperty(navigator.mediaDevices, "getUserMedia", { value: async () => { throw new DOMException("Unavailable for isolated QA", "NotAllowedError"); } });
+  });
   const phone = await context.newPage();
   const errors: string[] = []; phone.on("pageerror", error => errors.push(error.message));
   const origin = new URL(page.url()).origin;
+  await context.addCookies([{ name: "spc-admin-theme", value: "dark", url: origin }]);
   await phone.goto(`${origin}/admin/magacin/prijava`);
   await phone.getByLabel("E-pošta", { exact: true }).fill(email); await phone.getByLabel("Lozinka", { exact: true }).fill("wrong-password");
   await phone.getByRole("button", { name: "Prijavi se", exact: true }).click(); await expect(phone.getByText("Pogrešna e-pošta ili lozinka.")).toBeVisible();
@@ -49,6 +53,8 @@ test("operations creates a restricted mobile warehouse account, picking and retu
   await expect(page.locator("[data-picking-row]")).toHaveCount(2);
   await expect(page.getByRole("button", { name: "+1", exact: true })).toHaveCount(2);
   await expect(page.locator("[data-picking-row]").first()).toContainText(order.number);
+  await expect(page.getByRole("button", { name: "Nedostaje / napomena", exact: true })).toHaveCount(2);
+  await expect(page.getByRole("textbox", { name: "Skenirajte barkod ili unesite šifru", exact: true })).not.toHaveAttribute("inputmode", "numeric");
   await page.goto("/admin/erp/operativci");
   await phone.getByRole("link", { name: new RegExp(batch.number) }).click();
   await expect(phone.getByText("0 / 3 kom.", { exact: true })).toBeVisible();
@@ -56,7 +62,11 @@ test("operations creates a restricted mobile warehouse account, picking and retu
   await expect(row).toHaveCount(1);
   await expect(row).toContainText(product.name);
   await expect(row).not.toContainText(order.number);
-  for (const label of ["Izaberi za sken", "+1", "−1"]) await expect(phone.getByRole("button", { name: label, exact: true })).toHaveCount(0);
+  await expect(phone.locator("[data-warehouse-picking-heading]")).toContainText(batch.number);
+  await expect(phone.locator("[data-warehouse-picking-heading]")).toContainText("0 / 3 kom.");
+  await expect(phone.getByRole("textbox", { name: "Skenirajte barkod ili unesite šifru", exact: true })).toHaveAttribute("inputmode", "numeric");
+  await expect(phone.getByRole("spinbutton", { name: "Količina", exact: true })).toHaveAttribute("inputmode", "numeric");
+  for (const label of ["Izaberi za sken", "+1", "−1", "Nedostaje / napomena"]) await expect(phone.getByRole("button", { name: label, exact: true })).toHaveCount(0);
   await phone.getByRole("button", { name: "Sledeći →", exact: true }).click();
   await expect(row).toContainText(nextProduct.name);
   await phone.getByRole("button", { name: "← Prethodni", exact: true }).click();
@@ -65,7 +75,17 @@ test("operations creates a restricted mobile warehouse account, picking and retu
   await phone.getByRole("button", { name: "Evidentiraj", exact: true }).click();
   await expect(phone.getByText("Šifra ne odgovara prikazanom artiklu. Proverite barkod ili otvorite drugi artikal.")).toBeVisible();
   expect(await db.pickingScanEvent.count({ where: { batchId: batch.id, actorId: operator.id } })).toBe(0);
-  await phone.getByRole("textbox", { name: "Skenirajte barkod ili unesite šifru", exact: true }).fill(product.sku);
+  await expect(phone.locator("[data-warehouse-scan-error=true]")).toBeVisible();
+  await expect(phone.locator("[data-warehouse-scan-error=true]").getByRole("alert")).toContainText("Šifra ne odgovara");
+  if (process.env.WAREHOUSE_QA_SCREENSHOT_DIR) await phone.screenshot({ path: `${process.env.WAREHOUSE_QA_SCREENSHOT_DIR}/pogresna-sifra-mobile.png`, fullPage: true });
+  await phone.getByRole("textbox", { name: "Skenirajte barkod ili unesite šifru", exact: true }).fill(product.barcode!);
+  await expect(phone.locator("[data-warehouse-scan-error=true]")).toHaveCount(0);
+  await expect(phone.getByRole("textbox", { name: "Skenirajte barkod ili unesite šifru", exact: true })).toHaveValue(product.barcode!);
+  await phone.getByRole("spinbutton", { name: "Količina", exact: true }).focus();
+  await phone.getByRole("button", { name: "Kamera", exact: true }).click();
+  await expect(phone.getByText("Kamera nije dostupna. Dozvolite pristup kameri ili koristite skener / ručni unos.", { exact: true }).filter({ visible: true })).toBeVisible();
+  expect(await phone.evaluate(() => document.activeElement?.tagName === "INPUT")).toBe(false);
+  await phone.getByRole("button", { name: "Zatvori kameru", exact: true }).click();
   await phone.getByRole("button", { name: "Evidentiraj", exact: true }).click();
   await expect(row).toContainText(nextProduct.name);
   await expect(phone.getByText("1 / 3 kom.", { exact: true })).toBeVisible();
