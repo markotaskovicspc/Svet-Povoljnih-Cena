@@ -50,12 +50,23 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
   const total = session.rows.reduce((sum, r) => sum + r.quantity, 0);
   const done = session.rows.reduce((sum, r) => sum + (session.progress[r.key] ?? 0), 0);
   const editable = session.editable && !busy && !retry;
-  const currentIndex = Math.max(0, session.rows.findIndex(row => row.key === selected));
-  const currentRow = session.rows[currentIndex];
+  // Keep outstanding work first, and completed items in confirmation order at the end.
+  const lastConfirmation = new Map<string, number>();
+  if (warehouseMode) session.events.forEach((event, index) => {
+    if (event.planHash === session.planHash && event.delta > 0 && !lastConfirmation.has(event.rowKey)) lastConfirmation.set(event.rowKey, index);
+  });
+  const orderedRows = warehouseMode ? [...session.rows].sort((a, b) => {
+    const aDone = (session.progress[a.key] ?? 0) >= a.quantity;
+    const bDone = (session.progress[b.key] ?? 0) >= b.quantity;
+    if (aDone !== bDone) return Number(aDone) - Number(bDone);
+    return aDone ? (lastConfirmation.get(b.key) ?? session.events.length) - (lastConfirmation.get(a.key) ?? session.events.length) : 0;
+  }) : session.rows;
+  const currentIndex = Math.max(0, orderedRows.findIndex(row => row.key === selected));
+  const currentRow = orderedRows[currentIndex];
   const visibleRows = warehouseMode ? (currentRow ? [currentRow] : []) : session.rows;
   const canScan = editable && (!warehouseMode || Boolean(currentRow && (session.progress[currentRow.key] ?? 0) < currentRow.quantity));
   function moveTo(index: number) {
-    const row = session.rows[index];
+    const row = orderedRows[index];
     if (!row || busy || retry) return;
     setSelected(row.key); setCode(""); setQuantity(1); setNote(""); setMessage(""); setCamera(false);
   }
@@ -106,8 +117,8 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
       const count = session.progress[row.key] ?? 0;
       return <article data-picking-row={row.key} key={row.key} className={`break-inside-avoid rounded-xl border p-4 ${count === row.quantity ? "border-emerald-300 bg-emerald-50 text-emerald-950" : ""} ${!warehouseMode && selected === row.key ? "ring-2 ring-blue-500" : ""}`}>
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex min-w-0 flex-1 gap-4"><div className="min-w-16 text-center"><span className="text-xs">POZICIJA</span><div className="text-2xl font-bold">{row.positions.join(", ") || "—"}</div></div><div className="min-w-0 break-words"><h2 className="font-semibold">{row.sku} · {row.name}</h2><p className="text-sm">{row.warehouseName} · Barkod: {row.barcode || "Nije upisan"}</p><p className="mt-2 text-sm">{row.allocations.map(a => `${a.orderNumber}: ${a.quantity} kom.`).join(" · ")}</p></div></div>
-          <strong className="text-xl">{count} / {row.quantity}</strong>
+          <div className="flex min-w-0 flex-1 gap-4"><div className="min-w-16 text-center"><span className="text-xs">POZICIJA</span><div className="text-2xl font-bold">{row.positions.join(", ") || "—"}</div></div><div className="min-w-0 break-words"><h2 className="font-semibold">{row.sku} · {row.name}</h2><p className="text-sm">{row.warehouseName} · Barkod: {row.barcode || "Nije upisan"}</p>{!warehouseMode && <p className="mt-2 text-sm">{row.allocations.map(a => `${a.orderNumber}: ${a.quantity} kom.`).join(" · ")}</p>}</div></div>
+          {warehouseMode ? <div className="text-right"><strong className="text-xl">{count} / {row.quantity}</strong>{count === row.quantity && <p className="mt-1 text-sm font-semibold">✓ Odvojeno</p>}</div> : <strong className="text-xl">{count} / {row.quantity}</strong>}
         </div>
         {session.editable && (!warehouseMode || count < row.quantity) && <div className="mt-3 flex flex-wrap gap-2 print:hidden">{!warehouseMode && <><button disabled={!editable} onClick={() => setSelected(row.key)} className="rounded border px-3 py-2">{selected === row.key ? "Izabran red" : "Izaberi za sken"}</button><button disabled={!editable || count >= row.quantity} onClick={() => record(row.key, 1, "Ručna potvrda odvajanja")} className="rounded border px-4 py-2">+1</button><button disabled={!editable || count === 0} onClick={() => record(row.key, -1, "Ispravka količine")} className="rounded border px-4 py-2">−1</button></>}<button disabled={!editable} onClick={() => { setSelected(row.key); setNoteKey(row.key); setNote(`Nedostaje ${row.quantity - count} kom. za ${row.sku}. `); }} className="rounded border px-3 py-2">Nedostaje / napomena</button></div>}
       </article>;
@@ -125,8 +136,13 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
       <form onSubmit={e => { e.preventDefault(); scan(); }} className="flex flex-wrap items-end gap-3">
         <label className="min-w-48 flex-1">Skenirajte barkod ili unesite šifru<input ref={input} autoComplete="off" value={code} onChange={e => setCode(e.target.value)} disabled={!canScan} className="mt-1 w-full rounded border bg-background p-3" /></label>
         <label>Količina<input type="number" min={1} max={warehouseMode && currentRow ? currentRow.quantity - (session.progress[currentRow.key] ?? 0) : 10000} value={quantity} onChange={e => setQuantity(Number(e.target.value))} disabled={!canScan} className="mt-1 block w-24 rounded border bg-background p-3" /></label>
+        {warehouseMode ? <div className="flex w-full justify-between gap-3">
+          <button type="button" disabled={!canScan} onClick={() => setCamera(!camera)} className="rounded border px-4 py-3">Kamera</button>
+          <button disabled={!canScan} className="rounded bg-foreground px-4 py-3 text-background">Evidentiraj</button>
+        </div> : <>
         <button disabled={!canScan} className="rounded bg-foreground px-4 py-3 text-background">Evidentiraj</button>
         <button type="button" disabled={!canScan} onClick={() => setCamera(!camera)} className="rounded border px-4 py-3">Kamera</button>
+        </>}
       </form>
       {camera && <Camera onClose={() => setCamera(false)} onCode={value => { setCode(value); setCamera(false); setMessage(`Očitano: ${value}. Proverite količinu i kliknite Evidentiraj.`); }} />}
       {!warehouseMode && <p className="text-sm">Ručni skener šalje šifru i Enter. Jedan sken dodaje izabranu količinu (podrazumevano 1). Za pogrešan unos koristite −1 na odgovarajućem redu.</p>}
