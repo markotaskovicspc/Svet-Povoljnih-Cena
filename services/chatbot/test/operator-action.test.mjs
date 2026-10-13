@@ -42,6 +42,7 @@ test('ERP command queues once, never sends literal command, and missing phone es
 
 test('resume catches up only latest unanswered customer message and preserves context',async()=>{const s=await setup();try{
  const now=Date.now();for(const [id,p] of [['first',{text:'Jedan komplet',timestamp:now-2000}],['answer',{text:'Dve četke su uključene',echo:true,timestamp:now-1000}],['last',{text:'Možete poslati',timestamp:now}]])await s.store.pool.query("INSERT INTO spc_chat_events(id,conversation,payload,status) VALUES($1,$2,$3,'skipped')",[id,s.id,s.store.encode(p)]);
+ await s.store.pool.query("UPDATE spc_chat_events SET created_at='2026-01-01T00:00:00Z' WHERE conversation=$1",[s.id]);
  await s.act({action:'resume'});const rows=(await s.store.pool.query('SELECT id,status FROM spc_chat_events')).rows;
  assert.equal(rows.find(r=>r.id==='last').status,'pending');assert.equal(rows.find(r=>r.id==='first').status,'skipped');
  assert.ok(s.store.decode((await s.row()).state).history.some(m=>m.content==='Dve četke su uključene'));
@@ -51,4 +52,10 @@ test('order failure alerts after unrelated handoff but identical retry does not 
  const worker=new Worker({store:s.store,accounts:[],spc:async()=>{mails++;return {ok:true};}});
  for(const id of ['staff-order:one','staff-order:two']){await s.store.pool.query('INSERT INTO spc_chat_support(id,conversation,payload) VALUES($1,$2,$3)',[id,s.id,s.store.encode({action:'support_handoff',reason:'Nedostaje telefon'})]);await worker.flushSupport();}
  assert.equal(mails,1);assert.equal((await s.store.pool.query("SELECT status FROM spc_chat_support WHERE id='staff-order:two'")).rows[0].status,'recorded');
+ }finally{await s.store.close();}});
+
+test('operator resume releases a stale Meta inbox marker',async()=>{const s=await setup();try{
+ await s.store.withConversation(s.id,async(row,state,c)=>{state.metaInboxControl={status:'inbox'};await s.store.save(c,row.id,state);});
+ await s.act({action:'pause'});assert.equal((await s.act({action:'resume'})).status,200);
+ assert.equal(s.store.decode((await s.row()).state).metaInboxControl,undefined);
  }finally{await s.store.close();}});

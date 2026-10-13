@@ -1,0 +1,111 @@
+--- a/src/server.mjs
++++ b/src/server.mjs
+@@ -1,3 +1,4 @@
++import {operatorAction} from './operator-action.mjs';
+ import {extractOrderImport,orderImportInputSchema} from './order-import.mjs';
+ import {operatorConversations,operatorConversation} from './operator-reader.mjs';
+ import http from 'node:http';
+@@ -26,8 +27,9 @@
+     if(req.method==='GET'&&url.pathname==='/'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'"});return res.end(page);}
+     const isWebhook=req.method==='POST'&&url.pathname==='/webhooks/meta';
+     const orderImport=req.method==='POST'&&url.pathname==='/operator/order-import';
++    const operatorWrite=req.method==='POST'&&(url.pathname==='/operator/action'||orderImport);
+     const operatorRead=req.method==='GET'&&['/operator/conversations','/operator/conversation'].includes(url.pathname);
+-    if(!isWebhook&&(((operatorRead||orderImport)&&!websiteSecret)||!equal(req.headers.authorization,`Bearer ${(operatorRead||orderImport)?websiteSecret:adminToken}`)))return reply(401,{error:'Unauthorized'});
++    if(!isWebhook&&(((operatorRead||operatorWrite)&&!websiteSecret)||!equal(req.headers.authorization,`Bearer ${(operatorRead||operatorWrite)?websiteSecret:adminToken}`)))return reply(401,{error:'Unauthorized'});
+     if(operatorRead){try{const data=url.pathname==='/operator/conversations'?await operatorConversations(store,url):await operatorConversation(store,url);return reply(data?200:404,data??{error:'Not found'});}catch{return reply(400,{error:'Invalid query'});}}
+     let bytes=0;const chunks=[];
+     for await(const chunk of req){bytes+=chunk.length;if(bytes>(orderImport?4*1024*1024:256*1024))return reply(413,{error:'Too large'});chunks.push(chunk);}
+@@ -39,6 +41,7 @@
+       try{return reply(200,{ok:true,draft:await extractOrderImport(body,worker.model)});}catch{console.error('order_import.extraction_failed');return reply(502,{error:'Čitanje nije uspelo. Pokušajte ponovo.'});}finally{orderImportActive--;}
+     }
+ 
++    if(req.method==='POST'&&url.pathname==='/operator/action'){const result=await operatorAction({store,worker,body:JSON.parse(raw)});return reply(result.status,result.data);}
+     if(req.method==='GET'&&url.pathname==='/admin/email-drafts'){
+       if(!emailWorker||emailWorker.status==='disabled')return reply(200,{status:'disabled'});
+       const result=await store.pool.query('SELECT status,reason,count(*)::int AS count FROM spc_email_drafts GROUP BY status,reason');
+--- a/src/worker.mjs
++++ b/src/worker.mjs
+@@ -436,9 +436,10 @@
+       const out=rows.rows[0]; if(!out) return;
+       if(out.status==='sending') {await this.store.pause(row.id,'Nepotvrđen ishod slanja odgovora; proveriti Meta inbox');await c.query(`UPDATE spc_chat_outbox SET status='uncertain' WHERE id=$1`,[out.id]);return;}
+       const message=this.store.decode(out.payload);
+-      if(!inWindow(Number(row.last_customer)) || (!this.allowed(row.sender) && !message.human) || blocksAutonomousReply(row,state,message) || (row.paused&&!message.allowPaused&&!message.human)) {
++      if((row.channel!=='web'&&!inWindow(Number(row.last_customer))) || (!this.allowed(row.sender) && !message.human) || blocksAutonomousReply(row,state,message) || (row.paused&&!message.allowPaused&&!message.human)) {
+         await c.query(`UPDATE spc_chat_outbox SET status='suppressed' WHERE id=$1`,[out.id]); return;
+       }
++      if(row.channel==='web'){await c.query("UPDATE spc_chat_outbox SET status='sent' WHERE id=$1",[out.id]);return;}
+       const account=this.accounts.find(a=>a.channel===row.channel&&a.id===row.account);
+       if(!account) return;
+       await c.query(`UPDATE spc_chat_outbox SET status='sending' WHERE id=$1`,[out.id]);
+--- a/src/staff-order.mjs
++++ b/src/staff-order.mjs
+@@ -10,7 +10,7 @@
+ export const isOrderCommandText=text=>/^\/porud[zž]bina\s*$/i.test(String(text).trim());
+ // Business Suite also supplies app_id on human Page replies. Authentication is
+ // the signed Page-origin echo; worker additionally excludes our outbox IDs.
+-export const isStaffOrderCommand=event=>event.channel==='facebook'&&event.echo===true&&!event.botEcho&&isOrderCommandText(event.text);
++export const isStaffOrderCommand=event=>(event.channel==='facebook'||event.operatorCommand===true)&&event.echo===true&&!event.botEcho&&isOrderCommandText(event.text);
+ const address=z.object({firstName:z.string(),lastName:z.string(),phone:z.string(),street:z.string(),houseNumber:z.string(),city:z.string(),postalCode:z.string().nullable()});
+ const inputSchema=z.object({guestEmail:z.email().nullable(),shipping:address,lines:z.array(z.object({sku:z.string(),qty:z.number().int().positive().max(1000)})).min(1).max(30),paymentMethod:z.literal('POUZECE_GOTOVINA'),shippingMethod:z.enum(['KURIR','KAMION'])});
+ const priceConflictSchema=z.object({sku:z.string(),basis:z.enum(['unit','total']),earlierPrice:z.number().nonnegative(),latestPrice:z.number().nonnegative(),earlierEvidence:z.string(),latestEvidence:z.string()});
+--- /dev/null
++++ b/src/operator-action.mjs
+@@ -0,0 +1,57 @@
++import {inWindow} from './security.mjs';
++import {isOrderCommandText} from './staff-order.mjs';
++export async function operatorAction({store,worker,body}){
++ if(typeof body?.id!=='string'||body.id.length>200||!['pause','resume','reply'].includes(body.action))return {status:400,data:{error:'INVALID_ACTION'}};
++ if(body.action==='reply'&&(typeof body.text!=='string'||!body.text.trim()||body.text.length>1800||!/^[0-9a-f-]{36}$/i.test(body.requestId??'')))return {status:400,data:{error:'INVALID_MESSAGE'}};
++ const exists=await store.pool.query('SELECT id FROM spc_chat_conversations WHERE id=$1',[body.id]);if(!exists.rows.length)return {status:404,data:{error:'NOT_FOUND'}};
++ let result={status:409,data:{error:'BUSY'}};
++ await store.withConversation(body.id,async(row,state,c)=>{
++  const outId='operator:'+body.id+':'+body.requestId;
++  const command=body.action==='reply'&&isOrderCommandText(body.text);
++  if(body.action==='reply'){
++   const prior=await c.query('SELECT payload,status FROM spc_chat_events WHERE id=$1 AND conversation=$2',[outId,row.id]);
++   if(prior.rows.length){result=command&&store.decode(prior.rows[0].payload).text===body.text.trim()?{status:200,data:{ok:true,command:true,messageId:outId,delivery:prior.rows[0].status}}:{status:409,data:{error:'MESSAGE_CONFLICT'}};return;}
++   const sent=await c.query('SELECT payload,status FROM spc_chat_outbox WHERE id=$1 AND conversation=$2',[outId,row.id]);
++   if(sent.rows.length){const prior=store.decode(sent.rows[0].payload);result=prior.text===body.text.trim()?{status:200,data:{ok:true,messageId:outId,delivery:sent.rows[0].status}}:{status:409,data:{error:'MESSAGE_CONFLICT'}};return;}
++   if(row.channel!=='web'&&!inWindow(Number(row.last_customer))){result={status:409,data:{error:'MESSAGE_WINDOW_CLOSED'}};return;}
++  }
++  if(body.action==='resume'&&(state.confirming||state.cancelling||state.submittingReclamation||state.reclamationInFlight||state.operatorOrder||state.staffOrder?.status==='creating')){result={status:409,data:{error:'RECONCILIATION_REQUIRED'}};return;}
++  await c.query('BEGIN');
++  try{
++   if(body.action==='resume'){
++    delete state.pending;delete state.reclamation;delete state.cancellation;delete state.handedOff;delete state.historyVersion;delete state.metaInboxControl;
++    await c.query("UPDATE spc_chat_events SET status='skipped' WHERE conversation=$1 AND status='pending'",[row.id]);
++    // Resume only the latest unanswered customer message, never the whole backlog.
++    // Delivered staff/bot replies and later order commands count as an answer.
++    const recent=await c.query("SELECT id,payload,created_at,'event' AS kind FROM spc_chat_events WHERE conversation=$1 UNION ALL SELECT id,payload,created_at,'reply' AS kind FROM spc_chat_outbox WHERE conversation=$1 AND status IN ('sent','sending','uncertain') ORDER BY created_at DESC LIMIT 30",[row.id]);
++    const ordered=recent.rows.map(item=>{const p=store.decode(item.payload);return {...item,time:item.kind==='event'&&Number.isFinite(p.timestamp)?p.timestamp:new Date(item.created_at).getTime()};}).sort((a,b)=>b.time-a.time||String(b.id).localeCompare(String(a.id)));
++    const latest=ordered.find(item=>{const p=store.decode(item.payload);return !p.botEcho&&!p.referralOnly;});
++    if(latest?.kind==='event'){
++     const p=store.decode(latest.payload);
++     if(!p.echo&&inWindow(p.timestamp)){
++      state.history=await store.history(c,row.id,{id:latest.id,timestamp:Date.now()});
++      await c.query("UPDATE spc_chat_events SET status='pending',next_at=now(),attempts=0 WHERE id=$1 AND status='skipped'",[latest.id]);
++     }
++    }
++    await c.query('UPDATE spc_chat_conversations SET paused=false,reason=NULL WHERE id=$1',[row.id]);
++   }else{
++    delete state.handedOff;
++    await c.query('UPDATE spc_chat_conversations SET paused=true,reason=$2 WHERE id=$1',[row.id,'Razgovor preuzeo zaposleni']);
++    const queued=await c.query("SELECT id,payload FROM spc_chat_outbox WHERE conversation=$1 AND status='pending'",[row.id]);
++    for(const item of queued.rows){const p=store.decode(item.payload);if(!p.human&&!p.staffCommand)await c.query("UPDATE spc_chat_outbox SET status='suppressed' WHERE id=$1",[item.id]);}
++    if(body.action==='reply'){
++     const text=body.text.trim();
++     if(command){
++      const event={id:outId,conversation:row.id,channel:row.channel,account:row.account,sender:row.sender,text,echo:true,operatorCommand:true,actorId:body.actorId,timestamp:Date.now()};
++      await c.query('INSERT INTO spc_chat_events(id,conversation,payload) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[outId,row.id,store.encode(event)]);
++     }else{
++      state.history??=[];state.history.push({role:'assistant',content:text,timestamp:Date.now()});
++      await store.enqueue(c,outId,row.id,{text,human:true,operator:true,actorId:body.actorId});
++     }
++    }
++   }
++   await store.save(c,row.id,state);await c.query('COMMIT');result={status:200,data:{ok:true,...(body.action==='reply'?{messageId:outId,delivery:'pending',command}:{})}};
++  }catch(e){await c.query('ROLLBACK');throw e;}
++ });
++ if(result.status===200)void worker.tick();return result;
++}
