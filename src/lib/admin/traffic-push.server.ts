@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { enqueueBackgroundJob, processBackgroundJob } from "@/lib/background-jobs";
 import { getPushConfiguration, sendAdminDevicePush } from "./order-push.server";
-import { PRESENCE_WINDOW_MS, shouldAlertTraffic } from "@/lib/analytics/presence";
+import { PRESENCE_WINDOW_MS, TRAFFIC_ALERT_THRESHOLD, shouldAlertTraffic } from "@/lib/analytics/presence";
 
 export async function evaluateTrafficAlert(now = new Date()) {
   if (!getPushConfiguration()) return;
@@ -13,17 +13,18 @@ export async function evaluateTrafficAlert(now = new Date()) {
     if (!lock?.acquired) return [];
     const previous = await tx.adminSetting.findUnique({ where: { key: "traffic-alert-state" } });
     if (previous && now.getTime() - previous.updatedAt.getTime() < 15_000) return [];
-    const state = previous?.value as { lastAlertAt?: string } | null;
+    const state = previous?.value as { lastAlertAt?: string; aboveThreshold?: boolean } | null;
     const parsed = state?.lastAlertAt ? Date.parse(state.lastAlertAt) : NaN;
     const count = await tx.siteVisitorPresence.count({ where: { lastSeenAt: { gte: new Date(now.getTime() - PRESENCE_WINDOW_MS), lte: now } } });
-    const alert = shouldAlertTraffic(count, Number.isFinite(parsed) ? parsed : null, now.getTime());
+    const alert = shouldAlertTraffic(count, Number.isFinite(parsed) ? parsed : null, now.getTime(), Number.isFinite(parsed) && state?.aboveThreshold === true);
     const subscriptions = alert ? await tx.adminPushSubscription.findMany({
       where: { trafficAlerts: true, adminUser: { enabled: true, role: { in: ["SUPER", "OPS"] } } }, select: { id: true },
     }) : [];
     const lastAlertAt = subscriptions.length ? now.toISOString() : state?.lastAlertAt ?? null;
+    const aboveThreshold = count >= TRAFFIC_ALERT_THRESHOLD;
     await tx.adminSetting.upsert({ where: { key: "traffic-alert-state" },
-      create: { key: "traffic-alert-state", value: { lastAlertAt }, updatedAt: now },
-      update: { value: { lastAlertAt }, updatedAt: now },
+      create: { key: "traffic-alert-state", value: { lastAlertAt, aboveThreshold }, updatedAt: now },
+      update: { value: { lastAlertAt, aboveThreshold }, updatedAt: now },
     });
     // Queue inside this transaction: a crash cannot consume the cooldown without a durable notification.
     const jobs = [];
