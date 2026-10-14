@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ScanPress } from "@/lib/admin/scan-press";
+import { createPickingCameraDecoder } from "@/lib/admin/picking-camera-decoder";
 
 /** Keep the camera warm; a press accepts at most one code, never inventory. */
 export function PickingCamera({ onCode, onClose, enabled = true }: {
@@ -9,6 +10,7 @@ export function PickingCamera({ onCode, onClose, enabled = true }: {
 }) {
   const video = useRef<HTMLVideoElement>(null);
   const press = useRef(new ScanPress());
+  const scanFrame = useRef<() => void>(() => {});
   const callback = useRef(onCode);
   const allowed = useRef(enabled);
   const [ready, setReady] = useState(false);
@@ -36,7 +38,7 @@ export function PickingCamera({ onCode, onClose, enabled = true }: {
         void decoder.catch(() => {}); // Permission prompts may outlast module loading.
         stream = await navigator.mediaDevices.getUserMedia({
           audio: false,
-          video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
         });
         if (cancelled) { stream.getTracks().forEach(track => track.stop()); return; }
         const track = stream.getVideoTracks()[0];
@@ -49,38 +51,25 @@ export function PickingCamera({ onCode, onClose, enabled = true }: {
         const element = video.current!;
         element.srcObject = stream;
         await element.play();
-        const { BrowserMultiFormatReader } = await decoder;
+        const { BrowserMultiFormatReader, BrowserMultiFormatOneDReader } = await decoder;
         if (cancelled) return;
-        const reader = new BrowserMultiFormatReader();
-        const canvas = document.createElement("canvas");
-        const context = canvas.getContext("2d", { willReadFrequently: true });
-        if (!context) throw new Error("Canvas unavailable");
+        const decode = createPickingCameraDecoder(document.createElement("canvas"), new BrowserMultiFormatOneDReader(), new BrowserMultiFormatReader());
         setReady(true);
         setStatus("Držite dugme Skeniraj dok je barkod u kadru.");
         const loop = () => {
+          clearTimeout(timer);
           if (cancelled) return;
           if (!allowed.current) setHolding(false);
           if (allowed.current && press.current.active && !document.hidden && element.readyState >= 2 && element.videoWidth) {
-            // One-dimensional readers reverse rows for upside-down codes. Rotating
-            // the actual canvas also handles vertical codes without clipping pixels.
-            for (const rotated of [false, true]) {
-              canvas.width = rotated ? element.videoHeight : element.videoWidth;
-              canvas.height = rotated ? element.videoWidth : element.videoHeight;
-              context.setTransform(1, 0, 0, 1, 0, 0);
-              if (rotated) { context.translate(canvas.width, 0); context.rotate(Math.PI / 2); }
-              context.drawImage(element, 0, 0);
-              try {
-                const value = reader.decodeFromCanvas(canvas).getText();
-                if (press.current.accept()) {
-                  setHolding(false); setStatus(`Očitano: ${value}. Proverite količinu i kliknite Evidentiraj.`);
-                  callback.current(value);
-                }
-                break;
-              } catch { /* No readable barcode in this frame: try the next orientation/frame. */ }
+            const value = decode(element);
+            if (value && press.current.accept()) {
+              setHolding(false); setStatus(`Očitano: ${value}. Proverite količinu i kliknite Evidentiraj.`);
+              callback.current(value);
             }
           }
-          timer = setTimeout(loop, 80);
+          timer = setTimeout(loop, press.current.active ? 30 : 150);
         };
+        scanFrame.current = loop;
         loop();
       } catch {
         stream?.getTracks().forEach(track => track.stop());
@@ -93,11 +82,13 @@ export function PickingCamera({ onCode, onClose, enabled = true }: {
       stream?.getTracks().forEach(track => track.stop());
       window.removeEventListener("blur", release);
       document.removeEventListener("visibilitychange", visibility);
+      scanFrame.current = () => {};
     };
   }, []);
   function begin() {
     if (!ready || !enabled || error) return;
     press.current.begin(); setHolding(true); setStatus("Tražim barkod… Držite dugme.");
+    scanFrame.current();
   }
   function end() { press.current.release(); setHolding(false); }
   return <div className="space-y-3 rounded-xl border bg-black p-3 text-white">
