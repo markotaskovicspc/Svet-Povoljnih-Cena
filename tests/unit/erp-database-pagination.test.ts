@@ -35,9 +35,20 @@ it.each(Object.entries(mocks.modules))("%s limits the correct database model bef
   const order = mocks.db[model].findMany.mock.calls[0][0].orderBy;
   expect(slug === "admin-podesavanja" ? order : order.at(-1)).toEqual(slug === "admin-podesavanja" ? { key: "asc" } : { id: "asc" });
   expect(await countErpDatabaseRows(slug)).toBe(250);
-  if (slug === "otpremnice") {
+  if (["otpremnice", "porudzbenice", "porudzbenice-po-artiklima"].includes(slug)) {
     expect(mocks.db[model].findMany.mock.calls[0][0].where).toEqual(mocks.db[model].count.mock.calls[0][0].where);
   }
+});
+
+it("separates archived purchase orders while retaining the restore command", async () => {
+  const active = await getErpModule("porudzbenice", { includeLookupOptions: false });
+  expect(mocks.db.purchaseOrder.findMany).toHaveBeenLastCalledWith(expect.objectContaining({ where: { archivedAt: null } }));
+  expect(active?.commands.some((command) => command.action === "po.archive")).toBe(true);
+  expect(active?.commands.some((command) => command.action === "po.restore")).toBe(false);
+  const archive = await getErpModule("porudzbenice", { purchaseOrderArchived: true, includeLookupOptions: false });
+  expect(mocks.db.purchaseOrder.findMany).toHaveBeenLastCalledWith(expect.objectContaining({ where: { archivedAt: { not: null } } }));
+  expect(archive?.commands.map((command) => command.action)).toEqual(["po.restore"]);
+  expect(mocks.db.purchaseOrder.count).not.toHaveBeenCalled();
 });
 
 it.each(["prodajni-nalozi", "stanje-po-magacinima", "popisi", "neobjavljeni-artikli", "unknown", "toString"])("keeps transformed/unknown %s on the complete-result path", async (slug) => {

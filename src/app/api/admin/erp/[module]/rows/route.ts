@@ -98,6 +98,8 @@ export async function GET(
       searchColumn: requestedSearchColumn || undefined,
       stocktakeArchived:
         slug === "popisi" && search.get("archive") === "1",
+      purchaseOrderArchived:
+        slug === "porudzbenice" && search.get("archive") === "1",
     }),
     useDatabasePagination
       ? slug === "artikli" ? countArticleRows() : countErpDatabaseRows(slug)

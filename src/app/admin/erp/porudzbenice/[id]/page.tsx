@@ -723,7 +723,7 @@ export default async function PurchaseOrderEditorPage({
               <table className="min-w-[1900px] text-sm">
                 <thead className="bg-muted-bg/70 text-left text-xs uppercase tracking-[0.08em] text-ink-500">
                   <tr>
-                    {["Foto", "Šifra", "Dobavljač / naziv", "Atributi / dezen", "Nabavna cena", "Valuta / paritet / važi od", "MOQ / kom-pak", "Količina", "Iznos", "Zapremina / težina", "Carina % (procena)", "Kalk. MPC", "BM% (procena)", "Dobavljačev naziv / sertifikati / bar-kod", "Radnje"].map((label) => (
+                    {["Foto", "Šifra", "Naziv", "Atributi / dezen", "Nabavna cena", "Valuta / paritet / važi od", "MOQ / kom-pak", "Količina", "Iznos", "Zapremina / težina", "Carina % (procena)", "Kalk. MPC", "BM% (procena)", "Dobavljačev naziv / sertifikati / bar-kod", "Radnje"].map((label) => (
                       <th key={label} className={label === "Radnje" ? "sticky right-0 z-10 min-w-40 bg-background px-3 py-3 shadow-[-4px_0_6px_-4px_rgb(0_0_0/0.2)]" : "whitespace-nowrap px-3 py-3"}>{label}</th>
                     ))}
                   </tr>
@@ -753,8 +753,7 @@ export default async function PurchaseOrderEditorPage({
                         </td>
                         <td className="px-3 py-2 font-medium">{item.sku}</td>
                         <td className="px-3 py-2">
-                          <p>{order.supplier?.name ?? "—"}</p>
-                          <p className="text-ink-500">{item.name}</p>
+                          <p>{item.name}</p>
                         </td>
                         <td className="max-w-60 px-3 py-2 text-xs">
                           <p>{item.attributes ?? "—"}</p>

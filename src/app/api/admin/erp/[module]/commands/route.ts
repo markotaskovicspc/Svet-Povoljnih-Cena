@@ -35,6 +35,7 @@ import {
   type PurchasePriceCommandInput,
 } from "@/lib/admin/purchase-price.server";
 import { deleteManualSalesOrders } from "@/lib/admin/sales-order.server";
+import { setPurchaseOrdersArchived } from "@/lib/admin/purchase-order-archive.server";
 import {
   archiveWarehouses,
   createWarehouseWithAutomaticCode,
@@ -307,6 +308,17 @@ async function runCommand(
         throw new Error("Komanda nije dostupna u ovom ERP modulu.");
       }
       return validatePurchaseOrderPacks(ids);
+    case "po.archive":
+    case "po.restore": {
+      if (module !== "porudzbenice") {
+        throw new Error("Komanda nije dostupna u ovom ERP modulu.");
+      }
+      const archived = action === "po.archive";
+      const count = await setPurchaseOrdersArchived(ids, archived);
+      revalidatePath("/admin/erp/porudzbenice");
+      revalidatePath("/admin/erp/porudzbenice-po-artiklima");
+      return { message: archived ? `Arhivirano porudžbenica: ${count}.` : `Vraćeno iz arhive: ${count}.` };
+    }
     case "po.create":
       if (module !== "porudzbenice") {
         throw new Error("Komanda nije dostupna u ovom ERP modulu.");

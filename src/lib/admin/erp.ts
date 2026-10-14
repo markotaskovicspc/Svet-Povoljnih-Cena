@@ -666,6 +666,19 @@ const coreErpModules: ErpModule[] = [
         confirm:
           "Proknjižiti i zaključati izabrane porudžbenice? Posle toga redovno uređivanje nije moguće.",
       },
+      {
+        label: "Arhiviraj",
+        tone: "neutral",
+        action: "po.archive",
+        needsSelection: true,
+        confirm: "Arhivirati izabrane porudžbenice? Dokumenti i njihov status ostaju sačuvani.",
+      },
+      {
+        label: "Vrati iz arhive",
+        tone: "neutral",
+        action: "po.restore",
+        needsSelection: true,
+      },
     ],
     columns: purchaseOrderColumns,
     editableColumns: [],
@@ -912,6 +925,7 @@ export async function getErpModule(
     searchColumn?: string;
     salesOrderFilters?: SalesOrderExportFilters;
     stocktakeArchived?: boolean;
+    purchaseOrderArchived?: boolean;
     deferRows?: boolean;
     articleIds?: string[];
   } = {},
@@ -928,7 +942,7 @@ export async function getErpModule(
   const [rows, articleContext, supplierContext, purchasePriceContext, pickupAvailability] = await Promise.all([
     options.deferRows ? Promise.resolve([] as ErpRow[]) :
       getPersistedErpRows(slug, take, options.warehouseId, options.query, options.searchColumn,
-        { ...options.salesOrderFilters, stocktakeArchived: options.stocktakeArchived }, skip, options.articleIds),
+        { ...options.salesOrderFilters, stocktakeArchived: options.stocktakeArchived }, skip, options.articleIds, options.purchaseOrderArchived),
     includeLookupOptions && slug === "artikli" ? getArticleModuleContext() : Promise.resolve(null),
     includeLookupOptions && slug === "dobavljaci" ? getSupplierModuleContext() : Promise.resolve(null),
     includeLookupOptions && slug === "nabavne-cene" ? getPurchasePriceModuleContext() : Promise.resolve(null),
@@ -945,7 +959,7 @@ export async function getErpModule(
     : definition;
   const initialRowsTotal = !options.deferRows && options.take === undefined && !skip &&
     !options.query?.trim() && !options.warehouseId && !options.salesOrderFilters &&
-    !options.stocktakeArchived && supportsErpDatabasePagination(slug)
+    !options.stocktakeArchived && !options.purchaseOrderArchived && supportsErpDatabasePagination(slug)
       ? rows.length < take ? rows.length : await countErpDatabaseRows(slug)
       : null;
   const columns = runtimeDefinition.columns.map((column) => ({
@@ -972,6 +986,11 @@ export async function getErpModule(
   }));
   const commands = runtimeDefinition.commands
     .filter((command) => {
+      if (slug === "porudzbenice") {
+        return options.purchaseOrderArchived
+          ? command.action === "po.restore"
+          : command.action !== "po.restore";
+      }
       if (slug !== "popisi") return true;
       if (options.stocktakeArchived) {
         return (
@@ -1053,6 +1072,7 @@ async function getPersistedErpRows(
   salesOrderFilters?: SalesOrderExportFilters,
   skip = 0,
   articleIds?: string[],
+  purchaseOrderArchived = false,
 ): Promise<ErpRow[]> {
   switch (slug) {
     case "artikli":
@@ -1062,7 +1082,7 @@ async function getPersistedErpRows(
     case "nabavne-cene":
       return getPurchasePriceRows(take, skip);
     case "porudzbenice":
-      return getPurchaseOrderRows(take, skip);
+      return getPurchaseOrderRows(take, skip, purchaseOrderArchived);
     case "porudzbenice-po-artiklima":
       return getPurchaseOrderItemRows(take, skip);
     case "ulazne-fakture":
@@ -1388,6 +1408,7 @@ async function getArticleRows(
       id: product.id,
       values: {
         photo: mediaUrl || null,
+        photoPreview: resolveSupabaseStorageUrl(product.media[0]?.url) || null,
         status: product.articleStatus,
         sku: product.sku,
         supplierExternalId: product.supplierExternalId,
@@ -1605,8 +1626,9 @@ async function getPurchasePriceRows(take: number, skip = 0): Promise<ErpRow[]> {
   }));
 }
 
-async function getPurchaseOrderRows(take: number, skip = 0): Promise<ErpRow[]> {
+async function getPurchaseOrderRows(take: number, skip = 0, archived = false): Promise<ErpRow[]> {
   const orders = await db.purchaseOrder.findMany({
+    where: { archivedAt: archived ? { not: null } : null },
     orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     take,
     skip,
@@ -1638,6 +1660,7 @@ async function getPurchaseOrderRows(take: number, skip = 0): Promise<ErpRow[]> {
 
 async function getPurchaseOrderItemRows(take: number, skip = 0): Promise<ErpRow[]> {
   const items = await db.purchaseOrderItem.findMany({
+    where: { purchaseOrder: { archivedAt: null } },
     orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     take,
     skip,

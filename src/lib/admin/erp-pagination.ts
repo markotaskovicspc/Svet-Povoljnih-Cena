@@ -5,8 +5,8 @@ import { db } from "@/lib/db";
 const counters: Record<string, () => Promise<number>> = {
   dobavljaci: () => db.supplier.count(),
   "nabavne-cene": () => db.purchasePrice.count(),
-  porudzbenice: () => db.purchaseOrder.count(),
-  "porudzbenice-po-artiklima": () => db.purchaseOrderItem.count(),
+  porudzbenice: () => db.purchaseOrder.count({ where: { archivedAt: null } }),
+  "porudzbenice-po-artiklima": () => db.purchaseOrderItem.count({ where: { purchaseOrder: { archivedAt: null } } }),
   "ulazne-fakture": () => db.inboundInvoice.count(),
   "mp-cene": () => db.product.count(),
   "sifarnici-artikala": () => db.productLookupValue.count(),

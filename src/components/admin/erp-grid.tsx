@@ -12,6 +12,7 @@ import {
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import { ArticlePhotoPreview } from "@/components/admin/article-photo-preview";
 import {
   ArrowUp,
   ArrowDown,
@@ -664,6 +665,7 @@ function ErpGridContent({
           sorting: JSON.stringify(sorting),
           columns: JSON.stringify(visibleColumns),
           ...context,
+          ...(module.slug === "porudzbenice" ? { archive: initialContext?.archive ?? "" } : {}),
         });
         const response = await fetch(
           `/api/admin/erp/${encodeURIComponent(module.slug)}/rows?${params}`,
@@ -719,6 +721,7 @@ function ErpGridContent({
     sorting,
     visibleColumns,
     context,
+    initialContext?.archive,
   ]);
 
   const visible = useMemo(
@@ -1202,6 +1205,7 @@ function ErpGridContent({
       sorting: JSON.stringify(sorting),
       columns: JSON.stringify(visible.map((column) => column.key)),
       ...context,
+      ...(module.slug === "porudzbenice" ? { archive: initialContext?.archive ?? "" } : {}),
     });
     const a = document.createElement("a");
     a.href = `/api/admin/erp/${encodeURIComponent(module.slug)}/export?${params}`;
@@ -2064,6 +2068,14 @@ function ErpGridContent({
                               {formatValue(value, column)}
                             </span>
                           ) : column.key === "photo" ? (
+                            module.slug === "artikli" && typeof value === "string" && value ? (
+                              <ArticlePhotoPreview
+                                src={value}
+                                previewSrc={textValue(row.values.photoPreview)}
+                                href={row.cellHrefs?.photo ?? `/admin/erp/artikli/${row.id}#mediji`}
+                                name={textValue(row.values.name) || textValue(row.values.sku)}
+                              />
+                            ) : (
                             <Link
                               href={
                                 row.cellHrefs?.photo ??

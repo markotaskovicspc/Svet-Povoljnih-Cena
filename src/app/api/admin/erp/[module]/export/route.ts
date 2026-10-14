@@ -101,6 +101,7 @@ export async function GET(
     query: search.get("q") ?? undefined,
     searchColumn: requestedSearchColumn || undefined,
     stocktakeArchived: slug === "popisi" && search.get("archive") === "1",
+    purchaseOrderArchived: slug === "porudzbenice" && search.get("archive") === "1",
     salesOrderFilters:
       slug === "prodajni-nalozi"
         ? {

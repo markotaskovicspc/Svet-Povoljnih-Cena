@@ -2316,6 +2316,7 @@ model PurchaseOrder {
   postedAt             DateTime?
   cogsBookingSnapshot  Json?
   cogsBookedAt         DateTime?
+  archivedAt           DateTime?
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
 
@@ -2329,6 +2330,7 @@ model PurchaseOrder {
 
   @@index([supplierId, createdAt])
   @@index([status, createdAt])
+  @@index([archivedAt, createdAt])
 }
 
 model PurchaseOrderItem {

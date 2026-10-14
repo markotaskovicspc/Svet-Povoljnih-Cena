@@ -45,6 +45,7 @@ export function savedViewLocation(
         {
           artikli: ["view"],
           popisi: ["view"],
+          porudzbenice: ["view"],
           "prodajni-nalozi": ["channel", "loyalty"],
           "racunovodstveni-registri": ["prikaz"],
           "reklamacije-dnevnik": ["status"],

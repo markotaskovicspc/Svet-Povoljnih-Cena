@@ -11,15 +11,20 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function PurchaseOrdersOverviewPage() {
+export default async function PurchaseOrdersOverviewPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string }>;
+}) {
   await requireAdminAction(["OPS"]);
-  const erpModule = await getErpModule("porudzbenice");
+  const isArchive = (await searchParams).view === "archive";
+  const erpModule = await getErpModule("porudzbenice", { purchaseOrderArchived: isArchive });
   if (!erpModule) notFound();
 
   return (
     <>
       <PageHeader
-        title={erpModule.title}
+        title={isArchive ? "Arhivirane porudžbenice" : erpModule.title}
         description={erpModule.description}
         crumbs={[
           { href: "/admin", label: "Admin" },
@@ -27,16 +32,28 @@ export default async function PurchaseOrdersOverviewPage() {
           { label: "Tačka 4" },
         ]}
         actions={
-          <Link
-            href="/admin/erp"
-            className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
-          >
-            Svi ERP moduli
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href={isArchive ? "/admin/erp/porudzbenice" : "/admin/erp/porudzbenice?view=archive"}
+              className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
+            >
+              {isArchive ? "Aktivne porudžbenice" : "Arhiva porudžbenica"}
+            </Link>
+            <Link
+              href="/admin/erp"
+              className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
+            >
+              Svi ERP moduli
+            </Link>
+          </div>
         }
       />
       <div className="px-4 py-6 md:px-8">
-        <ErpGrid module={erpModule} />
+        <ErpGrid
+          key={isArchive ? "archive" : "active"}
+          module={erpModule}
+          initialContext={{ archive: isArchive ? "1" : "" }}
+        />
       </div>
     </>
   );
