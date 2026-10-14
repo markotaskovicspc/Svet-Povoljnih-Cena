@@ -1,6 +1,8 @@
 "use server";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { db } from "@/lib/db";
+import { adminLoginDestination } from "@/lib/admin/login-destination";
 import { signIn } from "@/lib/auth/auth";
 import { AuthError } from "next-auth";
 import { checkRateLimit, getClientIpFromHeaders, rateLimitKey, RATE_LIMITS } from "@/lib/security/rate-limit";
@@ -26,11 +28,12 @@ export async function loginAction(formData: FormData) {
     );
   }
   try {
+    const account = await db.adminUser.findUnique({ where: { email: email.toLowerCase() }, select: { role: true } });
     await signIn("admin-credentials", {
       email,
       password,
       redirect: true,
-      redirectTo: callbackUrl.startsWith("/admin") ? callbackUrl : "/admin",
+      redirectTo: adminLoginDestination(account?.role, callbackUrl),
     });
   } catch (err) {
     // next-auth throws a redirect — let Next handle it. Only catch credential errors.

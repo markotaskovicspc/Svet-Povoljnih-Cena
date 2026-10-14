@@ -6,14 +6,14 @@ import { usePathname } from "next/navigation";
 import { PackageCheck, Undo2, LogOut } from "lucide-react";
 import { warehouseSignOut } from "@/app/admin/magacin/actions";
 
-export function WarehouseShell({ name, children }: { name: string; children: React.ReactNode }) {
+export function WarehouseShell({ name, children, adminHref }: { name: string; children: React.ReactNode; adminHref?: string }) {
   const pathname = usePathname();
   const returns = pathname.startsWith("/admin/magacin/povrat");
   return (
     <div data-warehouse-shell className="min-h-screen bg-canvas pb-[env(safe-area-inset-bottom)]">
       <header className="border-b border-border/60 bg-surface px-4 py-3">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
-          <div className="min-w-0"><p className="text-lg font-semibold">Magacin</p><p className="truncate text-sm text-ink-500">{name}</p></div>
+          <div className="min-w-0"><p className="text-lg font-semibold">Magacin</p><p className="truncate text-sm text-ink-500">{name}</p>{adminHref && <a href={adminHref} className="mt-1 inline-flex min-h-11 items-center text-sm font-medium underline underline-offset-4">← Admin panel</a>}</div>
           <div className="flex items-center gap-2 [&>button]:h-11 [&>button]:w-11"><AdminRefreshButton /><form action={warehouseSignOut}><button className="flex min-h-11 items-center gap-2 rounded-lg border px-3 text-sm"><LogOut size={16} />Odjavi se</button></form></div>
         </div>
       </header>
