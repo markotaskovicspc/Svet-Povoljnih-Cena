@@ -21,6 +21,10 @@
   },
   "crons": [
     {
+      "path": "/api/cron/warehouse-picking",
+      "schedule": "0 2,3 * * *"
+    },
+    {
       "path": "/api/cron/ananas-inventory",
       "schedule": "*/5 * * * *"
     },

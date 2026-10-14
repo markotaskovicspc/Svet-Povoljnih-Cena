@@ -6,7 +6,8 @@ import { flushSync } from "react-dom";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { PickingCamera } from "./picking-camera";
 import type { getPickingSession } from "@/lib/admin/picking.server";
-import { recordPicking } from "@/app/admin/erp/preuzimanja/[id]/picking/actions";
+import { recordPicking, finishPicking } from "@/app/admin/erp/preuzimanja/[id]/picking/actions";
+import { pickingReview } from "@/lib/admin/picking-review";
 type Session = Awaited<ReturnType<typeof getPickingSession>>;
 type ScanRequest = Parameters<typeof recordPicking>[0];
 
@@ -17,7 +18,9 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
   const [cameraStarted, setCameraStarted] = useState(false);
   const cameraButton = useRef<HTMLButtonElement>(null);
   const validCameraScan = useRef(false);
-  const pendingQuantityFocus = useRef(false);
+  const [packagesConfirmed, setPackagesConfirmed] = useState(false);
+  const [labelUrl, setLabelUrl] = useState<string | null>(initial.labelsReady ? `/api/admin/erp/preuzimanja/${encodeURIComponent(initial.id)}/labels` : null);
+  const [shortageReported, setShortageReported] = useState(false);
   const [message, setMessage] = useState("");
   const [scanError, setScanError] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -26,7 +29,7 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
   const input = useRef<HTMLInputElement>(null);
   const quantityInput = useRef<HTMLInputElement>(null);
   const [selected, setSelected] = useState(warehouseMode ? initial.rows.find(row => (initial.progress[row.key] ?? 0) < row.quantity)?.key ?? initial.rows[0]?.key ?? "" : "");
-  const [quantity, setQuantity] = useState(warehouseMode ? "" : "1");
+  const [quantity, setQuantity] = useState(warehouseMode ? String(initial.rows.find(row => row.key === selected)?.quantity ?? 0) : "1");
   const [note, setNote] = useState("");
   const [noteKey, setNoteKey] = useState("");
   useEffect(() => { if (!warehouseMode && !busy && !retry) input.current?.focus(); }, [busy, retry, warehouseMode]);
@@ -46,12 +49,17 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
   }) : session.rows;
   const currentIndex = Math.max(0, orderedRows.findIndex(row => row.key === selected));
   const currentRow = orderedRows[currentIndex];
+  const remainingQuantity = currentRow ? Math.max(0, currentRow.quantity - (session.progress[currentRow.key] ?? 0)) : 0;
+  const review = pickingReview(session);
+  useEffect(() => {
+    if (warehouseMode) setQuantity(String(remainingQuantity));
+  }, [warehouseMode, selected, remainingQuantity]);
   const visibleRows = warehouseMode ? (currentRow ? [currentRow] : []) : session.rows;
   const canScan = editable && (!warehouseMode || Boolean(currentRow && (session.progress[currentRow.key] ?? 0) < currentRow.quantity));
   function moveTo(index: number) {
     const row = orderedRows[index];
     if (!row || busy || retry) return;
-    setSelected(row.key); setCode(""); setQuantity(warehouseMode ? "" : "1"); setNote(""); setMessage(""); setScanError(false);
+    setSelected(row.key); setCode(""); setQuantity(warehouseMode ? String(Math.max(0, row.quantity - (session.progress[row.key] ?? 0))) : "1"); setNote(""); setMessage(""); setScanError(false);
   }
   async function send(request: ScanRequest) {
     if (lock.current) return;
@@ -59,13 +67,14 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
     try {
       const response = await recordPicking(request);
       if (response.ok && response.result) {
-        setSession(response.result); setScanError(false); setRetry(null); setCode(""); setNote(""); setQuantity(warehouseMode ? "" : "1");
-        if (warehouseMode && request.delta > 0) {
+        setSession(response.result); setScanError(false); setRetry(null); setCode(""); setNote(""); setShortageReported(false);
+        if (!warehouseMode) setQuantity("1");
+        if (warehouseMode) {
           const updated = response.result;
           const row = updated.rows.find(row => row.key === request.rowKey);
-          if (row && (updated.progress[row.key] ?? 0) >= row.quantity) {
+          if (row) {
             const start = updated.rows.findIndex(candidate => candidate.key === row.key) + 1;
-            const remaining = [...updated.rows.slice(start), ...updated.rows.slice(0, start)].find(candidate => (updated.progress[candidate.key] ?? 0) < candidate.quantity);
+            const remaining = [...updated.rows.slice(start), ...updated.rows.slice(0, start)].find(candidate => (updated.progress[candidate.key] ?? 0) < candidate.quantity && !updated.reviewedRows.includes(candidate.key));
             if (remaining) setSelected(remaining.key);
             else { setCamera(false); setCameraStarted(false); }
           }
@@ -91,9 +100,9 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
     const row = warehouseMode ? matches.find(r => r.key === currentRow?.key) : matches.length === 1 ? matches[0] : matches.find(r => r.key === selected);
     if (!row) { setMessage(matches.length ? "Ista šifra je u više magacina. Izaberite odgovarajući red pa ponovite sken." : "Šifra nije na ovom nalogu ili je sva količina već odvojena."); return; }
     const amount = Number(quantity);
-    if (!quantity.trim() || !Number.isSafeInteger(amount) || amount < 1) { setMessage("Unesite pozitivnu celu količinu."); quantityInput.current?.focus(); return; }
+    if (!quantity.trim() || !Number.isSafeInteger(amount) || amount < (warehouseMode ? 0 : 1) || (warehouseMode && amount > remainingQuantity)) { setMessage(warehouseMode ? "Unesite celu količinu od 0 do preostale tražene količine." : "Unesite pozitivnu celu količinu."); quantityInput.current?.focus(); return; }
     setScanError(false);
-    record(row.key, amount);
+    record(row.key, amount, warehouseMode ? `Potvrđena količina: ${amount} kom. Nedostaje ${row.quantity - (session.progress[row.key] ?? 0) - amount} kom. za ${row.sku}.` : "");
   }
   function changeCode(value: string) {
     setCode(value);
@@ -110,8 +119,7 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
     } else {
       if (warehouseMode) {
         validCameraScan.current = true;
-        pendingQuantityFocus.current = true;
-        flushSync(() => { setCamera(false); setQuantity(""); setScanError(false); setMessage(`Očitano: ${value}. Unesite količinu i kliknite Evidentiraj.`); });
+        flushSync(() => { setCamera(false); setCameraStarted(false); setQuantity(String(remainingQuantity)); setScanError(false); setMessage(`Očitano: ${value}. Proverite količinu i kliknite Evidentiraj.`); });
         quantityInput.current?.focus();
       } else {
         setScanError(false); setMessage(`Očitano: ${value}. Proverite količinu i kliknite Evidentiraj.`);
@@ -119,35 +127,28 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
       return true;
     }
   }
-  useEffect(() => {
-    // iPhone may require a trusted release gesture to show the keyboard after
-    // asynchronous recognition. The code can only be accepted while held.
-    const focusQuantity = () => {
-      if (!pendingQuantityFocus.current) return;
-      pendingQuantityFocus.current = false;
-      quantityInput.current?.blur();
-      quantityInput.current?.focus();
-    };
-    const cancelFocus = () => { pendingQuantityFocus.current = false; };
-    window.addEventListener("pointerup", focusQuantity);
-    window.addEventListener("keyup", focusQuantity);
-    window.addEventListener("blur", cancelFocus);
-    return () => {
-      window.removeEventListener("pointerup", focusQuantity);
-      window.removeEventListener("keyup", focusQuantity);
-      window.removeEventListener("blur", cancelFocus);
-    };
-  }, []);
   function closeCamera() {
-    pendingQuantityFocus.current = false;
     validCameraScan.current = false;
     setCamera(false); setCameraStarted(false);
   }
   function toggleCamera() {
     if (warehouseMode) { input.current?.blur(); quantityInput.current?.blur(); }
     if (camera) { closeCamera(); return; }
-    validCameraScan.current = false; pendingQuantityFocus.current = false;
+    validCameraScan.current = false;
     setScanError(false); setMessage(""); setCameraStarted(true); setCamera(true);
+  }
+  async function finish(mode: "labels" | "shortage") {
+    if (lock.current) return;
+    lock.current = true; setBusy(true);
+    try {
+      const response = await finishPicking({ batchId: session.id, planHash: session.planHash, mode, packagesConfirmed: packagesConfirmed || Boolean(labelUrl) });
+      setMessage(response.message);
+      if (response.ok) {
+        if (mode === "labels") { setLabelUrl(response.result?.labelUrl ?? null); setSession(previous => ({ ...previous, editable: false, labelsReady: true })); }
+        else setShortageReported(true);
+      }
+    } catch { setMessage("Potvrda nije stigla. Osvežite nalog pre ponovnog pokušaja."); }
+    finally { lock.current = false; setBusy(false); }
   }
   const articles = (<div className="space-y-3">
       {warehouseMode && currentRow && <div className="flex items-center justify-between gap-2" aria-label="Kretanje kroz artikle">
@@ -176,6 +177,20 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
       <div className="flex gap-2 print:hidden">{!warehouseMode && <><Link href="/admin/erp/picking-pozicije" className="rounded border px-3 py-2">Pozicije</Link><button onClick={() => window.print()} className="rounded border px-3 py-2">Štampaj putanju</button></>}<button disabled={busy || !!retry} onClick={() => { window.location.reload(); }} className="rounded border px-3 py-2">Osveži</button></div>
     </div>}
     {warehouseMode && total > 0 && done === total && <p className="text-sm font-semibold text-success">Odvajanje je završeno.</p>}
+    {warehouseMode && (review.complete || review.reviewed || labelUrl) && <section className="space-y-3 rounded-xl border bg-muted/20 p-4 print:hidden">
+      {review.complete && !labelUrl && <>
+        <label className="flex items-center gap-3"><input type="checkbox" checked={packagesConfirmed} disabled={busy || !!retry || !session.labelsPreparationAllowed} onChange={event => setPackagesConfirmed(event.target.checked)} className="size-5" />Potvrđujem da su svi paketi spakovani i da su mere na nalogu tačne.</label>
+        <button type="button" disabled={busy || !!retry || !session.labelsPreparationAllowed || !packagesConfirmed} onClick={() => void finish("labels")} className="rounded-lg bg-foreground px-4 py-3 text-background">{busy ? "Priprema adresnica…" : "Štampaj adresnice"}</button>
+        <p className="text-sm text-muted-foreground">Kreiraju se kurirske adresnice; PDF se šalje na magacin@svetpovoljnihcena.rs.</p>
+      </>}
+      {labelUrl && <><a href={labelUrl} target="_blank" rel="noopener noreferrer" className="inline-flex rounded-lg bg-foreground px-4 py-3 text-background">Štampaj adresnice · PDF</a><button type="button" disabled={busy} onClick={() => void finish("labels")} className="ml-3 rounded-lg border px-4 py-3">Proveri slanje mejla</button></>}
+      {review.reviewed && review.shortages.length > 0 && <>
+        <h2 className="font-semibold">Nedostaje roba za {review.shortages.length} artikala</h2>
+        <ul className="space-y-2 text-sm">{review.shortages.map((row, index) => <li key={`${row.sku}-${index}`}>{row.sku} · Odvojeno {row.picked} / {row.required} · Nedostaje {row.missing} kom. · Porudžbine: {row.orders.map(order => order.number).join(", ")}</li>)}</ul>
+        <button type="button" disabled={!editable || shortageReported} onClick={() => void finish("shortage")} className="rounded-lg border px-4 py-3">{shortageReported ? "Prijava sačuvana" : "Prijavi manje količine"}</button>
+        <p className="text-sm text-muted-foreground">Izveštaj se šalje na podrska@svetpovoljnihcena.rs. Nepotpuna roba se ne šalje automatski.</p>
+      </>}
+    </section>}
     {!warehouseMode && <p className="text-sm text-muted-foreground">Redosled je po magacinu i podešenom redosledu pozicija. Kod više pozicija proverite raspoloživu robu. Stavke bez pozicije su na kraju svakog magacina. Odvajanje ne zamenjuje potvrdu spakovanih paketa.</p>}
     {session.previousPlan && <p className="rounded border border-amber-400 bg-amber-50 p-3 text-amber-950">Sadržaj naloga je menjan posle ranijih skeniranja. Za sadašnji sadržaj roba mora ponovo da se proveri; prethodni zapisi ostaju u istoriji.</p>}
     {!session.editable && <p className="rounded border p-3">Nalog je zaključen ili su adresnice već pokrenute. Pregled je dostupan, novo skeniranje je zaključano.</p>}
@@ -183,7 +198,11 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
     {session.editable && <section className="space-y-3 rounded-xl border bg-muted/20 p-4 print:hidden">
       <form onSubmit={e => { e.preventDefault(); scan(); }} className="flex flex-wrap items-end gap-3">
         <label className="min-w-48 flex-1">Skenirajte barkod ili unesite šifru<input ref={input} inputMode={warehouseMode ? "numeric" : undefined} enterKeyHint={warehouseMode ? "done" : undefined} aria-invalid={warehouseMode && scanError ? true : undefined} autoComplete="off" value={code} onChange={e => changeCode(e.target.value)} disabled={!canScan} className="mt-1 w-full rounded border bg-background p-3" /></label>
-        <label>Količina<input ref={quantityInput} type="number" inputMode={warehouseMode ? "numeric" : undefined} enterKeyHint={warehouseMode ? "done" : undefined} min={1} max={warehouseMode && currentRow ? currentRow.quantity - (session.progress[currentRow.key] ?? 0) : 10000} value={quantity} onChange={e => setQuantity(e.target.value)} disabled={!canScan} className="mt-1 block w-24 rounded border bg-background p-3" /></label>
+        <div><label htmlFor="picking-quantity">Količina</label><div className="mt-1 flex items-center gap-2">
+          {warehouseMode && <button type="button" aria-label="Smanji količinu" disabled={!canScan || Number(quantity) <= 0} onClick={() => setQuantity(String(Math.max(0, Number(quantity || 0) - 1)))} className="min-h-12 min-w-12 rounded border text-xl">−</button>}
+          <input id="picking-quantity" ref={quantityInput} type="number" inputMode={warehouseMode ? "numeric" : undefined} enterKeyHint={warehouseMode ? "done" : undefined} min={warehouseMode ? 0 : 1} max={warehouseMode ? remainingQuantity : 10000} value={quantity} onChange={e => setQuantity(e.target.value)} disabled={!canScan} className="block w-24 rounded border bg-background p-3" />
+          {warehouseMode && <button type="button" aria-label="Povećaj količinu" disabled={!canScan || Number(quantity) >= remainingQuantity} onClick={() => setQuantity(String(Math.min(remainingQuantity, Number(quantity || 0) + 1)))} className="min-h-12 min-w-12 rounded border text-xl">+</button>}
+        </div></div>
         {warehouseMode ? <div className="flex w-full justify-between gap-3">
           <button type="button" disabled={!canScan} ref={cameraButton} onClick={toggleCamera} className="rounded border px-4 py-3">Kamera</button>
           <button disabled={!canScan} className="rounded bg-foreground px-4 py-3 text-background">Evidentiraj</button>
@@ -195,7 +214,7 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
       {warehouseMode ? <Dialog open={camera} onOpenChange={open => { if (!open) closeCamera(); }}>
         <DialogContent keepMounted={cameraStarted} showCloseButton={false} className="sm:max-w-lg" finalFocus={() => validCameraScan.current ? quantityInput.current : cameraButton.current}>
           <DialogTitle>Skeniraj barkod</DialogTitle>
-          <DialogDescription>{currentRow?.sku} · {currentRow?.name}. Posle ispravnog barkoda unesite količinu.</DialogDescription>
+          <DialogDescription>{currentRow?.sku} · {currentRow?.name}. Posle ispravnog barkoda proverite ponuđenu količinu.</DialogDescription>
           {cameraStarted && <PickingCamera enabled={camera && canScan} onClose={closeCamera} onCode={cameraCode} />}
           {scanError && <p role="alert" className="rounded-lg border border-red-500 bg-red-50 p-3 font-semibold text-red-800">{message}</p>}
         </DialogContent>

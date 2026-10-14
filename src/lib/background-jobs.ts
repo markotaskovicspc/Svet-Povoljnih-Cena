@@ -8,12 +8,14 @@ import { SefApiError } from "@/lib/sef/client";
 import { BackgroundJobDeferredError } from "@/lib/background-job-deferral";
 import { rabaluxCourierAvailableAt } from "@/lib/rabalux/dispatch-policy";
 import { redactText } from "@/lib/monitoring";
+import { pickingNotificationSchema } from "@/lib/admin/picking-notification";
 import {
   disableInvalidRabaluxWebAvailability,
   expirePartnerReservations,
 } from "@/lib/channel-availability.server";
 
 const schemas = {
+  WAREHOUSE_PICKING_EMAIL: pickingNotificationSchema,
   ADMIN_TRAFFIC_PUSH_DEVICE: z.object({ subscriptionId: z.string().min(1), count: z.number().int().min(20), measuredAt: z.string().datetime() }),
   ADMIN_ORDER_PUSH: z.object({ orderId: z.string().min(1) }),
   ADMIN_ORDER_PUSH_DEVICE: z.object({ orderId: z.string().min(1), subscriptionId: z.string().min(1), adminUserId: z.string().min(1) }),
@@ -871,6 +873,11 @@ async function dispatchJob(job: JobRow) {
         idempotencyKey: `warehouse-order-cancel:${args.orderId}`,
       });
       if (!result.ok) throw new Error(result.error);
+      return;
+    }
+    case "WAREHOUSE_PICKING_EMAIL": {
+      const { sendPickingNotification } = await import("@/lib/admin/picking-notification.server");
+      await sendPickingNotification(pickingNotificationSchema.parse(payload));
       return;
     }
     case "IPS_PAYMENT_EMAIL": {

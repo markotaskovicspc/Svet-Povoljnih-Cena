@@ -66,14 +66,18 @@ test("operations creates a restricted mobile warehouse account, picking and retu
   await expect(phone.locator("[data-warehouse-picking-heading]")).toContainText("0 / 3 kom.");
   await expect(phone.getByRole("textbox", { name: "Skenirajte barkod ili unesite šifru", exact: true })).toHaveAttribute("inputmode", "numeric");
   await expect(phone.getByRole("spinbutton", { name: "Količina", exact: true })).toHaveAttribute("inputmode", "numeric");
-  await expect(phone.getByRole("spinbutton", { name: "Količina", exact: true })).toHaveValue("");
+  await expect(phone.getByRole("spinbutton", { name: "Količina", exact: true })).toHaveValue("1");
+  await expect(phone.getByRole("spinbutton", { name: "Količina", exact: true })).toHaveAttribute("min", "0");
+  await phone.getByRole("button", { name: "Smanji količinu", exact: true }).click();
+  await expect(phone.getByRole("spinbutton", { name: "Količina", exact: true })).toHaveValue("0");
+  await phone.getByRole("button", { name: "Povećaj količinu", exact: true }).click();
   for (const label of ["Izaberi za sken", "+1", "−1", "Nedostaje / napomena"]) await expect(phone.getByRole("button", { name: label, exact: true })).toHaveCount(0);
   await phone.getByRole("button", { name: "Sledeći →", exact: true }).click();
   await expect(row).toContainText(nextProduct.name);
   await phone.getByRole("button", { name: "← Prethodni", exact: true }).click();
   await expect(row).toContainText(product.name);
   await phone.getByRole("textbox", { name: "Skenirajte barkod ili unesite šifru", exact: true }).fill(nextProduct.sku);
-  await expect(phone.getByRole("spinbutton", { name: "Količina", exact: true })).toHaveValue("");
+  await expect(phone.getByRole("spinbutton", { name: "Količina", exact: true })).toHaveValue("1");
   await phone.getByRole("spinbutton", { name: "Količina", exact: true }).fill("1");
   await phone.getByRole("button", { name: "Evidentiraj", exact: true }).click();
   await expect(phone.getByText("Šifra ne odgovara prikazanom artiklu. Proverite barkod ili otvorite drugi artikal.")).toBeVisible();
@@ -109,7 +113,7 @@ test("operations creates a restricted mobile warehouse account, picking and retu
   await expect(row).toContainText(nextProduct.name);
   await expect(phone.getByText("Artikal 1 / 2", { exact: true }).filter({ visible: true })).toBeVisible();
   await phone.getByRole("textbox", { name: "Skenirajte barkod ili unesite šifru", exact: true }).fill(nextProduct.sku);
-  await expect(phone.getByRole("spinbutton", { name: "Količina", exact: true })).toHaveValue("");
+  await expect(phone.getByRole("spinbutton", { name: "Količina", exact: true })).toHaveValue("2");
   await phone.getByRole("spinbutton", { name: "Količina", exact: true }).fill("1");
   await phone.getByRole("button", { name: "Evidentiraj", exact: true }).click();
   await expect(phone.getByText("2 / 3 kom.", { exact: true }).filter({ visible: true })).toBeVisible();
@@ -120,7 +124,7 @@ test("operations creates a restricted mobile warehouse account, picking and retu
   expect(await phone.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   if (process.env.WAREHOUSE_QA_SCREENSHOT_DIR) await phone.screenshot({ path: `${process.env.WAREHOUSE_QA_SCREENSHOT_DIR}/picking-mobile.png`, fullPage: true });
   await phone.getByRole("textbox", { name: "Skenirajte barkod ili unesite šifru", exact: true }).fill(nextProduct.sku);
-  await expect(phone.getByRole("spinbutton", { name: "Količina", exact: true })).toHaveValue("");
+  await expect(phone.getByRole("spinbutton", { name: "Količina", exact: true })).toHaveValue("1");
   await phone.getByRole("spinbutton", { name: "Količina", exact: true }).fill("1");
   await phone.getByRole("button", { name: "Evidentiraj", exact: true }).click();
   await expect(phone.getByText("3 / 3 kom.", { exact: true }).filter({ visible: true })).toBeVisible();

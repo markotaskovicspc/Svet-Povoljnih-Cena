@@ -4,27 +4,8 @@ import Link from "next/link";
 import { useEffect, useRef, useState, useSyncExternalStore, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Field } from "./field";
-import { startBarcodeCamera } from "@/lib/barcode-camera";
-
-function ReturnCamera({ onCode, onClose }: { onCode: (code: string) => void; onClose: () => void }) {
-  const video = useRef<HTMLVideoElement>(null);
-  const callback = useRef(onCode);
-  const [error, setError] = useState("");
-  useEffect(() => { callback.current = onCode; }, [onCode]);
-  useEffect(() => {
-    let active = true;
-    const camera = startBarcodeCamera(video.current!, code => callback.current(code));
-    void camera.ready.catch(() => {
-      if (active) setError("Kamera nije dostupna. Dozvolite pristup kameri u pregledaču ili unesite broj sa adresnice ručno.");
-    });
-    return () => { active = false; camera.stop(); };
-  }, []);
-  return <div className="mt-3 space-y-3 rounded-xl border border-border bg-black p-3 text-white">
-    <video ref={video} muted playsInline aria-label="Kamera za skeniranje adresnice" className="max-h-80 w-full rounded-lg" />
-    <p role="status">{error || "Usmerite zadnju kameru ka barkodu na kurirskoj adresnici. Očitani paket će se automatski otvoriti."}</p>
-    <button type="button" onClick={onClose} className="rounded-lg border border-white/60 px-4 py-2">Zatvori kameru</button>
-  </div>;
-}
+import { PickingCamera } from "./picking-camera";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 function subscribePointer(callback: () => void) {
   const media = window.matchMedia("(pointer: coarse)");
@@ -77,7 +58,7 @@ export function ReturnScanner({ initialCode = "", initialCamera = false, warehou
       <button type="button" disabled={pending} aria-expanded={camera} onClick={() => { input.current?.blur(); setError(""); setCamera(!camera); }} className="rounded-lg border border-border px-4 py-3">Skeniraj kamerom</button>
       {initialCode ? <Link href={`${basePath}?camera=1${warehouseId ? `&warehouse=${encodeURIComponent(warehouseId)}` : ""}`} className="text-sm underline">Sledeći paket</Link> : null}
     </form>
-    {camera && <ReturnCamera onCode={scanned} onClose={() => setCamera(false)} />}
+    <Dialog open={camera} onOpenChange={setCamera}><DialogContent className="sm:max-w-lg"><DialogTitle>Skeniraj paket</DialogTitle><DialogDescription>Usmerite kameru ka barkodu na adresnici. Skeniranje samo pronalazi paket; prijem robe potvrđujete posebno.</DialogDescription>{camera && <PickingCamera onCode={value => { if (!value.trim() || value.trim().length > 40) return false; scanned(value); return true; }} onClose={() => setCamera(false)} />}</DialogContent></Dialog>
     {error && <p role="alert" className="mt-3 text-warning">{error}</p>}
     <p className="mt-3 text-xs text-ink-500">Na telefonu kliknite „Skeniraj kamerom“. Barkod čitačem skenirajte u polje iznad ili unesite broj ručno.</p>
     {pending ? <p role="status" className="mt-4 text-sm">Pronalazim paket…</p> : children}

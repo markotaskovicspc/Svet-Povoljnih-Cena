@@ -213,6 +213,7 @@ export async function setPickupPackageReady(
 export async function confirmAllPickupPackagesReady(
   batchId: string,
   actorId: string,
+  planHash?: string,
 ) {
   return db.$transaction(async (tx) => {
     await lockBatch(tx, batchId);
@@ -221,6 +222,12 @@ export async function confirmAllPickupPackagesReady(
       include: { lines: { where: { deferredAt: null } } },
     });
     assertEditableBatch(batch);
+    if (planHash) {
+      const { getPickingSession } = await import("./picking.server");
+      const { pickingReview } = await import("./picking-review");
+      const session = await getPickingSession(batchId, tx);
+      if (session.planHash !== planHash || !pickingReview(session).complete) throw new Error("Sadržaj naloga je promenjen ili roba nije potpuno odvojena. Osvežite picking.");
+    }
     if (!batch.lines.length) throw new Error("Nalog nema aktivnih paketa.");
     const incomplete = batch.lines.filter((line) =>
       [line.weightKg, line.widthCm, line.depthCm, line.heightCm].some(
@@ -237,6 +244,31 @@ export async function confirmAllPickupPackagesReady(
       data: { warehouseReadyAt: new Date(), warehouseReadyById: actorId },
     });
     return { readyCount: result.count };
+  }, TRANSACTION_OPTIONS);
+}
+
+/** Warehouse printing prepares labels; it does not announce an X Express pickup. */
+export async function prepareWarehousePickupLabels(batchId: string, actorId: string, planHash: string) {
+  const summary = await db.pickupBatch.findUnique({ where: { id: batchId }, select: { provider: true, labelsCreatedAt: true, labelsCreationStartedAt: true } });
+  if (!summary) throw new Error("Picking nalog nije pronađen.");
+  if (!summary.labelsCreatedAt && !summary.labelsCreationStartedAt) await confirmAllPickupPackagesReady(batchId, actorId, planHash);
+  await assertActivePickupPackagesReady(batchId);
+  const availability = await getPickupPostingAvailability(summary.provider);
+  if (!availability.available) throw new Error(availability.reason);
+  if (availability.provider === "MYGLS") return createMyGlsLabelsForPickupBatch(batchId, actorId, undefined, planHash);
+  return createXExpressLabelsForPickupBatch(batchId, actorId, planHash);
+}
+
+async function claimLabelPreparation(batchId: string, data: Prisma.PickupBatchUpdateManyMutationInput, planHash?: string) {
+  return db.$transaction(async tx => {
+    await lockBatch(tx, batchId);
+    if (planHash) {
+      const { getPickingSession } = await import("./picking.server");
+      const { pickingReview } = await import("./picking-review");
+      const session = await getPickingSession(batchId, tx);
+      if (session.planHash !== planHash || !pickingReview(session).complete) throw new Error("Sadržaj naloga je promenjen ili roba nije potpuno odvojena. Osvežite picking.");
+    }
+    return tx.pickupBatch.updateMany({ where: { id: batchId, status: "DRAFT", labelsCreatedAt: null }, data });
   }, TRANSACTION_OPTIONS);
 }
 
@@ -1420,6 +1452,7 @@ async function assertActivePickupPackagesReady(batchId: string) {
 async function createXExpressLabelsForPickupBatch(
   batchId: string,
   actorId: string,
+  planHash?: string,
 ) {
   let preparedCount = 0;
   const existing = await db.pickupBatch.findUnique({
@@ -1439,10 +1472,9 @@ async function createXExpressLabelsForPickupBatch(
     };
   }
 
-  const claimed = await db.pickupBatch.updateMany({
-    where: { id: batchId, status: "DRAFT", labelsCreatedAt: null },
-    data: { status: "POSTING", configurationIssue: null },
-  });
+  const claimed = planHash
+    ? await claimLabelPreparation(batchId, { status: "POSTING", configurationIssue: null }, planHash)
+    : await db.pickupBatch.updateMany({ where: { id: batchId, status: "DRAFT", labelsCreatedAt: null }, data: { status: "POSTING", configurationIssue: null } });
   if (!claimed.count) {
     throw new Error(
       "Nalog nije nov ili drugi administrator trenutno priprema X Express adresnice.",
@@ -1637,6 +1669,7 @@ async function createMyGlsLabelsForPickupBatch(
     channel: MyGlsBookingChannel;
     reference: string;
   },
+  planHash?: string,
 ) {
   let providerAttempted = false;
   let allLabelsCreated = false;
@@ -1674,13 +1707,9 @@ async function createMyGlsLabelsForPickupBatch(
     };
   }
 
-  const claimed = await db.pickupBatch.updateMany({
-    where: { id: batchId, status: "DRAFT" },
-    data: {
-      status: "POSTING",
-      configurationIssue: null,
-    },
-  });
+  const claimed = planHash
+    ? await claimLabelPreparation(batchId, { status: "POSTING", configurationIssue: null }, planHash)
+    : await db.pickupBatch.updateMany({ where: { id: batchId, status: "DRAFT" }, data: { status: "POSTING", configurationIssue: null } });
   if (!claimed.count) {
     throw new Error(
       "Nalog nije nov ili drugi administrator trenutno kreira MyGLS adresnice.",

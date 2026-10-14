@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mock = vi.hoisted(() => ({ tx: { $queryRaw: vi.fn(), pickingScanEvent: { findUnique: vi.fn(), create: vi.fn() } }, session: vi.fn(), auth: vi.fn() }));
 vi.mock("@/lib/db", () => ({ db: { $transaction: async (fn: (tx: unknown) => unknown) => fn(mock.tx) } }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("@/lib/background-jobs", () => ({ enqueueBackgroundJob: vi.fn() }));
+vi.mock("@/lib/admin/pickup-batch.server", () => ({ prepareWarehousePickupLabels: vi.fn() }));
 vi.mock("@/lib/admin/picking.server", () => ({ getPickingSession: mock.session }));
 vi.mock("@/lib/admin", () => ({ withAdminState: (meta: unknown, fn: (id: string) => unknown) => async () => { mock.auth(meta); return fn("admin-1"); } }));
 import { recordPicking } from "@/app/admin/erp/preuzimanja/[id]/picking/actions";

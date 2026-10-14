@@ -3,6 +3,7 @@ import { requireAdminAction } from "@/lib/admin";
 import { getPickingSession } from "@/lib/admin/picking.server";
 import { DigitalPicking } from "@/components/admin/digital-picking";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 export default async function WarehousePickingDetail({ params }: { params: Promise<{ id: string }> }) {
   await requireAdminAction(["OPS", "WAREHOUSE"]);
   const { id } = await params;

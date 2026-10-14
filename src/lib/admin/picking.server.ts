@@ -54,6 +54,9 @@ export async function getPickingSession(batchId: string, client: Reader = db) {
   for (const event of events) if (event.planHash === planHash) progress[event.rowKey] = (progress[event.rowKey] ?? 0) + event.delta;
   return {
     id: batch.id, number: batch.number, planHash, rows, progress,
+    labelsReady: Boolean(batch.labelsCreatedAt),
+    labelsPreparationAllowed: batch.status === "DRAFT",
+    reviewedRows: [...new Set(events.filter(e => e.planHash === planHash && (e.delta > 0 || e.note.startsWith("Potvrđena količina:"))).map(e => e.rowKey))],
     editable: batch.status === "DRAFT" && !batch.labelsCreationStartedAt && !batch.labelsCreatedAt,
     previousPlan: events.some(e => e.planHash !== planHash),
     events: events.slice(0, 100).map(e => ({ ...e, createdAt: e.createdAt.toISOString(), actorName: actors.filter(a => a.id === e.actorId).map(a => [a.firstName, a.lastName].filter(Boolean).join(" ") || a.email)[0] ?? e.actorId })),

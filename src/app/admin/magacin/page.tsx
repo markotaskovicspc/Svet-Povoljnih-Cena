@@ -7,8 +7,8 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Magacin · Picking", robots: { index: false, follow: false } };
 export default async function WarehousePicking({ searchParams }: { searchParams: Promise<{ q?: string; forbidden?: string }> }) {
   await requireAdminAction(["OPS", "WAREHOUSE"]);
-  const { q: rawQuery, forbidden } = await searchParams;
-  const q = rawQuery?.trim().slice(0, 100) ?? "";
+  const { forbidden } = await searchParams;
+  const q = "";
   const batches = await db.pickupBatch.findMany({
     where: { status: "DRAFT", labelsCreationStartedAt: null, labelsCreatedAt: null, ...(q ? { number: { contains: q, mode: "insensitive" } } : {}) },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }], take: 100,
@@ -18,7 +18,7 @@ export default async function WarehousePicking({ searchParams }: { searchParams:
   return <main className="space-y-5 p-4 sm:p-6">
     {forbidden && <p role="alert" className="rounded-lg border border-warning/30 p-3 text-sm">Vaš nalog ima pristup samo pickingu i povratima.</p>}
     <div><h1 className="text-xl font-semibold">Odvajanje robe</h1><p className="mt-1 text-sm text-ink-500">Otvorite nalog, pronađite robu i potvrdite količinu.</p></div>
-    <form className="flex gap-2"><label className="min-w-0 flex-1"><span className="sr-only">Broj picking naloga</span><input name="q" defaultValue={q} placeholder="Pretraži broj naloga" className="w-full rounded-lg border bg-surface px-3 py-3" /></label><button className="rounded-lg border bg-surface px-4">Traži</button></form>
+
     <p className="text-sm text-ink-500">Nalozi za rad: {batches.length}{batches.length === 100 ? " (prvih 100)" : ""}</p>
     <div className="space-y-3">{batches.map(batch => {
       const state = progress.get(batch.id)!;
