@@ -28,6 +28,7 @@ export async function recordPicking(input: z.infer<typeof schema>) {
     }, { timeout: 20000 });
     revalidatePath(`/admin/erp/preuzimanja/${data.batchId}/picking`);
     revalidatePath(`/admin/magacin/picking/${data.batchId}`);
+    revalidatePath("/admin/magacin");
     return { ok: true, entityId: data.batchId, diff: data, result, message: data.delta ? "Količina je evidentirana." : "Napomena je sačuvana." };
   })();
 }

@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 const mock = vi.hoisted(() => ({ pickupBatch: { findUnique: vi.fn() }, warehousePickingPosition: { findMany: vi.fn() }, pickingScanEvent: { findMany: vi.fn() }, adminUser: { findMany: vi.fn() } }));
 vi.mock("@/lib/db", () => ({ db: mock }));
-import { getPickingSession } from "@/lib/admin/picking.server";
+import { getPickingSession, getPickingBatchProgress } from "@/lib/admin/picking.server";
 const item = { id: "i1", sku: "001", name: "Chair", qty: 10, warehouseId: "dc", warehouse: { name: "DC" }, product: { barcode: "8601", supplierId: "s1" } };
 const packedItem = { orderItemId: "i1", quantity: 3, sku: "001", name: "Chair", barcode: "8601", categoryName: null, color1: null, color2: null, unitValue: 100 };
 const line = { id: "l1", orderId: "o1", orderItemId: "i1", lineGroupKey: "o1", quantity: 10, packedQuantity: 3, packedItems: [packedItem], purpose: "ORDER_DELIVERY", deferredAt: null, reclamation: null, order: { id: "o1", number: "P1", status: "U_PRIPREMI", items: [item] } };
@@ -26,4 +26,32 @@ it("uses the replacement warehouse and omits cancelled orders", async () => {
  expect((await getPickingSession("b1")).rows[0].warehouseName).toBe("Replacement DC");
  mock.pickupBatch.findUnique.mockResolvedValue({...batch,lines:[{...line,order:{...line.order,status:"OTKAZANO"}}]});
  expect((await getPickingSession("b1")).rows).toEqual([]);
+});
+
+it("colors list cards from current parcel progress, including quantity corrections", async () => {
+ const session = await getPickingSession("b1");
+ const summary = () => getPickingBatchProgress([structuredClone(batch)] as never);
+ const event = { batchId: "b1", rowKey: session.rows[0].key, planHash: session.planHash, delta: 1 };
+ expect((await summary()).get("b1")).toEqual({ done: 0, total: 3, status: "empty" });
+ mock.pickingScanEvent.findMany.mockResolvedValue([event]);
+ expect((await summary()).get("b1")).toEqual({ done: 1, total: 3, status: "partial" });
+ mock.pickingScanEvent.findMany.mockResolvedValue([{ ...event, delta: 3 }]);
+ expect((await summary()).get("b1")).toEqual({ done: 3, total: 3, status: "complete" });
+ mock.pickingScanEvent.findMany.mockResolvedValue([{ ...event, delta: 3 }, { ...event, delta: -1 }]);
+ expect((await summary()).get("b1")).toEqual({ done: 2, total: 3, status: "partial" });
+});
+it("ignores old plans and counts all list cards with a single event query", async () => {
+ const session = await getPickingSession("b1");
+ mock.pickingScanEvent.findMany.mockClear();
+ mock.pickingScanEvent.findMany.mockResolvedValue([{ batchId:"b1", rowKey:session.rows[0].key, planHash:session.planHash, delta:3 }]);
+ const changed = { ...batch, lines: [{ ...line, packedItems: [{ ...packedItem, quantity: 2 }] }] };
+ const summaries = await getPickingBatchProgress([changed, {...batch,id:"b2"}] as never);
+ expect(summaries.get("b1")).toEqual({ done:0,total:2,status:"empty" });
+ expect(summaries.get("b2")).toEqual({ done:0,total:3,status:"empty" });
+ expect(mock.pickingScanEvent.findMany).toHaveBeenCalledTimes(1);
+ expect(mock.pickingScanEvent.findMany).toHaveBeenCalledWith(expect.objectContaining({where:{batchId:{in:["b1","b2"]}}}));
+});
+it("does not mark a list card with no active picking items as ready", async () => {
+ const cancelled = {...batch,lines:[{...line,order:{...line.order,status:"OTKAZANO"}}]};
+ expect((await getPickingBatchProgress([cancelled] as never)).get("b1")).toEqual({done:0,total:0,status:"empty"});
 });
