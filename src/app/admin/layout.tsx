@@ -61,7 +61,7 @@ export default async function AdminLayout({
   if (user.role === "WAREHOUSE" && !warehousePath) redirect("/admin/magacin");
   if (warehousePath) {
     if (!isAuthorized(user.role, ["OPS", "WAREHOUSE"])) redirect("/admin?forbidden=1");
-    return <AdminThemeProvider initialTheme={initialTheme}><WarehouseShell name={user.name}>{children}</WarehouseShell></AdminThemeProvider>;
+    return <AdminThemeProvider initialTheme={initialTheme}><WarehouseShell name={user.name} adminHref={user.role !== "WAREHOUSE" ? "/admin/erp" : undefined}>{children}</WarehouseShell></AdminThemeProvider>;
   }
 
   const availableNav = allowedNavFor(user.role);
