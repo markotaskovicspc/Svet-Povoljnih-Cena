@@ -1,3 +1,5 @@
+import { readPackedItems } from "@/lib/courier/parcel-contents";
+
 export type ReturnShipment = {
   id: string;
   provider?: string | null;
@@ -5,6 +7,7 @@ export type ReturnShipment = {
   packageCount?: number;
   providerParcelNumbers?: unknown;
   rawCreateResponse?: unknown;
+  pickupBatchLines?: { providerParcelNumber: string | null; packedItems?: unknown; orderItemId?: string | null; packedQuantity?: number | null }[];
   returnArrivals?: { parcelNumber: string }[];
 };
 
@@ -42,13 +45,29 @@ export function returnItemParcelNumbers(
 ) {
   return shipments.flatMap((shipment) => {
     const codes = returnParcelNumbers(shipment);
+    // Picking stores exact contents separately from older courier snapshots.
+    // Resolve by the saved parcel code; array position is not packing evidence.
+    const savedCodes = new Set<string>();
+    const savedParcels = codes.flatMap((code) => {
+      const matches = (shipment.pickupBatchLines ?? []).filter((line) => line.providerParcelNumber && normalizeReturnParcelNumber(line.providerParcelNumber) === code);
+      if (!matches.length) return [];
+      if (matches.length > 1) throw new Error("Više paketa je povezano sa istom adresnicom. Proverite evidenciju.");
+      savedCodes.add(code);
+      const line = matches[0]!;
+      const packed = readPackedItems(line.packedItems);
+      const match = packed.find((entry) => entry.orderItemId === item.id);
+      const quantity = match?.quantity ?? (!packed.length && line.orderItemId === item.id ? line.packedQuantity : undefined);
+      return match || (!packed.length && line.orderItemId === item.id)
+        ? [{ shipment, code, quantity: Number.isSafeInteger(quantity) && Number(quantity) > 0 ? Number(quantity) : undefined }]
+        : [];
+    });
     const raw = shipment.rawCreateResponse;
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return savedParcels;
     const data = raw as Record<string, unknown>;
     const labels = shipment.provider === "MYGLS"
       ? data.myGlsPackageAssignments : data.articleLabels;
-    if (!Array.isArray(labels)) return [];
-    return labels.flatMap((entry) => {
+    if (!Array.isArray(labels)) return savedParcels;
+    const legacyParcels = labels.flatMap((entry) => {
       if (!entry || typeof entry !== "object") return [];
       const label = entry as Record<string, unknown>;
       const packed = Array.isArray(label.packedItems) ? label.packedItems : [];
@@ -66,6 +85,13 @@ export function returnItemParcelNumbers(
         quantity: Number.isSafeInteger(quantity) && Number(quantity) > 0 ? Number(quantity) : undefined,
       }] : [];
     });
+    // Preserve existing exact unit ordering and receipt idempotency keys.
+    // Recover only missing quantities/codes, without counting a box twice.
+    const legacyCodes = new Set(legacyParcels.map((parcel) => parcel.code));
+    return [
+      ...legacyParcels.map((parcel) => parcel.quantity ? parcel : savedParcels.find((saved) => saved.code === parcel.code) ?? parcel),
+      ...savedParcels.filter((parcel) => !legacyCodes.has(parcel.code)),
+    ];
   });
 }
 

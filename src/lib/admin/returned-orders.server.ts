@@ -51,7 +51,7 @@ export async function listReturnedOrders() {
         shipments: {
           where: returnShipmentWhere,
           orderBy: { createdAt: "desc" },
-          select: { id: true, provider: true, trackingNo: true, status: true, packageCount: true, providerParcelNumbers: true, lastStatusEventAt: true, returnArrivals: true, rawCreateResponse: true },
+          select: { id: true, provider: true, trackingNo: true, status: true, packageCount: true, providerParcelNumbers: true, lastStatusEventAt: true, pickupBatchLines: { select: { providerParcelNumber: true, packedItems: true, orderItemId: true, packedQuantity: true } }, returnArrivals: true, rawCreateResponse: true },
         },
       },
     }),
