@@ -2098,6 +2098,7 @@ function ErpGridContent({
                                 "+ Foto"
                               )}
                             </Link>
+                            )
                           ) : [
                               "stockTotal",
                               "reservedStock",
