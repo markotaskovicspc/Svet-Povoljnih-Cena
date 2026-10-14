@@ -2,37 +2,11 @@
 import Link from "next/link";
 import { RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { PickingCamera } from "./picking-camera";
 import type { getPickingSession } from "@/lib/admin/picking.server";
 import { recordPicking } from "@/app/admin/erp/preuzimanja/[id]/picking/actions";
 type Session = Awaited<ReturnType<typeof getPickingSession>>;
 type ScanRequest = Parameters<typeof recordPicking>[0];
-
-function Camera({ onCode, onClose }: { onCode: (code: string) => void; onClose: () => void }) {
-  const video = useRef<HTMLVideoElement>(null);
-  const [error, setError] = useState("");
-  const callback = useRef(onCode);
-  useEffect(() => { callback.current = onCode; }, [onCode]);
-  useEffect(() => {
-    let cancelled = false;
-    let controls: { stop: () => void } | undefined;
-    let stream: MediaStream | undefined;
-    const start = async () => {
-      try {
-        const { BrowserMultiFormatReader } = await import("@zxing/browser");
-        if (cancelled) return;
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
-        if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
-        controls = await new BrowserMultiFormatReader().decodeFromStream(stream, video.current!, (result, _error, ctl) => {
-          if (!cancelled && result) { cancelled = true; ctl.stop(); stream?.getTracks().forEach(t => t.stop()); callback.current(result.getText()); }
-        });
-        if (cancelled) controls.stop();
-      } catch { if (!cancelled) setError("Kamera nije dostupna. Dozvolite pristup kameri ili koristite skener / ručni unos."); }
-    };
-    void start();
-    return () => { cancelled = true; controls?.stop(); stream?.getTracks().forEach(t => t.stop()); };
-  }, []);
-  return <div className="rounded-xl border bg-black p-3 text-white"><video ref={video} muted playsInline className="max-h-64 w-full" /><p role="status">{error || "Usmerite kameru ka barkodu. Posle očitavanja potvrdite količinu."}</p><button type="button" onClick={onClose} className="mt-2 rounded border px-4 py-2">Zatvori kameru</button></div>;
-}
 
 export function DigitalPicking({ initial, warehouseMode = false }: { initial: Session; warehouseMode?: boolean }) {
   const [session, setSession] = useState(initial);
@@ -71,7 +45,7 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
   function moveTo(index: number) {
     const row = orderedRows[index];
     if (!row || busy || retry) return;
-    setSelected(row.key); setCode(""); setQuantity(1); setNote(""); setMessage(""); setCamera(false); setScanError(false);
+    setSelected(row.key); setCode(""); setQuantity(1); setNote(""); setMessage(""); setScanError(false);
   }
   async function send(request: ScanRequest) {
     if (lock.current) return;
@@ -120,7 +94,7 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
     }
   }
   function cameraCode(value: string) {
-    setCode(warehouseMode ? value.trim() : value); setCamera(false);
+    setCode(warehouseMode ? value.trim() : value);
     if (warehouseMode && currentRow && value.trim() !== currentRow.barcode && value.trim() !== currentRow.sku) {
       setScanError(true);
       setMessage("Šifra ne odgovara prikazanom artiklu. Proverite barkod ili otvorite drugi artikal.");
@@ -175,7 +149,7 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
         <button type="button" disabled={!canScan} onClick={toggleCamera} className="rounded border px-4 py-3">Kamera</button>
         </>}
       </form>
-      {camera && <Camera onClose={() => setCamera(false)} onCode={cameraCode} />}
+      {camera && <PickingCamera enabled={canScan} onClose={() => setCamera(false)} onCode={cameraCode} />}
       {!warehouseMode && <p className="text-sm">Ručni skener šalje šifru i Enter. Jedan sken dodaje izabranu količinu (podrazumevano 1). Za pogrešan unos koristite −1 na odgovarajućem redu.</p>}
     </section>}
     <div role={warehouseMode && scanError ? "alert" : "status"} aria-live={warehouseMode && scanError ? "assertive" : "polite"} className={warehouseMode && scanError ? "rounded-lg border border-red-500 bg-red-50 p-3 font-semibold text-red-800 print:hidden" : "print:hidden"}>{message}</div>
