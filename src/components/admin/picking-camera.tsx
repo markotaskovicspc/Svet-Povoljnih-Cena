@@ -6,13 +6,14 @@ import { createPickingCameraDecoder } from "@/lib/admin/picking-camera-decoder";
 
 /** Keep the camera warm; a press accepts at most one code, never inventory. */
 export function PickingCamera({ onCode, onClose, enabled = true }: {
-  onCode: (code: string) => void; onClose: () => void; enabled?: boolean;
+  onCode: (code: string) => boolean | void; onClose: () => void; enabled?: boolean;
 }) {
   const video = useRef<HTMLVideoElement>(null);
   const press = useRef(new ScanPress());
   const scanFrame = useRef<() => void>(() => {});
   const callback = useRef(onCode);
   const allowed = useRef(enabled);
+  const decodedVersion = useRef(0);
   const [ready, setReady] = useState(false);
   const [holding, setHolding] = useState(false);
   const [status, setStatus] = useState("Pokretanje kamere…");
@@ -21,6 +22,12 @@ export function PickingCamera({ onCode, onClose, enabled = true }: {
   useEffect(() => {
     allowed.current = enabled;
     if (!enabled) { press.current.release(); }
+    let cancelled = false;
+    const version = decodedVersion.current;
+    if (enabled && video.current?.srcObject) void video.current.play().then(() => {
+      if (!cancelled && version === decodedVersion.current) setStatus("Držite dugme Skeniraj dok je barkod u kadru.");
+    }).catch(() => {});
+    return () => { cancelled = true; };
   }, [enabled]);
   useEffect(() => {
     const trigger = press.current;
@@ -63,8 +70,9 @@ export function PickingCamera({ onCode, onClose, enabled = true }: {
           if (allowed.current && press.current.active && !document.hidden && element.readyState >= 2 && element.videoWidth) {
             const value = decode(element);
             if (value && press.current.accept()) {
+              decodedVersion.current++;
               setHolding(false); setStatus(`Očitano: ${value}. Proverite količinu i kliknite Evidentiraj.`);
-              callback.current(value);
+              if (callback.current(value) === false) setStatus("Barkod ne odgovara artiklu. Pokušajte ponovo.");
             }
           }
           timer = setTimeout(loop, press.current.active ? 30 : 150);
@@ -104,7 +112,7 @@ export function PickingCamera({ onCode, onClose, enabled = true }: {
         onKeyDown={event => { if (event.key === " " || event.key === "Enter") { event.preventDefault(); if (!event.repeat) begin(); } }}
         onKeyUp={event => { if (event.key === " " || event.key === "Enter") { event.preventDefault(); end(); } }}
         onContextMenu={event => event.preventDefault()}
-        className="touch-none select-none rounded-lg border bg-white px-4 py-3 font-semibold text-black disabled:opacity-50">
+        className="touch-none select-none rounded-lg border bg-foreground px-4 py-3 font-semibold text-background disabled:opacity-50">
         {holding ? "Skeniram…" : "Držite za skeniranje"}
       </button>
       <button type="button" onClick={onClose} className="rounded-lg border px-4 py-3">Zatvori kameru</button>
