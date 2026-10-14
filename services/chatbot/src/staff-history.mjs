@@ -7,7 +7,8 @@ export function mergeStaffHistory({saved=[],remote=[],local=[],before}){
   const previous=merged.slice();
   for(const m of source){
    if(m.timestamp>before||(m.role==='assistant'&&/^Auto-label added:/.test(m.content??'')))continue;
-   if(previous.some(p=>p.role===m.role&&p.content===m.content&&Math.abs((p.timestamp??0)-(m.timestamp??0))<10000))continue;
+   const duplicate=previous.find(p=>p.role===m.role&&p.content===m.content&&Math.abs((p.timestamp??0)-(m.timestamp??0))<10000);
+   if(duplicate){if(m.source==='staff')duplicate.source='staff';continue;}
    merged.push(m);
   }
  }

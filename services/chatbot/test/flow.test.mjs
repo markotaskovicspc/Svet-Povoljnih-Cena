@@ -10,6 +10,30 @@ import {unverifiedOrderReply} from '../src/order-reply-guard.mjs';
 
 // Real embedded PostgreSQL for persistence and transaction tests. Advisory locks
 // are represented by a single test executor (cross-process locks need staging).
+
+test('sticker preserves the active offer and following DA creates only once',async()=>{
+ const {store,worker,event,calls}=await setup();
+ try{
+  await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
+  worker.visionFn=async()=>{throw Error('Sticker must not reach vision');};
+  await store.accept({...event,id:'fb:thumb',text:'',attachments:[{type:'image',url:'thumb'},{type:'sticker',url:'thumb'}]});await worker.tick();
+  const row=(await store.pool.query('SELECT state FROM spc_chat_conversations')).rows[0];assert.equal(store.decode(row.state).pending.quoteToken,'signed_quote');
+  await store.accept({...event,id:'fb:yes-after-thumb',text:'DA',attachments:[{type:'sticker',url:'thumb'}],timestamp:Date.now()});await worker.tick();await worker.tick();
+  assert.equal(calls.filter(p=>p.action==='create_order').length,1);
+ }finally{await store.close();}
+});
+
+test('queued short text burst gets one answer and persists all consumed events',async()=>{
+ const {store,worker,event}=await setup();let turns=0;
+ try{
+  await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
+  await store.withConversation(event.conversation,async(row,state,c)=>{delete state.pending;state.historyVersion=2;await store.save(c,row.id,state);});
+  worker.answerFn=async({event})=>{turns++;assert.equal(event.text,'6\nkom');return {text:'Šest komada.',images:[]};};worker.orderReplyCheckFn=async()=>null;
+  await store.accept({...event,id:'fb:burst1',text:'6',timestamp:Date.now()});await store.accept({...event,id:'fb:burst2',text:'kom',timestamp:Date.now()+1});
+  await worker.tick();await worker.tick();assert.equal(turns,1);
+  const rows=await store.pool.query("SELECT status FROM spc_chat_events WHERE id IN ('fb:burst1','fb:burst2')");assert(rows.rows.every(r=>r.status==='done'));
+ }finally{await store.close();}
+});
 async function setup(channel='facebook') {
   const db=new PGlite();const store=new Store(undefined,randomBytes(32).toString('hex'));
   await store.pool.end();

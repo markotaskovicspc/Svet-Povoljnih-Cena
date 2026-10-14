@@ -40,3 +40,8 @@ test('courier quote needs only product and quantity, no invented city',async()=>
  assert.equal((await readDeliveryQuote({input:{...input,shippingMethod:'KURIR',city:null},event:{channel:'facebook',conversation:'fb:test',text:'Koliko je dostava?'},spc:async p=>{calls.push(p);return {ok:true,shipping:599};}})).shipping,599);
  assert.equal(calls[0].city,undefined);
 });
+
+test('courier price ignores even an unresolved supplied locality',async()=>{
+ let sent;const result=await readDeliveryQuote({input:{...input,city:'Konjevići kod Čačka',shippingMethod:'KURIR'},event:{text:'Koliko je dostava?'},spc:async p=>{sent=p;return {ok:true,shipping:599};}});
+ assert.equal(result.shipping,599);assert.equal(sent.city,undefined);
+});

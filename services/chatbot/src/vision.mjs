@@ -3,6 +3,7 @@ import {Agent,run} from '@openai/agents';
 import {z} from 'zod';
 import {isOrderConfirmation} from './confirmation.mjs';
 import {currentPurchaseHistory} from './conversation-context.mjs';
+import {productAttachments,reactionOnly} from './message-context.mjs';
 
 const MAX_BYTES=8*1024*1024;
 export const VISION_TTL=2*60*60*1000;
@@ -41,8 +42,9 @@ export function activeVisualContext(state,now=Date.now()){
  return state.visualContext&&now-state.visualContext.createdAt<VISION_TTL?state.visualContext:null;
 }
 export async function receiveProductImages({state,event,model,load=loadMetaImage,describe=describeImage}){
+ if(reactionOnly(event))return activeVisualContext(state);
  if(state.visualContext?.eventId===event.id)return state.visualContext;
- const images=(event.attachments??[]).filter(a=>a.type==='image').slice(0,3);
+ const images=productAttachments(event).slice(0,3);
  const results=[];let failed=(event.attachments??[]).length-images.length;
  const analyses=await Promise.allSettled(images.map(async(attachment,index)=>({imageNumber:index+1,...await describe({image:await load(attachment.url),model})})));
  for(const analysis of analyses){if(analysis.status==='fulfilled')results.push(analysis.value);else failed++;}

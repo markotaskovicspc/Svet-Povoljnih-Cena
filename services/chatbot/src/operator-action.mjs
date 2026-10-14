@@ -45,7 +45,7 @@ export async function operatorAction({store,worker,body}){
       const event={id:outId,conversation:row.id,channel:row.channel,account:row.account,sender:row.sender,text,echo:true,operatorCommand:true,actorId:body.actorId,timestamp:Date.now()};
       await c.query('INSERT INTO spc_chat_events(id,conversation,payload) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[outId,row.id,store.encode(event)]);
      }else{
-      state.history??=[];state.history.push({role:'assistant',content:text,timestamp:Date.now()});
+      state.history??=[];state.history.push({role:'assistant',content:text,timestamp:Date.now(),source:'staff'});
       await store.enqueue(c,outId,row.id,{text,human:true,operator:true,actorId:body.actorId});
      }
     }

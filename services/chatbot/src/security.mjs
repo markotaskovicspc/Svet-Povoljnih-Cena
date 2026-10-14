@@ -44,7 +44,7 @@ export function parseEvents(body, accounts) {
         conversation: `${channel}:${entry.id}:${sender}`, timestamp: event.timestamp,
         echo, botEcho: message.metadata === 'spc-bot' || (echo && Boolean(account.appId) && String(message.app_id??'')===account.appId), sentByApp:Boolean(message.app_id), text: String(message.text ?? '').slice(0, 6000),
         referral: echo?null:referral,referralOnly,
-        attachments: (message.attachments ?? []).slice(0, 5).map(a => ({type:a.type, url:a.payload?.url})),
+        attachments: (message.attachments ?? []).slice(0, 5).map(a => ({type:message.sticker_id?'sticker':a.type, url:a.payload?.url,...(message.sticker_id?{stickerId:String(message.sticker_id)}:{})})),
       });
     }
   }

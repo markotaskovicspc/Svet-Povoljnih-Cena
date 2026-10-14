@@ -25,7 +25,7 @@ export async function readDeliveryQuote({input,event,state={},spc}){
  const membership=activeLoyalty(state);
  try{
   const {city,...cart}=input;
-  const result=await spc({action:'delivery_quote',...cart,...(city?{city}:{}),channel:event.channel,conversationId:event.conversation??`comment:${event.id}`,
+  const result=await spc({action:'delivery_quote',...cart,...(input.shippingMethod==='KAMION'&&city?{city}:{}),channel:event.channel,conversationId:event.conversation??`comment:${event.id}`,
    ...(membership?{email:membership.email,loyaltyProof:membership.proof}:{})});
   if(!result.ok)return result;
   if(!Number.isFinite(result.shipping)||result.shipping<0)return {ok:false,error:{code:'DELIVERY_PRICE_UNAVAILABLE'}};

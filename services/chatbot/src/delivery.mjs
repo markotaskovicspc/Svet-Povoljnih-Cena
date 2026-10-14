@@ -14,10 +14,13 @@ export async function resolveQualifiedTown(city,lookup){
  // Parenthesized city districts use dedicated routing aliases. Do not resolve
  // "Beograd (Vračar)" to the broader parent city as a settlement fallback.
  if(/[()]/.test(String(city??'')))return null;
- const parts=String(city??'').split(/\s*,\s*|\s+[—–-]\s+/).map(s=>s.trim()).filter(Boolean);
+ const parts=String(city??'').split(/\s*,\s*|\s+[—–-]\s+|\s+kod\s+/i).map(s=>s.trim()).filter(Boolean);
  if(parts.length!==2)return null;
- const groups=await Promise.all(parts.map(lookup));
- const exact=groups.map((items,i)=>items.filter(t=>normalizePlace(t.name)===normalizePlace(parts[i])));
+ // Serbian genitive after "kod": Čačka -> Čačak, Vršca -> Vršac.
+ // Only accept a real dictionary record and matching municipality IDs.
+ const names=parts.map(part=>[...new Set([part,part.replace(/([cč])ka$/i,'$1ak').replace(/ca$/i,'ac')])]);
+ const groups=await Promise.all(names.map(async variants=>(await Promise.all(variants.map(lookup))).flat()));
+ const exact=groups.map((items,i)=>items.filter(t=>names[i].some(name=>normalizePlace(t.name)===normalizePlace(name))));
  const candidates=[];
  for(const [localities,parents] of [[exact[0],exact[1]],[exact[1],exact[0]]]){
   for(const town of localities){

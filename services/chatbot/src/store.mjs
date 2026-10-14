@@ -59,7 +59,7 @@ export class Store {
       const timestamp=r.kind==='event'?p.timestamp:new Date(r.created_at).getTime();
       if(timestamp>event.timestamp)return [];
       const content=p.text||(p.attachments?.length?'[Prilog kupca]':'');
-      return content?[{role:r.kind==='reply'||p.echo?'assistant':'user',content,timestamp}]:[];
+      return content?[{role:r.kind==='reply'||p.echo?'assistant':'user',content,timestamp,...((p.echo&&!p.botEcho)||p.human||p.operator?{source:'staff'}:{})}]:[];
     }).sort((a,b)=>a.timestamp-b.timestamp).slice(-120);
   }
   async pause(id, reason) { await this.pool.query('UPDATE spc_chat_conversations SET paused=true,reason=$2,updated_at=now() WHERE id=$1',[id,reason]); }

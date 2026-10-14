@@ -1,4 +1,5 @@
 import {metaSendTarget} from './meta-send-target.mjs';
+import {productAttachments,conversationAttachments,reactionOnly,messageBurst} from './message-context.mjs';
 import {receiveSupportContact,requestSupportContact,appendSupportContact,guardSupportContact} from './support-contact.mjs';
 import {staffSummary} from './support-summary.mjs';
 import {receiveAdContext} from './ad-context.mjs';
@@ -41,9 +42,10 @@ export class Worker {
     try {
       const rows=await this.store.pool.query(`SELECT DISTINCT conversation FROM spc_chat_events WHERE status='pending' AND next_at<=now() LIMIT 8`);
       await Promise.all(rows.rows.map(r=>this.store.withConversation(r.conversation,async(row,state,c)=>{
-        const events=await c.query(`SELECT * FROM spc_chat_events WHERE conversation=$1 AND status='pending' ORDER BY created_at,id LIMIT 1`,[row.id]);
+        const events=await c.query(`SELECT * FROM spc_chat_events WHERE conversation=$1 AND status='pending' ORDER BY created_at,id LIMIT 12`,[row.id]);
         const job=events.rows[0]; if(!job || new Date(job.next_at)>new Date()) return;
-        const event=this.store.decode(job.payload);
+        let event=this.store.decode(job.payload);
+        let mergedIds=[];
         if(event.referralOnly){
           if(inWindow(event.timestamp))await receiveAdContext({state,event,account:this.accounts.find(a=>a.channel===row.channel&&a.id===row.account),graphVersion:this.graphVersion,model:this.model});
           await this.store.save(c,row.id,state);await c.query("UPDATE spc_chat_events SET status='done' WHERE id=$1",[job.id]);return;
@@ -89,6 +91,22 @@ export class Worker {
         if(event.echo || row.paused || !this.allowed(row.sender) || !inWindow(event.timestamp)) {
           await c.query(`UPDATE spc_chat_events SET status='skipped' WHERE id=$1`,[job.id]); return;
         }
+        if(reactionOnly(event)){
+          await c.query("UPDATE spc_chat_events SET status='done' WHERE id=$1",[job.id]);return;
+        }
+        event={...event,attachments:conversationAttachments(event)};
+        if(!state.pending&&!state.loyaltyPending&&!state.claimVerification&&!state.reclamation&&!state.cancellation&&!state.confirming&&!state.cancelling&&!state.submittingReclamation&&!state.reclamationInFlight&&!state.operatorOrder){
+          const ready=[];
+          for(const r of events.rows){if(new Date(r.next_at)>new Date())break;ready.push(this.store.decode(r.payload));}
+          const burst=messageBurst(ready);
+          if(burst.length>1){
+            event={...event,text:[...new Set(burst.map(e=>e.text.trim()))].join('\n'),timestamp:burst.at(-1).timestamp};
+            mergedIds=burst.slice(1).map(e=>e.id);
+          }
+          if(event.text.length>=12&&/\?$/.test(event.text.trim())&&state.lastHandledMessage?.text===event.text&&event.timestamp>=state.lastHandledMessage.timestamp&&event.timestamp-state.lastHandledMessage.timestamp<10000){
+            await c.query("UPDATE spc_chat_events SET status='done' WHERE id=ANY($1::text[])",[[job.id,...mergedIds]]);return;
+          }
+        }
         if(isOrderCommandText(event.text)){
           await c.query('BEGIN');
           await this.store.enqueue(c,`reply:${job.id}`,row.id,{text:'Ovu komandu koristi prodavac. Za naručivanje napišite koji artikal želite; ako već imate ponudu, potvrdite je odgovorom DA.'});
@@ -110,11 +128,16 @@ export class Worker {
             } catch {state.history=local;state.historyImport='unavailable';console.error('chat.history_import_unavailable');}
             state.historyVersion=2;
           }
+          if(!state.staffProvenanceVersion){
+            const known=await this.store.history(c,row.id,event);
+            for(const m of state.history)if(m.role==='assistant'&&known.some(k=>k.source==='staff'&&k.content===m.content&&Math.abs((k.timestamp??0)-(m.timestamp??0))<10000))m.source='staff';
+            state.staffProvenanceVersion=1;
+          }
           await this.store.importCommentContext(c,row.id,state,event);
           await receiveAdContext({state,event,account:this.accounts.find(a=>a.channel===row.channel&&a.id===row.account),graphVersion:this.graphVersion,model:this.model});
           if(state.reclamationContext&&Date.now()-state.reclamationContext.createdAt>2*3600000)delete state.reclamationContext;
           if(!activeVisualContext(state))delete state.visualContext;
-          if(event.attachments.length&&!state.reclamationContext){
+          if(productAttachments(event).length&&!state.reclamationContext){
             delete state.pending;delete state.confirming;delete state.cancellation;
             state.claimAttachments=event.attachments.slice(0,5).map(a=>({...a,timestamp:Date.now()}));
             await this.visionFn({state,event,model:this.model});
@@ -301,6 +324,7 @@ export class Worker {
           state.history.push({role:'user',content:/^\s*\d{6}\s*$/.test(event.text)&&Boolean(state.claimVerification||state.claimOrders)?'[Kod za proveru porudžbine]':event.text || '[Prilog kupca]',timestamp:event.timestamp},{role:'assistant',content:message,timestamp:Date.now()});
           state.history=state.history.slice(-HISTORY_LIMIT);
           await c.query('BEGIN');
+          state.lastHandledMessage={text:event.text,timestamp:event.timestamp};
           if(state.supportRequest) {
             const payload={action:'support_handoff',id:job.id,channel:event.channel,conversationId:row.id,
               callbackEmail:state.supportContact?.email,contactUpdate:state.supportRequest.contactUpdate,reason:state.supportRequest.reason,reclamationId:state.supportRequest.reclamationId,transcript:state.history.slice(-8).map(m=>`${m.role==='user'?'Kupac':'SPC'}: ${m.content}`).join('\n').slice(-6000)};
@@ -312,9 +336,12 @@ export class Worker {
           await this.store.enqueue(c,`reply:${job.id}`,row.id,{text:message,allowPaused:state.handedOff===true || event.attachments.length>0 || message.includes('zaposleni')});
           for(const [index,image] of images.entries()) await this.store.enqueue(c,`reply:${job.id}:image:${index}`,row.id,{imageUrl:image.url});
           await c.query(`UPDATE spc_chat_events SET status='done' WHERE id=$1`,[job.id]);
+          if(mergedIds.length)await c.query("UPDATE spc_chat_events SET status='done' WHERE id=ANY($1::text[])",[mergedIds]);
           await c.query('COMMIT');
-        } catch {
+        } catch(error) {
           await c.query('ROLLBACK');
+          // Keep a bounded diagnostic without raw model errors or customer data.
+          state.processingDiagnostic={eventId:job.id,at:Date.now(),attempts:job.attempts+1,errorType:['TimeoutError','AbortError','RateLimitError','MaxTurnsExceededError'].includes(error?.name)?error.name:'ServiceError'};
           // An unreadable photo or failed model turn is not an uncertain ERP
           // write. Keep shopping usable and ask for one alternative identifier.
           if(event.attachments.length && job.attempts>=2 && !state.reclamationInFlight && !state.confirming && !state.cancelling && !state.submittingReclamation){
@@ -343,12 +370,14 @@ export class Worker {
               await c.query('UPDATE spc_chat_conversations SET paused=true,reason=$2 WHERE id=$1',[row.id,'Proveriti neizvestan ishod upisa u ERP']);
             }else{
               const saved=(await c.query('SELECT state FROM spc_chat_conversations WHERE id=$1',[row.id])).rows[0];
-              const clean=this.store.decode(saved.state);
+              const clean=saved?this.store.decode(saved.state):state;
+              clean.processingDiagnostic=state.processingDiagnostic;
               const message='Izvinite na zastoju. Proslediću razgovor korisničkoj podršci. Možete nastaviti da pišete ovde.';
               clean.history.push({role:'user',content:event.text,timestamp:event.timestamp},{role:'assistant',content:message,timestamp:Date.now()});clean.history=clean.history.slice(-HISTORY_LIMIT);
               await this.store.save(c,row.id,clean);
               await this.store.enqueue(c,`reply:${job.id}`,row.id,{text:message});
             }
+            if(uncertain)await this.store.save(c,row.id,state);
             await c.query("UPDATE spc_chat_events SET status='failed',attempts=attempts+1 WHERE id=$1",[job.id]);
             await c.query('COMMIT');
           }else await c.query("UPDATE spc_chat_events SET attempts=attempts+1,next_at=now()+interval '10 seconds' WHERE id=$1",[job.id]);
@@ -477,7 +506,7 @@ export class Worker {
     await this.store.withConversation(id,async(row,state,c)=>{
       if(!inWindow(Number(row.last_customer))) throw new Error('MESSAGE_WINDOW_CLOSED');
       await this.store.pause(id,'Razgovor preuzeo zaposleni');
-      state.history.push({role:'assistant',content:text}); await this.store.save(c,id,state);
+      state.history.push({role:'assistant',content:text,timestamp:Date.now(),source:'staff'}); await this.store.save(c,id,state);
       await this.store.enqueue(c,`human:${randomUUID()}`,id,{text,human:true});
     });
     void this.tick();

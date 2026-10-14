@@ -3,6 +3,13 @@ import assert from 'node:assert/strict';
 import {selectTown,orderErrorMessage,resolveQualifiedTown} from '../src/delivery.mjs';
 import {createSpcClient} from '../src/spc.mjs';
 const town={townId:123,name:'Kruševac',postalCode:'37000'};
+
+test('kod municipality resolves Konjevici without guessing a same-name village',async()=>{
+ const village={townId:745715,name:'Konjevići',municipalityId:71242};
+ const parent={townId:746061,name:'Čačak',municipalityId:71242};
+ const lookup=async q=>q==='Konjevići'?[village]:q==='Čačak'?[parent]:[];
+ assert.equal((await resolveQualifiedTown('Konjevići kod Čačka',lookup))?.townId,745715);
+});
 test('settlement plus municipality resolves by verified dictionary municipality, never nearest town',async()=>{
  const village={townId:11,name:'Bajevac',postalCode:'14226',municipalityId:7};
  const parent={townId:12,name:'Lajkovac',municipalityId:7};
