@@ -122,7 +122,8 @@ export function summarizeDashboardReturns(evidence: DashboardReturnEvidence, war
         itemParcels.set(`${item.id}:${shipment.id}`, matches);
       }
     }
-    const hasDispatchedContents = lines.some(item => outgoing.some(s => s.dispatched && (itemParcels.get(`${item.id}:${s.id}`)?.length ?? 0) > 0));
+    const dispatchedContents = lines.flatMap(item => outgoing.filter(s => s.dispatched).flatMap(s => itemParcels.get(`${item.id}:${s.id}`) ?? []));
+    const hasDispatchedContents = dispatchedContents.length > 0 && dispatchedContents.every(p => p.quantity != null);
     for (const item of lines) {
       if (item.qty <= 0 || (warehouseId && item.warehouseId !== warehouseId)) continue;
       const sent = hasDispatchedContents ? Math.min(item.qty, outgoing.filter(s => s.dispatched).reduce((sum, s) =>
@@ -134,10 +135,11 @@ export function summarizeDashboardReturns(evidence: DashboardReturnEvidence, war
         const source = shipment.reclamationId ? `claim:${shipment.reclamationId}` : 'order';
         const matches = itemParcels.get(`${item.id}:${shipment.id}`) ?? [];
         const arrived = new Set(shipment.returnArrivals.map(a => normalizeReturnParcelNumber(a.parcelNumber)));
-        let quantity = matches.filter(p => arrived.size ? arrived.has(p.code) : shipment.returned).reduce((sum, p) => sum + (p.quantity ?? 0), 0);
+        let quantity = matches.filter(p => arrived.size ? arrived.has(p.code) : shipment.returned).reduce((sum, p) => sum + (p.quantity ?? (item.qty === 1 ? 1 : 0)), 0);
         const hasPacking = shipment.pickupBatchLines.length > 0 || Boolean(shipment.rawCreateResponse && typeof shipment.rawCreateResponse === 'object' &&
           ('articleLabels' in shipment.rawCreateResponse || 'myGlsPackageAssignments' in shipment.rawCreateResponse));
-        if (!hasPacking && (shipment.returned || arrived.size) && (!arrived.size || (shipment.packageCount ?? 1) <= arrived.size)) {
+        const completeReturn = (shipment.returned && !arrived.size) || (arrived.size > 0 && (shipment.packageCount ?? 1) <= arrived.size);
+        if ((!hasPacking || (matches.length > 0 && matches.some(p => p.quantity == null))) && completeReturn) {
           quantity = shipment.reclamationId
             ? shipment.purpose === 'RECLAMATION_REPLACEMENT' ? shipment.replacementQty ?? shipment.claimQuantity ?? 0 : shipment.claimQuantity ?? 0
             : outgoing.length === 1 || lines.reduce((sum, i) => sum + i.qty, 0) === 1 ? item.qty : 0;

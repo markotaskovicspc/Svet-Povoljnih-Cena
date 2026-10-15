@@ -179,3 +179,9 @@ it("processes a monthly cohort with thousands of parcel quantities without expan
  expect(dashboardReturnsQuery(now,'').text).not.toContain('jsonb_array_elements');
  expect(await summary()).toEqual({sent:4500,returned:150});
 }, 10000);
+
+it("retains legacy shipped quantities and complete returns when old labels lack packed quantities", async () => {
+ await order('old-label'); await quantity('old-label',5);
+ await sql.query(`UPDATE "Shipment" SET provider='XEXPRESS', "trackingNo"='OLD', "rawCreateResponse"=$1::jsonb, status='RETURNED' WHERE id='old-label'`,[JSON.stringify({articleLabels:[{Code:'OLD',sku:'old-label'}]})]);
+ expect(await summary()).toEqual({sent:5,returned:5});
+});
