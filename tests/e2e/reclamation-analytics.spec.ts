@@ -455,6 +455,9 @@ test.describe("Admin analitika reklamacija", () => {
     await test.step("dashboard periodi, podrazumevani pogledi i XLSX izvozi rade", async () => {
       await page.goto("/admin", { waitUntil: "domcontentloaded" });
       await expect(page.getByRole("heading", { name: "Kontrolna tabla" })).toBeVisible();
+      await expect(page.getByText("Porudžbine danas", { exact: true })).toBeVisible();
+      await expect(page.getByLabel("Porudžbine period")).toBeHidden();
+      await page.getByText("Filteri, sačuvani pogledi i XLSX izvoz", { exact: true }).click();
       for (const label of [
         "Porudžbine period",
         "Fiskalni promet period",
@@ -584,6 +587,7 @@ test.describe("Admin analitika reklamacija", () => {
       );
 
       await page.goto("/admin", { waitUntil: "domcontentloaded" });
+      await page.getByText("Filteri, sačuvani pogledi i XLSX izvoz", { exact: true }).click();
       await expect(page.locator('[data-client-ready="true"]')).toBeVisible();
       await expect(page.locator('select[name="ordersRange"]')).toHaveValue("custom");
       await expect(page.getByLabel("Porudžbine od")).toHaveValue(dashboardDate);
