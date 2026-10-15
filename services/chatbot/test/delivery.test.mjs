@@ -4,6 +4,23 @@ import {selectTown,orderErrorMessage,resolveQualifiedTown} from '../src/delivery
 import {createSpcClient} from '../src/spc.mjs';
 const town={townId:123,name:'Kruševac',postalCode:'37000'};
 
+test('invalid optional postal code resolves only a unique locality and never reaches ERP',async()=>{
+ const original=globalThis.fetch;const queries=[],sent=[];
+ globalThis.fetch=async(url,options)=>({ok:true,json:async()=>{
+  if(options?.body){const p=JSON.parse(options.body);sent.push(p);return {ok:true,input:p.input};}
+  queries.push(new URL(url).searchParams.get('q'));return {items:[{townId:42,name:'Stepanovićevo',postalCode:'21212'}]};
+ }});
+ try{
+  for(const postalCode of ['212212','abc','1234'])for(const action of ['quote','staff_quote']){
+   const r=await createSpcClient('https://example.test','test')({action,input:{shipping:{city:'Stepanovicevo',postalCode}}});
+   assert.equal(r.input.shipping.postalCode,'21212');assert.equal(r.input.shipping.xExpressTownId,42);
+  }
+  assert(queries.every(q=>q==='Stepanovicevo'));assert.equal(sent.length,6);
+  globalThis.fetch=async()=>({ok:true,json:async()=>({items:[{townId:42,name:'Stepanovićevo',postalCode:'21212'},{townId:43,name:'Stepanovićevo',postalCode:'99999'}]})});
+  const result=await createSpcClient('https://example.test','test')({action:'quote',input:{shipping:{city:'Stepanovicevo',postalCode:'212212'}}});assert.equal(result.error.code,'DELIVERY_ADDRESS_INVALID');
+ }finally{globalThis.fetch=original;}
+});
+
 test('kod municipality resolves Konjevici without guessing a same-name village',async()=>{
  const village={townId:745715,name:'Konjevići',municipalityId:71242};
  const parent={townId:746061,name:'Čačak',municipalityId:71242};

@@ -1,0 +1,8 @@
+# Conversation audit follow-up — October 15
+
+- Invalid optional postal strings (including the reported six-digit typo) are treated as missing before calling the ERP. Resolve an exact unique locality and use its dictionary postcode. Ambiguous places remain blocked for clarification; valid five-digit customer corrections retain priority over the dictionary.
+- A pending loyalty challenge survives questions and attachments. Repeated tool calls reuse the displayed challenge instead of generating new terms. Explicit acceptance with an explanation is supported; questions, conditions, quotations, order confirmations and cancellation confirmations cannot activate membership. A new purchase still needs its own offer confirmation.
+- Only a newly prepared loyalty invitation forces the server terms into the reply. Follow-up questions receive an answer instead of another copy of the terms. Existing persisted invitations continue to work.
+- Pulled main 55552b7f, which already fixes loyalty pricing for new items added by staff to guest orders. Its default-on staff option uses active pricing rules without enrolling the buyer; active actions take precedence and existing item prices remain unchanged. Confirmed this exact commit is live on the www alias (Vercel deployment dpl_87zXKE2uDjxv4h2cqnAAPPcjitc9). Ten add/edit pricing tests passed, including action expiry and the delivery quote.
+
+No historical command replay, customer sends or edits to existing orders. Tests use fake clients and embedded PostgreSQL. Root checkout isolation checks passed; the root build wrapper still stops at its pre-existing POSIX shell condition on Windows. No Next application or schema changes are introduced by this follow-up.

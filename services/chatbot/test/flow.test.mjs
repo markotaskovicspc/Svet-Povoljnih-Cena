@@ -11,6 +11,22 @@ import {unverifiedOrderReply} from '../src/order-reply-guard.mjs';
 // Real embedded PostgreSQL for persistence and transaction tests. Advisory locks
 // are represented by a single test executor (cross-process locks need staging).
 
+test('loyalty follow-up is answered without repeating terms, then DA activates membership without creating order',async()=>{
+ const {store,worker,event}=await setup();const calls=[];
+ try{
+  await store.pool.query("UPDATE spc_chat_events SET status='skipped'");
+  await store.withConversation(event.conversation,async(row,state,c)=>{delete state.pending;state.historyVersion=2;state.loyaltyPending={challenge:'original',summary:'TERMS',preparedEventId:'previous'};await store.save(c,row.id,state);});
+  worker.answerFn=async()=>({text:'Dostava za oba je 299 din.',images:[]});worker.orderReplyCheckFn=async()=>null;
+  worker.spc=async p=>{calls.push(p);assert.equal(p.action,'accept_loyalty');return {ok:true,proof:'membership',expiresAt:Date.now()+60000};};
+  await store.accept({...event,id:'fb:loyalty-question',text:'Koliko je dostava?'});await worker.tick();
+  let state=store.decode((await store.pool.query('SELECT state FROM spc_chat_conversations')).rows[0].state);
+  assert.equal(state.history.at(-1).content,'Dostava za oba je 299 din.');assert.equal(state.loyaltyPending.challenge,'original');assert.equal(calls.length,0);
+  await store.accept({...event,id:'fb:loyalty-yes',text:'Da'});await worker.tick();
+  state=store.decode((await store.pool.query('SELECT state FROM spc_chat_conversations')).rows[0].state);
+  assert.equal(calls.length,1);assert.equal(calls[0].challenge,'original');assert.equal(state.orders.length,0);assert.equal(state.loyalty.proof,'membership');
+ }finally{await store.close();}
+});
+
 test('sticker preserves the active offer and following DA creates only once',async()=>{
  const {store,worker,event,calls}=await setup();
  try{

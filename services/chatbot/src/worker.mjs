@@ -304,7 +304,7 @@ export class Worker {
             if(state.reclamation?.reclamationToken) message=reclamationMessage(state.reclamation);
             else if(state.reclamation) {delete state.reclamation;message='Pripremimo ponovo kratak sažetak reklamacije. Napišite koji artikal prijavljujete.';}
             if(state.claimStatusNotice){message=state.claimStatusNotice;delete state.claimStatusNotice;images=[];}
-            if(state.loyaltyPending){message=state.loyaltyPending.summary;images=[];delete state.pending;delete state.confirming;}
+            if(state.loyaltyPending){if(state.loyaltyPending.preparedEventId===event.id)message=state.loyaltyPending.summary;images=[];delete state.pending;delete state.confirming;}
             if(message.length>1850) {
               delete state.pending; delete state.reclamation;delete state.cancellation;
               state.supportRequest={reason:'Složena ponuda zahteva zaposlenog'};

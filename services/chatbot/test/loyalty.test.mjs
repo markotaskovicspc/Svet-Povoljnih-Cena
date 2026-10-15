@@ -3,6 +3,29 @@ import assert from 'node:assert/strict';
 import {prepareLoyalty,receiveLoyalty,activeLoyalty} from '../src/loyalty.mjs';
 import {quoteMessage} from '../src/agent.mjs';
 const event={channel:'facebook',conversation:'test-conversation',text:'buyer@example.com',attachments:[]};
+
+test('question preserves displayed consent and next plain DA accepts the same challenge once',async()=>{
+ const state={history:[]},calls=[];
+ const spc=async p=>{calls.push(p);return p.action==='prepare_loyalty'?{ok:true,email:null,summary:'Terms DA',challenge:'original',expiresAt:Date.now()+60000}:{ok:true,email:null,proof:'member',expiresAt:Date.now()+60000};};
+ await prepareLoyalty({state,event:{...event,id:'terms'},spc});
+ assert.equal(await receiveLoyalty({state,event:{...event,id:'question',text:'Koliko je sa poštarinom?'},spc}),null);
+ await prepareLoyalty({state,event:{...event,id:'repeat-tool'},spc});
+ assert.equal(state.loyaltyPending.challenge,'original');assert.equal(calls.length,1);
+ await receiveLoyalty({state,event:{...event,id:'yes',text:'Da'},spc});
+ assert.equal(calls.length,2);assert.equal(calls[1].challenge,'original');assert(activeLoyalty(state));
+ assert.equal(await receiveLoyalty({state,event:{...event,text:'Da'},spc}),null);assert.equal(calls.length,2);
+});
+
+test('explicit acceptance with explanation works but conditional, quoted and order confirmations do not',async()=>{
+ for(const text of ['Prihvatam, da sačekam članstvo, sa povoljnijom cenom.','Прихватам услове','Da, hvala']){
+  const state={history:[],loyaltyPending:{challenge:'signed'}};let calls=0;
+  await receiveLoyalty({state,event:{...event,text},spc:async()=>{calls++;return {ok:true,proof:'yes',expiresAt:Date.now()+60000};}});assert.equal(calls,1,text);
+ }
+ for(const text of ['Da li je besplatno?','Prihvatam ako je besplatno','> DA','Potvrđujem porudžbinu','Prihvatam otkazivanje']){
+  const state={history:[],loyaltyPending:{challenge:'signed'}};
+  await receiveLoyalty({state,event:{...event,text},spc:()=>{throw Error('Not membership consent');}});assert.equal(state.loyaltyPending.challenge,'signed');
+ }
+});
 test('consent DA cannot confirm an old order and a changed or quoted consent cannot activate',async()=>{
  const calls=[],spc=async input=>{calls.push(input);return input.action==='prepare_loyalty'?{ok:true,email:'buyer@example.com',summary:'Terms DA',challenge:'signed'}:{ok:true,email:'buyer@example.com',proof:'proof',expiresAt:Date.now()+60000};};
  const state={history:[],pending:{quoteToken:'old'}};
