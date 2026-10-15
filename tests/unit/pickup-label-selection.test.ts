@@ -18,7 +18,8 @@ describe("physical label selection", () => {
     expect(selectPickupLabels(lines, "", "sku").map(l => l.id)).toEqual(["chair2", "chair10", "lamp"]);
     expect(selectPickupLabels(lines, "", "order")).toEqual(lines);
     expect(lines[0].id).toBe("chair10");
-    expect(pickupLabelSort("invalid")).toBe("order");
+    expect(pickupLabelSort("invalid")).toBe("name");
+    expect(pickupLabelSort(undefined)).toBe("name");
   });
   it("finds any article in a combined box, without duplicating or splitting the box", () => {
     const packedItems = lines.map((l, i) => ({ ...l.orderItem, orderItemId: l.id, quantity: i + 1, barcode: null, categoryName: null, color1: null, color2: null, unitValue: 100 }));

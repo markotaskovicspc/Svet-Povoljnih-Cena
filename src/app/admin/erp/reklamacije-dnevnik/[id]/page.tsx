@@ -22,6 +22,7 @@ import { signReclamationPhotoUrls } from "@/lib/api/uploads";
 import { updateReclamationStatus } from "@/lib/api/reclamation-status";
 import { db } from "@/lib/db";
 import { queueReclamationRefundNotice } from "@/lib/admin/reclamation-refund-notice.server";
+import { ReclamationShipmentStatus } from "@/components/admin/reclamation-shipment-status";
 import { SHIPMENT_STATUS_LABEL } from "@/lib/courier/status";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle } from "@/components/admin/card";
@@ -307,6 +308,13 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
     }),
   ]);
   if (!reclamation) notFound();
+  const courierCodes = [...new Set(reclamation.shipments
+    .filter(shipment => shipment.provider === "X_EXPRESS")
+    .flatMap(shipment => [shipment.providerStatusCode, ...shipment.events.map(event => event.providerStatusCode)])
+    .filter((code): code is string => Boolean(code)))];
+  const courierLabels = new Map((courierCodes.length ? await db.courierStatusCode.findMany({
+    where: { provider: "X_EXPRESS", code: { in: courierCodes } }, select: { code: true, label: true },
+  }) : []).map(row => [row.code, row.label]));
   const cataloguePackages = reclamationCataloguePackages(reclamation);
   const savedPackages = readReclamationPackages(reclamation.replacementPackages);
   const initialPackages = savedPackages.length ? savedPackages : cataloguePackages;
@@ -428,8 +436,8 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
                     <div className="mt-2 text-sm">
                       <p>
                         {shipment.provider ?? "Kurir"} · <strong>{shipment.provider === "X_EXPRESS" && !shipment.providerShipmentId ? "Pripremljeno — kurir nije potvrdio nalog" : (myGlsReturnStatusLabel(shipment) ?? SHIPMENT_STATUS_LABEL[shipment.status])}</strong>
-                        {shipment.trackingNo ? ` · ${shipment.trackingNo}` : ""}
                       </p>
+                      <ReclamationShipmentStatus shipment={shipment} labels={courierLabels} />
                       {returnBooking?.state === "UNKNOWN" ? <p className="mt-2">Referenca za proveru u MyGLS-u: <strong>{shipment.providerOrderId}</strong></p> : null}
                       {returnBooking?.state === "ACCEPTED" ? <p className="mt-2">Traženi datum preuzimanja: {returnBooking.pickupDate ?? "Proverite GLS potvrdu"}. Kurir donosi adresnicu; tačan sat dolaska nije potvrđen.</p> : null}
                       {shipment.syncError ? <p className="mt-2 text-destructive">{shipment.syncError}</p> : null}

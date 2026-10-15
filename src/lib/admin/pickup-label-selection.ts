@@ -9,7 +9,7 @@ export type PickupLabelLine = {
 };
 
 export function pickupLabelSort(value: unknown): PickupLabelSort {
-  return value === "name" || value === "sku" ? value : "order";
+  return value === "order" || value === "sku" ? value : "name";
 }
 
 export function pickupLabelArticles(line: PickupLabelLine) {

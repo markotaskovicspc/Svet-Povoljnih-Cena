@@ -8,6 +8,7 @@ import { z } from "zod";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { Card, CardTitle } from "@/components/admin/card";
 import { PageHeader } from "@/components/admin/page-header";
+import { LabelPdfActions } from "@/components/admin/label-pdf-actions";
 import { PendingLinkLabel } from "@/components/admin/pending-link-label";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { Button } from "@/components/ui/button";
@@ -605,14 +606,11 @@ export default async function PickupBatchPage({
               Samostalna picking lista
             </Link>
             {batch.labelsCreatedAt ? (
-              <Link
-                href={`/admin/erp/preuzimanja/${batch.id}/adresnice`}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
-              >
-                Kurirske adresnice
-              </Link>
+              <LabelPdfActions
+                href={`/api/admin/erp/preuzimanja/${batch.id}/labels?sort=name`}
+                filename={`${batch.number}-adresnice.pdf`}
+                label="Kurirske adresnice"
+              />
             ) : (
               <span
                 aria-disabled="true"
@@ -953,7 +951,7 @@ export default async function PickupBatchPage({
                                   <span>{display(item.name)}</span>{" "}
                                   <strong className="whitespace-nowrap">× {item.quantity}</strong>
                                   <p className="text-xs text-ink-500">
-                                    {[item.barcode, item.collection, item.description, item.attributes]
+                                    {[item.parcelNumbers.length ? item.parcelNumbers.join(", ") : null, item.barcode, item.collection, item.description, item.attributes]
                                       .filter(Boolean)
                                       .join(" · ") || "Bez dodatnih podataka"}
                                   </p>
@@ -1387,6 +1385,7 @@ function aggregatePickupGroups(rows: ReturnType<typeof pickupLineRow>[]) {
         name: string;
         quantity: number;
         barcode: string;
+        parcelNumbers: string[];
         collection: string;
         description: string;
         attributes: string;
@@ -1395,12 +1394,18 @@ function aggregatePickupGroups(rows: ReturnType<typeof pickupLineRow>[]) {
       }
     >();
     for (const row of group.rows) {
+      const parcelLabel = `Paket ${row.packageNo}${row.providerParcelNumber ? `: ${row.providerParcelNumber}` : ""}`;
       if (row.packedContents.length) {
         for (const content of row.packedContents) {
           const previous = items.get(content.orderItemId);
-          if (previous) { previous.quantity += content.quantity; continue; }
+          if (previous) {
+            previous.quantity += content.quantity;
+            if (!previous.parcelNumbers.includes(parcelLabel)) previous.parcelNumbers.push(parcelLabel);
+            continue;
+          }
           items.set(content.orderItemId, {
             key: content.orderItemId, sku: content.sku, name: content.name, quantity: content.quantity,
+            parcelNumbers: [parcelLabel],
             barcode: content.barcode ?? "", collection: "POMPEA", description: "Zajednički paket",
             attributes: [content.color1, content.color2].filter(Boolean).join(" / "),
             isPartReplacement: false, originalName: content.name,
@@ -1409,13 +1414,18 @@ function aggregatePickupGroups(rows: ReturnType<typeof pickupLineRow>[]) {
         continue;
       }
       const key = row.orderItemId ?? `package:${row.lineId}`;
-      if (items.has(key)) continue;
+      const previous = items.get(key);
+      if (previous) {
+        if (!previous.parcelNumbers.includes(parcelLabel)) previous.parcelNumbers.push(parcelLabel);
+        continue;
+      }
       items.set(key, {
         key,
         sku: row.sku,
         name: row.shortName,
         quantity: row.qty,
         barcode: row.barcode,
+        parcelNumbers: [parcelLabel],
         collection: row.collection,
         description: row.shortDescription,
         attributes: [

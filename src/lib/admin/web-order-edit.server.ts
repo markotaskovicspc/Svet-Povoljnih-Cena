@@ -792,6 +792,7 @@ export async function addWebOrderItem(input: {
   qty: number;
   actorId: string;
   expectedItem?: { id: string; qty: number; updatedAt: Date };
+  staffLoyalty?: boolean;
 }) {
   const requestedSku = input.sku.trim();
   if (!input.orderId || !requestedSku) {
@@ -851,6 +852,7 @@ export async function addWebOrderItem(input: {
   const deliveryQuote = await resolveDeliveryQuote({
     city: preview.shipCity,
     lines: previewLines,
+    staffLoyaltySkus: input.staffLoyalty && !previewTarget ? [productRef.sku] : [],
     loggedIn: Boolean(preview.userId || preview.guestLoyaltyEmail),
     tariffAt: preview.createdAt,
   });
@@ -1140,7 +1142,7 @@ export async function addWebOrderItem(input: {
           discountPct: product.discountPct,
           loyaltyPrice: null,
           loyaltyDiscountPct: ruleInputs.loyaltyDiscountPct,
-          loyaltyEligible: Boolean(order.userId || order.guestLoyaltyEmail),
+          loyaltyEligible: Boolean(order.userId || order.guestLoyaltyEmail || input.staffLoyalty),
           action: product.action,
           actionPrices: product.actionPrices.map((entry) => ({
             price: num(entry.salePrice),
