@@ -18,6 +18,7 @@ import {
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle, StatCard } from "@/components/admin/card";
 import { DataTable } from "@/components/admin/data-table";
+import { DashboardDisclosure } from "@/components/admin/dashboard-disclosure";
 import { DashboardFilters } from "@/components/admin/dashboard-filters";
 
 export const dynamic = "force-dynamic";
@@ -125,30 +126,40 @@ async function DashboardBody({ adminId, sp, canViewAnanas }: { adminId: string; 
   const fiscalExport = `/api/admin/erp/prodajni-nalozi/export?from=${context.fiscalFrom}&to=${context.fiscalTo}&dateField=fiscal-issued-at&fiscalStatus=issued${exportWarehouse}`;
 
   return (
-      <div className="space-y-8 px-8 py-6">
+      <div className="space-y-4 px-4 py-4 sm:space-y-8 sm:px-8 sm:py-6">
         {sp.forbidden ? (
           <div className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-ink-700">
             Nemate ovlašćenja za tu sekciju.
           </div>
         ) : null}
 
-        <DashboardFilters context={context} warehouses={warehouses} />
-
         <div className="space-y-2">
-          <div className="flex flex-wrap gap-2">
-            <a href={orderExport} className="rounded-lg border border-border px-3 py-2 text-sm text-ink-700">
-              XLSX porudžbine
-            </a>
-            <a href={fiscalExport} className="rounded-lg border border-border px-3 py-2 text-sm text-ink-700">
-              XLSX fiskalizovane porudžbine
-            </a>
-          </div>
-          <p className="text-xs text-ink-500">
-            Fiskalizovani XLSX prati izdate prodajne dokumente; refundacije umanjuju neto kartice, ali nisu zasebni redovi izvoza porudžbina.
-          </p>
-        </div>
+          <DashboardDisclosure title="Filteri, sačuvani pogledi i XLSX izvoz">
+            <DashboardFilters context={context} warehouses={warehouses} />
 
-        {canViewAnanas && <Suspense fallback={<DashboardPending label="Učitavanje Ananas pregleda…" />}><AnanasSummary period={fiscalPeriod} /></Suspense>}
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-2">
+                <a href={orderExport} className="rounded-lg border border-border px-3 py-2 text-sm text-ink-700">
+                  XLSX porudžbine
+                </a>
+                <a href={fiscalExport} className="rounded-lg border border-border px-3 py-2 text-sm text-ink-700">
+                  XLSX fiskalizovane porudžbine
+                </a>
+              </div>
+              <p className="text-xs text-ink-500">
+                Fiskalizovani XLSX prati izdate prodajne dokumente; refundacije umanjuju neto kartice, ali nisu zasebni redovi izvoza porudžbina.
+              </p>
+            </div>
+
+          </DashboardDisclosure>
+          {canViewAnanas && (
+            <DashboardDisclosure title="Ananas · fiskalni pregled">
+              <Suspense fallback={<DashboardPending label="Učitavanje Ananas pregleda…" />}>
+                <AnanasSummary period={fiscalPeriod} />
+              </Suspense>
+            </DashboardDisclosure>
+          )}
+        </div>
         <section aria-label="Ključni pokazatelji" className="space-y-8">
           <Suspense key={`operations-${sectionKey}`} fallback={<DashboardPending label="Učitavanje porudžbina i zaliha…" />}>
             <OperationalCards data={operations} input={input} warehouseLabel={warehouseLabel} />

@@ -1693,8 +1693,8 @@ function ErpGridContent({
                           module.columns.find((column) => column.key === key),
                         )
                         .filter((column): column is ErpColumn => Boolean(column))
-                        .map((column) => (
-                          <label
+                        .map((column, index, columns) => (
+                          <div
                             key={column.key}
                             draggable
                             onDragStart={() => setDraggedColumn(column.key)}
@@ -1717,11 +1717,15 @@ function ErpGridContent({
                               aria-hidden
                             />
                             <Checkbox
+                              id={`grid-column-${module.slug}-${column.key}`}
+                              aria-label={`Prikaži kolonu ${column.label}`}
                               checked={visibleColumns.includes(column.key)}
                               onCheckedChange={() => toggleColumn(column.key)}
                             />
-                            <span>{column.label}</span>
-                          </label>
+                            <label htmlFor={`grid-column-${module.slug}-${column.key}`} className="min-w-0 flex-1 cursor-pointer">{column.label}</label>
+                            <button type="button" className="inline-flex size-11 shrink-0 items-center justify-center rounded border border-border disabled:opacity-30" aria-label={`Pomeri kolonu ${column.label} ulevo`} disabled={index === 0} onClick={() => moveColumn(column.key, columns[index - 1].key)}><ArrowUp className="size-4" aria-hidden /></button>
+                            <button type="button" className="inline-flex size-11 shrink-0 items-center justify-center rounded border border-border disabled:opacity-30" aria-label={`Pomeri kolonu ${column.label} udesno`} disabled={index === columns.length - 1} onClick={() => moveColumn(column.key, columns[index + 1].key)}><ArrowDown className="size-4" aria-hidden /></button>
+                          </div>
                         ))}
                     </div>
                   </section>

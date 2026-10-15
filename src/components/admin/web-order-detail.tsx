@@ -198,6 +198,7 @@ async function addWebOrderItemAction(
         sku,
         qty: Number(rawQty),
         actorId,
+        staffLoyalty: formData.get("staffLoyalty") === "on",
       });
       revalidatePath(`/admin/erp/prodajni-nalozi/${orderId}`);
       revalidatePath("/admin/erp/prodajni-nalozi");
@@ -211,6 +212,7 @@ async function addWebOrderItemAction(
         diff: {
           orderId,
           sku: result.sku,
+          staffLoyalty: formData.get("staffLoyalty") === "on",
           previousQty: result.previousQty,
           newQty: result.newQty,
           totals: result.totals,
@@ -1824,6 +1826,7 @@ export async function WebOrderDetail({ id }: { id: string }) {
               >
                 <div className="mb-3">
                   <h3 className="font-medium text-ink-900">Dodaj artikal</h3>
+                  <label className="mt-2 flex items-start gap-2 text-sm"><input type="checkbox" name="staffLoyalty" defaultChecked className="mt-1 size-4 shrink-0" /><span>Primeni važeću loyalty cenu za novi artikal, i za kupca bez naloga. Aktivna akcija ima prednost; postojeće stavke zadržavaju dogovorenu cenu.</span></label>
                   <p className="mt-1 text-sm text-ink-500">
                     Unesite tačnu šifru iz WEB kataloga. Ako šifra već postoji
                     u porudžbini, uneta količina će biti dodata na postojeću.

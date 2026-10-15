@@ -271,3 +271,20 @@ it.each(["MYGLS", "X_EXPRESS"])("sorts SKUs across shipments while retaining the
     expect.objectContaining({ shipmentId: "shipment-first", sourceIndex: 0, packageIndex: 1, clientReference: "FIRST-2" }),
   ]);
 });
+
+
+it.each(["MYGLS", "X_EXPRESS"])("defaults directly to article-name sorting, preserving parcel identity (%s)", async courier => {
+  provider = courier;
+  lines = [
+    { ...line("zebra"), providerClientReference: "Z", orderItem: { sku: "001", name: "Žuta stolica" } },
+    { ...line("alfa"), providerClientReference: "A", orderItem: { sku: "999", name: "Alfa lampa" } },
+  ];
+  mocks.shipments.mockResolvedValue([shipment("zebra"), shipment("alfa")]);
+  const response = await request();
+  expect(response.status).toBe(200);
+  const selection = courier === "MYGLS" ? mocks.merge.mock.calls[0][2] : mocks.render.mock.calls[0][1].selection;
+  expect(selection).toEqual([
+    expect.objectContaining({ sourceIndex: 1, packageIndex: 0, clientReference: "A" }),
+    expect.objectContaining({ sourceIndex: 0, packageIndex: 0, clientReference: "Z" }),
+  ]);
+});
