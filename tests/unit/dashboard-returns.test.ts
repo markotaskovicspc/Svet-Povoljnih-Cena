@@ -1,7 +1,7 @@
 import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import { Prisma, OrderStatus, ShipmentStatus, ShipmentPurpose } from "@prisma/client";
-import { dashboardReturnsQuery } from "@/lib/admin/dashboard-returns";
+import { dashboardReturnsQuery, summarizeDashboardReturns, type DashboardReturnEvidence } from "@/lib/admin/dashboard-returns";
 import { resolveReportPeriod } from "@/lib/admin/report-period";
 const sql = new PGlite();
 const now = new Date("2026-10-15T12:00:00Z");
@@ -11,7 +11,7 @@ beforeAll(async () => { await sql.exec(`
  CREATE TYPE shipment_purpose AS ENUM (${Object.values(ShipmentPurpose).map(value => `'${value}'`).join(",")});
  CREATE TABLE "Order" (id text PRIMARY KEY, status order_status);
  CREATE TABLE "OrderItem" ("orderId" text, "warehouseId" text, id text, sku text, qty int DEFAULT 1);
- CREATE TABLE "Shipment" (id text PRIMARY KEY, "orderId" text, purpose shipment_purpose, status shipment_status, "shippedAt" timestamp, "reclamationId" text, "packageCount" int DEFAULT 1, "rawCreateResponse" jsonb);
+ CREATE TABLE "Shipment" (id text PRIMARY KEY, "orderId" text, purpose shipment_purpose, status shipment_status, "shippedAt" timestamp, "reclamationId" text, "packageCount" int DEFAULT 1, "rawCreateResponse" jsonb, provider text, "trackingNo" text, "providerParcelNumbers" jsonb);
  CREATE TABLE "ShipmentEvent" ("shipmentId" text, status shipment_status, "occurredAt" timestamp);
  CREATE TABLE "PickupBatchLine" ("orderId" text, purpose shipment_purpose, "courierPickedUpAt" timestamp, "shipmentId" text, "providerParcelNumber" text, "orderItemId" text, "packedQuantity" int DEFAULT 1, "packedItems" jsonb);
  CREATE TABLE "OrderStatusEvent" ("orderId" text, status order_status, "createdAt" timestamp);
@@ -33,12 +33,12 @@ async function shipment(id: string, orderId: string, purpose: string, status: st
 }
 async function summary(warehouse = "") {
  const query = Prisma.sql`SELECT ${dashboardReturnsQuery(now, warehouse)} AS summary`;
- return (await sql.query<{ summary: {sent:number;returned:number} }>(query.text,query.values)).rows[0].summary;
+ return summarizeDashboardReturns((await sql.query<{ summary: DashboardReturnEvidence }>(query.text,query.values)).rows[0].summary, warehouse);
 }
 it("caps returned units at the sold quantity despite multiple return events and reclamations", async () => {
  await order("refused");
  await shipment("refused-second","refused","ORDER_DELIVERY","RETURNED","2026-10-02T10:00Z");
- await sql.exec(`INSERT INTO "ShipmentEvent" VALUES ('refused-second','RETURNED','2026-10-10'); INSERT INTO "ReturnParcelArrival" ("shipmentId") VALUES ('refused-second');`);
+ await sql.exec(`INSERT INTO "ShipmentEvent" VALUES ('refused-second','RETURNED','2026-10-10'); INSERT INTO "ReturnParcelArrival" ("shipmentId", "parcelNumber") VALUES ('refused-second','refused-second');`);
  await order("claim");
  await shipment("claim-return","claim","RECLAMATION_RETURN","DELIVERED");
  await shipment("claim-return-2","claim","RECLAMATION_RETURN","DELIVERED");
@@ -68,7 +68,7 @@ it("accepts recorded courier handover and dispatched order history without using
 });
 it("includes warehouse arrivals, posted returns and historical returns after later reshipment", async () => {
  await order("arrived"); await shipment("arrived-claim","arrived","RECLAMATION_RETURN","PICKED_UP");
- await sql.exec(`INSERT INTO "ReturnParcelArrival" ("shipmentId") VALUES ('arrived-claim');`);
+ await sql.exec(`INSERT INTO "ReturnParcelArrival" ("shipmentId", "parcelNumber") VALUES ('arrived-claim','arrived-claim');`);
  await order("posted"); await sql.exec(`INSERT INTO "StockMovement" ("orderId",kind,qty, "orderItemId") VALUES ('posted','REFUND_RETURN',1,'posted');`);
  await order("history"); await sql.exec(`INSERT INTO "OrderStatusEvent" VALUES ('history','VRACENO','2026-10-06');`);
  await order("negative"); await sql.exec(`INSERT INTO "StockMovement" ("orderId",kind,qty, "orderItemId") VALUES ('negative','REFUND_RETURN',-1,'negative');`);
@@ -93,6 +93,7 @@ async function quantity(id: string, qty: number) {
 async function parcel(shipmentId: string, code: string, itemId: string, qty: number) {
  await sql.query(`INSERT INTO "PickupBatchLine" ("orderId",purpose,"shipmentId","providerParcelNumber","orderItemId","packedQuantity")
  SELECT "orderId",purpose,id,$2,$3,$4 FROM "Shipment" WHERE id=$1`, [shipmentId,code,itemId,qty]);
+ await sql.query(`UPDATE "Shipment" SET "providerParcelNumbers"=COALESCE("providerParcelNumbers",'[]'::jsonb) || to_jsonb($2::text) WHERE id=$1`, [shipmentId,code]);
 }
 it("counts one returned unit out of five, rather than all five units in a partially returned order", async () => {
  await order("partial"); await quantity("partial",5);
@@ -121,7 +122,7 @@ it("attributes a mixed parcel to its own article quantities and applies warehous
  await order("mixed"); await quantity("mixed",3);
  await sql.exec(`INSERT INTO "OrderItem" VALUES ('mixed','OTHER','other','other',2);`);
  await parcel("mixed","X","mixed",1);
- await sql.query(`UPDATE "PickupBatchLine" SET "packedItems"=$1::jsonb WHERE "shipmentId"='mixed'`,[JSON.stringify([{orderItemId:'mixed',quantity:3},{orderItemId:'other',quantity:2}])]);
+ await sql.query(`UPDATE "PickupBatchLine" SET "packedItems"=$1::jsonb WHERE "shipmentId"='mixed'`,[JSON.stringify([{orderItemId:'mixed',quantity:3},{orderItemId:'other',quantity:2}].map(i=>({...i,sku:i.orderItemId,name:i.orderItemId,barcode:null,categoryName:null,color1:null,color2:null,unitValue:null})))]);
  await sql.exec(`INSERT INTO "ReturnParcelArrival" VALUES ('mixed','X');`);
  expect(await summary()).toEqual({sent:5,returned:5});
  expect(await summary('DC')).toEqual({sent:3,returned:3});
@@ -155,3 +156,26 @@ it("counts a zero-delta physical receipt but ignores negative inventory correcti
  ('zero','REFUND_RETURN',-1,'zero','zero','correction');`);
  expect(await summary()).toEqual({sent:5,returned:1});
 });
+
+it("does not count both legs of the same reclamation as two originally sold units", async () => {
+ await order('two-legs'); await quantity('two-legs',5);
+ await shipment('inbound','two-legs','RECLAMATION_RETURN','DELIVERED');
+ await shipment('replacement','two-legs','RECLAMATION_REPLACEMENT','RETURNED');
+ await sql.exec(`UPDATE "Shipment" SET "reclamationId"='inbound' WHERE id='replacement';`);
+ expect(await summary()).toEqual({sent:5,returned:1});
+});
+
+it("processes a monthly cohort with thousands of parcel quantities without expanding JSON in SQL", async () => {
+ await sql.exec(`
+ INSERT INTO "Order" SELECT 'bulk-' || n, 'ISPORUCENO' FROM generate_series(1,1500) n;
+ INSERT INTO "OrderItem" SELECT id,'DC',id,id,3 FROM "Order";
+ INSERT INTO "Shipment" (id,"orderId",purpose,status,"shippedAt","packageCount","providerParcelNumbers")
+ SELECT id,id,'ORDER_DELIVERY','DELIVERED','2026-10-01',2,jsonb_build_array(id || '-1',id || '-2') FROM "Order";
+ INSERT INTO "PickupBatchLine" ("orderId",purpose,"shipmentId","providerParcelNumber","orderItemId","packedQuantity")
+ SELECT id,'ORDER_DELIVERY'::shipment_purpose,id,id || '-1',id,1 FROM "Order"
+ UNION ALL SELECT id,'ORDER_DELIVERY'::shipment_purpose,id,id || '-2',id,2 FROM "Order";
+ INSERT INTO "ReturnParcelArrival" SELECT 'bulk-' || n,'bulk-' || n || '-1' FROM generate_series(10,1500,10) n;
+ `);
+ expect(dashboardReturnsQuery(now,'').text).not.toContain('jsonb_array_elements');
+ expect(await summary()).toEqual({sent:4500,returned:150});
+}, 10000);
