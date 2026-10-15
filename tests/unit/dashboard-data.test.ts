@@ -10,9 +10,9 @@ const input = { now, warehouseId: "", todayPeriod, ordersPeriod: period, fiscalP
 beforeEach(() => vi.clearAllMocks());
 describe("dashboard data snapshot", () => {
   it("fetches every dashboard group in a single fresh database statement", async () => {
-    const data = { orderSummary: { today_count: 5 }, reclamationCount: 2, fiscalRows: [], topProducts: [], warehouseStockRows: [], incomingRows: [], visitRows: [], conversionRows: [], lowStock: [] };
+    const data = { returnSummary: { orders: [], items: [], shipments: [], parcels: [], arrivals: [], receipts: [] }, orderSummary: { today_count: 5 }, reclamationCount: 2, fiscalRows: [], topProducts: [], warehouseStockRows: [], incomingRows: [], visitRows: [], conversionRows: [], lowStock: [] };
     mocks.query.mockResolvedValue([data]);
-    expect(await getDashboardData(input)).toBe(data);
+    expect(await getDashboardData(input)).toEqual({ ...data, returnSummary: { sent: 0, returned: 0 } });
     await getDashboardData(input);
     expect(mocks.query).toHaveBeenCalledTimes(2);
     const statement = mocks.query.mock.calls[0][0];

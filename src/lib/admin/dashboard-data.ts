@@ -1,4 +1,4 @@
-import { dashboardReturnsQuery, type DashboardReturnSummary } from "./dashboard-returns";
+import { dashboardReturnsQuery, summarizeDashboardReturns, type DashboardReturnEvidence, type DashboardReturnSummary } from "./dashboard-returns";
 import { Prisma } from "@prisma/client";
 import { analyticsFunnelSummaryQuery } from "./analytics-report.server";
 import { PRESENCE_WINDOW_MS } from "@/lib/analytics/presence";
@@ -335,18 +335,18 @@ export function buildDashboardDataQuery(input: DashboardDataInput, section: "all
 }
 
 export async function getDashboardData(input: DashboardDataInput): Promise<DashboardData> {
-  const [data] = await db.$queryRaw<DashboardData[]>(buildDashboardDataQuery(input));
+  const [data] = await db.$queryRaw<(Omit<DashboardData, "returnSummary"> & { returnSummary: DashboardReturnEvidence })[]>(buildDashboardDataQuery(input));
   if (!data) throw new Error("Podaci kontrolne table nisu učitani.");
-  return data;
+  return { ...data, returnSummary: summarizeDashboardReturns(data.returnSummary, input.warehouseId) };
 }
 
 export type DashboardOperations = Omit<DashboardData, "visitRows" | "conversionRows">;
 export type DashboardAnalytics = Pick<DashboardData, "visitRows" | "conversionRows">;
 
 export async function getDashboardOperations(input: DashboardDataInput): Promise<DashboardOperations> {
-  const [data] = await db.$queryRaw<DashboardOperations[]>(buildDashboardDataQuery(input, "operations"));
+  const [data] = await db.$queryRaw<(Omit<DashboardOperations, "returnSummary"> & { returnSummary: DashboardReturnEvidence })[]>(buildDashboardDataQuery(input, "operations"));
   if (!data) throw new Error("Poslovni podaci kontrolne table nisu učitani.");
-  return data;
+  return { ...data, returnSummary: summarizeDashboardReturns(data.returnSummary, input.warehouseId) };
 }
 
 export async function getDashboardAnalyticsData(input: DashboardDataInput): Promise<DashboardAnalytics> {
