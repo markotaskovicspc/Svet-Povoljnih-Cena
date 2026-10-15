@@ -1,3 +1,4 @@
+import { LabelPdfActions } from "@/components/admin/label-pdf-actions";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdminAction } from "@/lib/admin";
@@ -65,7 +66,7 @@ export default async function PickupLabelsPage({ params, searchParams }: {
       </form>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p role="status" className="text-sm">Za štampu: <strong>{selected.length}</strong> od {active.length} adresnica</p>
-        {canPrint ? <a href={`/api/admin/erp/preuzimanja/${batch.id}/labels?${pdfQuery}`} target="_blank" rel="noreferrer" className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background">Otvori PDF za štampu ({selected.length})</a> : null}
+        {canPrint ? <LabelPdfActions href={`/api/admin/erp/preuzimanja/${batch.id}/labels?${pdfQuery}`} filename={`${batch.number}-adresnice.pdf`} label={`Otvori PDF za štampu (${selected.length})`} /> : null}
       </div>
       {!batch.labelsCreatedAt ? <p className="rounded-lg border border-border p-4 text-sm">Adresnice još nisu kreirane. Na nalogu prvo kliknite „Kreiraj adresnice i pošalji“.</p> : null}
       <p className="text-sm text-ink-500">PDF prati primenjeni filter i redosled iz tabele. Paket sa više artikala prikazuje se jednom ako odgovara pretrazi; pri sortiranju se koristi prvi artikal po izabranom redosledu.</p>

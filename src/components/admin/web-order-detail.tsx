@@ -1,3 +1,4 @@
+import { LabelPdfActions } from "@/components/admin/label-pdf-actions";
 import { isMyGlsReturn, myGlsReturnStatusLabel } from "@/lib/mygls/return-booking";
 import { OrderPickupLinks } from "@/components/admin/order-pickup-links";
 import { PickupReferenceNote } from "@/components/admin/pickup-reference-note";
@@ -2686,14 +2687,11 @@ export async function WebOrderDetail({ id }: { id: string }) {
                             <Row
                               k={isMyGlsReturn(shipment) ? "P&R dokument" : "Etiketa"}
                               v={
-                                <a
+                                <LabelPdfActions
                                   href={shipment.labelUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="text-walnut underline"
-                                >
-                                  Otvori
-                                </a>
+                                  filename={`adresnica-${shipment.trackingNo ?? shipment.id}.pdf`}
+                                  label="Otvori PDF"
+                                />
                               }
                             />
                           ) : null}

@@ -1989,7 +1989,7 @@ export async function confirmMyGlsPickupAnnouncement(
     if (!batch.labelsCreatedAt) {
       throw new Error("Prvo moraju biti kreirane MyGLS adresnice za sve pakete.");
     }
-    await assertPickupGroupsPaymentReady(workGroups);
+    await assertPickupGroupsPaymentReady(workGroups, tx);
     const orderIds = ordinaryOrderIdsForGroups(workGroups);
 
     const shipments = await tx.shipment.findMany({
@@ -2388,10 +2388,11 @@ function ordinaryOrderIdsForGroups(groups: readonly PickupWorkGroup[]) {
 
 async function assertPickupGroupsPaymentReady(
   groups: readonly PickupWorkGroup[],
+  client: Pick<Transaction, "order"> = db,
 ) {
   const orderIds = ordinaryOrderIdsForGroups(groups);
   if (!orderIds.length) return;
-  const orders = await db.order.findMany({
+  const orders = await client.order.findMany({
     where: { id: { in: orderIds } },
     select: {
       id: true,

@@ -4,6 +4,7 @@ import { RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { LabelPdfActions } from "./label-pdf-actions";
 import { PickingCamera } from "./picking-camera";
 import type { getPickingSession } from "@/lib/admin/picking.server";
 import { recordPicking, finishPicking } from "@/app/admin/erp/preuzimanja/[id]/picking/actions";
@@ -29,7 +30,7 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
   const input = useRef<HTMLInputElement>(null);
   const quantityInput = useRef<HTMLInputElement>(null);
   const [selected, setSelected] = useState(warehouseMode ? initial.rows.find(row => (initial.progress[row.key] ?? 0) < row.quantity)?.key ?? initial.rows[0]?.key ?? "" : "");
-  const [quantity, setQuantity] = useState(warehouseMode ? String(initial.rows.find(row => row.key === selected)?.quantity ?? 0) : "1");
+  const [quantity, setQuantity] = useState(warehouseMode ? String(Math.max(0, (initial.rows.find(row => row.key === selected)?.quantity ?? 0) - (initial.progress[selected] ?? 0))) : "1");
   const [note, setNote] = useState("");
   const [noteKey, setNoteKey] = useState("");
   useEffect(() => { if (!warehouseMode && !busy && !retry) input.current?.focus(); }, [busy, retry, warehouseMode]);
@@ -51,9 +52,6 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
   const currentRow = orderedRows[currentIndex];
   const remainingQuantity = currentRow ? Math.max(0, currentRow.quantity - (session.progress[currentRow.key] ?? 0)) : 0;
   const review = pickingReview(session);
-  useEffect(() => {
-    if (warehouseMode) setQuantity(String(remainingQuantity));
-  }, [warehouseMode, selected, remainingQuantity]);
   const visibleRows = warehouseMode ? (currentRow ? [currentRow] : []) : session.rows;
   const canScan = editable && (!warehouseMode || Boolean(currentRow && (session.progress[currentRow.key] ?? 0) < currentRow.quantity));
   function moveTo(index: number) {
@@ -75,8 +73,8 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
           if (row) {
             const start = updated.rows.findIndex(candidate => candidate.key === row.key) + 1;
             const remaining = [...updated.rows.slice(start), ...updated.rows.slice(0, start)].find(candidate => (updated.progress[candidate.key] ?? 0) < candidate.quantity && !updated.reviewedRows.includes(candidate.key));
-            if (remaining) setSelected(remaining.key);
-            else { setCamera(false); setCameraStarted(false); }
+            if (remaining) { setSelected(remaining.key); setQuantity(String(Math.max(0, remaining.quantity - (updated.progress[remaining.key] ?? 0)))); }
+            else { setQuantity(String(Math.max(0, row.quantity - (updated.progress[row.key] ?? 0)))); setCamera(false); setCameraStarted(false); }
           }
         }
         setMessage(response.message);
@@ -183,7 +181,7 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
         <button type="button" disabled={busy || !!retry || !session.labelsPreparationAllowed || !packagesConfirmed} onClick={() => void finish("labels")} className="rounded-lg bg-foreground px-4 py-3 text-background">{busy ? "Priprema adresnica…" : "Štampaj adresnice"}</button>
         <p className="text-sm text-muted-foreground">Kreiraju se kurirske adresnice; PDF se šalje na magacin@svetpovoljnihcena.rs.</p>
       </>}
-      {labelUrl && <><a href={labelUrl} target="_blank" rel="noopener noreferrer" className="inline-flex rounded-lg bg-foreground px-4 py-3 text-background">Štampaj adresnice · PDF</a><button type="button" disabled={busy} onClick={() => void finish("labels")} className="ml-3 rounded-lg border px-4 py-3">Proveri slanje mejla</button></>}
+      {labelUrl && <LabelPdfActions href={labelUrl} filename={`${session.number}-adresnice.pdf`} />}
       {review.reviewed && review.shortages.length > 0 && <>
         <h2 className="font-semibold">Nedostaje roba za {review.shortages.length} artikala</h2>
         <ul className="space-y-2 text-sm">{review.shortages.map((row, index) => <li key={`${row.sku}-${index}`}>{row.sku} · Odvojeno {row.picked} / {row.required} · Nedostaje {row.missing} kom. · Porudžbine: {row.orders.map(order => order.number).join(", ")}</li>)}</ul>
@@ -192,10 +190,10 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
       </>}
     </section>}
     {!warehouseMode && <p className="text-sm text-muted-foreground">Redosled je po magacinu i podešenom redosledu pozicija. Kod više pozicija proverite raspoloživu robu. Stavke bez pozicije su na kraju svakog magacina. Odvajanje ne zamenjuje potvrdu spakovanih paketa.</p>}
-    {session.previousPlan && <p className="rounded border border-amber-400 bg-amber-50 p-3 text-amber-950">Sadržaj naloga je menjan posle ranijih skeniranja. Za sadašnji sadržaj roba mora ponovo da se proveri; prethodni zapisi ostaju u istoriji.</p>}
-    {!session.editable && <p className="rounded border p-3">Nalog je zaključen ili su adresnice već pokrenute. Pregled je dostupan, novo skeniranje je zaključano.</p>}
-    {warehouseMode && articles}
-    {session.editable && <section className="space-y-3 rounded-xl border bg-muted/20 p-4 print:hidden">
+    {!warehouseMode && session.previousPlan && <p className="rounded border border-amber-400 bg-amber-50 p-3 text-amber-950">Sadržaj naloga je menjan posle ranijih skeniranja. Za sadašnji sadržaj roba mora ponovo da se proveri; prethodni zapisi ostaju u istoriji.</p>}
+    {!warehouseMode && !session.editable && <p className="rounded border p-3">Nalog je zaključen ili su adresnice već pokrenute. Pregled je dostupan, novo skeniranje je zaključano.</p>}
+    {warehouseMode && !review.complete && !labelUrl && articles}
+    {session.editable && (!warehouseMode || !review.complete) && <section className="space-y-3 rounded-xl border bg-muted/20 p-4 print:hidden">
       <form onSubmit={e => { e.preventDefault(); scan(); }} className="flex flex-wrap items-end gap-3">
         <label className="min-w-48 flex-1">Skenirajte barkod ili unesite šifru<input ref={input} inputMode={warehouseMode ? "numeric" : undefined} enterKeyHint={warehouseMode ? "done" : undefined} aria-invalid={warehouseMode && scanError ? true : undefined} autoComplete="off" value={code} onChange={e => changeCode(e.target.value)} disabled={!canScan} className="mt-1 w-full rounded border bg-background p-3" /></label>
         <div><label htmlFor="picking-quantity">Količina</label><div className="mt-1 flex items-center gap-2">
