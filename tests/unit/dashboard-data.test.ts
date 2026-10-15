@@ -9,12 +9,13 @@ const period = resolveReportPeriod({ range: "30d" }, now);
 const input = { now, warehouseId: "", todayPeriod, ordersPeriod: period, fiscalPeriod: period, reclamationsPeriod: period, topProductsPeriod: period, analyticsPeriod: period };
 beforeEach(() => vi.clearAllMocks());
 describe("dashboard data snapshot", () => {
-  it("fetches every dashboard group in a single fresh database statement", async () => {
-    const data = { returnSummary: { orders: [], items: [], shipments: [], parcels: [], arrivals: [], receipts: [] }, orderSummary: { today_count: 5 }, reclamationCount: 2, fiscalRows: [], topProducts: [], warehouseStockRows: [], incomingRows: [], visitRows: [], conversionRows: [], lowStock: [] };
-    mocks.query.mockResolvedValue([data]);
+  it("keeps return parcel evidence separate from the core dashboard statement", async () => {
+    const data = { orderSummary: { today_count: 5 }, reclamationCount: 2, fiscalRows: [], topProducts: [], warehouseStockRows: [], incomingRows: [], visitRows: [], conversionRows: [], lowStock: [] };
+    mocks.query.mockResolvedValueOnce([data]).mockResolvedValueOnce([{ evidence: { orders: [], items: [], shipments: [], parcels: [], arrivals: [], receipts: [] } }]);
     expect(await getDashboardData(input)).toEqual({ ...data, returnSummary: { sent: 0, returned: 0 } });
-    await getDashboardData(input);
     expect(mocks.query).toHaveBeenCalledTimes(2);
+    expect(mocks.query.mock.calls[0][0].text).not.toContain('"ReturnParcelArrival"');
+    expect(mocks.query.mock.calls[1][0].text).toContain('"ReturnParcelArrival"');
     const statement = mocks.query.mock.calls[0][0];
     expect(statement.text).toContain('AS "orderSummary"');
     expect(statement.text).toContain('AS "conversionRows"');
