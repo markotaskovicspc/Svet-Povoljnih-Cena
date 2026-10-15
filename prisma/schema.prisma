@@ -3403,6 +3403,8 @@ model Reclamation {
   customerLast              String
   customerEmail             String?
   customerPhone             String?
+  /// Courier address override for this reclamation; original order remains unchanged.
+  customerAddress           Json?
   description               String                     @db.VarChar(250)
   notifyVia                 NotifyChannel
   status                    ReclamationStatus          @default(PRIMLJENO)

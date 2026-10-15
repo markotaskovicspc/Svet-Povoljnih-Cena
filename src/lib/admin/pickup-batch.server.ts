@@ -1,3 +1,4 @@
+import { withReclamationAddress } from "@/lib/reclamation-address";
 import "server-only";
 import { loadPendingOrderReshipments } from "./order-reshipment.server";
 import { getPickupPostingAvailability } from "@/lib/admin/pickup-availability.server";
@@ -1496,7 +1497,7 @@ async function createXExpressLabelsForPickupBatch(
               },
             },
             reclamation: {
-              select: { resolution: true, resolutionNote: true },
+              select: { resolution: true, resolutionNote: true, customerAddress: true },
             },
             orderItem: { select: { name: true } },
           },
@@ -1536,7 +1537,8 @@ async function createXExpressLabelsForPickupBatch(
     }
 
     for (const group of workGroups) {
-      const order = group.lines[0]?.order;
+      const firstLine = group.lines[0];
+      const order = withReclamationAddress(firstLine?.order, firstLine?.reclamation?.customerAddress);
       if (!order) {
         throw new Error(
           `Picking grupa ${group.lineGroupKey} nema povezanu porudžbinu.`,

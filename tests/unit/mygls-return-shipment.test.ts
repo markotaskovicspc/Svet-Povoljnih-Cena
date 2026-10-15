@@ -24,11 +24,21 @@ beforeEach(() => {
   mocks.claim.mockImplementation(async ({ data }) => { stored = { ...stored, ...data }; return { count: 1 }; });
   mocks.findShipment.mockImplementation(async () => ({ ...stored, order: { number: order.number } }));
   mocks.print.mockImplementation(async ({ parcelList }) => ({ Labels: [...Buffer.from("%PDF-confirmation")], PrintLabelsErrorList: [], PrintLabelsInfoList: parcelList.map((p: { ClientReference: string }, i: number) => ({ ClientReference: p.ClientReference, ParcelId: 100 + i, ParcelNumber: 900000 + i })) }));
-  mocks.upload.mockResolvedValue({ objectKey: "private/confirmation.pdf", labelUrl: "/api/admin/shipments/s/label", mimeType: "application/pdf" });
+  mocks.upload.mockResolvedValue({ objectKey: "private/confirmation.pdf", labelUrl: "/api/admin/shipments/s/label", mimeType: "application/pdf", bytes: Buffer.from("%PDF-confirmation") });
 });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
 describe("GLS P&R lifecycle", () => {
+  it.each(["RECLAMATION_RETURN", "RECLAMATION_REPLACEMENT"] as const)("uses the moved customer's reclamation address for %s", async purpose => {
+    mocks.findReclamation.mockResolvedValue({ id: "claim-1", orderId: "order-1", orderItemId: "item-1", quantity: 1, warehouseId: "w1", customerAddress: {
+      shipFirstName: "Novi", shipLastName: "Kupac", shipPhone: "0647654321", shipStreet: "Nova", shipHouseNumber: "25", shipCity: "Novi Sad", shipPostalCode: "21000", shipXExpressTownId: 100,
+    } });
+    await createMyGlsShipmentForOrder("order-1", { ...options, purpose });
+    const parcel = mocks.print.mock.calls[0][0].parcelList[0];
+    const customer = purpose === "RECLAMATION_RETURN" ? parcel.PickupAddress : parcel.DeliveryAddress;
+    expect(customer).toMatchObject({ Street: "Nova", HouseNumber: "25", City: "Novi Sad", ZipCode: "21000", ContactPhone: "+381647654321" });
+    expect(order.shipStreet).toBe("Prva 10");
+  });
   it("sends PRS once, records next Serbian business day, zero COD and a booking confirmation", async () => {
     const result = await createMyGlsShipmentForOrder("order-1", options);
     const parcels = mocks.print.mock.calls[0][0].parcelList;

@@ -67,6 +67,17 @@ describe("X Express reclamation return preparation", () => {
     expect(mocks.create).not.toHaveBeenCalled();
   });
 
+  it.each(["RECLAMATION_RETURN", "RECLAMATION_REPLACEMENT"] as const)("uses the reclamation address for %s", async purpose => {
+    mocks.reclamation.mockResolvedValue({ id: "r1", orderId: "o1", orderItemId: "i1", quantity: 1, warehouseId: "w1", customerAddress: {
+      shipFirstName: "Novi", shipLastName: "Kupac", shipPhone: "0647654321", shipStreet: "Nova", shipHouseNumber: "25", shipCity: "Novi Sad", shipPostalCode: "21000", shipXExpressTownId: 400,
+    } });
+    await createXExpressShipmentForOrder("o1", { ...options, purpose, returnPickupCoordinates: undefined });
+    const payload = mocks.create.mock.calls[0][0].data.rawCreateResponse.createOrderPayload;
+    const customer = payload.Waypoints.find((w: { WaypointType: string }) => w.WaypointType === (purpose === "RECLAMATION_RETURN" ? "PICKUP" : "DELIVERY"));
+    expect(customer.Address).toMatchObject({ TownId: 400, StreetName: "Nova", StreetNumber: "25" });
+    expect((await mocks.order()).shipStreet).toBe("Prva 10");
+  });
+
   it("checks both addresses and saves the destination route, zero COD and exact pickup snapshot", async () => {
     const shipment = await createXExpressShipmentForOrder("o1", options);
     expect(mocks.allocate).toHaveBeenCalledTimes(2);

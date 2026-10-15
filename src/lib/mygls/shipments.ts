@@ -1,3 +1,4 @@
+import { withReclamationAddress } from "@/lib/reclamation-address";
 import { assertMyGlsReturnAccepted, myGlsReturnBooking } from "./return-booking";
 import { boxQuantity } from "@/lib/courier/label-quantity";
 import "server-only";
@@ -217,6 +218,7 @@ async function prepareMyGlsShipmentForOrder(
             orderItemId: true,
             quantity: true,
             warehouseId: true,
+            customerAddress: true,
           },
         });
   if (
@@ -225,7 +227,7 @@ async function prepareMyGlsShipmentForOrder(
   ) {
     throw new MyGlsConfigError("Reklamacija za kurirski nalog nije pronađena.");
   }
-  const order = await db.order.findUnique({
+  const originalOrder = await db.order.findUnique({
     where: { id: orderId },
     include: {
       user: { select: { email: true } },
@@ -248,7 +250,8 @@ async function prepareMyGlsShipmentForOrder(
       },
     },
   });
-  if (!order) throw new Error(`Order ${orderId} ne postoji.`);
+  if (!originalOrder) throw new Error(`Order ${orderId} ne postoji.`);
+  const order = withReclamationAddress(originalOrder, reclamation?.customerAddress);
   if (order.shippingMethod !== "KURIR") {
     throw new MyGlsConfigError("MyGLS se koristi samo za kurirsku isporuku.");
   }

@@ -1,3 +1,5 @@
+import { formatStreetAddress } from "@/lib/address/house-number";
+import { withReclamationAddress } from "@/lib/reclamation-address";
 import { assertMyGlsReturnAccepted, isMyGlsReturn } from "@/lib/mygls/return-booking";
 import { ensureMyGlsReturnDocument } from "@/lib/mygls/shipments";
 import { parcelOrderItemIds } from "@/lib/courier/parcel-contents";
@@ -147,12 +149,13 @@ async function processShipmentForOrder(
             orderItemId: true,
             quantity: true,
             warehouseId: true,
+            customerAddress: true,
           },
         });
   if (purpose !== "ORDER_DELIVERY" && (!reclamation || reclamation.orderId !== orderId)) {
     throw new CourierConfigError("Reklamacija za kurirski nalog nije pronađena.");
   }
-  const order = await db.order.findUnique({
+  const originalOrder = await db.order.findUnique({
     where: { id: orderId },
     include: {
       items: {
@@ -201,7 +204,8 @@ async function processShipmentForOrder(
       },
     },
   });
-  if (!order) throw new Error(`Order ${orderId} ne postoji.`);
+  if (!originalOrder) throw new Error(`Order ${orderId} ne postoji.`);
+  const order = withReclamationAddress(originalOrder, reclamation?.customerAddress);
 
   const requestedOrderItemIds = normalizeOrderItemIds(options.orderItemIds);
   const supplierFulfillment = options.supplierFulfillmentId
@@ -420,7 +424,7 @@ async function processShipmentForOrder(
       firstName: order.shipFirstName,
       lastName: order.shipLastName,
       phone: order.shipPhone,
-      street: order.shipStreet,
+      street: formatStreetAddress(order.shipStreet, order.shipHouseNumber ?? ""),
       city: order.shipCity,
       postalCode: order.shipPostalCode,
       country: order.shipCountry,

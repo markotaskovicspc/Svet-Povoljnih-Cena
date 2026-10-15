@@ -24,6 +24,8 @@ it("renders dated, category-sorted picking with colors, unit totals and separate
     ],
   });
   const html = renderToStaticMarkup(await PickupBatchPrintPage({ params: Promise.resolve({ id: "batch" }), searchParams: Promise.resolve({}) }));
+  expect(html).toContain("Ukupna zapremina");
+  expect(html).toContain("nepotpuno — nedostaju mere za 3 paketa");
   expect(html).toContain("Datum štampe");
   expect(html).toContain("25. 9. 2026.");
   expect(html).toContain("12:30");

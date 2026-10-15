@@ -1,4 +1,5 @@
 import "server-only";
+import { pickingVolume } from "./picking-volume";
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -57,6 +58,7 @@ export async function getPickingSession(batchId: string, client: Reader = db) {
     labelsReady: Boolean(batch.labelsCreatedAt),
     labelsPreparationAllowed: batch.status === "DRAFT",
     reviewedRows: [...new Set(events.filter(e => e.planHash === planHash && (e.delta > 0 || e.note.startsWith("Potvrđena količina:"))).map(e => e.rowKey))],
+    volume: pickingVolume(batch.lines),
     editable: batch.status === "DRAFT" && !batch.labelsCreationStartedAt && !batch.labelsCreatedAt,
     previousPlan: events.some(e => e.planHash !== planHash),
     events: events.slice(0, 100).map(e => ({ ...e, createdAt: e.createdAt.toISOString(), actorName: actors.filter(a => a.id === e.actorId).map(a => [a.firstName, a.lastName].filter(Boolean).join(" ") || a.email)[0] ?? e.actorId })),

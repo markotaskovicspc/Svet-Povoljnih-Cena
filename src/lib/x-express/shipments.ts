@@ -1,3 +1,4 @@
+import { withReclamationAddress } from "@/lib/reclamation-address";
 import { isCancelledDelivery } from "@/lib/courier/cancelled-delivery";
 import "server-only";
 import { courierAddressParts } from "@/lib/address/house-number";
@@ -75,12 +76,13 @@ export async function createXExpressShipmentForOrder(
             orderItemId: true,
             quantity: true,
             warehouseId: true,
+            customerAddress: true,
           },
         });
   if (purpose !== "ORDER_DELIVERY" && (!reclamation || reclamation.orderId !== orderId)) {
     throw new XExpressConfigError("Reklamacija za kurirski nalog nije pronađena.");
   }
-  const order = await db.order.findUnique({
+  const originalOrder = await db.order.findUnique({
     where: { id: orderId },
     include: {
       items: {
@@ -116,7 +118,8 @@ export async function createXExpressShipmentForOrder(
       },
     },
   });
-  if (!order) throw new Error(`Order ${orderId} ne postoji.`);
+  if (!originalOrder) throw new Error(`Order ${orderId} ne postoji.`);
+  const order = withReclamationAddress(originalOrder, reclamation?.customerAddress);
   if (isCancelledDelivery({ purpose, order })) throw new Error("Otkazana porudžbina ne može biti poslata kuriru.");
   if (order.shippingMethod !== "KURIR") {
     throw new XExpressConfigError("X Express se koristi samo za kurirsku isporuku.");

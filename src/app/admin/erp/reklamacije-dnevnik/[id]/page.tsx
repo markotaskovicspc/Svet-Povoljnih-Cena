@@ -1,3 +1,6 @@
+import { ReclamationAddressFields } from "@/components/admin/reclamation-address-fields";
+import { reclamationAddressDefaults } from "@/lib/reclamation-address";
+import { saveReclamationAddress } from "@/lib/admin/reclamation-address.server";
 import { saveWarehouseAction } from "../warehouse-action";
 import { isMyGlsReturn, myGlsReturnBooking, myGlsReturnStatusLabel } from "@/lib/mygls/return-booking";
 import { formatStreetAddress } from "@/lib/address/house-number";
@@ -69,6 +72,22 @@ function refresh(id: string) {
   revalidatePath("/admin/erp/preuzimanja/povrati");
   revalidatePath("/admin/erp/preuzimanja");
   revalidatePath("/nalog/reklamacije");
+}
+
+async function saveAddressAction(_state: AdminActionState, formData: FormData) {
+  "use server";
+  return withAdminState(
+    { allowed: ["OPS"], action: "reclamation.addressUpdate", entity: "Reclamation" },
+    async (_actorId, data: FormData) => {
+      const id = String(data.get("id") ?? "");
+      if (!id) return { ok: false as const, error: "Reklamacija nije izabrana." };
+      const fields = ["shipFirstName", "shipLastName", "shipPhone", "shipStreet", "shipHouseNumber", "shipCity", "shipPostalCode"];
+      const address = Object.fromEntries(fields.map(key => [key, String(data.get(key) ?? "")]));
+      const diff = await saveReclamationAddress(id, { ...address, shipXExpressTownId: Number(data.get("shipXExpressTownId")) || null });
+      refresh(id);
+      return { ok: true as const, entityId: id, diff, message: "Adresa reklamacije je sačuvana za preuzimanje i slanje zamene." };
+    },
+  )(formData);
 }
 
 async function saveDetailsAction(_state: AdminActionState, formData: FormData) {
@@ -279,7 +298,7 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
       include: {
         photos: true,
         events: { orderBy: { createdAt: "desc" } },
-        order: { select: { number: true, shipStreet: true, shipHouseNumber: true, shipCity: true, shipPostalCode: true } },
+        order: { select: { number: true, shipFirstName: true, shipLastName: true, shipPhone: true, shipStreet: true, shipHouseNumber: true, shipCity: true, shipPostalCode: true, shipXExpressTownId: true } },
         orderItem: { select: { name: true, qty: true } },
         product: { select: {
           name: true, grossWeightKg: true, weightKg: true,
@@ -315,6 +334,7 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
   const courierLabels = new Map((courierCodes.length ? await db.courierStatusCode.findMany({
     where: { provider: "X_EXPRESS", code: { in: courierCodes } }, select: { code: true, label: true },
   }) : []).map(row => [row.code, row.label]));
+  const customerAddress = reclamationAddressDefaults(reclamation.order, reclamation.customerAddress);
   const cataloguePackages = reclamationCataloguePackages(reclamation);
   const savedPackages = readReclamationPackages(reclamation.replacementPackages);
   const initialPackages = savedPackages.length ? savedPackages : cataloguePackages;
@@ -360,6 +380,15 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
           </dl>
           <p className="mt-4 rounded-lg bg-muted-bg p-4 text-sm text-ink-800">{reclamation.description}</p>
           {reclamation.photos.length ? <div className="mt-4 flex flex-wrap gap-3">{reclamation.photos.map((photo) => <a key={photo.id} href={signedPhotos.get(photo.url) ?? photo.url} target="_blank" rel="noreferrer" className="relative block size-28 overflow-hidden rounded-lg border border-border"><Image src={signedPhotos.get(photo.url) ?? photo.url} alt="Fotografija uz reklamaciju" fill sizes="112px" className="object-cover" /></a>)}</div> : null}
+        </Card>
+
+        <Card>
+          <CardTitle description="Adresa važi za preuzimanje od kupca i isporuku zamene u ovoj reklamaciji. Originalna porudžbina zadržava svoju adresu. Ako je kurirski nalog već poslat, prvo ga otkažite.">Adresa kupca za reklamaciju</CardTitle>
+          <AdminActionForm action={saveAddressAction} refreshOnSuccess preserveValues className="space-y-4">
+            <input type="hidden" name="id" value={reclamation.id} />
+            <ReclamationAddressFields key={JSON.stringify(customerAddress)} initial={customerAddress} />
+            <SubmitButton pendingLabel="Čuvam…">Sačuvaj adresu reklamacije</SubmitButton>
+          </AdminActionForm>
         </Card>
 
         <div className="grid gap-6 xl:grid-cols-2">
@@ -488,11 +517,11 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
                       <input type="hidden" name="purpose" value={purpose} />
                       {previous?.syncError ? <p className="w-full text-destructive">{previous.syncError}</p> : null}
                       <div className="w-full space-y-1 text-sm">
-                        <p>Preuzimanje: {formatStreetAddress(reclamation.order.shipStreet, reclamation.order.shipHouseNumber ?? "")}, {reclamation.order.shipPostalCode} {reclamation.order.shipCity}</p>
+                        <p>Preuzimanje: {formatStreetAddress(customerAddress.shipStreet, customerAddress.shipHouseNumber)}, {customerAddress.shipPostalCode} {customerAddress.shipCity}</p>
                         <p>Odredište: {reclamation.warehouse ? `${reclamation.warehouse.name} · ${reclamation.warehouse.address ?? "Adresa nije uneta"}, ${reclamation.warehouse.city ?? ""}` : "Izaberite magacin"}</p>
                         <p>Otkupnina: 0 RSD. Za GLS se šalje P&R zahtev za naredni radni dan; kurir donosi adresnicu.</p>
                       </div>
-                      <p className="w-full text-xs text-ink-500">Za preuzimanje se kuriru šalju adresa i kontakt kupca iz porudžbine.</p>
+                      <p className="w-full text-xs text-ink-500">Za preuzimanje se kuriru šalju sačuvana adresa i kontakt iz dela „Adresa kupca za reklamaciju“.</p>
                       <p className="w-full text-xs text-ink-500">Broj i mere GLS paketa preuzimaju se iz artikla i količine reklamacije.</p>
                       <Field label="Broj paketa za X Express">
                         <input name="packageCount" type="number" min={1} max={99} defaultValue={1} className="h-9 w-24 rounded-lg border border-input bg-transparent px-2" />

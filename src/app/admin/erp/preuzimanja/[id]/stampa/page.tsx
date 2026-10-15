@@ -5,6 +5,7 @@ import { requireAdminAction } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { PrintPageButton } from "@/components/admin/print-page-button";
 import { AutoPrintOnLoad } from "@/components/admin/auto-print-on-load";
+import { pickingVolume, formatPickingVolume } from "@/lib/admin/picking-volume";
 import { buildPickupPrintRows } from "@/lib/admin/pickup-print";
 import { PickingBarcode } from "@/components/admin/picking-barcode";
 
@@ -117,6 +118,7 @@ export default async function PickupBatchPrintPage({
             <div>
               <dt>Paketa</dt><dd className="font-bold">{activeLines.length}</dd>
             </div>
+            <div><dt>Ukupna zapremina</dt><dd className="font-bold">{formatPickingVolume(pickingVolume(activeLines))}</dd></div>
             {batch.pickupDate ? <div><dt>Termin preuzimanja</dt><dd className="font-bold">{new Intl.DateTimeFormat("sr-Latn-RS", { timeZone: "Europe/Belgrade", dateStyle: "short", timeStyle: "short" }).format(batch.pickupDate)}</dd></div> : null}
             <div><dt>Datum štampe</dt><dd className="font-bold">{printedAt}</dd></div>
           </dl>
