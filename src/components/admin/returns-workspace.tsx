@@ -1,5 +1,6 @@
 import { SHIPMENT_STATUS_LABEL } from "@/lib/courier/status";
 import { ReturnEvidenceDisclosure } from "@/components/admin/return-evidence-disclosure";
+import { ScannedReturnPanel } from "@/components/admin/reclamation-return-notice";
 import { ReturnScanner } from "@/components/admin/return-scanner";
 import { scannedReturnPlan, receiveScannedReturn } from "@/lib/admin/scanned-return.server";
 import { returnUnitParcelNumbers, returnItemParcelNumbers, returnParcelNumbers, returnParcelArrived, displayReturnParcelNumber, normalizeReturnParcelNumber, type ReturnShipment } from "@/lib/admin/return-parcels";
@@ -609,7 +610,7 @@ export async function ReturnsWorkspace({
           <CardTitle>Prijem povratnog paketa</CardTitle>
           <ReturnScanner basePath={returnHref} key={`${params?.q ?? ""}:${params?.camera ?? ""}`} initialCode={params?.q ?? ""} initialCamera={params?.camera === "1"} warehouseId={params?.warehouse ?? ""}>
           {scanError ? <p role="alert" className="mt-4 text-warning">{scanError}</p> : null}
-          {scanPlan ? <div className="mt-5 space-y-3 rounded-xl border border-border p-4">
+          {scanPlan ? <ScannedReturnPanel reclamationNumber={scanPlan.kind === "reclamation" ? scanPlan.shipment.reclamation?.number ?? "Povezana reklamacija" : null}>
             {warehouseMode ? <div className="space-y-4 break-words">
               <div><p className="font-mono font-semibold">{scanPlan.shipment.reclamation?.number ?? scanPlan.shipment.order.number}</p><p className="text-sm text-ink-500">Paket {returnParcelNumbers(scanPlan.shipment).indexOf(scanPlan.code) + 1}/{scanPlan.shipment.packageCount} · {scanPlan.shipment.provider}</p><p className="break-all font-mono text-sm">{displayReturnParcelNumber(scanPlan.code, scanPlan.shipment.provider)}</p><p className="text-sm">{scannedReturnStatusLabel(scanPlan.shipment, scanPlan.code)}</p></div>
               <ul className="space-y-3">{scanPlan.lines.map(line => <li key={line.id} className="rounded-lg bg-muted p-3"><p className="font-mono font-semibold">{line.sku}</p><p>{line.name}</p>{line.description && <p className="text-sm text-ink-500">{line.description}</p>}<p className="mt-2 font-semibold">U ovom paketu: {line.units.length} kom</p></li>)}</ul>
@@ -654,7 +655,7 @@ export async function ReturnsWorkspace({
               </table>
             </div>
             )}
-            {scanPlan.received ? <p className="text-success">Već primljeno. Ponovni sken ne uvećava lager.</p> : <AdminActionForm action={receiveScannedAction} preserveValues toastOnSuccess={warehouseMode} className="flex flex-wrap items-end gap-3">
+            {scanPlan.received ? <p className={scanPlan.kind === "reclamation" ? "text-amber-900" : "text-success"}>Već primljeno. Ponovni sken ne uvećava lager.</p> : <AdminActionForm action={receiveScannedAction} preserveValues toastOnSuccess={warehouseMode} className="flex flex-wrap items-end gap-3">
               <input type="hidden" name="code" value={params?.q ?? ""} />
               <input type="hidden" name="returnTo" value={returnHref} />
               {warehouseSelect}
@@ -662,7 +663,7 @@ export async function ReturnsWorkspace({
               <SubmitButton disabled={!warehouses.length}>Potvrdi prijem</SubmitButton>
               <p className="w-full text-xs text-ink-500">Potvrdom prijema potvrđujete da ste pregledali sadržaj paketa. Ako je roba oštećena, izaberite magacin za proveru vraćene robe.</p>
             </AdminActionForm>}
-          </div> : null}
+          </ScannedReturnPanel> : null}
           </ReturnScanner>
         </Card>
         <ReturnEvidenceDisclosure loaded={loadEvidence} href={`${returnHref}?evidence=1${query ? `&q=${encodeURIComponent(params?.q ?? "")}` : ""}`} >
