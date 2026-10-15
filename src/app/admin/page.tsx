@@ -1,3 +1,4 @@
+import { DashboardReturnRate } from "@/components/admin/dashboard-return-rate";
 import { getAnanasTopProducts } from "@/lib/ananas/report";
 import { AnanasSummary } from "@/components/admin/ananas-summary";
 import { AnanasOrdersHealth } from "@/components/admin/ananas-orders-health";
@@ -185,7 +186,7 @@ function shippingShare(shipping: number, total: number) { return total > 0 ? `${
 
 async function OperationalCards({ data, input, warehouseLabel }: OperationalSectionProps) {
   const { warehouseId, ordersPeriod, fiscalPeriod, reclamationsPeriod } = input;
-  const { orderSummary, fiscalRows, reclamationCount, reclamationQuantity, reclamationDeliveredQuantity, warehouseStockRows, incomingRows } = await data;
+  const { returnSummary, orderSummary, fiscalRows, reclamationCount, reclamationQuantity, reclamationDeliveredQuantity, warehouseStockRows, incomingRows } = await data;
   const reclamationRate = reclamationDeliveredQuantity > 0
     ? `${((reclamationQuantity / reclamationDeliveredQuantity) * 100).toLocaleString("sr-Latn-RS", { maximumFractionDigits: 2 })}%`
     : "—";
@@ -245,7 +246,8 @@ async function OperationalCards({ data, input, warehouseLabel }: OperationalSect
             <AnanasOrdersHealth from={input.todayPeriod.fromInput} to={input.todayPeriod.toInput} />
           </Suspense>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <DashboardReturnRate summary={returnSummary} warehouseLabel={warehouseLabel} />
             <StatCard
               label="Reklamacije u periodu"
               value={String(reclamationCount)}
@@ -253,6 +255,8 @@ async function OperationalCards({ data, input, warehouseLabel }: OperationalSect
               hint={`${reclamationRatioHint} · ${reclamationsPeriod.label} · ${warehouseLabel}`}
               tone={reclamationCount > 0 ? "warning" : "default"}
             />
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <StatCard label="Ukupne zalihe po COGS-u" value={formatRsd(totalStock.stock_value)} hint={`${totalStock.total_qty} kom · ${formatVolume(totalStock.total_volume)} · svi aktivni magacini`} />
             <StatCard
               label="Zauzeta paletna mesta"

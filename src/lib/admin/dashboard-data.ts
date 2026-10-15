@@ -1,3 +1,4 @@
+import { dashboardReturnsQuery, type DashboardReturnSummary } from "./dashboard-returns";
 import { Prisma } from "@prisma/client";
 import { analyticsFunnelSummaryQuery } from "./analytics-report.server";
 import { PRESENCE_WINDOW_MS } from "@/lib/analytics/presence";
@@ -87,6 +88,7 @@ type OrderSummary = {
 
 export type DashboardData = {
   orderSummary: OrderSummary;
+  returnSummary: DashboardReturnSummary;
   reclamationCount: number;
   reclamationQuantity: number;
   reclamationDeliveredQuantity: number;
@@ -156,6 +158,7 @@ export function buildDashboardDataQuery(input: DashboardDataInput, section: "all
       WHERE ((o."createdAt" >= ${todayPeriod.start} AND o."createdAt" < ${todayPeriod.endExclusive})
         OR (o."createdAt" >= ${ordersPeriod.start} AND o."createdAt" < ${ordersPeriod.endExclusive}))
     ) result) AS "orderSummary",
+    ${dashboardReturnsQuery(now, warehouseId)} AS "returnSummary",
     (SELECT COUNT(*)::int FROM "Reclamation" r
       WHERE r."createdAt" >= ${reclamationsPeriod.start} AND r."createdAt" < ${reclamationsPeriod.endExclusive}
       ${reclamationWarehouseSql}) AS "reclamationCount",

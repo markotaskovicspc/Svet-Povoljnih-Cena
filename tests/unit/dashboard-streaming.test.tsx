@@ -10,7 +10,7 @@ vi.mock("@/components/admin/page-header", () => ({ PageHeader: ({title}: {title:
 vi.mock("@/components/admin/ananas-orders-health", () => ({ AnanasOrdersHealth: () => null }));
 vi.mock("@/lib/ananas/report", () => ({ getAnanasTopProducts: vi.fn().mockResolvedValue([]) }));
 import AdminDashboard from "@/app/admin/page";
-const data = { orderSummary: { today_count: 1234, today_total: 50, today_shipping: 5, period_count: 1234, period_total: 50, period_shipping: 5 }, fiscalRows: [], reclamationCount: 0, reclamationQuantity: 0, reclamationDeliveredQuantity: 0, topProducts: [], warehouseStockRows: [], incomingRows: [], lowStock: [] };
+const data = { returnSummary: { sent: 0, returned: 0 }, orderSummary: { today_count: 1234, today_total: 50, today_shipping: 5, period_count: 1234, period_total: 50, period_shipping: 5 }, fiscalRows: [], reclamationCount: 0, reclamationQuantity: 0, reclamationDeliveredQuantity: 0, topProducts: [], warehouseStockRows: [], incomingRows: [], lowStock: [] };
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((r) => { resolve = r; });

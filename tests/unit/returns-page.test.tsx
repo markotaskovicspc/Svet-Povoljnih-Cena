@@ -345,3 +345,22 @@ describe("warehouse returns workspace", () => {
     expect(mocks.redirect).toHaveBeenCalledWith("/admin/magacin/povrat?camera=1&warehouse=qa&received=1", "replace");
   });
 });
+
+it.each([false,true])("highlights reclamation scans, including already received parcels (received=%s)", async received => {
+ mocks.scan.mockResolvedValue({kind:"reclamation",code:"9002838514",received,
+  shipment:{orderId:"o",order:{number:"SPC-TEST"},reclamation:{id:"r",number:"R-1-SPC-TEST"},provider:"MYGLS",status:"DELIVERED",packageCount:1,providerParcelNumbers:[9002838514]},
+  lines:[{id:"i",sku:"110085",name:"Stolica",totalQuantity:1,units:[1]}]});
+ const html=renderToStaticMarkup(await ReturnsWorkspace({warehouseMode:true,searchParams:Promise.resolve({q:"9002838514"})}));
+ expect(html).toContain('data-return-kind="reclamation"');
+ expect(html).toContain('bg-amber-50'); expect(html).toContain('role="alert"');
+ expect(html).toContain('Povrat po reklamaciji'); expect(html).toContain('Reklamacija R-1-SPC-TEST');
+ if(received) { expect(html).toContain('Već primljeno'); expect(html).not.toContain('Potvrdi prijem'); }
+ else expect(html).toContain('Potvrdi prijem');
+});
+it("keeps ordinary scanned returns visually distinct from reclamations",async()=>{
+ mocks.scan.mockResolvedValue({kind:"order",code:"9002838514",received:false,
+  shipment:{orderId:"o",order:{number:"SPC-TEST"},provider:"MYGLS",status:"RETURNED",packageCount:1,providerParcelNumbers:[9002838514]},
+  lines:[{id:"i",sku:"110085",name:"Stolica",totalQuantity:1,units:[1]}]});
+ const html=renderToStaticMarkup(await ReturnsWorkspace({warehouseMode:true,searchParams:Promise.resolve({q:"9002838514"})}));
+ expect(html).toContain('data-return-kind="ordinary"'); expect(html).not.toContain('Povrat po reklamaciji');
+});
