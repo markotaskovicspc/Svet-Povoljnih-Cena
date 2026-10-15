@@ -101,8 +101,8 @@ export type DashboardData = {
   lowStock: LowStockRow[];
 };
 
-// Each section is a single read-only statement. Operational cards share one
-// fresh snapshot; analytics can stream separately without holding them back.
+// Core cards share one read-only statement. Return evidence is read separately
+// so parcel history cannot inflate the core dashboard SQL plan.
 export function buildDashboardDataQuery(input: DashboardDataInput, section: "all" | "operations" | "analytics" = "all") {
   const { now, warehouseId, todayPeriod, ordersPeriod, fiscalPeriod,
     reclamationsPeriod, topProductsPeriod, analyticsPeriod } = input;
@@ -158,7 +158,6 @@ export function buildDashboardDataQuery(input: DashboardDataInput, section: "all
       WHERE ((o."createdAt" >= ${todayPeriod.start} AND o."createdAt" < ${todayPeriod.endExclusive})
         OR (o."createdAt" >= ${ordersPeriod.start} AND o."createdAt" < ${ordersPeriod.endExclusive}))
     ) result) AS "orderSummary",
-    ${dashboardReturnsQuery(now, warehouseId)} AS "returnSummary",
     (SELECT COUNT(*)::int FROM "Reclamation" r
       WHERE r."createdAt" >= ${reclamationsPeriod.start} AND r."createdAt" < ${reclamationsPeriod.endExclusive}
       ${reclamationWarehouseSql}) AS "reclamationCount",
@@ -335,22 +334,30 @@ export function buildDashboardDataQuery(input: DashboardDataInput, section: "all
 }
 
 export async function getDashboardData(input: DashboardDataInput): Promise<DashboardData> {
-  const [data] = await db.$queryRaw<(Omit<DashboardData, "returnSummary"> & { returnSummary: DashboardReturnEvidence })[]>(buildDashboardDataQuery(input));
+  const [data] = await db.$queryRaw<Omit<DashboardData, "returnSummary">[]>(buildDashboardDataQuery(input));
   if (!data) throw new Error("Podaci kontrolne table nisu učitani.");
-  return { ...data, returnSummary: summarizeDashboardReturns(data.returnSummary, input.warehouseId) };
+  return { ...data, returnSummary: await getDashboardReturnSummary(input) };
 }
 
 export type DashboardOperations = Omit<DashboardData, "visitRows" | "conversionRows">;
 export type DashboardAnalytics = Pick<DashboardData, "visitRows" | "conversionRows">;
 
 export async function getDashboardOperations(input: DashboardDataInput): Promise<DashboardOperations> {
-  const [data] = await db.$queryRaw<(Omit<DashboardOperations, "returnSummary"> & { returnSummary: DashboardReturnEvidence })[]>(buildDashboardDataQuery(input, "operations"));
+  const [data] = await db.$queryRaw<Omit<DashboardOperations, "returnSummary">[]>(buildDashboardDataQuery(input, "operations"));
   if (!data) throw new Error("Poslovni podaci kontrolne table nisu učitani.");
-  return { ...data, returnSummary: summarizeDashboardReturns(data.returnSummary, input.warehouseId) };
+  return { ...data, returnSummary: await getDashboardReturnSummary(input) };
 }
 
 export async function getDashboardAnalyticsData(input: DashboardDataInput): Promise<DashboardAnalytics> {
   const [data] = await db.$queryRaw<DashboardAnalytics[]>(buildDashboardDataQuery(input, "analytics"));
   if (!data) throw new Error("Analitika kontrolne table nije učitana.");
   return data;
+}
+
+async function getDashboardReturnSummary(input: DashboardDataInput): Promise<DashboardReturnSummary> {
+  const [result] = await db.$queryRaw<{ evidence: DashboardReturnEvidence }[]>(Prisma.sql`
+    SELECT ${dashboardReturnsQuery(input.now, input.warehouseId)} AS evidence
+  `);
+  if (!result) throw new Error("Podaci povrata nisu učitani.");
+  return summarizeDashboardReturns(result.evidence, input.warehouseId);
 }
