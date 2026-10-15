@@ -1,6 +1,6 @@
 import { ReclamationAddressFields } from "@/components/admin/reclamation-address-fields";
 import { reclamationAddressDefaults } from "@/lib/reclamation-address";
-import { saveReclamationAddress } from "@/lib/admin/reclamation-address.server";
+import { saveAddressAction } from "../address-action";
 import { saveWarehouseAction } from "../warehouse-action";
 import { isMyGlsReturn, myGlsReturnBooking, myGlsReturnStatusLabel } from "@/lib/mygls/return-booking";
 import { formatStreetAddress } from "@/lib/address/house-number";
@@ -72,22 +72,6 @@ function refresh(id: string) {
   revalidatePath("/admin/erp/preuzimanja/povrati");
   revalidatePath("/admin/erp/preuzimanja");
   revalidatePath("/nalog/reklamacije");
-}
-
-async function saveAddressAction(_state: AdminActionState, formData: FormData) {
-  "use server";
-  return withAdminState(
-    { allowed: ["OPS"], action: "reclamation.addressUpdate", entity: "Reclamation" },
-    async (_actorId, data: FormData) => {
-      const id = String(data.get("id") ?? "");
-      if (!id) return { ok: false as const, error: "Reklamacija nije izabrana." };
-      const fields = ["shipFirstName", "shipLastName", "shipPhone", "shipStreet", "shipHouseNumber", "shipCity", "shipPostalCode"];
-      const address = Object.fromEntries(fields.map(key => [key, String(data.get(key) ?? "")]));
-      const diff = await saveReclamationAddress(id, { ...address, shipXExpressTownId: Number(data.get("shipXExpressTownId")) || null });
-      refresh(id);
-      return { ok: true as const, entityId: id, diff, message: "Adresa reklamacije je sačuvana za preuzimanje i slanje zamene." };
-    },
-  )(formData);
 }
 
 async function saveDetailsAction(_state: AdminActionState, formData: FormData) {
