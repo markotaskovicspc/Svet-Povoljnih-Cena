@@ -3,10 +3,11 @@
 import { useRef, useState, useSyncExternalStore } from "react";
 
 /** Native file sharing exposes iOS Print even inside a home-screen web app. */
-export function LabelPdfActions({ href, filename, label = "Štampaj adresnice · PDF" }: {
+export function LabelPdfActions({ href, filename, label = "Štampaj adresnice · PDF", singleAction = false }: {
   href: string;
   filename: string;
   label?: string;
+  singleAction?: boolean;
 }) {
   const canShare = useSyncExternalStore(subscribe, supportsFileSharing, () => false);
   const [busy, setBusy] = useState(false);
@@ -50,7 +51,7 @@ export function LabelPdfActions({ href, filename, label = "Štampaj adresnice ·
   return <div className="space-y-2 print:hidden">
     <div className="flex flex-wrap gap-3">
       <a href={href} target="_blank" rel="noopener noreferrer" className="inline-flex rounded-lg bg-foreground px-4 py-3 text-background">{label}</a>
-      {canShare && <button type="button" disabled={busy} onClick={() => void sharePdf()} className="rounded-lg border px-4 py-3 disabled:opacity-50">{busy ? "Priprema PDF-a…" : "Podeli / štampaj PDF"}</button>}
+      {canShare && !singleAction && <button type="button" disabled={busy} onClick={() => void sharePdf()} className="rounded-lg border px-4 py-3 disabled:opacity-50">{busy ? "Priprema PDF-a…" : "Podeli / štampaj PDF"}</button>}
     </div>
     {message && <p role="status" className="text-sm">{message}</p>}
   </div>;

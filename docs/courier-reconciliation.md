@@ -30,3 +30,9 @@ X Express original je zasad slika; Marko potvrđuje da XLSX nema, a PDF dobija n
 Unit testovi pokrivaju tarifne granice, PDV, referencu/broj paketa, dupliranje, GLS namespace/breakdown, delimičnu/tačnu/nepoznatu uplatu. Dodatna lokalna provera originalnog XLSX (`COURIER_SOURCE_XLSX`) potvrđuje sve stavke i iznos fakture. Migracija proverena na privremenom PGlite-u. `npm run build` je obavezan.
 
 Migracija dodaje CourierStatement i CourierStatementLine, sa RLS i bez API grantova. Pri puštanju koristiti postojeći db:deploy koji završava sa db:harden. Produkcija nije menjana samim lokalnim razvojem/testom.
+
+## Razlikovanje nedostajućih izvora (16.10.2026)
+
+Red bez uvezene COD stavke prikazuje „Nije uvezena uplata“, bez izmišljene nule i bez statusa „Manjak“. Izričito uvezena nulta ili delimična uplata i dalje može biti manjak. Pošiljka bez očekivanog pouzeća prikazuje „Nema očekivanog pouzeća“. Nedostajuća specifikacija troška i nedostajući istorijski snapshot težine imaju odvojena objašnjenja; fakturisani trošak ostaje vidljiv i kada osnovna procena nije dostupna.
+
+Stariji GLS izveštaj koristi i težine iz sačuvanih picking redova vezanih za istu pošiljku i tačan broj paketa. Potrebna je potpuna, jednoznačna veza svih paketa i sačuvana COD raspodela; ne koristi se sadašnja težina artikla.
