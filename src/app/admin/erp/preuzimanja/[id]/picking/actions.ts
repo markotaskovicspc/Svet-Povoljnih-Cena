@@ -68,6 +68,8 @@ export async function finishPicking(input: z.infer<typeof finishSchema>) {
     }
     revalidatePath(`/admin/magacin/picking/${data.batchId}`);
     revalidatePath("/admin/magacin");
+    revalidatePath(`/admin/erp/preuzimanja/${data.batchId}`);
+    revalidatePath("/admin/erp/preuzimanja");
     return { ok: true, entityId: data.batchId, diff: { mode: data.mode, operationKey: notification.operationKey }, result: { labelUrl: data.mode === "labels" ? `/api/admin/erp/preuzimanja/${encodeURIComponent(data.batchId)}/labels` : null },
       message: data.mode === "labels" ? "Adresnice su spremne. PDF je u redu za slanje na magacin@svetpovoljnihcena.rs." : "Prijava manjka je sačuvana za slanje na podrska@svetpovoljnihcena.rs." };
   })();

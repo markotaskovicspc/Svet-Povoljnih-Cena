@@ -1,6 +1,8 @@
 import { beforeEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   globalOrders: vi.fn(),
+  batch: vi.fn(),
+  createShipment: vi.fn(),
   tx: {
     $queryRaw: vi.fn(),
     pickupBatch: { findUnique: vi.fn(), update: vi.fn() },
@@ -12,8 +14,11 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/db", () => ({ db: {
   $transaction: (run: (tx: typeof mocks.tx) => unknown) => run(mocks.tx),
   order: { findMany: mocks.globalOrders },
+  pickupBatch: { findUnique: mocks.batch },
 } }));
-import { confirmMyGlsPickupAnnouncement } from "@/lib/admin/pickup-batch.server";
+vi.mock("@/lib/admin/pickup-availability.server", () => ({ getPickupPostingAvailability: async () => ({ available: true, provider: "MYGLS" }) }));
+vi.mock("@/lib/courier", () => ({ createShipmentForOrder: mocks.createShipment }));
+import { prepareWarehousePickupLabels, confirmMyGlsPickupAnnouncement } from "@/lib/admin/pickup-batch.server";
 const booking = { channel: "MYGLS_API" as const, reference: "batch-79" };
 beforeEach(() => {
   vi.resetAllMocks();
@@ -47,4 +52,18 @@ it("does not duplicate finalization when the same booking was already recorded",
   await expect(confirmMyGlsPickupAnnouncement("b", "actor", booking)).resolves.toMatchObject({ orderCount: 1 });
   expect(mocks.tx.order.findMany).not.toHaveBeenCalled();
   expect(mocks.tx.orderStatusEvent.createMany).not.toHaveBeenCalled();
+});
+
+it("finalizes warehouse label retries instead of leaving an already accepted GLS batch as New", async () => {
+  mocks.batch.mockResolvedValue({ provider: 'MYGLS', labelsCreatedAt: new Date(), labelsCreationStartedAt: new Date(), _count: {lines:1}, lines:[{lineGroupKey:'order:o'}] });
+  await prepareWarehousePickupLabels('b','actor','a'.repeat(64));
+  expect(mocks.tx.pickupBatch.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({status:'BOOKED', externalBookingChannel:'MYGLS_API', externalBookingReference:'PrintLabels'}) }));
+  expect(mocks.createShipment).not.toHaveBeenCalled();
+});
+it("does not announce warehouse retries when a saved successful label is missing", async () => {
+  mocks.batch.mockResolvedValue({provider:'MYGLS',labelsCreatedAt:new Date(),_count:{lines:1},lines:[{lineGroupKey:'order:o'}]});
+  mocks.tx.shipment.findMany.mockResolvedValue([]);
+  await expect(prepareWarehousePickupLabels('b','actor','a'.repeat(64))).rejects.toThrow('Nedostaje uspešna');
+  expect(mocks.tx.pickupBatch.update).not.toHaveBeenCalled();
+  expect(mocks.createShipment).not.toHaveBeenCalled();
 });

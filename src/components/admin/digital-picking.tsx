@@ -143,7 +143,14 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
       const response = await finishPicking({ batchId: session.id, planHash: session.planHash, mode, packagesConfirmed: packagesConfirmed || Boolean(labelUrl) });
       setMessage(response.message);
       if (response.ok) {
-        if (mode === "labels") { setLabelUrl(response.result?.labelUrl ?? null); setSession(previous => ({ ...previous, editable: false, labelsReady: true })); }
+        if (mode === "labels") {
+          const href = response.result?.labelUrl;
+          setLabelUrl(href ?? null);
+          setSession(previous => ({ ...previous, editable: false, labelsReady: true }));
+          // Same-tab navigation also works when async preparation outlives the
+          // browser's popup activation. Back returns to the saved picking state.
+          if (href) window.location.assign(href);
+        }
         else setShortageReported(true);
       }
     } catch { setMessage("Potvrda nije stigla. Osvežite nalog pre ponovnog pokušaja."); }
@@ -180,10 +187,10 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
     {warehouseMode && (review.complete || review.reviewed || labelUrl) && <section className="space-y-3 rounded-xl border bg-muted/20 p-4 print:hidden">
       {review.complete && !labelUrl && <>
         <label className="flex items-center gap-3"><input type="checkbox" checked={packagesConfirmed} disabled={busy || !!retry || !session.labelsPreparationAllowed} onChange={event => setPackagesConfirmed(event.target.checked)} className="size-5" />Potvrđujem da su svi paketi spakovani i da su mere na nalogu tačne.</label>
-        <button type="button" disabled={busy || !!retry || !session.labelsPreparationAllowed || !packagesConfirmed} onClick={() => void finish("labels")} className="rounded-lg bg-foreground px-4 py-3 text-background">{busy ? "Priprema adresnica…" : "Štampaj adresnice"}</button>
+        <button type="button" disabled={busy || !!retry || !session.labelsPreparationAllowed || !packagesConfirmed} onClick={() => void finish("labels")} className="rounded-lg bg-foreground px-4 py-3 text-background">{busy ? "Priprema adresnica…" : "Kreiraj i otvori adresnice za štampu"}</button>
         <p className="text-sm text-muted-foreground">Kreiraju se kurirske adresnice; PDF se šalje na magacin@svetpovoljnihcena.rs.</p>
       </>}
-      {labelUrl && <LabelPdfActions href={labelUrl} filename={`${session.number}-adresnice.pdf`} />}
+      {labelUrl && <LabelPdfActions href={labelUrl} filename={`${session.number}-adresnice.pdf`} singleAction />}
       {review.reviewed && review.shortages.length > 0 && <>
         <h2 className="font-semibold">Nedostaje roba za {review.shortages.length} artikala</h2>
         <ul className="space-y-2 text-sm">{review.shortages.map((row, index) => <li key={`${row.sku}-${index}`}>{row.sku} · Odvojeno {row.picked} / {row.required} · Nedostaje {row.missing} kom. · Porudžbine: {row.orders.map(order => order.number).join(", ")}</li>)}</ul>

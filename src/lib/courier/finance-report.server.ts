@@ -1,34 +1,30 @@
+import { courierFinancePackages } from "./finance-packages";
+import { courierPaymentCoverage } from "./finance-coverage";
 import "server-only";
 import { db } from "@/lib/db";
 import { type ReportPeriod, dateInputInTimeZone } from "@/lib/admin/report-period";
-import { carrierSchema, courierBaseCost, codBalance, money } from "./finance";
+import { carrierSchema, courierBaseCost, money } from "./finance";
 import { expectedCod } from "./finance.server";
 
-function packages(raw: unknown, provider: string | null): { weightKg: number; codAmount?: number }[] {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
-  const record = raw as Record<string, unknown>;
-  if (Array.isArray(record.courierFinancePackages)) return record.courierFinancePackages as { weightKg: number; codAmount?: number }[];
-  if (provider === "X_EXPRESS" && Array.isArray(record.packages)) return record.packages.map(pkg => ({ weightKg: Number((pkg as { Mass?: unknown }).Mass) }));
-  return [];
-}
 export async function courierFinanceReport(period: ReportPeriod, filter?: string) {
   const provider = carrierSchema.safeParse(filter);
   const providerWhere = provider.success ? { provider: provider.data } : { provider: { in: ["MYGLS", "X_EXPRESS"] } };
-  const shipments = await db.shipment.findMany({ where: { ...providerWhere, status: { in: ["DELIVERED", "RETURNED"] }, OR: [{ deliveredAt: { gte: period.start, lt: period.endExclusive } }, { status: "RETURNED", lastStatusEventAt: { gte: period.start, lt: period.endExclusive } }, { events: { some: { status: { in: ["DELIVERED", "RETURNED"] }, occurredAt: { gte: period.start, lt: period.endExclusive } } } }] }, include: { order: { select: { id: true, number: true } }, courierStatementLines: true, events: { where: { status: { in: ["DELIVERED", "RETURNED"] } }, orderBy: { occurredAt: "asc" }, take: 1, select: { occurredAt: true } } }, take: 5001 });
+  const shipments = await db.shipment.findMany({ where: { ...providerWhere, status: { in: ["DELIVERED", "RETURNED"] }, OR: [{ deliveredAt: { gte: period.start, lt: period.endExclusive } }, { status: "RETURNED", lastStatusEventAt: { gte: period.start, lt: period.endExclusive } }, { events: { some: { status: { in: ["DELIVERED", "RETURNED"] }, occurredAt: { gte: period.start, lt: period.endExclusive } } } }] }, include: { pickupBatchLines: { select: { providerParcelNumber: true, weightKg: true } }, order: { select: { id: true, number: true } }, courierStatementLines: true, events: { where: { status: { in: ["DELIVERED", "RETURNED"] } }, orderBy: { occurredAt: "asc" }, take: 1, select: { occurredAt: true } } }, take: 5001 });
   if (shipments.length > 5000) throw new Error("Izaberite kraći period (najviše 5000 pošiljki).");
   const rows = shipments.filter(s => {
     const date = s.events[0]?.occurredAt ?? s.deliveredAt ?? (s.status === "RETURNED" ? s.lastStatusEventAt : null);
     return date && date >= period.start && date < period.endExclusive && s.syncError !== "MyGLS etiketa obrisana.";
   }).map(s => {
     const expected = expectedCod(s);
-    const submitted = packages(s.rawCreateResponse, s.provider);
+    const submitted = courierFinancePackages(s);
     const originalCod = expectedCod({ ...s, status: "CREATED" });
     const prices = submitted.map((pkg, index) => courierBaseCost(s.provider as "MYGLS" | "X_EXPRESS", pkg.weightKg, submitted.length, pkg.codAmount != null ? pkg.codAmount > 0 : index === 0 && (originalCod ?? 0) > 0));
     const base = submitted.length === s.packageCount && prices.every(price => price != null) ? money(prices.reduce<number>((sum, price) => sum + (price ?? 0), 0)) : null;
     const costs = s.courierStatementLines.filter(line => line.kind === "COST");
     const actual = costs.length ? money(costs.reduce((sum, line) => sum + Number(line.amountNet), 0)) : null;
-    const cod = money(s.courierStatementLines.filter(line => line.kind === "COD").reduce((sum, line) => sum + Number(line.amountGross), 0));
-    return { id: s.id, orderId: s.orderId, orderNumber: s.order.number, provider: s.provider, trackingNo: s.trackingNo, status: s.status, date: dateInputInTimeZone((s.events[0]?.occurredAt ?? s.deliveredAt ?? s.lastStatusEventAt)!), base, actual, difference: base != null && actual != null ? money(actual - base) : null, expectedCod: expected, cod, codStatus: codBalance(expected, cod).status };
+    const payment = courierPaymentCoverage(expected, s.courierStatementLines.filter(line => line.kind === "COD").map(line => Number(line.amountGross)));
+    const baseUnavailable = submitted.length !== s.packageCount ? "Nije sačuvana težina poslata kuriru za sve pakete" : "Sačuvana težina nije pokrivena osnovnim cenovnikom";
+    return { id: s.id, orderId: s.orderId, orderNumber: s.order.number, provider: s.provider, trackingNo: s.trackingNo, status: s.status, date: dateInputInTimeZone((s.events[0]?.occurredAt ?? s.deliveredAt ?? s.lastStatusEventAt)!), base, baseUnavailable, actual, difference: base != null && actual != null ? money(actual - base) : null, expectedCod: expected, ...payment };
   });
   // Statement dates are DATE columns; use UTC calendar bounds, not timezone midnight.
   const dateBounds = { gte: new Date(`${period.fromInput}T00:00:00Z`), lte: new Date(`${period.toInput}T00:00:00Z`) };

@@ -256,7 +256,7 @@ export async function prepareWarehousePickupLabels(batchId: string, actorId: str
   await assertActivePickupPackagesReady(batchId);
   const availability = await getPickupPostingAvailability(summary.provider);
   if (!availability.available) throw new Error(availability.reason);
-  if (availability.provider === "MYGLS") return createMyGlsLabelsForPickupBatch(batchId, actorId, undefined, planHash);
+  if (availability.provider === "MYGLS") return createMyGlsLabelsForPickupBatch(batchId, actorId, { channel: "MYGLS_API", reference: "PrintLabels" }, planHash);
   return createXExpressLabelsForPickupBatch(batchId, actorId, planHash);
 }
 

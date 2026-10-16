@@ -823,7 +823,9 @@ export default async function PickupBatchPage({
                 ? `Kurir je preuzeo sve pošiljke i pakete (${handoverProgress.totalGroups}/${handoverProgress.totalGroups} pošiljki · ${handoverProgress.totalPackages}/${handoverProgress.totalPackages} paketa).`
                 : handoverStatus === "Delimično preuzeto"
                   ? `Kurir je preuzeo ${handoverProgress.pickedUpGroups}/${handoverProgress.totalGroups} pošiljki i ${handoverProgress.pickedUpPackages}/${handoverProgress.totalPackages} paketa.`
-                  : "Adresnice su kreirane i nalog je proknjižen. Status preuzimanja će se automatski promeniti kada kurir evidentira da je preuzeo pošiljke."}
+                  : batch.status === "DRAFT"
+                    ? "Adresnice su pripremljene, ali nalog još nije proknjižen. Završite slanje kuriru."
+                    : "Adresnice su kreirane i nalog je proknjižen. Status preuzimanja će se automatski promeniti kada kurir evidentira da je preuzeo pošiljke."}
             </p>
           ) : previousPostingIssue && !postingBlockReason ? (
             <p
