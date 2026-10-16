@@ -1,5 +1,6 @@
 import { SERBIAN_PLACES } from "@/data/serbian-places";
 import { normalizeSerbianSearch } from "@/lib/serbian-search";
+import { beogradMunicipalitySeats } from "@/lib/x-express/location-search";
 import { exactTownAlias } from "@/lib/x-express/town-aliases";
 
 export type ImportTown = { id: number; name: string; displayName?: string | null; postalCode?: string | null };
@@ -60,6 +61,13 @@ export function searchImportTowns(towns: ImportTown[], city: string, postalCode 
   const key = importTownKey(city);
   const exact = candidates(towns, city);
   const matches = exact.length ? exact : towns.filter(t => keys(t).some(n => n.includes(key) || nearby(key, n)) || t.postalCode === city);
-  return matches.filter(t => /^\d{5}$/.test(t.postalCode ?? "")).slice(0, 20)
+  const municipalitySeats = beogradMunicipalitySeats(key);
+  const rank = (town: ImportTown) => {
+    if (importTownKey(town.name).startsWith(key)) return 0;
+    if (municipalitySeats.some(place => importTownKey(place.name) === importTownKey(town.name) && place.postalCode === town.postalCode)) return 1;
+    return keys(town).some(name => name.startsWith(key)) ? 2 : 3;
+  };
+  return matches.filter(t => /^\d{5}$/.test(t.postalCode ?? ""))
+    .sort((a, b) => rank(a) - rank(b)).slice(0, 20)
     .map(t => ({ name: t.name, postalCode: t.postalCode!, townId: t.id, displayName: t.displayName, autoResolved: false }));
 }

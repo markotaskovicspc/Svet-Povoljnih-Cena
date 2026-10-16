@@ -49,3 +49,19 @@ describe("whole dictionary order-import addresses", () => {
     expect(matchImportTown(towns, "Palilula")).toBeNull();
   });
 });
+
+
+it("shows all 17 Beograd municipalities before surrounding settlements", () => {
+  const settlements = Array.from({ length: 35 }, (_, i) => ({ id: 100 + i, name: `Naselje ${i}`, displayName: `Naselje ${i} (Beograd-Grocka) - 11306`, postalCode: "11306" }));
+  const central = ["Čukarica", "Novi Beograd", "Palilula", "Rakovica", "Savski Venac", "Stari Grad", "Voždovac", "Vračar", "Zemun", "Zvezdara"]
+    .map((name, i) => ({ id: i + 1, name: `Beograd (${name})`, postalCode: "11000" }));
+  const suburban = ["Barajevo", "Grocka", "Lazarevac", "Mladenovac", "Obrenovac", "Sopot", "Surčin"]
+    .map((name, i) => ({ id: i + 20, name, postalCode: ["11460", "11306", "11550", "11400", "11500", "11450", "11271"][i] }));
+  const unrelated = { id: 99, name: "Lazarevac", postalCode: "18420" };
+  const dictionary = [...settlements, unrelated, ...central, ...suburban];
+  for (const query of ["Beograd", "Београд", "BG"]) {
+    const result = searchImportTowns(dictionary, query);
+    expect(result.slice(0, 17).map(t => t.townId).sort((a,b) => a-b)).toEqual([...central, ...suburban].map(t => t.id).sort((a,b) => a-b));
+    expect(result.every(t => !t.autoResolved)).toBe(true);
+  }
+});

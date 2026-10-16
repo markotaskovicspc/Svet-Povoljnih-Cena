@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  preferExactCityMatches,
   resolveExactRemoteCity,
   type CityAutocompletePlace,
 } from "@/components/forms/city-autocomplete";
@@ -76,4 +77,17 @@ describe("visibleCityError", () => {
 it("does not auto-select an explicitly ambiguous or fuzzy server suggestion", () => {
   expect(resolveExactRemoteCity([{ name: "Novo Selo", postalCode: "18250", townId: 1, autoResolved: false }], "Novo Selo", "18250")).toBeNull();
   expect(resolveExactRemoteCity([{ name: "Novi Sad (Veternik)", postalCode: "21203", townId: 3, autoResolved: true }], "Veternik-NS")).toMatchObject({ townId: 3 });
+});
+
+
+describe("Beograd municipality suggestions", () => {
+  it("keeps all municipality choices alongside the exact city", () => {
+    const items = [
+      { name: "Beograd", postalCode: "11000" },
+      { name: "Beograd — Palilula", postalCode: "11060" },
+      { name: "Barajevo", postalCode: "11460" },
+    ];
+    expect(preferExactCityMatches(items, "Београд")).toEqual(items);
+    expect(preferExactCityMatches(items, "Barajevo")).toEqual([items[2]]);
+  });
 });

@@ -42,7 +42,8 @@ export function preferExactCityMatches(
   const exact = items.filter(
     (item) => normalizedPlaceName(item.name) === normalizedQuery,
   );
-  return exact.length ? exact : items;
+  // Keep the municipality choices when searching the whole city.
+  return normalizedQuery === "beograd" ? items : exact.length ? exact : items;
 }
 
 export function resolveExactRemoteCity(
@@ -146,7 +147,7 @@ export function CityAutocomplete({
         : []
       : remoteSuggestions.query === q && remoteSuggestions.items.length
         ? remoteSuggestions.items
-        : searchSerbianPlaces(value, 8);
+        : searchSerbianPlaces(value, 20);
     return preferExactCityMatches(items, q);
   }, [remoteSuggestions, strictRemote, value, minChars]);
 
@@ -159,7 +160,7 @@ export function CityAutocomplete({
     const timer = setTimeout(async () => {
       try {
         const res = await fetch(
-          `${locationEndpoint}${encodeURIComponent(q)}&limit=8&postalCode=${encodeURIComponent(postalCode ?? "")}`,
+          `${locationEndpoint}${encodeURIComponent(q)}&limit=20&postalCode=${encodeURIComponent(postalCode ?? "")}`,
           { signal: controller.signal },
         );
         if (!res.ok || controller.signal.aborted) return;

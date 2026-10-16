@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { xExpressTownSearchTerms, normalizedTownQuery } from "@/lib/x-express/location-search";
+import { xExpressTownSearchTerms, normalizedTownQuery, beogradMunicipalitySeats } from "@/lib/x-express/location-search";
 import { searchTownAliases } from "@/lib/x-express/town-aliases";
 
 export const runtime = "nodejs";
@@ -27,11 +27,12 @@ export async function GET(req: Request) {
   const orderBy = [{ priority: "asc" as const }, { name: "asc" as const }];
 
   const key = normalizedTownQuery(q);
+  const municipalitySeats = beogradMunicipalitySeats(q);
   // Match the entire active courier dictionary, not just the curated list of
   // cities. Parameterized SQL keeps customer text out of SQL syntax; position
   // also treats percent/underscore as literal characters, not wildcards.
   const foldedName = Prisma.sql`replace(replace(translate(lower(name), 'čćšž', 'ccsz'), 'đ', 'd'), 'dj', 'd')`;
-  const [exactNameItems, foldedItems, exactPostalItems, startsWithItems, containsItems] =
+  const [exactNameItems, foldedItems, exactPostalItems, startsWithItems, containsItems, municipalityItems] =
     await Promise.all([
       db.xExpressTown.findMany({
         where: {
@@ -89,6 +90,20 @@ export async function GET(req: Request) {
         take: limit,
         select,
       }),
+      municipalitySeats.length
+        ? db.xExpressTown.findMany({
+            where: {
+              active: true,
+              OR: municipalitySeats.map(place => ({
+                name: { equals: place.name, mode: "insensitive" as const },
+                postalCode: place.postalCode,
+              })),
+            },
+            orderBy,
+            take: municipalitySeats.length,
+            select,
+          })
+        : Promise.resolve([]),
     ]);
 
   // Some postal localities are routed under a municipality in the courier
@@ -108,7 +123,7 @@ export async function GET(req: Request) {
     });
     if (aliasItems.length) return NextResponse.json({items: aliasItems});
   }
-  const rankedItems = [...foldedItems, ...startsWithItems, ...containsItems];
+  const rankedItems = [...municipalityItems, ...foldedItems, ...startsWithItems, ...containsItems];
   const items = rankedItems
     .filter(
       (item, index) =>

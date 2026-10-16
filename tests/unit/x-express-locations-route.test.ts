@@ -123,3 +123,24 @@ describe('entire courier dictionary without Serbian diacritics',()=>{
   const sql=queryRaw.mock.calls[0][0];expect(sql.text).toContain('position(');expect(sql.text).not.toContain("OR 1=1 --");expect(sql.values).toContain("%_' or 1=1 --");
  });
 });
+
+
+describe("all Beograd municipalities", () => {
+  it("keeps all 17 ahead of unrelated towns and postcode duplicates", async () => {
+    const central = ["Čukarica", "Novi Beograd", "Palilula", "Rakovica", "Savski Venac", "Stari Grad", "Voždovac", "Vračar", "Zemun", "Zvezdara"]
+      .map((name, i) => ({ id: i + 1, name: `Beograd (${name})`, postalCode: "11000", displayName: null, municipalityId: i + 1 }));
+    const suburban = ["Barajevo", "Grocka", "Lazarevac", "Mladenovac", "Obrenovac", "Sopot", "Surčin"]
+      .map((name, i) => ({ id: i + 20, name, postalCode: ["11460", "11306", "11550", "11400", "11500", "11450", "11271"][i], displayName: null, municipalityId: i + 20 }));
+    const unrelated = Array.from({ length: 20 }, (_, i) => ({ id: 100 + i, name: "Lazarevac", postalCode: "18420", displayName: null, municipalityId: 100 + i }));
+    queryRaw.mockResolvedValue(central);
+    findMany.mockReset().mockResolvedValue([]);
+    findMany.mockResolvedValueOnce([]).mockResolvedValueOnce(unrelated).mockResolvedValueOnce(unrelated).mockResolvedValueOnce(suburban);
+    const result = await (await GET(new Request("http://localhost/api/x-express/locations?q=Beograd&limit=20"))).json();
+    for (const town of [...central, ...suburban]) {
+      expect(result.items).toContainEqual(expect.objectContaining({ townId: town.id, name: town.name }));
+    }
+    expect(findMany.mock.calls[3][0].where).toMatchObject({ active: true, OR: expect.arrayContaining([
+      { name: { equals: "Lazarevac", mode: "insensitive" }, postalCode: "11550" },
+    ]) });
+  });
+});
