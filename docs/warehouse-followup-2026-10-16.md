@@ -17,7 +17,7 @@
 - e4b554af, 14.10.2026. 21:01: uvedeni PDF adresnica na magacin@svetpovoljnihcena.rs i dugme „Proveri slanje mejla“.
 - 57548066, 15.10.2026. 13:52: uklonjeno samo dugme za proveru, automatski red WAREHOUSE_PICKING_EMAIL ostao aktivan.
 - Produkcijska evidencija: PRE-2026-0079 isporučen 15.10; PRE-2026-0081 poslat 16.10. u 12:45, zatim povratna greška sa budo350.adriahost.com (Transient/General, SMTP 5.0.0). Evidencija ne daje precizniji uzrok; zahteva proveru prijemnog mail servera.
-- U pregledanoj istoriji nema zasebnog uklonjenog mejla magacinu za povrate. Novi okidač za povrate nije deo ove izmene dok se zahtev ne razjasni.
+- U pregledanoj istoriji nema zasebnog uklonjenog mejla magacinu za povrate. Marko je 16.10. u 14:42 potvrdio da misli na jutarnji posao u 04:00. Taj posao od uvođenja 14.10. priprema naloge bez slanja mejla; dopuna uvodi jutarnji pregled kroz trajni red. Korisnik je potvrdio da je inbox pun i da će ga oni osloboditi.
 
 ## Objava i oporavak
 

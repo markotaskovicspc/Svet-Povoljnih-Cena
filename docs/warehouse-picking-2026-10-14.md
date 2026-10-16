@@ -16,6 +16,8 @@ Zahtevi iz klijentovog dokumenta `Document (1).docx` i tri ugrađene slike:
 
 Za MYGLS i X_EXPRESS redom koristi postojeće `createPickupBatch` / `loadEligibleOrders`: otvoreni izmenjivi draft se ponovo koristi, novi podobni paketi dopunjavaju nalog, a postojeće zaključavanje kolekcije sprečava duple pakete. Koristi aktivnog OPS/SUPER administratora za postojeću evidenciju događaja. Ne kreira adresnice, ne najavljuje kurirsko preuzimanje i ne šalje robu u 04:00. Ostaju postojeće provere kanala, magacina, rezervacija, uplata, otkazanih i već obrađenih porudžbina.
 
+Od dopune 16.10.2026, nakon uspešne pripreme svaki kurir dobija dnevni `WAREHOUSE_MORNING_EMAIL` posao. Mejl na `magacin@svetpovoljnihcena.rs` sadrži broj naloga, artikle/količine/pozicije i zaštićene linkove za picking i prijem povrata. To je jutarnji radni pregled; PDF kurirskih adresnica i dalje nastaje tek posle potvrđenog pakovanja. Red poslova i email tracking koriste isti stabilni ključ datuma u Beogradu i kurira, pa ponovljeni cron ne šalje duplikate. Privremene greške slanja ponavlja postojeći worker na pet minuta. Ako je sanduče puno, prijemni server može odbiti mejl i nakon uspešnog slanja.
+
 Postojeća zaštita napretka se zadržava: promena sadržaja naloga menja planHash i traži novu fizičku proveru robe; promene picking pozicija same po sebi ne poništavaju napredak.
 
 ## Provere
