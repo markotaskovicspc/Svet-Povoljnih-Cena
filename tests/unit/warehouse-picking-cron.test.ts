@@ -1,8 +1,9 @@
 import { beforeEach, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ auth: vi.fn(), actor: vi.fn(), create: vi.fn(), load: vi.fn() }));
+const mocks = vi.hoisted(() => ({ auth: vi.fn(), actor: vi.fn(), create: vi.fn(), load: vi.fn(), queue: vi.fn() }));
 vi.mock("@/lib/db", () => ({ db: { adminUser: { findFirst: mocks.actor } } }));
 vi.mock("@/lib/security/bearer", () => ({ isAuthorizedCronRequest: mocks.auth }));
 vi.mock("@/lib/admin/pickup-batch.server", () => ({ createPickupBatch: mocks.create, loadEligibleOrders: mocks.load }));
+vi.mock("@/lib/background-jobs", () => ({ enqueueBackgroundJob: mocks.queue }));
 import { GET } from "@/app/api/cron/warehouse-picking/route";
 beforeEach(() => { vi.useRealTimers(); vi.clearAllMocks(); mocks.auth.mockReturnValue(true); mocks.actor.mockResolvedValue({ id: "ops" }); mocks.create.mockImplementation(async (provider: string) => ({ id: provider })); mocks.load.mockResolvedValue({ added: 1 }); });
 it("requires cron authorization before doing any work", async () => {
@@ -28,4 +29,23 @@ it("continues with the other courier when one preparation fails", async () => {
   const logger = vi.spyOn(console, "error").mockImplementation(() => {});
   expect((await GET(new Request("https://example.test/cron"))).status).toBe(503);
   expect(mocks.load).toHaveBeenCalledWith("X_EXPRESS", "ops"); logger.mockRestore(); vi.useRealTimers();
+});
+
+it("queues one morning mail per provider/date after preparation, with stable retry keys", async () => {
+  vi.setSystemTime(new Date("2026-10-17T02:00:00Z"));
+  await GET(new Request("https://example.test/cron"));
+  await GET(new Request("https://example.test/cron"));
+  expect(mocks.queue.mock.calls[0][0]).toEqual(mocks.queue.mock.calls[2][0]);
+  expect(mocks.queue.mock.calls[1][0]).toEqual(mocks.queue.mock.calls[3][0]);
+  expect(mocks.queue.mock.calls[0][0]).toEqual({ kind: "WAREHOUSE_MORNING_EMAIL", payload: { batchId: "MYGLS", provider: "MYGLS", date: "2026-10-17" }, idempotencyKey: "warehouse-morning:2026-10-17:MYGLS" });
+  expect(mocks.load.mock.invocationCallOrder[0]).toBeLessThan(mocks.queue.mock.invocationCallOrder[0]);
+  vi.useRealTimers();
+});
+it("reports mail queue failure so preparation cannot appear fully successful", async () => {
+  vi.setSystemTime(new Date("2026-12-01T03:00:00Z"));
+  mocks.queue.mockRejectedValueOnce(new Error("queue unavailable"));
+  const logger = vi.spyOn(console, "error").mockImplementation(() => {});
+  expect((await GET(new Request("https://example.test/cron"))).status).toBe(503);
+  expect(mocks.queue).toHaveBeenCalledTimes(2);
+  logger.mockRestore(); vi.useRealTimers();
 });

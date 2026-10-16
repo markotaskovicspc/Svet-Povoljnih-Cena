@@ -15,6 +15,7 @@ import {
 } from "@/lib/channel-availability.server";
 
 const schemas = {
+  WAREHOUSE_MORNING_EMAIL: z.object({ batchId: z.string().min(1), provider: z.enum(["MYGLS", "X_EXPRESS"]), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }),
   WAREHOUSE_PICKING_EMAIL: pickingNotificationSchema,
   ADMIN_TRAFFIC_PUSH_DEVICE: z.object({ subscriptionId: z.string().min(1), count: z.number().int().min(20), measuredAt: z.string().datetime() }),
   ADMIN_ORDER_PUSH: z.object({ orderId: z.string().min(1) }),
@@ -520,6 +521,11 @@ async function dispatchJob(job: JobRow) {
   const payload = schemas[kind].parse(job.payload);
 
   switch (kind) {
+    case "WAREHOUSE_MORNING_EMAIL": {
+      const { sendWarehouseMorningEmail } = await import("@/lib/admin/warehouse-morning-email.server");
+      await sendWarehouseMorningEmail(schemas.WAREHOUSE_MORNING_EMAIL.parse(payload));
+      return;
+    }
     case "SEF_INBOX_DISCOVER": {
       const { discoverSefInvoices } = await import("@/lib/sef/documents.server");
       const args = payload as z.infer<typeof schemas.SEF_INBOX_DISCOVER>;
