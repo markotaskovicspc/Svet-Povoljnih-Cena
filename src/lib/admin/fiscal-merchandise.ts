@@ -6,9 +6,12 @@ export function isFiscalService(sku:string,name:string) {
   const fold=(text:string)=>text.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase();
   return serviceSku.test(fold(sku)) || /^(?:DOSTAVA|POSTARINA|TROSKOVI DOSTAVE|SHIPPING|DELIVERY|MONTAZA|ASSEMBLY)(?:$|\s)/.test(fold(name));
 }
-export function ananasMerchandiseItems(items:unknown) {
+export function ananasFiscalItems(items:unknown) {
   if(!Array.isArray(items))return [];
-  return items.flatMap(value=>{const parsed=itemSchema.safeParse(value);return parsed.success&&!isFiscalService(parsed.data.sku,parsed.data.name)?[parsed.data]:[];});
+  return items.flatMap(value=>{const parsed=itemSchema.safeParse(value);return parsed.success?[parsed.data]:[];});
+}
+export function ananasMerchandiseItems(items:unknown) {
+  return ananasFiscalItems(items).filter(item=>!isFiscalService(item.sku,item.name));
 }
 // serviceGross includes allocated services inside a merchandise fiscal line.
 export function fiscalMerchandiseAmounts(line:{qty:number,totalGross:number,totalNet:number,serviceGross:number,vatRate:number}) {
