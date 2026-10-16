@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { derivePhysicalPackages } from "@/lib/courier/packages";
 import type { MyGlsConfig } from "@/lib/mygls/config";
 import {
   buildMyGlsParcelForOrder,
@@ -527,4 +528,25 @@ describe("MyGLS postal code preflight", () => {
     expect(() => buildMyGlsParcelsForOrder({cfg: {...config, pickup: {...config.pickup, postalCode: ""}}, order, packages, purpose: "RECLAMATION_RETURN"}))
       .toThrow("Adresa magacina: neispravan poštanski broj");
   });
+});
+
+it("books the legacy mixed order as four ordinary parcels and one shared Pompea parcel with one COD", () => {
+  const items = [
+    ...["Kofer TRAVEL MATE", "Set za čišćenje POWER MOP", "Super secko TURBO CUT", "Usisivač CLEAN HOME"].map((name, i) => ({
+      id: `ordinary-${i}`, sku: `ordinary-${i}`, name, qty: 1, unitPriceSale: 500,
+    })),
+    ...["LIGHT MASSAGE 20 DEN", "NANOTECH 40 DEN", "NANOTECH 70 DEN"].map((name, i) => ({
+      id: `pompea-${i}`, sku: ["110122", "110126", "110129"][i], name: `Ženske čarape ${name}`, qty: 1,
+      supplierName: "Modital doo", collectionName: null, product: null, unitPriceSale: 100,
+    })),
+  ];
+  const packages = derivePhysicalPackages(items).map(pkg => ({ ...pkg, weightKg: 1, widthCm: 25, depthCm: 20, heightCm: 10 }));
+  const parcels = buildMyGlsParcelsForOrder({ cfg: config, order: { ...order, total: 6192, items }, packages });
+  expect(parcels).toHaveLength(5);
+  expect(parcels.every(parcel => parcel.Count === 1)).toBe(true);
+  expect(parcels.map(parcel => parcel.CODAmount)).toEqual([6192, 0, 0, 0, 0]);
+  expect(packages[4].packedItems?.map(item => [item.orderItemId, item.quantity])).toEqual([
+    ["pompea-0", 1], ["pompea-1", 1], ["pompea-2", 1],
+  ]);
+  expect(parcels[4].Content).toContain("LIGHT MASSAGE");
 });

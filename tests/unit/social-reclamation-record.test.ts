@@ -17,7 +17,7 @@ beforeEach(() => {
   m.tx.mockImplementation(async fn => fn({ $queryRaw: m.raw, reclamation: { findUnique: m.lockedExisting, findFirst: m.open, findMany: async () => [], create: m.create } }));
 });
 afterEach(() => vi.unstubAllEnvs());
-it.each(["KVAR", "FIZICKO_OSTECENJE", "POGRESNO_ISPORUCENO", "NIJE_ISPORUCENO"] as const)("validates and saves problem type %s and the requested remedy through a staff link", async (type) => {
+it.each(["KVAR", "FIZICKO_OSTECENJE", "POGRESNO_ISPORUCENO", "NIJE_ISPORUCENO", "ODUSTANAK"] as const)("validates and saves problem type %s and the requested remedy through a staff link", async (type) => {
   const { token } = createReclamationLinkToken(order.number);
   const parsed = createReclamationSchema.parse({ ...input, type, request: "ZAMENA" });
   expect(await createGuestReclamation(parsed, token)).toMatchObject({ ok: true });

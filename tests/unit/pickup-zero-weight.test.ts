@@ -105,3 +105,27 @@ it("persists City Line gross weight for each pair and the odd remaining chair", 
   expect(lines.map((line: { packedQuantity: number; weightKg: number }) => [line.packedQuantity, line.weightKg])).toEqual([[2, 7], [2, 7], [1, 3.5]]);
   expect(lines.every((line: object) => !("warehouseReadyAt" in line))).toBe(true);
 });
+
+it("loads legacy Pompea into one parcel per buyer in a mixed GLS picking", async () => {
+  mocks.batch.mockResolvedValue({ id: "batch", number: "PRE-test", status: "DRAFT", provider: "MYGLS" });
+  mocks.query.mockReset().mockResolvedValueOnce([]).mockResolvedValueOnce(["first", "second"].map(id => ({ id, number: id, paymentMethod: "POUZECE_GOTOVINA" })));
+  mocks.items.mockResolvedValue(["first", "second"].flatMap(orderId => [
+    { id: `${orderId}-ordinary`, orderId, sku: "ORDINARY", name: "Kofer", qty: 1, warehouseReservedQty: 1, withAssembly: false,
+      product: { grossWeightKg: 2, unitPackWidthCm: 70, unitPackDepthCm: 30, unitPackHeightCm: 20 } },
+    ...["110122", "110126", "110129"].map(sku => ({
+      id: `${orderId}-${sku}`, orderId, sku, name: "Ženske čarape", qty: 2, warehouseReservedQty: 2,
+      supplierName: "Modital doo", collectionName: null, product: null, unitPriceSale: 100, withAssembly: false,
+    })),
+  ]));
+  expect(await loadEligibleOrders("batch", "actor", ["first", "second"])).toMatchObject({ orderCount: 2, lineCount: 4 });
+  const saved = mocks.insert.mock.calls[0][0].data;
+  for (const orderId of ["first", "second"]) {
+    const lines = saved.filter((line: { orderId: string }) => line.orderId === orderId);
+    expect(lines).toHaveLength(2);
+    const shared = lines.find((line: { packedItems?: unknown }) => line.packedItems);
+    expect(shared).toMatchObject({ quantity: 6, packedQuantity: 6, weightKg: null, widthCm: null });
+    expect(shared.packedItems.map((item: { orderItemId: string }) => item.orderItemId)).toEqual([
+      `${orderId}-110122`, `${orderId}-110126`, `${orderId}-110129`,
+    ]);
+  }
+});

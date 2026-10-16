@@ -1,0 +1,1 @@
+ALTER TYPE "ReclamationType" ADD VALUE 'ODUSTANAK';

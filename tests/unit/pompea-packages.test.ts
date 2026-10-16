@@ -38,6 +38,15 @@ describe("one Pompea parcel per order", () => {
     expect(isPompeaItem({ ...ordinary, product: { collection: { name: "Pompea-Mimi" } } })).toBe(true);
     expect(isPompeaItem({ ...ordinary, name: "POMPEANO" })).toBe(false);
   });
+  it("recognizes the unbranded legacy catalogue, including missing EANs and deleted product records", () => {
+    const legacy = { id: "legacy", sku: "110129", name: "Ženske čarape NANOTECH 70 DEN, veličina M", qty: 1 };
+    expect(isPompeaItem({ ...legacy, product: { barcode: "8056777584948" } })).toBe(true);
+    expect(isPompeaItem({ ...legacy, supplierName: "Modital doo", product: null })).toBe(true);
+    expect(isPompeaItem({ ...legacy, sku: "1129", product: { supplier: { name: "MODITAL D.O.O." } } })).toBe(true);
+    expect(isPompeaItem({ ...legacy, supplierName: "Drugi dobavljač" })).toBe(false);
+    expect(isPompeaItem({ ...legacy, sku: "OTHER", supplierName: "Modital doo" })).toBe(false);
+    expect(isPompeaItem({ ...legacy, product: { barcode: "unknown" } })).toBe(false);
+  });
   it("requires measured outer dimensions before booking, while permitting preliminary picking", () => {
     const packages = derivePhysicalPackages([item("A", 2), item("B", 3)]);
     expect(resolveCourierProvider({ shippingMethod: "KURIR", items: packages.map(physicalPackageRouteItem) })).toEqual({ kind: "single", provider: "X_EXPRESS" });

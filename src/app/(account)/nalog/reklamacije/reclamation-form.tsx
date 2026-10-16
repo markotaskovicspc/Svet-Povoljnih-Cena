@@ -421,6 +421,7 @@ export function ReclamationForm({
             <option value="FIZICKO_OSTECENJE">Fizičko oštećenje</option><option value="KVAR">Kvar</option>
             <option value="POGRESNO_ISPORUCENO">Pogrešno isporučeno</option>
             <option value="NIJE_ISPORUCENO">Nije isporučeno</option>
+            <option value="ODUSTANAK">Odustanak</option>
           </select>
         </div>
         <div className="grid gap-2">

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
 
@@ -9,7 +10,7 @@ vi.mock("@/lib/api/uploads", () => ({ signReclamationPhotoUrls: mocks.sign }));
 vi.mock("@/lib/api/reclamations", () => ({}));
 vi.mock("@/components/admin/erp-grid", () => ({ ErpGrid: () => null }));
 vi.mock("@/components/admin/reclamation-order-search", () => ({ ReclamationOrderFields: () => null }));
-vi.mock("@/components/admin/action-form", () => ({ AdminActionForm: () => null }));
+vi.mock("@/components/admin/action-form", () => ({ AdminActionForm: ({ children }: { children: ReactNode }) => <form>{children}</form> }));
 vi.mock("next/image", () => ({ default: () => <span>Fotografija</span> }));
 
 import ReclamationsPage from "@/app/admin/erp/reklamacije-dnevnik/page";
@@ -25,6 +26,7 @@ it("keeps visible cards, private photos, and detail links without loading hidden
   mocks.sign.mockResolvedValue(new Map([["private-photo", "https://example.test/signed-photo"]]));
   const html = renderToStaticMarkup(await ReclamationsPage({ searchParams: Promise.resolve({ status: "PRIMLJENO" }) }));
   expect(html).toContain("Opis reklamacije");
+  expect(html).toContain('<option value="ODUSTANAK">Odustanak</option>');
   expect(html).toContain('/admin/erp/reklamacije-dnevnik/claim');
   expect(html).toContain("https://example.test/signed-photo");
   expect(html).not.toContain("Sačuvaj magacin");

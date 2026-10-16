@@ -52,6 +52,7 @@ const TYPE_LABELS: Record<string, string> = {
   KVAR: "Kvar",
   POGRESNO_ISPORUCENO: "Pogrešno isporučeno",
   NIJE_ISPORUCENO: "Nije isporučeno",
+  ODUSTANAK: "Odustanak",
   NIJE_UNETO: "Nije uneto",
 };
 

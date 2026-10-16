@@ -3356,6 +3356,7 @@ enum ReclamationType {
   KVAR
   POGRESNO_ISPORUCENO
   NIJE_ISPORUCENO
+  ODUSTANAK
 }
 
 enum ReclamationRequest {

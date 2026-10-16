@@ -342,10 +342,28 @@ function positiveInteger(value: unknown) {
   return number != null && Number.isInteger(number) ? number : null;
 }
 
-/** Brand matching also covers the current Modital catalogue without grouping other brands. */
+// POMPEA MIMI in src/data/svet-akcija-products.json. The legacy import lost
+// collectionId and omitted the brand from names. Current SKUs were verified
+// against that catalogue by EAN; keep the SKU fallback scoped to Modital.
+const LEGACY_POMPEA_SKUS = new Set([
+  "1120", "1121", "1122", "1123", "1124", "1125", "1126", "1127", "1128", "1129", "1130",
+  "110120", "110121", "110122", "110123", "110124", "110125", "110126", "110127", "110128", "110129", "110130",
+]);
+const POMPEA_BARCODES = new Set([
+  "8032844707502", "8032844707564", "8034112993242", "8034112993303", "8056777156923",
+  "8056777584825", "8056777584856", "8056777584887", "8056777584917", "8056777584948", "8056777584979",
+]);
+
+/** Recognize explicit brands and legacy articles without grouping other Modital brands. */
 export function isPompeaItem(item: PackageSourceItem): boolean {
-  return [item.product?.supplier?.name, item.supplierName, item.product?.collection?.name,
-    item.collectionName, item.product?.name, item.name].some(value => /^pompea(?:\b|_)/iu.test(value?.trim() ?? ""));
+  if ([item.product?.supplier?.name, item.supplierName, item.product?.collection?.name,
+    item.collectionName, item.product?.name, item.name].some(value => /^pompea(?:\b|_)/iu.test(value?.trim() ?? ""))) {
+    return true;
+  }
+  if (POMPEA_BARCODES.has(item.product?.barcode?.replace(/\s/g, "") ?? "")) return true;
+  const modital = [item.product?.supplier?.name, item.supplierName]
+    .some(value => /^(?:modital|moditaldoo)$/iu.test(value?.replace(/[\s.]/g, "") ?? ""));
+  return modital && LEGACY_POMPEA_SKUS.has(item.sku?.trim() ?? "");
 }
 
 function buildPompeaParcel(items: readonly PackageSourceItem[], packageNo: number): PhysicalPackage {
