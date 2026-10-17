@@ -4,7 +4,7 @@ const dayFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Belgra
 const dayAt = (time: number) => { const parts = dayFormatter.formatToParts(new Date(time)); return ['year','month','day'].map(type => parts.find(part => part.type === type)!.value).join('-'); };
 export type StockPoint = { at: string; qty: number; balance: number | null };
 export type ProductSale = { day: string; at?: string | null; qty: number; revenue: number; cogs: number | null };
-export type PerformanceInput = HistoricalCosts & { id: string; sku: string; name: string; stock: number; baseline: number | null; latestBalance: number | null; movements: StockPoint[]; sales: ProductSale[] };
+export type PerformanceInput = HistoricalCosts & { id: string; sku: string; name: string; stock: number; baseline: number | null; latestBalance: number | null; stockHistoryConsistent?: boolean | null; movements: StockPoint[]; sales: ProductSale[] };
 export type ProductPerformance = ReturnType<typeof calculateProductPerformance>;
 
 export function calculateProductPerformance(product: PerformanceInput, period: ReportPeriod, now: Date) {
@@ -13,7 +13,7 @@ export function calculateProductPerformance(product: PerformanceInput, period: R
   let at = start, balance = product.baseline, weightedQty = 0, knownMs = 0;
   let weightedValue = 0, valuedMs = 0;
   const valuationSources = new Set<string>();
-  let consistent = product.latestBalance !== null && product.latestBalance === product.stock;
+  let consistent = product.stockHistoryConsistent !== false && product.latestBalance !== null && product.latestBalance === product.stock;
   const available = new Set<string>(), unknown = new Set<string>();
   const visitSegment = (until: number) => {
     if (until <= at) return;

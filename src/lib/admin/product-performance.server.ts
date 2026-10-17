@@ -7,7 +7,39 @@ import { calculateProductPerformance, type PerformanceInput } from './product-pe
 export function productPerformanceQuery(period: ReportPeriod, now = new Date()) {
   // One database snapshot: fiscal merchandise from WEB only; stock history covers owned warehouses.
   return Prisma.sql`
-    WITH sales AS (
+    WITH stock_entries AS (
+      SELECT m.id, m."productId", m."createdAt", m.qty, m."balanceAfterTotal", m.kind, m."idempotencyKey",
+        CASE WHEN m."idempotencyKey" LIKE 'ananas-fiscal:%'
+          THEN a."inventoryPostedAt" ELSE m."createdAt" END AS "recordedAt"
+      FROM "StockMovement" m
+      LEFT JOIN "AnanasDocument" a ON m."idempotencyKey" LIKE 'ananas-fiscal:%'
+        AND a.id = split_part(m."idempotencyKey", ':', 2)
+      WHERE m."productId" IS NOT NULL AND m."createdAt" <= ${now}
+    ), posting_stock AS (
+      SELECT m.*,
+        FIRST_VALUE(m."balanceAfterTotal" - m.qty) OVER posting AS "openingBalance",
+        FIRST_VALUE(m."recordedAt") OVER posting AS "knownFrom",
+        SUM(m.qty) OVER posting AS "postedDelta"
+      FROM stock_entries m
+      WINDOW posting AS (PARTITION BY m."productId" ORDER BY m."recordedAt", m.id
+        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+    ), stock_integrity AS (
+      SELECT "productId",
+        BOOL_OR(COALESCE("idempotencyKey" LIKE 'ananas-fiscal:%', false)) AS "hasAnanas",
+        BOOL_AND(COALESCE("recordedAt" IS NOT NULL AND "recordedAt" <= ${now}
+          AND "balanceAfterTotal" = "openingBalance" + "postedDelta", false)) AS consistent
+      FROM posting_stock GROUP BY "productId"
+    ), effective_stock AS (
+      -- Snapshots belong to posting time. Replay deltas at document time only
+      -- after the complete posting ledger passes reconciliation; never rewrite it.
+      SELECT m.*, i."hasAnanas", i.consistent AS "postingConsistent",
+        (CASE WHEN i."hasAnanas" AND i.consistent AND m."createdAt" < m."knownFrom" THEN NULL
+          WHEN i."hasAnanas" AND i.consistent THEN
+          m."openingBalance" + SUM(m.qty) OVER (PARTITION BY m."productId"
+            ORDER BY m."createdAt", m.id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+          ELSE m."balanceAfterTotal" END)::int AS "historyBalance"
+      FROM posting_stock m JOIN stock_integrity i ON i."productId" = m."productId"
+    ), sales AS (
       SELECT l."productId", to_char(f."issuedAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Belgrade', 'YYYY-MM-DD') AS day,
         (CASE WHEN f.kind = 'REFUND' THEN -l.qty ELSE l.qty END)::int AS qty,
         ((CASE WHEN f.kind = 'REFUND' THEN -1 ELSE 1 END) * GREATEST(0, l."totalGross" - l."serviceGross"))::double precision AS revenue,
@@ -21,9 +53,14 @@ export function productPerformanceQuery(period: ReportPeriod, now = new Date()) 
         AND l."productId" IS NOT NULL AND f."issuedAt" >= ${period.start}
         AND f."issuedAt" < ${period.endExclusive} AND f."issuedAt" <= ${now}
     ), movements AS (
-      SELECT m."productId", json_agg(json_build_object('at', m."createdAt" AT TIME ZONE 'UTC', 'qty', m.qty, 'balance', m."balanceAfterTotal") ORDER BY m."createdAt", m.id) AS points
-      FROM "StockMovement" m WHERE m."createdAt" >= ${period.start} AND m."createdAt" < ${period.endExclusive} AND m."createdAt" <= ${now}
-      GROUP BY m."productId"
+      SELECT m."productId",
+        (array_agg(m."historyBalance" ORDER BY m."createdAt" DESC, m.id DESC)
+          FILTER (WHERE m."createdAt" < ${period.start}))[1] AS baseline,
+        (array_agg(m."historyBalance" ORDER BY m."createdAt" DESC, m.id DESC))[1] AS "latestBalance",
+        BOOL_AND(NOT m."hasAnanas" OR m."postingConsistent") AS "stockHistoryConsistent",
+        json_agg(json_build_object('at', m."createdAt" AT TIME ZONE 'UTC', 'qty', m.qty, 'balance', m."historyBalance") ORDER BY m."createdAt", m.id)
+          FILTER (WHERE m."createdAt" >= ${period.start} AND m."createdAt" < ${period.endExclusive}) AS points
+      FROM effective_stock m GROUP BY m."productId"
     ), booked_costs AS (
       SELECT po.id, po."cogsBookedAt", before->>'productId' AS "productId",
         ROUND(CASE WHEN (before->>'stock')::numeric > 0 AND before->>'cogs' IS NOT NULL
@@ -51,11 +88,11 @@ export function productPerformanceQuery(period: ReportPeriod, now = new Date()) 
         AND EXISTS (SELECT 1 FROM "InboundInvoice" inv WHERE inv."purchaseOrderId" = po.id AND inv.status = 'POSTED')
     ), receipt_costs AS (
       SELECT m."productId", MIN(m."createdAt") AS at, SUM(m.qty)::double precision AS "incomingQty",
-        (array_agg(m."balanceAfterTotal" - m.qty ORDER BY m."createdAt", m.id))[1] AS "beforeStock",
+        (array_agg(m."historyBalance" - m.qty ORDER BY m."createdAt", m.id))[1] AS "beforeStock",
         CASE WHEN COUNT(*) FILTER (WHERE i.id IS NULL) > 0 THEN NULL ELSE
           SUM(m.qty * (i."purchasePrice" * po."exchangeRate" * (1 + COALESCE(i."customsRate", 0) / 100)
             + (COALESCE(i."freightAllocated", 0) + COALESCE(i."additionalCostAllocated", 0)) / NULLIF(i.qty, 0)))::double precision END AS "incomingCost"
-      FROM "StockMovement" m
+      FROM effective_stock m
       LEFT JOIN "PurchaseOrderItem" i ON m."idempotencyKey" = 'purchase-order:' || i."purchaseOrderId" || ':receive:' || i.id
       LEFT JOIN "PurchaseOrder" po ON po.id = i."purchaseOrderId"
       WHERE m.kind = 'PURCHASE_RECEIPT' AND m.qty > 0
@@ -83,8 +120,7 @@ export function productPerformanceQuery(period: ReportPeriod, now = new Date()) 
       ) observations WHERE source <> 'fiscal' OR previous_source IS DISTINCT FROM 'fiscal' OR cost IS DISTINCT FROM previous_cost
     )
     SELECT p.id, p.sku, p.name, p.stock,
-      (SELECT m."balanceAfterTotal" FROM "StockMovement" m WHERE m."productId" = p.id AND m."createdAt" < ${period.start} ORDER BY m."createdAt" DESC, m.id DESC LIMIT 1) AS baseline,
-      (SELECT m."balanceAfterTotal" FROM "StockMovement" m WHERE m."productId" = p.id AND m."createdAt" <= ${now} ORDER BY m."createdAt" DESC, m.id DESC LIMIT 1) AS "latestBalance",
+      m.baseline, m."latestBalance", m."stockHistoryConsistent",
       COALESCE(m.points, '[]'::json) AS movements,
       COALESCE((SELECT json_agg(json_build_object('at', c.at AT TIME ZONE 'UTC', 'unitCost', c.cost, 'source', c.source, 'incomingQty', c."incomingQty", 'incomingCost', c."incomingCost", 'beforeStock', c."beforeStock") ORDER BY c.at, c.priority)
         FROM cost_points c WHERE c."productId" = p.id), '[]'::json) AS "costEvents",

@@ -8,6 +8,7 @@ it('executes historical valuation SQL with inclusive Serbian dates, booked costs
  const db=new PGlite();
  try {
  await db.exec(`
+ CREATE TABLE "AnanasDocument" (id text,"inventoryPostedAt" timestamp);
  CREATE TABLE "Product" (id text,sku text,name text,stock int,cogs numeric);
  CREATE TABLE "Order" (id text,channel text);
  CREATE TABLE "FiscalDocument" (id text,"orderId" text,"issuedAt" timestamp,status text,kind text);
@@ -63,5 +64,71 @@ it('executes historical valuation SQL with inclusive Serbian dates, booked costs
  expect(calculateProductPerformance(dstRow,dst,new Date('2026-10-27T00:00:00Z')).averageStockValue).toBe(3000);
  // Today's product.cogs=999 never enters any historical denominator.
  expect(rows.find(row=>row.sku==='B')?.costEvents.filter(e=>e.source==='receipt')).toHaveLength(0);
+
+ // Snapshots are correct in posting order, but Ananas sales/refunds carry older
+ // business dates. Historical balances must follow the deltas at those dates.
+ await db.exec(`
+ INSERT INTO "Product" VALUES ('n','N','Backfilled Ananas',7,999);
+ INSERT INTO "PurchasePrice" VALUES ('nprice','n','N','2026-09-01',NULL,100,'RSD','2026-09-01');
+ INSERT INTO "AnanasDocument" VALUES ('old-sale','2026-10-04 09:00:00');
+ INSERT INTO "StockMovement" VALUES
+ ('n0','n','2026-09-01',10,10,'INITIAL',NULL),
+ ('n1','n','2026-09-30 22:00:00',-1,9,'SALE_RESERVATION',NULL),
+ ('n2','n','2026-10-02 22:00:00',-1,8,'SALE_RESERVATION',NULL),
+ ('n3','n','2026-10-01 22:00:00',-1,7,'SALE_RESERVATION','ananas-fiscal:old-sale:N');
+ `);
+ const replayPeriod=resolveReportPeriod({range:'custom',from:'2026-10-01',to:'2026-10-03'});
+ const replayNow=new Date('2026-10-06T12:00:00Z');
+ const replayQuery=productPerformanceQuery(replayPeriod,replayNow);
+ const replay=async()=> (await db.query<PerformanceInput>(replayQuery.text,replayQuery.values)).rows.find(row=>row.sku==='N')!;
+ let n=await replay();
+ expect(n).toMatchObject({baseline:10,latestBalance:7,stockHistoryConsistent:true});
+ expect(typeof n.latestBalance).toBe('number'); // Prisma maps bigint to bigint, not number.
+ expect(n.movements.map(m=>m.balance)).toEqual([9,8,7]);
+ expect(calculateProductPerformance(n,replayPeriod,replayNow)).toMatchObject({completeHistory:true,availableDays:3,averageStockValue:800});
+ // A period starting after the backdated sale also needs the corrected baseline.
+ const later=resolveReportPeriod({range:'custom',from:'2026-10-03',to:'2026-10-03'});
+ const laterQuery=productPerformanceQuery(later,replayNow);
+ const laterRow=(await db.query<PerformanceInput>(laterQuery.text,laterQuery.values)).rows.find(row=>row.sku==='N')!;
+ expect(laterRow.baseline).toBe(8);
+ expect(calculateProductPerformance(laterRow,later,replayNow)).toMatchObject({averageStockValue:700,completeHistory:true});
+ // A late-posted refund is a positive movement at its original business date.
+ await db.exec(`
+ UPDATE "Product" SET stock=8 WHERE id='n';
+ INSERT INTO "AnanasDocument" VALUES ('old-refund','2026-10-05 09:00:00');
+ INSERT INTO "StockMovement" VALUES ('n4','n','2026-10-01 10:00:00',1,8,'REFUND_RETURN','ananas-fiscal:old-refund:N');
+ `);
+ n=await replay();
+ expect(calculateProductPerformance(n,replayPeriod,replayNow)).toMatchObject({completeHistory:true,availableDays:3});
+ expect(calculateProductPerformance(n,replayPeriod,replayNow).averageStockValue).toBeCloseTo(2650/3);
+ // A real missing/unlogged quantity change must still fail, even if the latest
+ // snapshot equals today's stock. Do not "repair" it by deriving from totals.
+ await db.exec(`UPDATE "StockMovement" SET "balanceAfterTotal"=9 WHERE id='n2';`);
+ n=await replay();
+ expect(n.stockHistoryConsistent).toBe(false);
+ expect(calculateProductPerformance(n,replayPeriod,replayNow)).toMatchObject({completeHistory:false,averageStockValue:null,estimatedKoz:null});
+ await db.exec(`UPDATE "StockMovement" SET "balanceAfterTotal"=8 WHERE id='n2';
+ UPDATE "AnanasDocument" SET "inventoryPostedAt"=NULL WHERE id='old-sale';`);
+ n=await replay();
+ expect(n.stockHistoryConsistent).toBe(false);
+ expect(calculateProductPerformance(n,replayPeriod,replayNow).completeHistory).toBe(false);
+ await db.exec(`UPDATE "AnanasDocument" SET "inventoryPostedAt"='2026-10-04 09:00:00' WHERE id='old-sale';
+ UPDATE "Product" SET stock=99 WHERE id='n';`);
+ n=await replay();
+ expect(calculateProductPerformance(n,replayPeriod,replayNow)).toMatchObject({completeHistory:false,averageStockValue:null});
+ // Backdating must not create stock knowledge before the first posted snapshot.
+ await db.exec(`UPDATE "Product" SET stock=8 WHERE id='n';
+ UPDATE "StockMovement" SET "createdAt"='2026-09-20' WHERE id='n3';`);
+ const early=resolveReportPeriod({range:'custom',from:'2026-09-20',to:'2026-09-21'});
+ const earlyQuery=productPerformanceQuery(early,replayNow);
+ const earlyRow=(await db.query<PerformanceInput>(earlyQuery.text,earlyQuery.values)).rows.find(row=>row.sku==='N')!;
+ // Initial observation exists since September 1, so this earlier sale is known.
+ expect(earlyRow.baseline).toBe(10);
+ await db.exec(`UPDATE "StockMovement" SET "createdAt"='2026-08-20' WHERE id='n3';`);
+ const unknown=resolveReportPeriod({range:'custom',from:'2026-08-20',to:'2026-08-21'});
+ const unknownQuery=productPerformanceQuery(unknown,replayNow);
+ const unknownRow=(await db.query<PerformanceInput>(unknownQuery.text,unknownQuery.values)).rows.find(row=>row.sku==='N')!;
+ expect(unknownRow.movements[0].balance).toBeNull();
+ expect(calculateProductPerformance(unknownRow,unknown,replayNow).completeHistory).toBe(false);
  } finally { await db.close(); }
 },30000);
