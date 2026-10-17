@@ -14,7 +14,7 @@ export function calculateProductPerformance(product: PerformanceInput, period: R
   let weightedValue = 0, valuedMs = 0;
   const valuationSources = new Set<string>();
   let consistent = product.stockHistoryConsistent !== false && product.latestBalance !== null && product.latestBalance === product.stock;
-  const available = new Set<string>(), unknown = new Set<string>();
+  const available = new Set<string>(), unknown = new Set<string>(), observed = new Set<string>();
   const visitSegment = (until: number) => {
     if (until <= at) return;
     if (balance !== null) {
@@ -35,7 +35,8 @@ export function calculateProductPerformance(product: PerformanceInput, period: R
     for (let cursor = Date.parse(first + 'T00:00:00Z'); ; cursor += 86400_000) {
       const day = new Date(cursor).toISOString().slice(0,10);
       if (day > last) break;
-      if (balance === null) unknown.add(day); else if (balance > 0) available.add(day);
+      if (balance === null) unknown.add(day);
+      else { observed.add(day); if (balance > 0) available.add(day); }
     }
     at = until;
   };
@@ -47,7 +48,9 @@ export function calculateProductPerformance(product: PerformanceInput, period: R
     balance = movement.balance ?? (balance === null ? null : balance + movement.qty);
   }
   visitSegment(end);
-  for (const day of unknown) available.delete(day);
+  // A receipt day counts once stock becomes positive, even if its earlier
+  // hours are unknown. Only fully observed dates without positive stock
+  // are confirmed stockout days; unknown dates never become lost sales.
   if (!consistent) available.clear();
   let estimatedSalesCogs = false;
   const sales = product.sales.map(sale => {
@@ -68,8 +71,13 @@ export function calculateProductPerformance(product: PerformanceInput, period: R
   const averageRetailPrice = quantity > 0 && revenue >= 0 ? revenue / quantity : null;
   const cogs = sales.some(sale => sale.cogs === null) ? null : sales.reduce((sum, sale) => sum + (sale.cogs ?? 0), 0);
   const availableDays = consistent && knownMs > 0 ? available.size : null;
+  const outOfStockDays = consistent && knownMs > 0
+    ? [...observed].filter(day => !available.has(day) && !unknown.has(day)).length : null;
+  const unknownStockDays = consistent ? periodDays - available.size - (outOfStockDays ?? 0) : periodDays;
   const dailyQty = availableDays ? availableSales.reduce((sum, sale) => sum + sale.qty, 0) / availableDays : null;
   const dailyRevenue = availableDays ? availableSales.reduce((sum, sale) => sum + sale.revenue, 0) / availableDays : null;
+  const estimatedLostQuantity = dailyQty !== null && outOfStockDays !== null ? Math.max(0, dailyQty) * outOfStockDays : null;
+  const estimatedLostRevenue = dailyRevenue !== null && outOfStockDays !== null ? Math.max(0, dailyRevenue) * outOfStockDays : null;
   const completeHistory = consistent && end > start && knownMs === end - start;
   const averageStockQty = completeHistory ? weightedQty / (end - start) : null;
   const completeCostHistory = completeHistory && valuedMs === end - start;
@@ -78,7 +86,7 @@ export function calculateProductPerformance(product: PerformanceInput, period: R
     : valuationSources.has('purchase-price') ? 'purchase-prices' : valuationSources.has('booking') ? 'booking' : 'fiscal';
   const estimatedValuation = valuationSources.has('purchase-price') || valuationSources.has('booking');
   return { id: product.id, sku: product.sku, name: product.name, stock: product.stock, quantity, revenue, cogs,
-    periodDays, netRevenuePerDay, netQuantityPerDay, averageRetailPrice, availableDays, dailyQty, dailyRevenue, averageStockQty, averageStockValue, completeHistory, completeCostHistory,
+    periodDays, outOfStockDays, unknownStockDays, estimatedLostQuantity, estimatedLostRevenue, netRevenuePerDay, netQuantityPerDay, averageRetailPrice, availableDays, dailyQty, dailyRevenue, averageStockQty, averageStockValue, completeHistory, completeCostHistory,
     valuationBasis, estimatedValuation, estimatedSalesCogs,
     historyStatus: product.latestBalance === null ? 'incomplete-stock' as const : !consistent ? 'unreconciled' as const : !completeHistory ? 'incomplete-stock' as const : !completeCostHistory ? 'incomplete-cost' as const : 'complete' as const,
     estimatedKoz: cogs !== null && averageStockValue !== null && averageStockValue > 0 ? cogs / averageStockValue : null,
@@ -105,7 +113,7 @@ export function summarizeProductPerformance(rows: ProductPerformance[]) {
     estimatedCogsCount: rows.filter(row => row.estimatedSalesCogs).length,
     estimatedKoz: cogs !== null && averageStockValue !== null && averageStockValue > 0 ? cogs / averageStockValue : null };
 }
-export const PERFORMANCE_SORTS = ['sku','name','stock','quantity','revenue','cogs','availableDays','dailyQty','dailyRevenue','netRevenuePerDay','netQuantityPerDay','averageRetailPrice','averageStockValue','estimatedKoz','coverageDays'] as const;
+export const PERFORMANCE_SORTS = ['sku','name','stock','quantity','revenue','cogs','availableDays','outOfStockDays','unknownStockDays','estimatedLostQuantity','estimatedLostRevenue','dailyQty','dailyRevenue','netRevenuePerDay','netQuantityPerDay','averageRetailPrice','averageStockValue','estimatedKoz','coverageDays'] as const;
 export type PerformanceSort = typeof PERFORMANCE_SORTS[number];
 export function sortProductPerformance(rows: ProductPerformance[], sort: PerformanceSort, direction: 'asc'|'desc') {
   return [...rows].sort((a,b) => {

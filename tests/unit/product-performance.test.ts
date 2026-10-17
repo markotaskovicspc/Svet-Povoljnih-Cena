@@ -63,3 +63,35 @@ it('reports a documented subtotal without mixing unknown SKUs into its turnover 
  expect(summary.documentedKoz).toBeCloseTo(2 / 3);
  expect(summarizeProductPerformance([missing]).documentedKoz).toBeNull();
 });
+
+it('estimates missed sales from confirmed stockout dates and counts receipt and sellout dates', () => {
+ const p = resolveReportPeriod({range:'custom',from:'2026-10-01',to:'2026-10-06'});
+ const row = calculateProductPerformance({...input, baseline:0, stock:0, latestBalance:0,
+  movements:[{at:'2026-10-02T10:00:00Z',qty:10,balance:10},{at:'2026-10-04T10:00:00Z',qty:-10,balance:0}],
+  sales:[{day:'2026-10-04',qty:10,revenue:3000,cogs:1000}]},p,new Date('2026-10-07T10:00:00Z'));
+ expect(row).toMatchObject({periodDays:6,availableDays:3,outOfStockDays:3,unknownStockDays:0,dailyRevenue:1000,estimatedLostRevenue:3000});
+ expect(row.dailyQty).toBeCloseTo(10/3);
+ expect(row.netQuantityPerDay).toBeCloseTo(10/6);
+ expect(row.estimatedLostQuantity).toBeCloseTo(10);
+});
+it('counts the first receipt date without turning dates before it into stockout days', () => {
+ const p=resolveReportPeriod({range:'custom',from:'2026-10-01',to:'2026-10-04'});
+ const row=calculateProductPerformance({...input,baseline:null,stock:20,latestBalance:20,
+ movements:[{at:'2026-10-02T08:00:00Z',qty:24,balance:24},{at:'2026-10-03T08:00:00Z',qty:-4,balance:20}],
+ sales:[{day:'2026-10-03',qty:4,revenue:1000,cogs:400}]},p,now);
+ expect(row).toMatchObject({availableDays:3,outOfStockDays:0,unknownStockDays:1,estimatedLostQuantity:0,estimatedLostRevenue:0,completeHistory:false,averageStockValue:null});
+ expect(row.dailyQty).toBeCloseTo(4/3);
+});
+it('keeps a partly unknown date out of stockout estimates when its only known stock is zero', () => {
+ const row=calculateProductPerformance({...input,baseline:null,stock:0,latestBalance:0,
+ movements:[{at:'2026-10-01T08:00:00Z',qty:-1,balance:0}],sales:[]},period,now);
+ expect(row).toMatchObject({availableDays:0,outOfStockDays:1,unknownStockDays:1,estimatedLostQuantity:null,estimatedLostRevenue:null});
+});
+it('excludes replenishment gaps from available days and does not estimate from corrupt history', () => {
+ const p=resolveReportPeriod({range:'custom',from:'2026-10-01',to:'2026-10-06'});
+ const data={...input,baseline:2,stock:2,latestBalance:2,
+ movements:[{at:'2026-10-01T10:00:00Z',qty:-2,balance:0},{at:'2026-10-04T10:00:00Z',qty:4,balance:4},{at:'2026-10-05T10:00:00Z',qty:-2,balance:2}],
+ sales:[{day:'2026-10-01',qty:2,revenue:200,cogs:100},{day:'2026-10-05',qty:2,revenue:200,cogs:100}]};
+ expect(calculateProductPerformance(data,p,new Date('2026-10-07T10:00:00Z'))).toMatchObject({availableDays:4,outOfStockDays:2,unknownStockDays:0,dailyQty:1,estimatedLostQuantity:2});
+ expect(calculateProductPerformance({...data,stockHistoryConsistent:false},p,now)).toMatchObject({availableDays:null,outOfStockDays:null,unknownStockDays:5,estimatedLostQuantity:null,estimatedLostRevenue:null});
+});

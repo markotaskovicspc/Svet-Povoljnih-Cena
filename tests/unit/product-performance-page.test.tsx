@@ -21,7 +21,7 @@ it('renders the combined collapsed panel, scrollable table, and honest partial h
   expect(html).toContain('sticky top-0');
   expect(html).toContain('KOZ dokumentovanih artikala');
   expect(html).toContain('delimičan zbir poznatih vrednosti');
-  expect(html).toContain('Nedostaje istorija količine');
+  expect(html).toContain('Nepotpuna istorija celog perioda');
   expect(html).toContain('Prosek kom po kalendarskom danu');
   if (process.env.PERFORMANCE_QA_HTML) {
     mocks.report.mockResolvedValue(Array.from({length:50},(_,i)=>({... (i%4===0 ? unknown : known),id:`item-${i}`,sku:`SKU-${String(i+1).padStart(3,'0')}`})));
