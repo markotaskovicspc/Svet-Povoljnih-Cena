@@ -48,3 +48,18 @@ it('uses elapsed calendar dates for the current period and leaves no-sale MPC un
  expect(refunded).toMatchObject({netRevenuePerDay:-100,averageRetailPrice:null});
  expect(sortProductPerformance([row,{...row,sku:'B',averageRetailPrice:200}],'averageRetailPrice','desc').map(r=>r.sku)).toEqual(['B','A']);
 });
+
+it('keeps calendar quantity available when stock history is missing and explains why valuation is unknown', () => {
+ const missing = calculateProductPerformance({...input, baseline: null, movements: []}, period, now);
+ expect(missing).toMatchObject({netQuantityPerDay: 2.5, historyStatus: 'incomplete-stock', averageStockValue: null});
+ expect(calculateProductPerformance({...input, latestBalance: 6}, period, now).historyStatus).toBe('unreconciled');
+ expect(calculateProductPerformance({...input, costEvents: []}, period, now).historyStatus).toBe('incomplete-cost');
+});
+it('reports a documented subtotal without mixing unknown SKUs into its turnover numerator', () => {
+ const known = calculateProductPerformance(input, period, now);
+ const missing = {...known, id: 'b', sku: 'B', cogs: 9000, averageStockValue: null};
+ const summary = summarizeProductPerformance([known, missing]);
+ expect(summary).toMatchObject({averageStockValue: null, estimatedKoz: null, knownStockValue: 750, documentedCount: 1, documentedCogs: 500, documentedStockValue: 750});
+ expect(summary.documentedKoz).toBeCloseTo(2 / 3);
+ expect(summarizeProductPerformance([missing]).documentedKoz).toBeNull();
+});

@@ -64,6 +64,7 @@ export function calculateProductPerformance(product: PerformanceInput, period: R
   const lastDay = Date.parse(dayAt(end - 1) + 'T00:00:00Z');
   const periodDays = end > start ? Math.round((lastDay - firstDay) / 86400_000) + 1 : 0;
   const netRevenuePerDay = periodDays > 0 ? revenue / periodDays : null;
+  const netQuantityPerDay = periodDays > 0 ? quantity / periodDays : null;
   const averageRetailPrice = quantity > 0 && revenue >= 0 ? revenue / quantity : null;
   const cogs = sales.some(sale => sale.cogs === null) ? null : sales.reduce((sum, sale) => sum + (sale.cogs ?? 0), 0);
   const availableDays = consistent && knownMs > 0 ? available.size : null;
@@ -77,8 +78,9 @@ export function calculateProductPerformance(product: PerformanceInput, period: R
     : valuationSources.has('purchase-price') ? 'purchase-prices' : valuationSources.has('booking') ? 'booking' : 'fiscal';
   const estimatedValuation = valuationSources.has('purchase-price') || valuationSources.has('booking');
   return { id: product.id, sku: product.sku, name: product.name, stock: product.stock, quantity, revenue, cogs,
-    periodDays, netRevenuePerDay, averageRetailPrice, availableDays, dailyQty, dailyRevenue, averageStockQty, averageStockValue, completeHistory, completeCostHistory,
+    periodDays, netRevenuePerDay, netQuantityPerDay, averageRetailPrice, availableDays, dailyQty, dailyRevenue, averageStockQty, averageStockValue, completeHistory, completeCostHistory,
     valuationBasis, estimatedValuation, estimatedSalesCogs,
+    historyStatus: product.latestBalance === null ? 'incomplete-stock' as const : !consistent ? 'unreconciled' as const : !completeHistory ? 'incomplete-stock' as const : !completeCostHistory ? 'incomplete-cost' as const : 'complete' as const,
     estimatedKoz: cogs !== null && averageStockValue !== null && averageStockValue > 0 ? cogs / averageStockValue : null,
     coverageDays: dailyQty !== null && dailyQty > 0 ? Math.max(0, product.stock) / dailyQty : null };
 }
@@ -87,14 +89,23 @@ export function summarizeProductPerformance(rows: ProductPerformance[]) {
   const sum = (key: 'stock'|'quantity'|'revenue') => rows.reduce((total, row) => total + row[key], 0);
   const cogs = rows.some(row => row.cogs === null) ? null : rows.reduce((total, row) => total + (row.cogs ?? 0), 0);
   const averageStockValue = rows.some(row => row.averageStockValue === null) ? null : rows.reduce((total, row) => total + (row.averageStockValue ?? 0), 0);
-  return { count: rows.length, stock: sum('stock'), quantity: sum('quantity'), revenue: sum('revenue'), cogs, averageStockValue,
+  // A documented subset can be shown even when one SKU lacks historical data.
+  // Its numerator and denominator must cover exactly the same articles.
+  const documented = rows.filter(row => row.cogs !== null && row.averageStockValue !== null);
+  const documentedCogs = documented.reduce((total, row) => total + (row.cogs ?? 0), 0);
+  const documentedStockValue = documented.reduce((total, row) => total + (row.averageStockValue ?? 0), 0);
+  const valued = rows.filter(row => row.averageStockValue !== null);
+  const knownStockValue = valued.length ? valued.reduce((total, row) => total + (row.averageStockValue ?? 0), 0) : null;
+  return { documentedCount: documented.length, documentedCogs, documentedStockValue, knownStockValue,
+    documentedKoz: documentedStockValue > 0 ? documentedCogs / documentedStockValue : null,
+    count: rows.length, stock: sum('stock'), quantity: sum('quantity'), revenue: sum('revenue'), cogs, averageStockValue,
     completeCount: rows.filter(row => row.completeHistory).length,
     costHistoryCount: rows.filter(row => row.completeCostHistory).length,
     estimatedCount: rows.filter(row => row.completeCostHistory && row.estimatedValuation).length,
     estimatedCogsCount: rows.filter(row => row.estimatedSalesCogs).length,
     estimatedKoz: cogs !== null && averageStockValue !== null && averageStockValue > 0 ? cogs / averageStockValue : null };
 }
-export const PERFORMANCE_SORTS = ['sku','name','stock','quantity','revenue','cogs','availableDays','dailyQty','dailyRevenue','netRevenuePerDay','averageRetailPrice','averageStockValue','estimatedKoz','coverageDays'] as const;
+export const PERFORMANCE_SORTS = ['sku','name','stock','quantity','revenue','cogs','availableDays','dailyQty','dailyRevenue','netRevenuePerDay','netQuantityPerDay','averageRetailPrice','averageStockValue','estimatedKoz','coverageDays'] as const;
 export type PerformanceSort = typeof PERFORMANCE_SORTS[number];
 export function sortProductPerformance(rows: ProductPerformance[], sort: PerformanceSort, direction: 'asc'|'desc') {
   return [...rows].sort((a,b) => {
