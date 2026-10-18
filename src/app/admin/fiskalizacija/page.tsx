@@ -12,6 +12,7 @@ import {
   issueAndDeliverFiscalReceipt,
   paymentMethodLabel,
 } from "@/lib/fiscal";
+import { loadFiscalCogs, loadAnanasCostDates } from "@/lib/admin/fiscal-cogs.server";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle } from "@/components/admin/card";
 import { Input } from "@/components/ui/input";
@@ -175,6 +176,7 @@ export default async function FiscalizationPage({
       take: PAGE_LIMIT,
       include: {
         fiscalDocument: { select: { receiptNumber: true, issuedAt: true, paymentMethod: true, kind: true } },
+        originalSaleLine: { select: { unitCogs: true, fiscalDocument: { select: { issuedAt: true } } } },
       },
     }),
     db.warehouse.findMany({
@@ -189,11 +191,21 @@ export default async function FiscalizationPage({
     }),
   ]);
 
+  const [costAt, ananasSaleDates] = await Promise.all([
+    loadFiscalCogs([...lines.filter(line => !isFiscalService(line.sku, line.shortName)).map(line => line.sku), ...ananasDocuments.flatMap(doc => ananasFiscalItems(doc.items).filter(item => !isFiscalService(item.sku, item.name)).map(item => item.sku))]),
+    loadAnanasCostDates(ananasDocuments),
+  ]);
+
   const rows: FiscalizationRow[] = lines.filter(line=>sp.channel!=="ANANAS" && (!merchandiseOnly || !isFiscalService(line.sku,line.shortName))).map((line) => {
     const amounts = merchandiseOnly
       ? fiscalMerchandiseAmounts({qty:line.qty,totalGross:num(line.totalGross),totalNet:num(line.totalNet),serviceGross:num(line.serviceGross),vatRate:num(line.vatRate)})
       : { unit: num(line.unitPriceGross), gross: num(line.totalGross), net: num(line.totalNet) };
     const sign=line.fiscalDocument.kind==="REFUND"?-1:1;
+    const unitCogs = isFiscalService(line.sku, line.shortName) ? null : costAt(
+      line.sku,
+      (sign < 0 ? line.originalSaleLine?.fiscalDocument.issuedAt : null) ?? line.fiscalDocument.issuedAt ?? line.createdAt,
+      line.unitCogs == null ? (sign < 0 && line.originalSaleLine?.unitCogs != null ? num(line.originalSaleLine.unitCogs) : null) : num(line.unitCogs),
+    ).unitCogs;
     return ({
     id: line.id,
     orderNumber: line.orderNumber,
@@ -229,8 +241,8 @@ export default async function FiscalizationPage({
     paymentMethod: line.fiscalDocument.paymentMethod ?? "UPLATA_NA_RACUN",
     refunded: sign<0 || line.refundedQty >= line.qty,
     channel:"SPC", documentKind:sign<0?"Refundacija":"Račun", canRefund:sign>0,
-    cogs:line.unitCogs==null?"—":formatRsd(num(line.unitCogs)),
-    totalCogs:line.unitCogs==null?"—":formatRsd(sign*line.qty*num(line.unitCogs)),
+    cogs:unitCogs==null?"—":formatRsd(unitCogs),
+    totalCogs:unitCogs==null?"—":formatRsd(sign*line.qty*unitCogs),
   });});
   const emptyFields={customerName:"—",pib:"—",priceList:"MP",address:"—",city:"—",postalCode:"—",phone:"—",email:"—",supplierName:"—",categoryName:"—",groupName:"—",subgroupName:"—",collectionName:"—",shortDescription:"—",attribute1:"—",attribute2:"—",attribute3:"—",attribute4:"—",color1:"—",color2:"—",warehouseName:"Ananas",cogs:"—",totalCogs:"—"};
   if(sp.channel!=="SPC" && !sp.supplier && !sp.category)for(const doc of ananasDocuments){
@@ -238,7 +250,9 @@ export default async function FiscalizationPage({
     if(refunded==="yes"&&sign>0 || refunded==="no"&&sign<0)continue;
     ananasItemsForView(doc.items).forEach((item,index)=>{
       if(q&&![doc.orderNumber,doc.fiscalNumber,item.sku,item.name].some(value=>value.toLowerCase().includes(q.toLowerCase())))return;
-      rows.push({...emptyFields,id:`ananas:${doc.id}:${index}`,orderNumber:doc.orderNumber,fiscalReceiptNumber:doc.fiscalNumber,issuedAt:doc.issuedAt.toLocaleString("sr-Latn-RS"),sku:item.sku,shortName:item.name,qty:sign*item.quantity,unitPriceGross:formatRsd(item.gross/item.quantity),totalGross:formatRsd(sign*item.gross),totalNet:item.net==null?"—":formatRsd(sign*item.net),paymentMethod:doc.paymentMethods,refunded:sign<0,channel:"Ananas",documentKind:sign<0?"Refundacija":"Račun",canRefund:false,pdfHref:`/api/admin/ananas/${doc.id}/pdf`});
+      const unitCogs = isFiscalService(item.sku, item.name) ? null : costAt(item.sku,
+        (sign < 0 && doc.reference ? ananasSaleDates.get(doc.reference) : null) ?? doc.issuedAt).unitCogs;
+      rows.push({...emptyFields,cogs:unitCogs==null?"—":formatRsd(unitCogs),totalCogs:unitCogs==null?"—":formatRsd(sign*item.quantity*unitCogs),id:`ananas:${doc.id}:${index}`,orderNumber:doc.orderNumber,fiscalReceiptNumber:doc.fiscalNumber,issuedAt:doc.issuedAt.toLocaleString("sr-Latn-RS"),sku:item.sku,shortName:item.name,qty:sign*item.quantity,unitPriceGross:formatRsd(item.gross/item.quantity),totalGross:formatRsd(sign*item.gross),totalNet:item.net==null?"—":formatRsd(sign*item.net),paymentMethod:doc.paymentMethods,refunded:sign<0,channel:"Ananas",documentKind:sign<0?"Refundacija":"Račun",canRefund:false,pdfHref:`/api/admin/ananas/${doc.id}/pdf`});
     });
   }
   const rowTimes=new Map(lines.map(line=>[line.id,line.fiscalDocument.issuedAt?.getTime()??line.createdAt.getTime()]));
@@ -266,7 +280,7 @@ export default async function FiscalizationPage({
       />
       <div className="space-y-4 px-8 py-6">
         <Card>
-          <p className="mb-3 text-sm text-ink-500">Podrazumevano su prikazane sve fiskalizovane stavke i puni iznosi sa računa. Dostava je poseban red; montaža može biti uključena u cenu artikla. Prikaz „Samo roba“ isključuje usluge i njihove iznose. COGS je sačuvana nabavna vrednost u trenutku SPC fiskalizacije. Crtica znači da istorijski COGS nije dostupan; Ananas ga ne dostavlja. Ananas refundacije se preuzimaju iz Ananasa i ovde se ne izdaju ponovo. Prikaz je ograničen na poslednjih 500 dokumenata/redova po kanalu.</p>
+          <p className="mb-3 text-sm text-ink-500">Podrazumevano su prikazane sve fiskalizovane stavke i puni iznosi sa računa. Dostava je poseban red; montaža može biti uključena u cenu artikla. Prikaz „Samo roba“ isključuje usluge i njihove iznose. SPC koristi sačuvani COGS kada postoji. Ananas i redovi bez sačuvanog COGS-a koriste proknjižene nabavke za datum prodaje; refundacije koriste datum originalnog računa kada je dostupan. Ako nema vrednosti za taj datum, koristi se prva dostupna, a zatim trenutni COGS artikla. Naknadno unete i proknjižene fakture automatski ažuriraju obračun pri ponovnom otvaranju. Crtica znači da nabavna vrednost nije dostupna ili da je stavka usluga. Ananas refundacije se preuzimaju iz Ananasa i ovde se ne izdaju ponovo. Prikaz je ograničen na poslednjih 500 dokumenata/redova po kanalu.</p>
           <CardTitle description={`${rows.length.toLocaleString("sr-Latn-RS")} prikazanih redova`}>
             Filteri
           </CardTitle>

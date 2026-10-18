@@ -25,7 +25,7 @@ function safeHashEqual(left: string, right: string) {
 
 export async function authenticatePartner(
   request: Request,
-  requiredScope: "inventory:read" | "reservations:write",
+  requiredScope: "inventory:read" | "reservations:write" | "spcapp:read",
 ): Promise<PartnerAuthResult> {
   const authorization = request.headers.get("authorization")?.trim() ?? "";
   if (!authorization.startsWith("Bearer ")) {

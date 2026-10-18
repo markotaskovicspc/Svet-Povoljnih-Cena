@@ -151,6 +151,7 @@ export const adminNav: AdminNavGroup[] = [
       },
       { href: "/admin/xml-import", label: "XML feed", allowed: O },
       { href: "/admin/sistem", label: "Monitoring i backup", allowed: O },
+      { href: "/admin/erp/spcapp", label: "SPCApp API", allowed: ["SUPER"] },
     ],
   },
   {

@@ -97,11 +97,11 @@ export default async function DailyFinanceReportPage({
 
         <div className="grid gap-4 md:grid-cols-3">
           <StatCard label="SPC neto fiskalizovano" value={formatRsd(total.spcNetGross)} hint={`COGS: ${formatRsd(total.spcNetCogs)}`} />
-          <StatCard label="Ananas neto fiskalizovano" value={formatRsd(total.ananasNetGross)} hint={`COGS (procena): ${formatRsd(total.ananasNetCogs)}`} />
+          <StatCard label="Ananas neto fiskalizovano" value={formatRsd(total.ananasNetGross)} hint={`COGS: ${formatRsd(total.ananasNetCogs)}`} />
           <StatCard label="Neto COGS" value={formatRsd(total.fiscalNetCogs)} hint={`Prodaja ${formatRsd(total.fiscalSaleCogs)} · povrat ${formatRsd(total.fiscalRefundCogs)}`} />
         </div>
         <p className="text-sm text-ink-600">Promet uključuje dostavu i druge fiskalizovane usluge; COGS obuhvata samo artikle. Profakture su samo SPC. COGS refundacija umanjuje trošak na dan izdavanja refundacije.</p>
-        {(total.estimatedCogsQty > 0 || total.missingCogsQty > 0) && <p role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-ink-700">COGS je delimično procenjen: {total.estimatedCogsQty} kom. koristi trenutnu nabavnu vrednost jer dokument nema sačuvan COGS (stariji SPC računi i Ananas). Za {total.missingCogsQty} kom. nema nabavne vrednosti; njihov trošak nije uključen. Ovaj zbir treba proveriti pre knjiženja.</p>}
+        {(total.estimatedCogsQty > 0 || total.missingCogsQty > 0) && <p role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-ink-700">COGS je delimično procenjen: {total.estimatedCogsQty} kom. koristi procenu iz nabavki ili prvu dostupnu vrednost jer istorijski COGS nije potpun. Naknadno proknjižene fakture ažuriraju obračun pri ponovnom otvaranju. Za {total.missingCogsQty} kom. nema nabavne vrednosti; njihov trošak nije uključen. Ovaj zbir treba proveriti pre knjiženja.</p>}
 
         <Card>
           <CardTitle description={period.label}>Dnevni pregled</CardTitle>

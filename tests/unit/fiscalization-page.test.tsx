@@ -3,9 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { formatRsd } from "@/lib/format";
 
 const mocks = vi.hoisted(() => ({
-  lines: vi.fn(), warehouses: vi.fn(), orders: vi.fn(), ananas: vi.fn(), rows: vi.fn(),
+  lines: vi.fn(), warehouses: vi.fn(), orders: vi.fn(), ananas: vi.fn(), rows: vi.fn(), products: vi.fn(), prices: vi.fn(), invoices: vi.fn(),
 }));
 vi.mock("@/lib/db", () => ({ db: {
+  product: { findMany: mocks.products },
+  purchasePrice: { findMany: mocks.prices },
+  inboundInvoice: { findMany: mocks.invoices },
   fiscalDocumentLine: { findMany: mocks.lines },
   warehouse: { findMany: mocks.warehouses },
   order: { findMany: mocks.orders },
@@ -46,6 +49,9 @@ const ananas = {
 };
 
 beforeEach(() => {
+  mocks.products.mockResolvedValue([{ sku: "STO", cogs: 900 }]);
+  mocks.prices.mockResolvedValue([]);
+  mocks.invoices.mockResolvedValue([]);
   mocks.lines.mockResolvedValue([merchandise, shipping]);
   mocks.warehouses.mockResolvedValue([]);
   mocks.orders.mockResolvedValue([]);
@@ -80,4 +86,33 @@ describe("fiscalization receipt amounts", () => {
     const { rows } = await render({ channel: "SPC" });
     expect(rows).toEqual([expect.objectContaining({ id: "refund-shipping", qty: -1, totalGross: formatRsd(-599), totalNet: formatRsd(-499.17), canRefund: false, refunded: true })]);
   });
+});
+
+it("fills Ananas sale and refund costs, excluding services and using the original sale outside the filter", async () => {
+  mocks.ananas.mockResolvedValueOnce([{ ...ananas, kind: "REFUND", reference: "ANA-ORIGINAL", issuedAt: new Date("2026-10-18T12:00:00Z") }])
+    .mockResolvedValueOnce([{ fiscalNumber: "ANA-ORIGINAL", issuedAt }]);
+  mocks.prices.mockResolvedValue([
+    { sku: "STO", price: 700, validFrom: new Date("2026-10-01"), validTo: new Date("2026-10-15") },
+    { sku: "STO", price: 800, validFrom: new Date("2026-10-16"), validTo: null },
+  ]);
+  const { rows } = await render({ channel: "ANANAS" });
+  expect(rows).toContainEqual(expect.objectContaining({ channel: "Ananas", sku: "STO", cogs: formatRsd(700), totalCogs: formatRsd(-700) }));
+  expect(rows).toContainEqual(expect.objectContaining({ channel: "Ananas", sku: "DOSTAVA", cogs: "—", totalCogs: "—" }));
+  expect(mocks.ananas.mock.calls.at(-1)![0].where).toEqual({ kind: "SALE", fiscalNumber: { in: ["ANA-ORIGINAL"] } });
+});
+it("replaces the first available fallback after a backdated invoice is posted", async () => {
+  const invoice = (day: string, price: number) => ({ invoiceDate: new Date(day), lockedAt: new Date(), purchaseOrder: {
+    exchangeRate: 1, cogsBookingSnapshot: { version: 1, products: [{ productId: "p", sku: "STO", stock: 0, cogs: null }] },
+    items: [{ sku: "STO", productId: "p", qty: 10, purchasePrice: price, customsRate: 0, freightAllocated: 0, additionalCostAllocated: 0 }],
+  } });
+  mocks.lines.mockResolvedValue([{ ...merchandise, unitCogs: null }]);
+  mocks.invoices.mockResolvedValue([invoice("2026-10-17", 900)]);
+  let result = await render();
+  expect(result.rows.filter((row: { sku: string }) => row.sku === "STO")).toEqual(expect.arrayContaining([
+    expect.objectContaining({ channel: "SPC", cogs: formatRsd(900) }),
+    expect.objectContaining({ channel: "Ananas", cogs: formatRsd(900) }),
+  ]));
+  mocks.invoices.mockResolvedValue([invoice("2026-10-01", 600), invoice("2026-10-17", 900)]);
+  result = await render();
+  for (const row of result.rows.filter((row: { sku: string }) => row.sku === "STO")) expect(row.cogs).toBe(formatRsd(600));
 });

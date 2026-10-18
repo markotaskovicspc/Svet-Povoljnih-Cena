@@ -40,7 +40,7 @@ export async function GET(request: Request) {
     { header: "COGS povrata", key: "fiscalRefundCogs", width: 20 },
     { header: "Neto COGS", key: "fiscalNetCogs", width: 20 },
     { header: "SPC neto COGS", key: "spcNetCogs", width: 20 },
-    { header: "Ananas neto COGS (procena)", key: "ananasNetCogs", width: 30 },
+    { header: "Ananas neto COGS", key: "ananasNetCogs", width: 30 },
     { header: "COGS procena (kom.)", key: "estimatedCogsQty", width: 24 },
     { header: "Bez COGS (kom.)", key: "missingCogsQty", width: 22 },
   ];
@@ -68,7 +68,7 @@ export async function GET(request: Request) {
 
   const notes = workbook.addWorksheet("Napomene");
   notes.columns=[{header:"Obračun",key:"text",width:110}];
-  notes.addRows([{text:`Kanal: ${channel}. Period: ${period.fromInput} – ${period.toInput}.`},{text:"Promet uključuje fiskalizovane usluge. Profakture su samo SPC. COGS je samo za artikle."},{text:"SPC COGS koristi sačuvanu nabavnu vrednost u trenutku fiskalizacije, kada postoji. Refundacije umanjuju COGS na dan refundacije."},{text:"Stariji SPC dokumenti i Ananas bez sačuvanog COGS-a koriste trenutnu nabavnu vrednost artikla kao procenu, a ne istorijski knjiženi trošak."},{text:"Stavke bez COGS-a nisu uključene u zbir troška. Kolone procene i nedostajućih troškova proveriti pre knjiženja."}]);
+  notes.addRows([{text:`Kanal: ${channel}. Period: ${period.fromInput} – ${period.toInput}.`},{text:"Promet uključuje fiskalizovane usluge. Profakture su samo SPC. COGS je samo za artikle."},{text:"SPC COGS koristi sačuvanu nabavnu vrednost u trenutku fiskalizacije, kada postoji. Refundacije umanjuju COGS na dan refundacije."},{text:"Stariji SPC dokumenti i Ananas bez sačuvanog COGS-a koriste nabavke za datum originalne prodaje. Ako nema odgovarajućeg datuma, koriste prvu dostupnu vrednost kao procenu, a zatim trenutni COGS. Naknadno proknjižene fakture ažuriraju obračun."},{text:"Stavke bez COGS-a nisu uključene u zbir troška. Kolone procene i nedostajućih troškova proveriti pre knjiženja."}]);
   const buffer = await workbook.xlsx.writeBuffer();
   return new Response(new Uint8Array(buffer), {
     headers: {
