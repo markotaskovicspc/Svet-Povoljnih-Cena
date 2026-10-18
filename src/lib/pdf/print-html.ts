@@ -3,7 +3,7 @@ import "server-only";
 import { envValue } from "@/lib/env";
 
 /** Print the same self-contained HTML/CSS used by the ERP's label view. */
-export async function renderPrintHtmlPdf(html: string): Promise<Buffer> {
+export async function renderPrintHtmlPdf(html: string, options: { productLabels?: boolean } = {}): Promise<Buffer> {
   // Load the PDF runtime only when printing. Checkout and admin routes import
   // the email worker too, and must not fail while loading an optional renderer.
   const [{ default: chromium }, { chromium: playwright }] = await Promise.all([
@@ -35,7 +35,8 @@ export async function renderPrintHtmlPdf(html: string): Promise<Buffer> {
     await page.setContent(html, { waitUntil: "load", timeout: 15_000 });
     // A long consolidated packing list must remain on its buyer's label.
     // Measure real print layout; promote overflowing labels to a full A4 sheet.
-    await page.evaluate(() => {
+    await page.evaluate(async (checkProductLabels) => {
+      await document.fonts.ready;
       const labels = Array.from(document.querySelectorAll<HTMLElement>(".label:has(.packing-list)"));
       for (const label of labels) {
         if (label.scrollHeight <= label.clientHeight + 1) continue;
@@ -50,7 +51,24 @@ export async function renderPrintHtmlPdf(html: string): Promise<Buffer> {
           throw new Error("Spisak artikala ne staje na adresnicu. Proverite paket pre štampe.");
         }
       }
-    });
+      if (checkProductLabels) {
+        for (const label of document.querySelectorAll<HTMLElement>(".box-label:not(.empty)")) {
+          const name = label.querySelector<HTMLElement>(".article-name")!;
+          let size = 6.5;
+          while (name.scrollHeight > name.clientHeight + 1 && size > 5.5) {
+            size -= .25;
+            name.style.fontSize = `${size}pt`;
+          }
+          const bounds = label.getBoundingClientRect();
+          const fields = [...label.querySelectorAll<HTMLElement>(".article-name, .importer, .label-footer")];
+          const image = label.querySelector<HTMLImageElement>("img");
+          if (!image?.complete || !image.naturalWidth ||
+              fields.some(field => field.scrollWidth > field.clientWidth + 1 || field.scrollHeight > field.clientHeight + 1 || field.getBoundingClientRect().bottom > bounds.bottom - 2)) {
+            throw new Error(`PRINT_LABEL_OVERFLOW:${label.dataset.sku}`);
+          }
+        }
+      }
+    }, options.productLabels ?? false);
     return await page.pdf({
       format: "A4",
       preferCSSPageSize: true,

@@ -159,6 +159,7 @@ export default async function ErpModulePage({
                 Masovni uvoz nabavnih cena
               </Link>
             ) : null}
+            {slug === "artikli" && <Link href="/admin/erp/nalepnice" className="inline-flex h-8 items-center rounded-lg border border-border px-2.5 text-sm">Nalepnice za kutije</Link>}
             {slug === "artikli" && <Link href={isArticleArchive ? "/admin/erp/artikli" : "/admin/erp/artikli?view=archived-articles"} className="inline-flex h-8 items-center rounded-lg border border-border px-2.5 text-sm">{isArticleArchive ? "Svi artikli" : "Arhivirani artikli (ARH)"}</Link>}
             {slug === "preuzimanja" ? (
               <Link

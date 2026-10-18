@@ -17,6 +17,10 @@ it('renders the combined collapsed panel, scrollable table, and honest partial h
   expect(panel).toContain('name="range"');
   expect(panel).toContain('KOZ koristi istorijsku vrednost');
   expect(panel).not.toContain('<details open');
+  for (const label of ['Neto prodaja sajta', 'COGS prodate robe', 'Prosečne zalihe', 'KOZ dokumentovanih artikala']) {
+    expect(panel).toContain(label);
+    expect(html.slice(html.indexOf('</details>'))).not.toContain(`>${label}</p>`);
+  }
   expect(html).toContain('role="region"');
   expect(html).toContain('sticky top-0');
   expect(html).toContain('KOZ dokumentovanih artikala');

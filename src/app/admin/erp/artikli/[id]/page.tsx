@@ -1541,6 +1541,7 @@ export default async function ProductDetail({
       <PageHeader
         title={product.name}
         description={`SKU ${product.sku}`}
+        actions={<Link href={`/admin/erp/nalepnice?product=${encodeURIComponent(product.id)}`} className="inline-flex h-9 items-center rounded-lg border border-border px-3 text-sm font-medium">Nalepnice za kutije</Link>}
         crumbs={[
           { href: "/admin", label: "Admin" },
           { href: "/admin/erp", label: "ERP" },
