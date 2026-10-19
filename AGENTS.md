@@ -19,3 +19,6 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ## SPC Analytics classification (2026-10-19)
 The products partner export includes analyticsCategory (root Category resolved from the existing parentId tree). Original categories and Group remain unchanged. One deterministic root per product (path then ID) prevents duplicate turnover for multi-category products. Missing parents or cycles yield null. All catalog products are exported as before. Syntax and isolated hierarchy regression verified; full ERP build and production refresh not verified in this session.
+
+## Sparse XLSX classification updates (2026-10-19)
+Existing SKU category/group updates must not be rejected for unrelated missing legacy packaging dimensions. Validate volume source for new products or when a volume-source column is supplied. New-product and logistics-edit validation remains required. Classification import prepared for 265 archived products; data write not yet verified.

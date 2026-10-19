@@ -627,7 +627,11 @@ export async function POST(request: Request) {
         ? row.packHeightCm
         : Number(existing?.packHeightCm ?? 0),
     };
-    if (!hasProductVolumeSource(prospectiveVolumeSource)) {
+    const changesVolumeSource = [
+      "containerQty", "containerGrossWeightKg", "packQty",
+      "packWidthCm", "packDepthCm", "packHeightCm",
+    ].some((field) => headers.has(field as ArticleImportColumn));
+    if ((!existing || changesVolumeSource) && !hasProductVolumeSource(prospectiveVolumeSource)) {
       errors.push({
         row: row.row,
         field: "containerQty",
