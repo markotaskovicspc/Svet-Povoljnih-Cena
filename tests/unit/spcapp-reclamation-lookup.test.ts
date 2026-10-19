@@ -1,0 +1,12 @@
+import {beforeEach,expect,it,vi} from 'vitest';
+const mocks=vi.hoisted(()=>({auth:vi.fn(),find:vi.fn(),audit:vi.fn()}));
+vi.mock('@/lib/db',()=>({db:{reclamation:{findMany:mocks.find},auditLog:{create:mocks.audit}}}));
+vi.mock('@/lib/partners/auth',()=>({authenticatePartner:mocks.auth,partnerRateLimitHeaders:()=>({'Retry-After':'30'})}));
+import {POST} from '@/app/api/partners/v1/spcapp/reclamation-lookup/route';
+const request=(body:unknown)=>new Request('https://erp.test/api/partners/v1/spcapp/reclamation-lookup',{method:'POST',body:JSON.stringify(body)});
+beforeEach(()=>{vi.resetAllMocks();mocks.auth.mockResolvedValue({ok:true,client:{id:'test'}});mocks.find.mockResolvedValue([]);mocks.audit.mockResolvedValue({});});
+it.each([401,403,429])('auth %i precedes all data access',async status=>{mocks.auth.mockResolvedValue({ok:false,status,error:'denied'});const r=await POST(request({emails:['buyer@example.test']}));expect(r.status).toBe(status);expect(mocks.find).not.toHaveBeenCalled();expect(r.headers.get('cache-control')).toContain('no-store');});
+it('looks up customer email and returns only the bounded set',async()=>{mocks.find.mockResolvedValue(Array.from({length:21},(_,i)=>({id:String(i)})));const r=await POST(request({emails:['buyer@example.test']}));expect(r.status).toBe(200);const d=await r.json();expect(d.items).toHaveLength(20);expect(d.hasMore).toBe(true);expect(mocks.find.mock.calls[0][0].where).toEqual({OR:[{customerEmail:{equals:'buyer@example.test',mode:'insensitive'}}]});expect(JSON.stringify(mocks.audit.mock.calls)).not.toContain('buyer@');});
+it('exact claim id takes priority and fetches order discounts and prior payments',async()=>{await POST(request({id:'claim-1'}));const q=mocks.find.mock.calls[0][0];expect(q.where).toEqual({id:'claim-1'});expect(q.select.order.select).toMatchObject({shipping:true,total:true,voucherDiscount:true,firstPurchaseDiscount:true,savedCardDiscount:true});expect(q.select.order.select.paymentRefunds.where.status.in).toEqual(['PENDING','COMPLETED','NEEDS_REVIEW']);});
+it.each([{}, {emails:[]},{emails:['invalid']},{id:'',number:'x'},{unknown:'field'}])('rejects unbounded or malformed lookup %j',async body=>{expect((await POST(request(body))).status).toBe(400);expect(mocks.find).not.toHaveBeenCalled();});
+it('does not expose internal exception or customer identifiers',async()=>{mocks.find.mockRejectedValue(new Error('private database password'));const r=await POST(request({id:'test'}));expect(r.status).toBe(502);expect(await r.text()).not.toContain('private database');});

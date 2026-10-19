@@ -26,3 +26,7 @@ Existing SKU category/group updates must not be rejected for unrelated missing l
 
 ## Five-minute traffic export (2026-10-19)
 The SPC partner traffic export accepts granularity=5minute for one calendar day only. Actual consented PAGE_VIEW events are bucketed in Europe/Belgrade; session/visitor DISTINCT counts remain per bucket, so clients must request daily aggregates separately. Existing hour/day/month/year exports remain unchanged. Contract validation, cursor binding and boundary checks passed in isolation; full ERP build and live counts not verified locally.
+
+
+## Reclamation payment lookup (2026-10-19)
+Added authenticated POST /api/partners/v1/spcapp/reclamation-lookup for the user's IMAP refund workflow. Existing spcapp:read Bearer scope, partner rate limit, private/no-store responses and metadata-only audit apply. Requires exact claim id/number or up to10 customer emails; returns at most20 claims and only customer identity, claim decision/status, ordered item prices/quantities, discounts, shipping and existing payment refund states. Customer PII is not added to bulk exports. No business-data writes, fiscal issuance, emails or payments. Analytics derives the claimed item amount and includes delivery only for a single-item order, per user's instruction; QR generation is separate from payment execution. Auth/lookup tests19 pass (11 new cases); Next compile and build TypeScript pass. Full standalone tsc still reports unrelated existing unit-test typing errors. Production and actual mailbox login not verified locally.
