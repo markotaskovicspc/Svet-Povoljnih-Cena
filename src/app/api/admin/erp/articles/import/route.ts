@@ -51,6 +51,8 @@ import {
   type ArticleImportColumn,
 } from "@/lib/admin/article-import-workbook";
 
+export const maxDuration = 300;
+
 type ImportError = { row: number; field: string; message: string };
 
 type ArticleImportRow = {
@@ -1078,7 +1080,7 @@ export async function POST(request: Request) {
           });
         }
       }
-    });
+    }, { maxWait: 15_000, timeout: 180_000 });
   } catch (error) {
     const message =
       error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
