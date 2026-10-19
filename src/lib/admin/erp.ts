@@ -1610,13 +1610,14 @@ async function getPurchasePriceRows(take: number, skip = 0): Promise<ErpRow[]> {
     values: {
       sku: price.sku,
       supplier: price.supplier?.name ?? null,
-      name: price.name ?? price.product?.name ?? null,
-      attributes:
-        price.attributes ??
-        (price.product ? composePurchasePriceAttributes(price.product) : null),
-      pattern:
-        price.pattern ??
-        (price.product ? composePurchasePricePattern(price.product) : null),
+      // Keep price snapshots in storage; describe linked articles from current master data.
+      name: price.product?.name ?? price.name ?? null,
+      attributes: price.product
+        ? composePurchasePriceAttributes(price.product)
+        : price.attributes ?? null,
+      pattern: price.product
+        ? composePurchasePricePattern(price.product)
+        : price.pattern ?? null,
       purchasePrice: asNumber(price.price),
       currency: currencyLabel(price.currency),
       parity: price.parity ?? null,
