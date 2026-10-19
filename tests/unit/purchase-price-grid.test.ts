@@ -33,11 +33,11 @@ const price = {
 };
 
 async function firstRow() {
-  const module = await getErpModule("nabavne-cene", {
+  const erpModule = await getErpModule("nabavne-cene", {
     take: 100,
     includeLookupOptions: false,
   });
-  return module!.rows[0];
+  return erpModule!.rows[0];
 }
 
 describe("purchase-price grid article descriptions", () => {
