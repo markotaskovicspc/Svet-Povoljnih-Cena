@@ -40,7 +40,8 @@ export function parseExportQuery(resource: string, url: URL, secret: string, now
   const limit = Number(rawLimit);
   if (limit < 1 || limit > 200) throw new ExportInputError('limit must be an integer from 1 to 200.');
   const granularity = url.searchParams.get('granularity') ?? 'day';
-  if (!['hour', 'day', 'month', 'year'].includes(granularity)) throw new ExportInputError('Invalid granularity.');
+  if (!['5minute', 'hour', 'day', 'month', 'year'].includes(granularity)) throw new ExportInputError('Invalid granularity.');
+  if (granularity === '5minute' && (resource !== 'traffic' || from !== to)) throw new ExportInputError('5minute traffic requires a single day.');
   const basis = url.searchParams.get('basis') ?? 'orders';
   if (!['orders', 'fiscal'].includes(basis)) throw new ExportInputError('Invalid customer basis.');
   const status = url.searchParams.get('status');
@@ -61,7 +62,7 @@ export function parseExportQuery(resource: string, url: URL, secret: string, now
       after = decoded.after;
     } catch { throw new ExportInputError('Cursor does not match this export.'); }
   }
-  return { resource: resource as Resource, period, limit, after, granularity: granularity as 'hour' | 'day' | 'month' | 'year', basis, status, supplierPib,
+  return { resource: resource as Resource, period, limit, after, granularity: granularity as '5minute' | 'hour' | 'day' | 'month' | 'year', basis, status, supplierPib,
     nextCursor(lastId: string) {
       const body = Buffer.from(JSON.stringify({ binding, after: lastId })).toString('base64url');
       return `${body}.${createHmac('sha256', secret).update(body).digest('hex')}`;

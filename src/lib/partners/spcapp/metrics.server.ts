@@ -6,9 +6,13 @@ import { calculateProductPerformance, type PerformanceInput } from '@/lib/admin/
 import { type ExportQuery } from './contract';
 
 export function trafficQuery(q: ExportQuery) {
+  const localTime = Prisma.sql`"occurredAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Belgrade'`;
+  const bucket = q.granularity === '5minute'
+    ? Prisma.sql`date_trunc('hour', ${localTime}) + floor(extract(minute from ${localTime}) / 5)::int * interval '5 minutes'`
+    : Prisma.sql`date_trunc(${q.granularity}, ${localTime})`;
   return Prisma.sql`
     WITH buckets AS (
-      SELECT date_trunc(${q.granularity}, "occurredAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Belgrade') AS bucket,
+      SELECT ${bucket} AS bucket,
         COUNT(*)::int AS "pageViews", COUNT(DISTINCT "anonymousId")::int AS "uniqueVisitors",
         COUNT(DISTINCT COALESCE("sessionId", "anonymousId"))::int AS visits,
         COUNT(*) FILTER (WHERE "sessionId" IS NULL)::int AS "eventsWithoutSession"

@@ -22,3 +22,7 @@ The products partner export includes analyticsCategory (root Category resolved f
 
 ## Sparse XLSX classification updates (2026-10-19)
 Existing SKU category/group updates must not be rejected for unrelated missing legacy packaging dimensions. Validate volume source for new products or when a volume-source column is supplied. New-product and logistics-edit validation remains required. Classification import prepared for 265 archived products; data write not yet verified.
+
+
+## Five-minute traffic export (2026-10-19)
+The SPC partner traffic export accepts granularity=5minute for one calendar day only. Actual consented PAGE_VIEW events are bucketed in Europe/Belgrade; session/visitor DISTINCT counts remain per bucket, so clients must request daily aggregates separately. Existing hour/day/month/year exports remain unchanged. Contract validation, cursor binding and boundary checks passed in isolation; full ERP build and live counts not verified locally.
