@@ -1,4 +1,6 @@
 import { buildPickupPrintRows, type PickupPrintLine } from "./pickup-print";
+import { resolvePickingPositions, type PickingPosition } from "./picking-positions";
+export type { PickingPosition } from "./picking-positions";
 
 // Exact cell order from Magacin picking pozicije.pdf. Walking order is separate.
 export const pickingLayout = [
@@ -14,7 +16,6 @@ export const pickingLayout = [
 export type PositionedLine = PickupPrintLine & {
   warehouseId: string; warehouseName: string; orderId: string; orderNumber: string; supplierId: string | null;
 };
-export type PickingPosition = { warehouseId: string; number: number; routeOrder: number; skus: string[]; supplierIds: string[] };
 export type PickingRow = {
   key: string; sku: string; name: string; barcode: string | null; quantity: number;
   warehouseName: string; positions: number[]; routeOrder: number;
@@ -33,9 +34,7 @@ export function buildPickingPlan(lines: PositionedLine[], positions: PickingPosi
     for (const row of buildPickupPrintRows(group)) {
       const key = JSON.stringify([first.warehouseId, row.key]);
       const supplierId = group.find(line => line.orderItem?.sku === row.sku)?.supplierId;
-      const assigned = positions.filter(p => p.warehouseId === first.warehouseId && p.skus.includes(row.sku));
-      const locations = (assigned.length ? assigned : positions.filter(p => p.warehouseId === first.warehouseId && !!supplierId && p.supplierIds.includes(supplierId)))
-        .sort((a, b) => a.routeOrder - b.routeOrder || a.number - b.number);
+      const locations = resolvePickingPositions(positions, { warehouseId: first.warehouseId, sku: row.sku, supplierId });
       const current = result.get(key) ?? {
         key, sku: row.sku, name: row.name, barcode: row.barcode, quantity: 0,
         warehouseName: first.warehouseName, positions: locations.map(p => p.number),

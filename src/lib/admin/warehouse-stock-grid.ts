@@ -1,6 +1,7 @@
 import type { ErpRow } from "@/lib/admin/erp";
 import { resolveChannelAvailability } from "@/lib/channel-availability";
 import { resolveStoredWarehouseBalance } from "@/lib/reservation-stock";
+import { resolvePickingPositions, type PickingPosition } from "./picking-positions";
 
 export const WAREHOUSE_GRID_INCOMING_ORDER_STATUSES = [
   "DRAFT",
@@ -19,6 +20,7 @@ export type WarehouseStockGridProduct = {
   id: string;
   sku: string;
   name: string;
+  supplierId?: string | null;
   supplier: { name: string } | null;
   shortDescription: string | null;
   shortName: string | null;
@@ -71,6 +73,7 @@ function createWarehouseStockGridRow(input: {
   incoming: number;
   warehouse: WarehouseStockGridWarehouse;
   product: WarehouseStockGridProduct;
+  pickingPositions: PickingPosition[];
 }): ErpRow {
   const belongsToWarehouse = (warehouseId: string | null) =>
     warehouseId === input.warehouse.id ||
@@ -105,11 +108,17 @@ function createWarehouseStockGridRow(input: {
     manualWholesale: input.product.availableWholesaleManual,
     manualExport: input.product.availableExportManual,
   });
+  const positions = resolvePickingPositions(input.pickingPositions, {
+    warehouseId: input.warehouse.id,
+    sku: input.product.sku,
+    supplierId: input.product.supplierId,
+  });
   return {
     id: input.id,
     values: {
       warehouse: input.warehouse.name,
       sku: input.product.sku,
+      pickingPosition: positions.map(position => position.number).join(", ") || null,
       product: input.product.name,
       supplier: input.product.supplier?.name ?? null,
       shortDescription: input.product.shortDescription,
@@ -142,6 +151,7 @@ export function buildWarehouseStockGridRows(input: {
   incomingOrderLines: IncomingPurchaseOrderGridInput[];
   productsWithStoredIncoming: WarehouseStockGridProduct[];
   defaultWarehouse: WarehouseStockGridWarehouse | null;
+  pickingPositions?: PickingPosition[];
 }) {
   const incomingByProductWarehouse = new Map<string, IncomingGridBalance>();
   const derivedIncomingByProduct = new Map<string, number>();
@@ -197,6 +207,7 @@ export function buildWarehouseStockGridRows(input: {
       incoming,
       warehouse: stock.warehouse,
       product: stock.product,
+      pickingPositions: input.pickingPositions ?? [],
     });
   });
 
@@ -209,6 +220,7 @@ export function buildWarehouseStockGridRows(input: {
         incoming: balance.incoming,
         warehouse: balance.warehouse,
         product: balance.product,
+        pickingPositions: input.pickingPositions ?? [],
       }),
     );
   }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { migrateWarehousePickingColumns } from "./warehouse-picking-columns";
 const filter = z.object({ id: z.string(), columnKey: z.string(), operator: z.enum(["contains", "not_contains", "equals", "not_equals", "gt", "gte", "lt", "lte", "before", "after"]), value: z.string() });
 const schema = z.object({
   version: z.literal(1), query: z.string(), searchColumn: z.string(),
@@ -8,7 +9,7 @@ const schema = z.object({
   context: z.record(z.string(), z.string()), page: z.number().int().min(1),
 });
 /** Session-only list state, kept separately for each module and URL view. */
-export function readGridNavigation(raw: string | null, columns: string[]) {
+export function readGridNavigation(raw: string | null, columns: string[], moduleSlug = "") {
   if (!raw) return null;
   try {
     const parsed = schema.safeParse(JSON.parse(raw));
@@ -17,8 +18,9 @@ export function readGridNavigation(raw: string | null, columns: string[]) {
     const state = parsed.data;
     const visibleColumns = state.visibleColumns.filter(key => known.has(key));
     if (!visibleColumns.length) return null;
-    const order = state.columnOrder.filter(key => known.has(key));
-    return { ...state, visibleColumns,
+    const migrated = migrateWarehousePickingColumns(moduleSlug, visibleColumns, state.columnOrder);
+    const order = migrated.columnOrder.filter(key => known.has(key));
+    return { ...state, visibleColumns: migrated.visibleColumns.filter(key => known.has(key)),
       columnOrder: [...new Set([...order, ...columns])],
       searchColumn: known.has(state.searchColumn) ? state.searchColumn : "",
       filters: state.filters.filter(f => known.has(f.columnKey)),

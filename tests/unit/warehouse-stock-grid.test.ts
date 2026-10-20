@@ -38,6 +38,40 @@ function product(
 }
 
 describe("DC warehouse incoming rows", () => {
+  it("shows article positions in its own warehouse, ahead of supplier fallback", () => {
+    const article = { ...product("chair"), supplierId: "supplier" };
+    const secondWarehouse = { ...warehouse, id: "second", name: "Drugi", isDefault: false };
+    const rows = buildWarehouseStockGridRows({
+      stocks: [
+        { id: "dc-chair", qty: 4, warehouse, product: article },
+        { id: "second-chair", qty: 2, warehouse: secondWarehouse, product: article },
+      ],
+      incomingOrderLines: [], productsWithStoredIncoming: [], defaultWarehouse: warehouse,
+      pickingPositions: [
+        { warehouseId: "dc", number: 3, routeOrder: 20, skus: ["CHAIR"], supplierIds: [] },
+        { warehouseId: "dc", number: 20, routeOrder: 1, skus: ["CHAIR"], supplierIds: [] },
+        { warehouseId: "dc", number: 7, routeOrder: 0, skus: [], supplierIds: ["supplier"] },
+        { warehouseId: "second", number: 55, routeOrder: 1, skus: ["CHAIR"], supplierIds: [] },
+      ],
+    });
+    expect(rows.map(row => row.values.pickingPosition)).toEqual(["20, 3", "55"]);
+    expect(filterAndSortGridRows(rows, ["pickingPosition"], "55", [], []).map(row => row.id)).toEqual(["second-chair"]);
+  });
+
+  it("uses supplier positions for incoming-only stock and leaves unassigned articles empty", () => {
+    const rows = buildWarehouseStockGridRows({
+      stocks: [{ id: "unassigned", qty: 1, warehouse, product: product("none") }],
+      incomingOrderLines: [{ qty: 3, receivedQty: 0, warehouse: null, product: { ...product("incoming"), supplierId: "supplier" } }],
+      productsWithStoredIncoming: [], defaultWarehouse: warehouse,
+      pickingPositions: [
+        { warehouseId: "dc", number: 8, routeOrder: 2, skus: [], supplierIds: ["supplier"] },
+        { warehouseId: "dc", number: 2, routeOrder: 1, skus: [], supplierIds: ["supplier"] },
+        { warehouseId: "other", number: 99, routeOrder: 0, skus: ["NONE"], supplierIds: ["supplier"] },
+      ],
+    });
+    expect(rows.map(row => [row.values.pickingPosition, row.values.incoming])).toEqual([[null, 0], ["2, 8", 3]]);
+  });
+
   it("includes catalogue identity on stocked and incoming-only rows for filtering and export", () => {
     const article = {
       ...product("catalogue"),

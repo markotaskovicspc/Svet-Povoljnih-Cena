@@ -51,6 +51,7 @@ import type {
   ErpValue,
 } from "@/lib/admin/erp";
 import { readGridNavigation } from "@/lib/admin/grid-navigation";
+import { migrateWarehousePickingColumns } from "@/lib/admin/warehouse-picking-columns";
 import { nextGridSorting } from "@/lib/admin/grid-query";
 import { createInitialGridRowsReuse } from "@/lib/admin/grid-initial-rows";
 import {
@@ -212,7 +213,10 @@ function readColumnOrder(moduleSlug: string, columns: ErpColumn[]) {
     const raw = window.localStorage.getItem(columnOrderKey(moduleSlug));
     const stored = raw ? (JSON.parse(raw) as string[]) : [];
     const known = new Set(defaultOrder);
-    const validStored = stored.filter((key) => known.has(key));
+    const filteredStored = stored.filter((key) => known.has(key));
+    const validStored = filteredStored.length
+      ? migrateWarehousePickingColumns(moduleSlug, [], filteredStored).columnOrder
+      : filteredStored;
     const missing = defaultOrder.filter((key) => !validStored.includes(key));
     const completeOrder = [...validStored, ...missing];
     if (
@@ -391,12 +395,12 @@ function ErpGridContent({
         knownColumns.has(key),
       );
       return requestedColumns.length
-        ? requestedColumns
+        ? migrateWarehousePickingColumns(module.slug, requestedColumns, initialView?.columnOrder ?? requestedColumns).visibleColumns
         : module.columns
             .filter((column) => column.defaultVisible)
             .map((column) => column.key);
     },
-    [initialView?.visibleColumns, initialVisibleColumns, module.columns],
+    [initialView?.visibleColumns, initialView?.columnOrder, initialVisibleColumns, module.columns, module.slug],
   );
   const [query, setQuery] = useState(initialView?.query ?? initialQuery);
   const [searchColumn, setSearchColumn] = useState(() =>
@@ -429,9 +433,9 @@ function ErpGridContent({
   const [columnOrder, setColumnOrder] = useState<string[]>(() => {
     const defaultOrder = module.columns.map((column) => column.key);
     const knownColumns = new Set(defaultOrder);
-    const requestedOrder = (initialView?.columnOrder ?? []).filter((key) =>
-      knownColumns.has(key),
-    );
+    const requestedOrder = initialView?.columnOrder?.length
+      ? migrateWarehousePickingColumns(module.slug, [], initialView.columnOrder).columnOrder.filter((key) => knownColumns.has(key))
+      : [];
     return requestedOrder.length
       ? [
           ...requestedOrder,
@@ -517,6 +521,7 @@ function ErpGridContent({
   };
 
   function restoreView(view: SavedView) {
+    view = { ...view, ...migrateWarehousePickingColumns(module.slug, view.visibleColumns, view.columnOrder ?? []) };
     const visible = view.visibleColumns.filter((key) => knownColumnKeys.has(key));
     updateVisibleColumns(visible.length ? visible : defaultColumns);
     if (view.columnOrder?.length) {
@@ -554,7 +559,7 @@ function ErpGridContent({
     navigationKey.current = `spc:grid-navigation:${module.slug}:${window.location.pathname}${window.location.search}`;
     try {
       const raw = sessionStorage.getItem(navigationKey.current);
-      const saved = readGridNavigation(raw, module.columns.map(c => c.key));
+      const saved = readGridNavigation(raw, module.columns.map(c => c.key), module.slug);
       if (saved) {
         restoredSnapshot.current = true;
         setQuery(saved.query); setSearchColumn(saved.searchColumn);

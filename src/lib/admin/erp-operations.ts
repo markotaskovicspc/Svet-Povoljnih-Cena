@@ -298,6 +298,7 @@ export const operationalErpModules: ErpModule[] = [
     columns: [
       text("warehouse", "Magacin"),
       text("sku", "SKU"),
+      text("pickingPosition", "Picking pozicija"),
       text("product", "Artikal"),
       text("supplier", "Dobavljač"),
       text("shortDescription", "Kratki opis"),
@@ -1295,6 +1296,7 @@ async function warehouseStockRows(take: number): Promise<ErpRow[]> {
     id: true,
     sku: true,
     name: true,
+    supplierId: true,
     supplier: { select: { name: true } },
     shortDescription: true,
     shortName: true,
@@ -1335,7 +1337,7 @@ async function warehouseStockRows(take: number): Promise<ErpRow[]> {
     isDefault: true,
     active: true,
   } satisfies Prisma.WarehouseSelect;
-  const [stocks, incomingOrderLines, productsWithStoredIncoming, defaultWarehouse] =
+  const [stocks, incomingOrderLines, productsWithStoredIncoming, defaultWarehouse, pickingPositions] =
     await Promise.all([
       db.warehouseStock.findMany({
         take,
@@ -1377,6 +1379,9 @@ async function warehouseStockRows(take: number): Promise<ErpRow[]> {
         orderBy: { createdAt: "asc" },
         select: warehouseSelect,
       }),
+      db.warehousePickingPosition.findMany({
+        select: { warehouseId: true, number: true, routeOrder: true, skus: true, supplierIds: true },
+      }),
     ]);
 
   return buildWarehouseStockGridRows({
@@ -1395,6 +1400,7 @@ async function warehouseStockRows(take: number): Promise<ErpRow[]> {
     ),
     productsWithStoredIncoming,
     defaultWarehouse,
+    pickingPositions,
   });
 }
 
