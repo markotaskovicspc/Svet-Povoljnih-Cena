@@ -159,7 +159,7 @@ export const adminNav: AdminNavGroup[] = [
     label: "Marketing",
     items: [
       { href: "/admin/newsletter", label: "Newsletter centar", allowed: A },
-      { href: "/admin/viber", label: "Viber kampanje", allowed: A },
+      { href: "/admin/viber", label: "Viber i SMS", allowed: A },
       { href: "/admin/oglasi", label: "Oglasi (GMC/Meta)", allowed: A },
     ],
   },

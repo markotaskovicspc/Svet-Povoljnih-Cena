@@ -3,7 +3,7 @@ import { z } from "zod";
 import { envValue } from "@/lib/env";
 import { hasBearerSecret } from "@/lib/security/bearer";
 import { db } from "@/lib/db";
-import { isViberReady } from "@/lib/viber/config";
+import { isViberReady, isSmsReady } from "@/lib/viber/config";
 import { runDueCampaigns } from "@/lib/viber/campaign";
 import { claimNthMessage, completeNthMessage } from "@/lib/viber/outbox";
 
@@ -25,9 +25,9 @@ export async function POST(req: Request) {
   if (!input.success) return NextResponse.json({ error: "invalid_payload" }, { status: 400 });
   if (input.data.action === "reports") {
     const now = new Date();
-    const jobs = await db.backgroundJob.findMany({ where: { kind: "NTH_VIBER_OUTBOUND", status: { in: ["VIBER_SENT", "VIBER_DELIVERED"] }, createdAt: { gte: new Date(now.getTime() - 7*86400_000) }, availableAt: { lte: now }, lastError: { startsWith: "NTH:" } }, orderBy: { availableAt: "asc" }, take: 20, select: { id: true, lastError: true } });
+    const jobs = await db.backgroundJob.findMany({ where: { kind: "NTH_VIBER_OUTBOUND", status: { in: ["VIBER_SENT", "VIBER_DELIVERED"] }, createdAt: { gte: new Date(now.getTime() - 7*86400_000) }, availableAt: { lte: now }, lastError: { startsWith: "NTH:" } }, orderBy: { availableAt: "asc" }, take: 20, select: { id: true, lastError: true, payload: true } });
     await db.backgroundJob.updateMany({ where: { id: { in: jobs.map(j => j.id) } }, data: { availableAt: new Date(now.getTime()+60_000) } });
-    return NextResponse.json({ jobs: jobs.map(j => ({ id: j.id, messageId: j.lastError!.slice(4) })) }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ jobs: jobs.map(j => ({ id: j.id, messageId: j.lastError!.slice(4), channel: (j.payload as { channels?: string[] }).channels?.[0] === "SMS" ? "SMS" : "VIBER" })) }, { headers: { "Cache-Control": "no-store" } });
   }
   if (input.data.action === "delivery") {
     const { id, messageId, status } = input.data;
@@ -38,7 +38,7 @@ export async function POST(req: Request) {
     if (envValue("VIBER_SCHEDULED_CAMPAIGNS_ENABLED") === "true") await runDueCampaigns();
     return NextResponse.json({ ok: true });
   }
-  if (input.data.action === "claim" && !isViberReady()) return NextResponse.json({ job: null }, { headers: { "Cache-Control": "no-store" } });
+  if (input.data.action === "claim" && !isViberReady() && !isSmsReady()) return NextResponse.json({ job: null }, { headers: { "Cache-Control": "no-store" } });
   if (input.data.action === "claim") return NextResponse.json({ job: await claimNthMessage() }, { headers: { "Cache-Control": "no-store" } });
   await completeNthMessage(input.data.id, input.data.outcome, input.data.messageId);
   return NextResponse.json({ ok: true });

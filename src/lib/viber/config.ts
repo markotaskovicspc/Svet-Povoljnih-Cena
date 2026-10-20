@@ -81,3 +81,10 @@ export function isViberReady() {
     ? (cfg.deliveryMode === "worker" ? Boolean(envValue("NTH_WORKER_TOKEN") && envValue("NTH_WORKER_TOKEN")!.length >= 32) : Boolean(cfg.username && cfg.password))
     : cfg.provider === "viber" && Boolean(cfg.apiKey));
 }
+
+/** Both channels use the same verified NTH account and existing worker. */
+export function isSmsReady() {
+  const cfg = getViberConfig();
+  return cfg.provider === "nth" && isViberReady() && envValue("SMS_SENDING_ENABLED") !== "false";
+}
+export function smsSender() { return envValue("NTH_SMS_SENDER") ?? "SvetPovCena"; }

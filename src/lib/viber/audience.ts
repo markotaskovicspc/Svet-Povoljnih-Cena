@@ -27,6 +27,8 @@ import { nthPhoneNumber } from "./nth";
 
 export const audienceFilterSchema = z
   .object({
+    channel: z.enum(["VIBER", "SMS"]).optional(),
+    phoneScope: z.enum(["current"]).optional(),
     cities: z.array(z.string().min(1)).max(50).optional(),
     lastPurchaseFrom: z.string().datetime().optional(),
     lastPurchaseTo: z.string().datetime().optional(),
@@ -67,7 +69,8 @@ export function parseAudienceFilter(input: unknown): AudienceFilter {
 export async function resolveAudience(
   filter: AudienceFilter,
 ): Promise<AudienceRecipient[]> {
-  if (filter.allStoredPhones) return resolveStoredPhones();
+  if (filter.allStoredPhones) return resolveStoredPhones(filter);
+  const consentFlag = filter.channel === "SMS" ? Prisma.raw('mc.sms') : Prisma.raw('mc."viber"');
   const cityFilter = filter.cities?.length
     ? Prisma.sql`AND o."shipCity" = ANY(${filter.cities}::text[])`
     : Prisma.empty;
@@ -99,7 +102,7 @@ export async function resolveAudience(
     JOIN "MarketingConsent" mc ON mc."userId" = u."id"
     WHERE o."userId" IS NOT NULL
       AND o."status" = 'ISPORUCENO'
-      AND mc."viber" = true
+      AND ${consentFlag} = true
       AND u."phone" IS NOT NULL
       AND u."deletedAt" IS NULL
       ${cityFilter}
@@ -123,7 +126,7 @@ export async function resolveAudience(
       where: {
         deletedAt: null,
         phone: { not: null },
-        marketingConsent: { is: { viber: true } },
+        marketingConsent: { is: filter.channel === "SMS" ? { sms: true } : { viber: true } },
         id: { notIn: recipients.length ? Array.from(seen) : ["__none__"] },
       },
       select: {
@@ -164,7 +167,7 @@ export async function countAudience(filter: AudienceFilter): Promise<number> {
 }
 
 /** Counts only; raw contact numbers never leave the authenticated server. */
-export async function getViberContactSummary() {
+export async function getViberContactSummary(channel: "VIBER" | "SMS" = "VIBER") {
   const [rows, eligible, allEligible] = await Promise.all([
     db.$queryRaw<{ phone: string }[]>(Prisma.sql`
       SELECT DISTINCT phone FROM (
@@ -177,8 +180,8 @@ export async function getViberContactSummary() {
           WHERE o."userId" IS NULL OR u."deletedAt" IS NULL
       ) contacts WHERE phone IS NOT NULL AND TRIM(phone) <> ''
     `),
-    countAudience({ includeNonCustomers: true }),
-    countAudience({ allStoredPhones: true }),
+    countAudience({ includeNonCustomers: true, channel }),
+    countAudience({ allStoredPhones: true, phoneScope: "current", channel }),
   ]);
   const valid = new Set<string>();
   let invalid = 0;
@@ -192,28 +195,29 @@ export async function getViberContactSummary() {
 // after this cutoff are not silently covered by that historical declaration.
 export const STORED_PHONES_CONSENT = { source: "Stefan: all existing numbers have Viber consent", confirmedAt: "2026-10-14T20:38:02.000Z" } as const;
 export function storedPhoneRecipientId(phone: string) { return "phone_" + createHash("sha256").update(nthPhoneNumber(phone)).digest("hex"); }
-async function blockedPhones() {
+async function blockedPhones(channel: "VIBER" | "SMS" = "VIBER") {
+  const flag = channel === "SMS" ? Prisma.raw('mc.sms') : Prisma.raw('mc.viber');
   const rows = await db.$queryRaw<{ phone: string }[]>(Prisma.sql`
     SELECT u.phone FROM "User" u LEFT JOIN "MarketingConsent" mc ON mc."userId"=u.id
-      WHERE u.phone IS NOT NULL AND (u."deletedAt" IS NOT NULL OR mc.viber=false)
+      WHERE u.phone IS NOT NULL AND (u."deletedAt" IS NOT NULL OR ${flag}=false)
     UNION
     SELECT o."shipPhone" FROM "Order" o JOIN "User" u ON u.id=o."userId" LEFT JOIN "MarketingConsent" mc ON mc."userId"=u.id
-      WHERE u."deletedAt" IS NOT NULL OR mc.viber=false
+      WHERE u."deletedAt" IS NOT NULL OR ${flag}=false
     UNION
     SELECT c.phone FROM "Customer" c JOIN "User" u ON u.id=c."userId" LEFT JOIN "MarketingConsent" mc ON mc."userId"=u.id
-      WHERE c.phone IS NOT NULL AND (u."deletedAt" IS NOT NULL OR mc.viber=false)
+      WHERE c.phone IS NOT NULL AND (u."deletedAt" IS NOT NULL OR ${flag}=false)
   `);
   const phones = new Set<string>();
   for (const row of rows) { try { phones.add(nthPhoneNumber(row.phone)); } catch { /* invalid */ } }
   return phones;
 }
-export async function isStoredPhoneAllowed(phone: string) {
+export async function isStoredPhoneAllowed(phone: string, channel: "VIBER" | "SMS" = "VIBER") {
   let normalized: string;
   try { normalized = nthPhoneNumber(phone); } catch { return false; }
-  return !(await blockedPhones()).has(normalized);
+  return !(await blockedPhones(channel)).has(normalized);
 }
-async function resolveStoredPhones(): Promise<AudienceRecipient[]> {
-  const cutoff = new Date(STORED_PHONES_CONSENT.confirmedAt);
+async function resolveStoredPhones(filter: AudienceFilter): Promise<AudienceRecipient[]> {
+  const cutoff = filter.phoneScope === "current" ? new Date() : new Date(STORED_PHONES_CONSENT.confirmedAt);
   const [rows, blocked] = await Promise.all([
     db.$queryRaw<{ phone: string; name: string | null }[]>(Prisma.sql`
       SELECT u.phone, u."firstName" AS name FROM "User" u WHERE u.phone IS NOT NULL AND u."deletedAt" IS NULL AND u."createdAt" <= ${cutoff}
@@ -221,7 +225,7 @@ async function resolveStoredPhones(): Promise<AudienceRecipient[]> {
       SELECT c.phone, c."firstName" FROM "Customer" c WHERE c.phone IS NOT NULL AND c."createdAt" <= ${cutoff}
       UNION ALL
       SELECT o."shipPhone", o."shipFirstName" FROM "Order" o WHERE o."createdAt" <= ${cutoff}
-    `), blockedPhones(),
+    `), blockedPhones(filter.channel),
   ]);
   const unique = new Map<string, AudienceRecipient>();
   for (const row of rows) {

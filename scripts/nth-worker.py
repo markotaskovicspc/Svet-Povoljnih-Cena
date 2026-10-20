@@ -87,7 +87,7 @@ def main():
                         req = urllib.request.Request(status_url, headers={"Authorization": auth, "Accept": "application/json"})
                         with urllib.request.build_opener(NoRedirect).open(req, timeout=15) as response:
                             statuses = json.load(response).get("messages", [])
-                        code = next((entry.get("status", {}).get("code") for entry in statuses if entry.get("channel") == "VIBER"), None)
+                        code = next((entry.get("status", {}).get("code") for entry in statuses if entry.get("channel") == report.get("channel", "VIBER")), None)
                         outcome = "SEEN" if code == "SEEN" else "DELIVERED" if code == "DELIVERED" else "FAILED" if code in {"BLACKLISTED", "DELIVERY_FAILED", "ERROR", "EXPIRED", "INSUFFICIENT_FUNDS", "NO_ROUTE", "REJECTED", "USER_BLOCKED"} else None
                         if outcome:
                             request_json(url, "Bearer " + token, {"action": "delivery", "id": report["id"], "messageId": report["messageId"], "status": outcome})

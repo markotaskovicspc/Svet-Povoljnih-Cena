@@ -3,21 +3,26 @@ import { createHash, randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { isStoredPhoneAllowed, parseAudienceFilter, storedPhoneRecipientId } from "./audience";
-import { buildNthPayload } from "./nth";
+import { isSmsReady, isViberReady } from "./config";
+import { buildNthPayload, buildNthSmsPayload } from "./nth";
 import type { ViberConfig } from "./config";
 import type { ViberMessage, ViberDispatchResult } from "./transport";
 
 // Dedicated statuses keep these jobs out of the ordinary Vercel worker, which
 // cannot send from the IP whitelisted by NTH. No schema migration is required.
 export const NTH_JOB_KIND = "NTH_VIBER_OUTBOUND";
-export async function queueNthMessage(msg: ViberMessage, cfg: ViberConfig): Promise<ViberDispatchResult> {
-  let payload: ReturnType<typeof buildNthPayload>;
-  try { payload = buildNthPayload(msg, cfg.sender); }
-  catch { return { ok: false, provider: "nth", error: "nth:invalid_message" }; }
+export function nthQueueData(msg: ViberMessage, cfg: ViberConfig) {
+  const payload = msg.channel === "SMS" ? buildNthSmsPayload(msg) : buildNthPayload(msg, cfg.sender);
   const key = `nth:${createHash("sha256").update(msg.requestId ?? msg.trackingData ?? randomUUID()).digest("hex")}`;
+  return { kind: NTH_JOB_KIND, payload: payload as Prisma.InputJsonValue, idempotencyKey: key, status: "VIBER_QUEUED", maxAttempts: 1 };
+}
+export async function queueNthMessage(msg: ViberMessage, cfg: ViberConfig): Promise<ViberDispatchResult> {
+  let data: ReturnType<typeof nthQueueData>;
+  try { data = nthQueueData(msg, cfg); }
+  catch { return { ok: false, provider: "nth", error: "nth:invalid_message" }; }
   const job = await db.backgroundJob.upsert({
-    where: { idempotencyKey: key }, update: {},
-    create: { kind: NTH_JOB_KIND, payload: payload as Prisma.InputJsonValue, idempotencyKey: key, status: "VIBER_QUEUED", maxAttempts: 1 },
+    where: { idempotencyKey: data.idempotencyKey }, update: {},
+    create: data,
     select: { id: true, status: true },
   });
   if (["VIBER_FAILED", "VIBER_UNKNOWN"].includes(job.status)) return { ok: false, provider: "nth", error: "nth:previous_send_requires_review" };
@@ -29,7 +34,7 @@ export async function claimNthMessage() {
   // Reclaim only the acknowledgement lease. The server's durable journal must
   // return its stored result for a reclaimed job, never submit it again.
   const candidates = await db.backgroundJob.findMany({
-    where: { kind: NTH_JOB_KIND, OR: [
+    where: { kind: NTH_JOB_KIND, ...(!isSmsReady() || !isViberReady() ? { payload: { path: ["channels", "0"], equals: isSmsReady() ? "SMS" : "VIBER" } } : {}), OR: [
       { status: "VIBER_QUEUED" },
       { status: "VIBER_RUNNING", lockedAt: { lt: new Date(now.getTime() - 5 * 60_000) } },
     ] }, orderBy: { createdAt: "asc" }, take: 10,
@@ -37,22 +42,25 @@ export async function claimNthMessage() {
   });
   for (const candidate of candidates) {
     const payload = candidate.payload as Record<string, unknown>;
+    const channel = (payload.channels as string[] | undefined)?.[0] === "SMS" ? "SMS" : "VIBER";
+    if (!(channel === "SMS" ? isSmsReady() : isViberReady())) continue;
     const tracking = typeof payload.transactionId === "string" ? /^cmp:([^:]+):rcp:(.+)$/.exec(payload.transactionId) : null;
     if (tracking) {
       // Re-check marketing consent immediately before the outbound worker gets
       // the message. Deleting a campaign or withdrawing consent cancels its queue.
       const stored = tracking[2].startsWith("phone_");
       const [user, campaign] = await Promise.all([
-        stored ? Promise.resolve(null) : db.user.findFirst({ where: { id: tracking[2], deletedAt: null, marketingConsent: { is: { viber: true } } }, select: { id: true } }),
+        stored ? Promise.resolve(null) : db.user.findFirst({ where: { id: tracking[2], deletedAt: null, marketingConsent: { is: channel === "SMS" ? { sms: true } : { viber: true } } }, select: { id: true } }),
         db.viberCampaign.findUnique({ where: { id: tracking[1] }, select: { status: true, audience: { select: { filter: true } } } }),
       ]);
       let allowed = Boolean(user);
       if (stored && campaign?.audience) {
         const phone = (payload.destinations as { phoneNumber?: string }[] | undefined)?.[0]?.phoneNumber;
-        try { allowed = Boolean(phone && parseAudienceFilter(campaign.audience.filter).allStoredPhones && storedPhoneRecipientId(phone) === tracking[2]); } catch { allowed = false; }
-        if (allowed && phone) allowed = await isStoredPhoneAllowed(phone);
+        try { allowed = Boolean(phone && parseAudienceFilter(campaign.audience.filter).allStoredPhones && (parseAudienceFilter(campaign.audience.filter).channel ?? "VIBER") === channel && storedPhoneRecipientId(phone) === tracking[2]); } catch { allowed = false; }
+        if (allowed && phone) allowed = await isStoredPhoneAllowed(phone, channel);
       }
-      if (!allowed || !campaign || !["SENDING", "SENT"].includes(campaign.status)) {
+      const sameChannel = campaign?.audience && (parseAudienceFilter(campaign.audience.filter).channel ?? "VIBER") === channel;
+      if (!allowed || !campaign || !sameChannel || !["SENDING", "SENT"].includes(campaign.status)) {
         await db.backgroundJob.updateMany({ where: { id: candidate.id, status: candidate.status, lockedAt: candidate.lockedAt }, data: { status: "VIBER_CANCELLED", completedAt: now, lockedAt: null, lastError: "consent_or_campaign_unavailable" } });
         continue;
       }

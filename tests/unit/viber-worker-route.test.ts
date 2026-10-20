@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ claim: vi.fn(), complete: vi.fn(), campaigns: vi.fn(), jobs: vi.fn(), update: vi.fn() }));
 vi.mock("@/lib/db", () => ({ db: { backgroundJob: { findMany: mocks.jobs, updateMany: mocks.update } } }));
-vi.mock("@/lib/viber/config", () => ({ isViberReady: () => true }));
+vi.mock("@/lib/viber/config", () => ({ isViberReady: () => true, isSmsReady: () => true }));
 vi.mock("@/lib/viber/outbox", () => ({ claimNthMessage: mocks.claim, completeNthMessage: mocks.complete }));
 vi.mock("@/lib/viber/campaign", () => ({ runDueCampaigns: mocks.campaigns }));
 import { POST } from "@/app/api/viber/worker/route";
@@ -46,4 +46,13 @@ it("tracks delivery monotonically and cannot downgrade a read/delivered message 
   await POST(request({ action: "delivery", id: "job1", messageId: id, status: "SEEN" }));
   expect(mocks.update.mock.calls[1][0].data.status).toBe("VIBER_SEEN");
   expect((await POST(request({ action: "delivery", id: "job1", messageId: id, status: "arbitrary" }))).status).toBe(400);
+});
+
+it('includes SMS channel in report requests so the shared worker checks the right status', async()=>{
+ vi.stubEnv('NTH_WORKER_TOKEN',token);
+ mocks.jobs.mockResolvedValue([{id:'sms-job',lastError:'NTH:a8e4c54d-13ac-42d8-a1d8-1fee84248d7c',payload:{channels:['SMS']}}]);
+ mocks.update.mockResolvedValue({count:1});
+ const r=await POST(request({action:'reports'}));
+ expect(await r.json()).toMatchObject({jobs:[{id:'sms-job',channel:'SMS',messageId:'a8e4c54d-13ac-42d8-a1d8-1fee84248d7c'}]});
+ expect(r.headers.get('cache-control')).toBe('no-store');
 });

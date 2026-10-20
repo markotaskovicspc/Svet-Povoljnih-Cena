@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ blocked: vi.fn(), candidates: vi.fn(), update: vi.fn(), user: vi.fn(), campaign: vi.fn() }));
+vi.mock("@/lib/viber/config", () => ({ isViberReady: () => true, isSmsReady: () => true }));
 vi.mock("@/lib/db", () => ({ db: {
   $queryRaw: mocks.blocked,
   backgroundJob: { findMany: mocks.candidates, updateMany: mocks.update },
@@ -33,6 +34,18 @@ it('accepts a guest number only for a declared all-phone campaign and rechecks w
  mocks.blocked.mockResolvedValue([]);mocks.update.mockResolvedValue({count:1});
  expect((await claimNthMessage())?.id).toBe('guest');
  mocks.blocked.mockResolvedValue([{phone:'0637725045'}]);
+ expect(await claimNthMessage()).toBeNull();
+ expect(mocks.update.mock.calls.at(-1)[0].data.status).toBe('VIBER_CANCELLED');
+});
+
+it('keeps SMS campaigns isolated and rechecks SMS withdrawals for guest phones', async()=>{
+ const phone='381637725045';
+ mocks.candidates.mockResolvedValue([{id:'sms1',status:'VIBER_QUEUED',lockedAt:null,payload:{channels:['SMS'],transactionId:`cmp:c1:rcp:${storedPhoneRecipientId(phone)}`,destinations:[{phoneNumber:phone}]}}]);
+ mocks.campaign.mockResolvedValue({status:'SENT',audience:{filter:{allStoredPhones:true,phoneScope:'current',channel:'SMS'}}});
+ mocks.blocked.mockResolvedValue([]);mocks.update.mockResolvedValue({count:1});
+ expect((await claimNthMessage())?.id).toBe('sms1');
+ expect(mocks.blocked.mock.calls[0][0].sql).toContain('mc.sms');
+ mocks.campaign.mockResolvedValue({status:'SENT',audience:{filter:{allStoredPhones:true}}});
  expect(await claimNthMessage()).toBeNull();
  expect(mocks.update.mock.calls.at(-1)[0].data.status).toBe('VIBER_CANCELLED');
 });

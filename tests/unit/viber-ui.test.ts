@@ -16,4 +16,4 @@ it("describes saved audiences without exposing configuration JSON",()=>{
  expect(audienceDescription({cities:['Beograd']})).toContain('Beograd');
 });
 
-it("all phones is an explicit mode that clears purchase restrictions",()=>{expect(audienceFormFilter({name:'Svi',allStoredPhones:true,cities:'Beograd'})).toEqual({allStoredPhones:true});expect(audienceDescription({allStoredPhones:true})).toContain('Svi brojevi telefona');});
+it("all phones is an explicit mode that clears purchase restrictions",()=>{expect(audienceFormFilter({name:'Svi',allStoredPhones:true,cities:'Beograd'})).toEqual({allStoredPhones:true,phoneScope:"current",channel:"VIBER"});expect(audienceDescription({allStoredPhones:true})).toContain('Svi brojevi telefona');});

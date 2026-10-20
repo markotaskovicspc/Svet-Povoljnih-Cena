@@ -159,3 +159,47 @@ Desktop and 390px mobile UI were checked using an isolated fixture without real
 sends. The fixture was removed. The expired-purpose Ananas inspection endpoint
 and its helper/tests were also removed; its completed field-schema findings
 remain documented in docs/returns-2026-10-20.md.
+
+## SMS composer and current contact selection — 2026-10-20
+
+`/admin/viber` now contains separate Viber and SMS channel tabs; SMS opens at
+`/admin/viber?channel=sms`. Both support drafts, audience preview, single-number
+tests, manual launch, and delivery results. No customer campaign was launched.
+SMS uses the registered `SvetPovCena` sender with text and inline links, without
+Viber media/buttons or automatic fallback. GSM-7 extensions and Unicode SMS
+parts are estimated in the composer. There are no application hourly limits on
+test sends or AI editing, and no application SMS-part cap. Provider format,
+account quotas, authorization and duplicate-write protection still apply.
+
+New audiences default to all currently stored valid numbers from User, Customer
+and Order, including guest purchasers. They deduplicate normalized numbers and
+exclude channel-specific recorded withdrawals/deleted accounts. The old
+website-consent-only option remains explicit. Legacy saved audiences retain
+their dated selection; new current audiences do not fabricate consent records or
+claim that post-cutoff contacts were covered by the October 14 declaration.
+Preview refreshes when the selection changes and ignores stale responses.
+
+To avoid a migration, SMS campaigns reuse ViberCampaign storage with a validated
+SMS channel marker on their audience filter. Channel is checked on draft edits,
+tests and launch. Queries and delivery results are separated by channel. Both
+channels use the existing NTH outbox job kind/status vocabulary internally. The
+existing Python worker reads the report's channel, defaulting to VIBER for older
+application deployments; its persistent SQLite journal remains unchanged.
+
+AI editing uses the server-only SPC OPENAI_API_KEY and Responses API with
+store=false, sending only the message body and editing instruction. It returns
+a separate proposal for operator review; accepting it invalidates the saved
+draft. No audience records are sent to OpenAI. Prices, numbers, links and {ime}
+must survive the edit. Incomplete, invalid and failed responses leave the
+original untouched. Neither AI generation nor acceptance sends a customer message.
+
+Validation for the composer change: 34 focused unit tests passed, including
+1,001-recipient atomic queue batching, concurrent launch rejection, completed
+launch idempotency, current guest contacts, SMS-specific withdrawals, channel
+isolation, SMS status requests, segmentation and AI result validation. ESLint
+and the production build passed. An isolated UI fixture verified automatic
+all-contact/restricted counts, SMS draft/test controls, AI proposal acceptance,
+Viber media controls, no browser errors and no horizontal overflow at 390px.
+The fixture was removed before publication. Worker report selection was patched
+in place on the existing server, compiled before writing and restarted active;
+the local durable journal and credentials were not replaced.

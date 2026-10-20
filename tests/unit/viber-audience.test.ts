@@ -22,3 +22,13 @@ it('includes guest order/customer numbers under the dated declaration, deduplica
  expect(rows).toHaveLength(1);expect(rows[0]).toMatchObject({phone:'381637725045',displayName:'Gost'});expect(rows[0].userId).toMatch(/^phone_[a-f0-9]{64}$/);
  expect(mocks.query.mock.calls[0][0].values).toContainEqual(new Date('2026-10-14T20:38:02.000Z'));
 });
+
+it('current scope includes recent guest customers and uses SMS withdrawals independently',async()=>{
+ mocks.query.mockResolvedValueOnce([{phone:'0637725045',name:'Nov kupac'}]).mockResolvedValueOnce([]);
+ const rows=await resolveAudience({allStoredPhones:true,phoneScope:'current',channel:'SMS'});
+ expect(rows).toHaveLength(1);
+ const cutoff=mocks.query.mock.calls[0][0].values.find((v:unknown)=>v instanceof Date);
+ expect(cutoff.getTime()).toBeGreaterThan(new Date('2026-10-19').getTime());
+ expect(mocks.query.mock.calls[1][0].sql).toContain('mc.sms');
+ expect(mocks.query.mock.calls[1][0].sql).not.toContain('mc.viber');
+});

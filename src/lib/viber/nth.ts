@@ -1,6 +1,7 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { smsSender } from "./config";
 import type { ViberConfig } from "./config";
 import type { ViberMessage, ViberDispatchResult } from "./transport";
 
@@ -50,6 +51,12 @@ export function buildNthPayload(input: ViberMessage, sender: string) {
   };
 }
 
+export function buildNthSmsPayload(input: ViberMessage, sender = smsSender()) {
+  const text = z.string().trim().min(1).parse(input.text);
+  if (input.imageUrl || input.cta || input.template || !/^[A-Za-z0-9]{1,11}$/.test(sender)) throw new Error("sms:invalid_message");
+  return { channels: ["SMS"], destinations: [{ phoneNumber: nthPhoneNumber(input.to) }], requestId: input.requestId ?? randomUUID(), ...(input.trackingData ? { transactionId: input.trackingData } : {}), dlr: false, sms: { sender, text, ttl: 3600 } };
+}
+
 const responseSchema = z.object({
   resultCode: z.enum(["OK", "PARTIAL_OK"]),
   messages: z.array(z.object({
@@ -62,8 +69,8 @@ const responseSchema = z.object({
 export async function dispatchNth(msg: ViberMessage, cfg: ViberConfig): Promise<ViberDispatchResult> {
   const failed = (error: string): ViberDispatchResult => ({ ok: false, error, provider: "nth" });
   if (!cfg.username || !cfg.password) return failed("nth:missing_credentials");
-  let body: ReturnType<typeof buildNthPayload>;
-  try { body = buildNthPayload(msg, cfg.sender); }
+  let body: ReturnType<typeof buildNthPayload> | ReturnType<typeof buildNthSmsPayload>;
+  try { body = msg.channel === "SMS" ? buildNthSmsPayload(msg) : buildNthPayload(msg, cfg.sender); }
   catch { return failed("nth:invalid_message"); }
   let endpoint: URL;
   try {

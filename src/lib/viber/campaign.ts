@@ -4,7 +4,8 @@ import { z } from "zod";
 import { CampaignStatus, Prisma, type ViberCampaign } from "@prisma/client";
 import { db } from "@/lib/db";
 import { dispatch, type ViberDispatchResult } from "./transport";
-import { isViberReady } from "./config";
+import { getViberConfig, isViberReady, isSmsReady } from "./config";
+import { nthQueueData } from "./outbox";
 import {
   audienceFilterSchema,
   parseAudienceFilter,
@@ -24,7 +25,7 @@ import {
 export const campaignDraftSchema = z.object({
   audienceId: z.string().min(1),
   title: z.string().min(1).max(120),
-  body: z.string().min(1).max(900),
+  body: z.string().min(1),
   imageUrl: z.string().url().optional().nullable(),
   ctaLabel: z.string().min(1).max(30).optional().nullable(),
   ctaUrl: z.string().url().optional().nullable(),
@@ -130,7 +131,28 @@ export async function sendCampaign(
     };
   }
 
-  if (!isViberReady()) throw new Error("Viber nije konfigurisan ili test slanja nije potvrđen.");
+  const channel = filter.channel ?? "VIBER";
+  if (channel === "SMS" && (campaign.imageUrl || campaign.ctaUrl || campaign.ctaLabel)) throw new Error("SMS podržava samo tekst.");
+  if (!(channel === "SMS" ? isSmsReady() : isViberReady())) throw new Error("Viber nije konfigurisan ili test slanja nije potvrđen.");
+
+  const cfg = getViberConfig();
+  if (cfg.provider === "nth" && cfg.deliveryMode === "worker") {
+    // Commit the entire queue and campaign state together. Thousands of contacts
+    // do not require one database round-trip per recipient or partial sends.
+    const data: Prisma.BackgroundJobCreateManyInput[] = [];
+    let failed = 0;
+    for (const r of recipients) {
+      try { data.push(nthQueueData({ channel, to: r.phone, text: renderBody(campaign.body, r.displayName), imageUrl: campaign.imageUrl, cta: campaign.ctaLabel && campaign.ctaUrl ? { label: campaign.ctaLabel, url: campaign.ctaUrl } : null, trackingData: `cmp:${campaign.id}:rcp:${r.userId}` }, cfg)); }
+      catch { failed++; }
+    }
+    return db.$transaction(async tx => {
+      const claim = await tx.viberCampaign.updateMany({ where: { id: campaignId, status: { in: [CampaignStatus.DRAFT, CampaignStatus.SCHEDULED] } }, data: { status: CampaignStatus.SENDING } });
+      if (claim.count !== 1) throw new Error("Kampanja je već pokrenuta ili nije spremna za slanje.");
+      for (let i = 0; i < data.length; i += 250) await tx.backgroundJob.createMany({ data: data.slice(i, i + 250), skipDuplicates: true });
+      await tx.viberCampaign.update({ where: { id: campaignId }, data: { status: CampaignStatus.SENT, sentAt: new Date(), recipients: recipients.length, delivered: data.length, failed } });
+      return { campaignId, status: CampaignStatus.SENT, recipients: recipients.length, delivered: data.length, failed, errors: [] };
+    }, { timeout: 30_000 });
+  }
 
   const claimed = await db.viberCampaign.updateMany({
     where: { id: campaignId, status: { in: [CampaignStatus.DRAFT, CampaignStatus.SCHEDULED] } },
@@ -165,6 +187,7 @@ export async function sendCampaign(
       if (idx >= recipients.length) return;
       const r = recipients[idx];
       const result: ViberDispatchResult = await dispatch({
+        channel,
         to: r.phone,
         text: renderBody(campaignBody, r.displayName),
         imageUrl: campaignImage,
@@ -229,7 +252,7 @@ export async function failCampaign(
  * invoked by `/api/cron` on a 5-minute schedule.
  */
 export async function runDueCampaigns(now = new Date()): Promise<SendReport[]> {
-  if (!isViberReady()) return [];
+  if (!isViberReady() && !isSmsReady()) return [];
   const due = await db.viberCampaign.findMany({
     where: {
       status: CampaignStatus.SCHEDULED,

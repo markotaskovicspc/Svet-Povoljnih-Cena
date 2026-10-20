@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getViberConfig, isViberReady, type ViberProvider } from "./config";
+import { getViberConfig, isViberReady, isSmsReady, type ViberProvider } from "./config";
 import { dispatchNth } from "./nth";
 
 /**
@@ -12,6 +12,7 @@ import { dispatchNth } from "./nth";
 
 export interface ViberMessage {
   /** Recipient Viber subscriber id (PA-scoped) OR E.164 phone number. */
+  channel?: "VIBER" | "SMS";
   to: string;
   text: string;
   imageUrl?: string | null;
@@ -37,7 +38,7 @@ export async function dispatch(
 ): Promise<ViberDispatchResult> {
   const cfg = getViberConfig();
 
-  if (!isViberReady()) {
+  if (!(msg.channel === "SMS" ? isSmsReady() : isViberReady())) {
     return { ok: false, error: "viber:not_configured_or_not_accepted", provider: cfg.provider };
   }
   if (cfg.provider === "nth") {
