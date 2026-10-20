@@ -314,7 +314,7 @@ export function applyAdminNavPreferences(
   if (byHref.has(importHref) && !preferences.order.includes(importHref)) visible.add(importHref);
 
   // Include warehouse tools in menus saved before those tools existed.
-  for (const href of ["/admin/erp/operativci", "/admin/magacin"]) {
+  for (const href of ["/admin/erp/picking-pozicije", "/admin/erp/operativci", "/admin/magacin"]) {
     if (byHref.has(href) && !preferences.order.includes(href)) visible.add(href);
   }
 

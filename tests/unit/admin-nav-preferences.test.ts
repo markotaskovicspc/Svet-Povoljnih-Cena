@@ -18,9 +18,25 @@ describe("personal admin navigation", () => {
     allowed: ["OPS"] as const,
   };
   const importHref = "/admin/erp/porudzbina-iz-chata";
-  const warehouseHrefs = ["/admin/erp/operativci", "/admin/magacin"];
+  const warehouseHrefs = ["/admin/erp/picking-pozicije", "/admin/erp/operativci", "/admin/magacin"];
   const purchaseHref =
     "/admin/erp/nabavne-porudzbenice?savedView=purchase-view";
+
+  it.each(["SUPER", "OPS"] as const)("restores Picking pozicije for %s when the menu was saved while it was unavailable", (role) => {
+    const nav = applyAdminNavPreferences(allowedNavFor(role), {
+      visibleHrefs: ["/admin", "/admin/erp/preuzimanja"],
+      order: ["/admin", "/admin/erp/preuzimanja", importHref, "/admin/erp/operativci", "/admin/magacin"],
+    });
+    expect(nav.flatMap(group => group.items.map(item => item.href))).toEqual([
+      "/admin", "/admin/erp/preuzimanja", "/admin/erp/picking-pozicije",
+    ]);
+  });
+
+  it("keeps an explicitly hidden picking tab hidden and respects role restrictions", () => {
+    const preferences = { visibleHrefs: ["/admin"], order: ["/admin", importHref, ...warehouseHrefs] };
+    expect(applyAdminNavPreferences(allowedNavFor("OPS"), preferences)[0]?.items.map(item => item.href)).not.toContain("/admin/erp/picking-pozicije");
+    expect(applyAdminNavPreferences(allowedNavFor("CONTENT"), { visibleHrefs: ["/admin"], order: ["/admin"] })[0]?.items.map(item => item.href)).not.toContain("/admin/erp/picking-pozicije");
+  });
 
   it("moves a bottom shortcut between standard pages and keeps its saved position", () => {
     const available = withSavedViewLinks(allowedNavFor("OPS"), [purchaseView]);
