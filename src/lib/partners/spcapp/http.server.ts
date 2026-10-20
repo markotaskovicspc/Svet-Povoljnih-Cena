@@ -38,9 +38,9 @@ export async function spcappGet(request: Request, resource?: string) {
     const result = await exportResource(q);
     const hasMore = result.length > q.limit, items = result.slice(0, q.limit);
     await db.auditLog.create({ data: { action: 'partner.spcapp.read', entity: 'PartnerApiClient', entityId: auth.client.id,
-      diff: { resource, rows: items.length, from: q.period.fromInput, to: q.period.toInput } } });
+      diff: { resource, rows: items.length, from: q.history === 'all' ? null : q.period.fromInput, to: q.history === 'all' ? null : q.period.toInput, ...(q.history ? {history:q.history} : {}) } } });
     return NextResponse.json(jsonSafe({ ok: true, apiVersion: API_VERSION, resource, generatedAt: new Date().toISOString(), requestId,
-      from: q.period.fromInput, to: q.period.toInput, timezone: 'Europe/Belgrade', currency: 'RSD', count: items.length, hasMore,
+      from: q.history === 'all' ? null : q.period.fromInput, to: q.history === 'all' ? null : q.period.toInput, ...(q.history ? {history:q.history} : {}), timezone: 'Europe/Belgrade', currency: 'RSD', count: items.length, hasMore,
       nextCursor: hasMore ? q.nextCursor(items.at(-1)!.id) : null, items,
     }), { headers });
   } catch (error) {

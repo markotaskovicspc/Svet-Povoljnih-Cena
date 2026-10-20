@@ -33,3 +33,6 @@ Added authenticated POST /api/partners/v1/spcapp/reclamation-lookup for the user
 
 ## Analytics registered reclamations export (2026-10-21)
 Explicit user approval covers this ERP change and publication. Added read-only spcapp:read resource reclamations: ID, number, SKU, claimed quantity, createdAt only. Uses existing authenticated/rate-limited/audited export, signed ID cursor and Belgrade registration-period boundaries; all statuses included. No customer/payment data, business writes or schema migration. Analytics consumes complete pagination before showing counts. Validation: 27 contract/auth/HTTP/export tests and full npm run build (including checkout isolation and email asset checks) pass. Production deployment is tracked with the SCP Analytics task.
+
+## Reclamation journal export (2026-10-21)
+User requests the complete ERP journal with current status. Existing approved read-only reclamations export now includes status and optional history=all (no date cutoff); signed cursors bind this mode and other resources reject it. No business writes, PII or schema change. Existing authentication, rate limit and metadata audit remain. Validation and production verification are tracked in SCP Analytics.

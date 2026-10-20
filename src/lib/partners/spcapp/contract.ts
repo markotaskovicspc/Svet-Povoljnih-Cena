@@ -29,7 +29,7 @@ const validDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) &&
   Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
 export function parseExportQuery(resource: string, url: URL, secret: string, now = new Date()) {
   if (!(Object.prototype.hasOwnProperty.call(RESOURCES, resource))) throw new ExportInputError('Unknown resource.');
-  const allowed = new Set(['from', 'to', 'limit', 'cursor', 'granularity', 'status', 'supplierPib', 'basis']);
+  const allowed = new Set(['from', 'to', 'limit', 'cursor', 'granularity', 'status', 'supplierPib', 'basis', 'history']);
   for (const key of url.searchParams.keys()) if (!allowed.has(key) || url.searchParams.getAll(key).length !== 1) throw new ExportInputError(`Unsupported or repeated parameter: ${key}`);
   const from = url.searchParams.get('from') ?? (resource === 'product-performance' ? resolveReportPeriod({ range: '30d' }, now).fromInput : '2025-05-01');
   const to = url.searchParams.get('to') ?? dateInputInTimeZone(now);
@@ -49,7 +49,9 @@ export function parseExportQuery(resource: string, url: URL, secret: string, now
   if (status && (resource !== 'purchase-orders' || !['DRAFT', 'SENT', 'CONFIRMED', 'RECEIVED', 'CANCELLED'].includes(status))) throw new ExportInputError('Invalid status filter.');
   const supplierPib = url.searchParams.get('supplierPib');
   if (supplierPib && (resource !== 'sef-invoices' || !/^\d{9}$/.test(supplierPib))) throw new ExportInputError('Invalid supplierPib.');
-  const binding = JSON.stringify([resource, from, to, granularity, basis, status, supplierPib]);
+  const history = url.searchParams.get('history');
+  if (url.searchParams.has('history') && (resource !== 'reclamations' || history !== 'all')) throw new ExportInputError('Invalid history filter.');
+  const binding = JSON.stringify([resource, from, to, granularity, basis, status, supplierPib, ...(history ? [history] : [])]);
   let after = '';
   const cursor = url.searchParams.get('cursor');
   if (cursor) {
@@ -63,7 +65,7 @@ export function parseExportQuery(resource: string, url: URL, secret: string, now
       after = decoded.after;
     } catch { throw new ExportInputError('Cursor does not match this export.'); }
   }
-  return { resource: resource as Resource, period, limit, after, granularity: granularity as '5minute' | 'hour' | 'day' | 'month' | 'year', basis, status, supplierPib,
+  return { resource: resource as Resource, period, limit, after, granularity: granularity as '5minute' | 'hour' | 'day' | 'month' | 'year', basis, status, supplierPib, history,
     nextCursor(lastId: string) {
       const body = Buffer.from(JSON.stringify({ binding, after: lastId })).toString('base64url');
       return `${body}.${createHmac('sha256', secret).update(body).digest('hex')}`;
