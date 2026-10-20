@@ -62,3 +62,12 @@ it('allows only imported audience members and still rechecks withdrawals at work
  expect(await claimNthMessage()).toBeNull();
  expect(mocks.update.mock.calls.at(-1)[0].data.status).toBe('VIBER_CANCELLED');
 });
+
+it('leaves queued imports untouched when the withdrawal lookup fails temporarily',async()=>{
+ const phone='381637725045';
+ mocks.candidates.mockResolvedValue([{id:'imported',status:'VIBER_QUEUED',lockedAt:null,payload:{channels:['SMS'],transactionId:`cmp:c1:rcp:${storedPhoneRecipientId(phone)}`,destinations:[{phoneNumber:phone}]}}]);
+ mocks.campaign.mockResolvedValue({status:'SENT',audience:{filter:{channel:'SMS',importedContacts:[{phone,name:'Marko'}]}}});
+ mocks.blocked.mockRejectedValue(new Error('database unavailable'));
+ await expect(claimNthMessage()).rejects.toThrow('database unavailable');
+ expect(mocks.update).not.toHaveBeenCalled();
+});

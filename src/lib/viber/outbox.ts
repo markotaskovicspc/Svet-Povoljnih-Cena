@@ -57,13 +57,18 @@ export async function claimNthMessage() {
       let sameChannel = false;
       try {
         const filter = parseAudienceFilter(campaign?.audience?.filter);
-        sameChannel = (filter.channel ?? "VIBER") === channel;
+        sameChannel = Boolean(campaign?.audience) && (filter.channel ?? "VIBER") === channel;
         if (stored) {
           const phone = (payload.destinations as { phoneNumber?: string }[] | undefined)?.[0]?.phoneNumber;
           allowed = Boolean(phone && sameChannel && (filter.allStoredPhones || filter.importedContacts?.some(c => c.phone === phone)) && storedPhoneRecipientId(phone) === tracking[2]);
-          if (allowed && phone) allowed = await isStoredPhoneAllowed(phone, channel);
+
         }
       } catch { allowed = false; }
+      if (stored && allowed) {
+        const phone = (payload.destinations as { phoneNumber: string }[])[0].phoneNumber;
+        // A database outage must leave the job queued, rather than cancel consented recipients.
+        allowed = await isStoredPhoneAllowed(phone, channel);
+      }
       if (!allowed || !campaign || !sameChannel || !["SENDING", "SENT"].includes(campaign.status)) {
         await db.backgroundJob.updateMany({ where: { id: candidate.id, status: candidate.status, lockedAt: candidate.lockedAt }, data: { status: "VIBER_CANCELLED", completedAt: now, lockedAt: null, lastError: "consent_or_campaign_unavailable" } });
         continue;
