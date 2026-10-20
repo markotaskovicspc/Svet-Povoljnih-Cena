@@ -1,3 +1,4 @@
+import { ReturnReviewRequiredError } from "./return-review-error";
 import { normalizeReturnParcelNumber, returnParcelNumbers, returnUnitParcelNumbers, type ReturnShipment } from './return-parcels';
 import { myGlsBarcodeParcelNumber } from '@/lib/mygls/parcel-barcode';
 
@@ -10,7 +11,7 @@ export function reclamationParcelQuantity(shipment: ReturnShipment, item: { id: 
   let quantity = 0;
   for (let unitNo = 1; unitNo <= item.qty; unitNo++) {
     const match = returnUnitParcelNumbers(item, [shipment], unitNo);
-    if (!match.exact) throw new Error('Sadržaj paketa nije pouzdano povezan. Otvorite detalj reklamacije za ručnu proveru.');
+    if (!match.exact) throw new ReturnReviewRequiredError('Sadržaj paketa nije pouzdano povezan. Otvorite detalj reklamacije za ručnu proveru.');
     if (match.parcels.some(p => p.code === canonical)) quantity++;
   }
   if (!quantity) throw new Error('Paket nema povezanu količinu artikla.');

@@ -52,11 +52,11 @@ export function ReturnScanner({ initialCode = "", initialCamera = false, warehou
       });
     }} className="flex flex-wrap items-end gap-3" aria-busy={pending}>
       <Field label="Skeniraj paket ili unesi broj porudžbine" className="min-w-0 max-w-full">
-        <input ref={input} name="q" defaultValue={initialCode} disabled={pending} maxLength={40} autoComplete="off" placeholder="Kod sa adresnice" className="h-11 w-80 max-w-full rounded-lg border border-input px-3" />
+        <input ref={input} name="q" defaultValue={initialCode} disabled={pending} maxLength={40} autoComplete="off" placeholder="Kod sa adresnice / Ananas broj" className="h-11 w-80 max-w-full rounded-lg border border-input px-3" />
       </Field>
       <button disabled={pending} className="rounded-lg bg-foreground px-4 py-3 text-background">{pending ? "Pronalazim paket…" : "Pronađi paket"}</button>
       <button type="button" disabled={pending} aria-expanded={camera} onClick={() => { input.current?.blur(); setError(""); setCamera(!camera); }} className="rounded-lg border border-border px-4 py-3">Skeniraj kamerom</button>
-      {initialCode ? <Link href={`${basePath}?camera=1${warehouseId ? `&warehouse=${encodeURIComponent(warehouseId)}` : ""}`} className="text-sm underline">Sledeći paket</Link> : null}
+      {initialCode ? <Link href={`${basePath}?camera=1${warehouseId ? `&warehouse=${encodeURIComponent(warehouseId)}` : ""}`} className="rounded-lg bg-emerald-700 px-4 py-3 text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600">Sledeći paket</Link> : null}
     </form>
     <Dialog open={camera} onOpenChange={setCamera}><DialogContent className="sm:max-w-lg"><DialogTitle>Skeniraj paket</DialogTitle><DialogDescription>Usmerite kameru ka barkodu na adresnici. Skeniranje samo pronalazi paket; prijem robe potvrđujete posebno.</DialogDescription>{camera && <PickingCamera onCode={value => { if (!value.trim() || value.trim().length > 40) return false; scanned(value); return true; }} onClose={() => setCamera(false)} />}</DialogContent></Dialog>
     {error && <p role="alert" className="mt-3 text-warning">{error}</p>}

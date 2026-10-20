@@ -1,3 +1,4 @@
+import { ReturnReviewRequiredError } from "./return-review-error";
 import 'server-only';
 import { db } from '@/lib/db';
 import { findReturnParcel, confirmReturnParcelArrival } from './return-arrival.server';
@@ -15,7 +16,13 @@ export async function scannedReturnPlan(input: string) {
   if (await db.returnResolution.findUnique({ where: { key } })) throw new Error('Povrat je zatvoren kao izgubljen. Otvorite evidenciju za proveru.');
   if (shipment.reclamation) {
     const claim = shipment.reclamation;
-    const qty = reclamationParcelQuantity(shipment, { id: claim.orderItemId ?? '', sku: claim.sku, qty: claim.quantity }, code);
+    let qty: number;
+    try {
+      qty = reclamationParcelQuantity(shipment, { id: claim.orderItemId ?? '', sku: claim.sku, qty: claim.quantity }, code);
+    } catch (error) {
+      if (error instanceof ReturnReviewRequiredError) throw new ReturnReviewRequiredError(error.message, shipment.id, code);
+      throw error;
+    }
     const receipts = await db.stockMovement.findMany({ where: { OR: [
       { idempotencyKey: `reclamation-return:${claim.id}` },
       { idempotencyKey: `reclamation-return:${claim.id}:parcel:${code}` },
@@ -31,7 +38,7 @@ export async function scannedReturnPlan(input: string) {
     }
     return units.length ? [{ id: item.receiptItemId, sku: item.sku, name: item.name, totalQuantity: item.qty, description: returnPickingDescription(shipment.order.items.find(i => i.id === item.id)), units }] : [];
   });
-  if (!lines.length) throw new Error('Sadržaj paketa nije pouzdano povezan. Potrebna je ručna provera u evidenciji.');
+  if (!lines.length) throw new ReturnReviewRequiredError('Sadržaj paketa nije pouzdano povezan. Potrebna je ručna provera u evidenciji.', shipment.id, code);
   const keys = lines.flatMap(line => line.units.map(unit => shipment.reshipment ? `reshipment-return:${line.id}:${unit}` : `order-return:${shipment.order.number}:${line.id}:${unit}`));
   const receipts = await db.stockMovement.findMany({ where: { idempotencyKey: { in: keys } }, select: { idempotencyKey: true } });
   return { shipment, code, kind: shipment.reshipment ? 'reshipment' as const : 'order' as const, lines, received: receipts.length === keys.length };

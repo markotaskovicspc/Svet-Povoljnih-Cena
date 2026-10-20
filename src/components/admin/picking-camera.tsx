@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { requestScannerCamera, scannerCameraError } from "@/lib/admin/camera-access";
 import { createPickingCameraDecoder } from "@/lib/admin/picking-camera-decoder";
 
 /** Opening the camera starts recognition; a valid code is accepted once. */
@@ -14,6 +15,7 @@ export function PickingCamera({ onCode, onClose, enabled = true }: {
   const decodedVersion = useRef(0);
   const [status, setStatus] = useState("Pokretanje kamere…");
   const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => { callback.current = onCode; }, [onCode]);
   useEffect(() => {
     allowed.current = enabled;
@@ -35,10 +37,9 @@ export function PickingCamera({ onCode, onClose, enabled = true }: {
         // Load the decoder while the camera starts rather than delaying camera startup.
         const decoder = import("@zxing/browser");
         void decoder.catch(() => {}); // Permission prompts may outlast module loading.
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
-        });
+        setError("");
+        setStatus("Pokretanje kamere…");
+        stream = await requestScannerCamera();
         if (cancelled) { stream.getTracks().forEach(track => track.stop()); return; }
         const track = stream.getVideoTracks()[0];
         const capabilities = track?.getCapabilities?.() as (MediaTrackCapabilities & { focusMode?: string[] }) | undefined;
@@ -69,9 +70,9 @@ export function PickingCamera({ onCode, onClose, enabled = true }: {
           timer = setTimeout(loop, allowed.current && !accepted.current ? 60 : 200);
         };
         loop();
-      } catch {
+      } catch (error) {
         stream?.getTracks().forEach(track => track.stop());
-        if (!cancelled) setError("Kamera nije dostupna. Dozvolite pristup kameri ili koristite skener / ručni unos.");
+        if (!cancelled) setError(scannerCameraError(error));
       }
     };
     void start();
@@ -79,7 +80,7 @@ export function PickingCamera({ onCode, onClose, enabled = true }: {
       cancelled = true; clearTimeout(timer);
       stream?.getTracks().forEach(track => track.stop());
     };
-  }, []);
+  }, [attempt]);
   return <div className="space-y-3 rounded-xl border bg-black p-3 text-white">
     <div className="relative overflow-hidden rounded-lg">
       <video ref={video} muted playsInline aria-label="Kamera za skeniranje barkoda" className="max-h-64 w-full" />
@@ -87,6 +88,7 @@ export function PickingCamera({ onCode, onClose, enabled = true }: {
     </div>
     <p role="status" aria-live="polite" className="text-sm">{error || status}</p>
     <div className="flex flex-wrap gap-3">
+      {error && <button type="button" onClick={() => setAttempt(value => value + 1)} className="rounded-lg bg-white px-4 py-3 text-black">Pokušaj ponovo</button>}
       <button type="button" onClick={onClose} className="rounded-lg border px-4 py-3">Zatvori kameru</button>
     </div>
   </div>;

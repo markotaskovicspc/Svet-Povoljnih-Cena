@@ -4,9 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   resolutions: vi.fn(), orders: vi.fn(), count: vi.fn(), reclamations: vi.fn(), reshipments: vi.fn(),
-  state: vi.fn(), redirect: vi.fn(), scan: vi.fn(), jobs: vi.fn(), warehouses: vi.fn(), movements: vi.fn(), authorize: vi.fn(),
+  ananas: vi.fn(), queue: vi.fn(), process: vi.fn(), after: vi.fn(), state: vi.fn(), redirect: vi.fn(), scan: vi.fn(), jobs: vi.fn(), warehouses: vi.fn(), movements: vi.fn(), authorize: vi.fn(),
 }));
 vi.mock("@/lib/db", () => ({ db: {
+  ananasOrder: { findMany: mocks.ananas },
   returnResolution: { findMany: mocks.resolutions },
   order: { findMany: mocks.orders, count: mocks.count },
   orderReshipment: { findMany: mocks.reshipments },
@@ -18,9 +19,12 @@ vi.mock("@/lib/db", () => ({ db: {
 vi.mock("@/lib/admin", () => ({ requireAdminAction: mocks.authorize, withAdminState: () => mocks.state }));
 vi.mock("@/lib/admin/scanned-return.server", () => ({ scannedReturnPlan: mocks.scan, receiveScannedReturn: vi.fn() }));
 vi.mock("@/lib/admin/reclamation-fulfillment.server", () => ({ receiveReclamationReturn: vi.fn() }));
+vi.mock("next/server", () => ({ after: mocks.after }));
+vi.mock("@/lib/background-jobs", () => ({ enqueueBackgroundJob: mocks.queue, processBackgroundJob: mocks.process }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect, RedirectType: { replace: "replace" }, useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 
+import { ReturnReviewRequiredError } from "@/lib/admin/return-review-error";
 import { ReturnsWorkspace } from "@/components/admin/returns-workspace";
 import ReturnsPage from "@/app/admin/erp/povrati/page";
 
@@ -36,6 +40,8 @@ const returnedOrder = (id: string, shipments = [{
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.ananas.mockResolvedValue([]);
+  mocks.queue.mockResolvedValue({ id: "review-job" });
   mocks.authorize.mockResolvedValue({ id: "ops", role: "OPS" });
   mocks.state.mockResolvedValue({ ok: false, message: "Prijem nije potvrđen." });
   mocks.redirect.mockImplementation(() => { throw new Error("NEXT_REDIRECT"); });
@@ -363,4 +369,28 @@ it("keeps ordinary scanned returns visually distinct from reclamations",async()=
   lines:[{id:"i",sku:"110085",name:"Stolica",totalQuantity:1,units:[1]}]});
  const html=renderToStaticMarkup(await ReturnsWorkspace({warehouseMode:true,searchParams:Promise.resolve({q:"9002838514"})}));
  expect(html).toContain('data-return-kind="ordinary"'); expect(html).not.toContain('Povrat po reklamaciji');
+});
+
+describe("return review office scheduling", () => {
+  it("queues one stable job for a resolved unlinked parcel after authorization", async () => {
+    mocks.scan.mockRejectedValue(new ReturnReviewRequiredError("Sadržaj paketa nije pouzdano povezan.", "shipment-1", "AAA0850302567"));
+    const html = renderToStaticMarkup(await ReturnsWorkspace({ searchParams: Promise.resolve({ q: "AAA0850302567" }), warehouseMode: true }));
+    expect(mocks.queue).toHaveBeenCalledWith({ kind: "RETURN_REVIEW_OFFICE_EMAIL", payload: { shipmentId: "shipment-1", parcelNumber: "AAA0850302567" }, idempotencyKey: "return-review:shipment-1:AAA0850302567" });
+    expect(mocks.authorize.mock.invocationCallOrder[0]).toBeLessThan(mocks.queue.mock.invocationCallOrder[0]);
+    expect(html).toContain("evidentirano za slanje");
+    expect(mocks.after).toHaveBeenCalled();
+  });
+  it("does not send office notices for unknown barcode lookups", async () => {
+    await ReturnsWorkspace({ searchParams: Promise.resolve({ q: "UNKNOWN123" }), warehouseMode: true });
+    expect(mocks.queue).not.toHaveBeenCalled();
+  });
+  it("reports a queue failure without hiding the original manual-review warning", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.scan.mockRejectedValue(new ReturnReviewRequiredError("Sadržaj paketa nije pouzdano povezan.", "s", "AAA0850302567"));
+    mocks.queue.mockRejectedValueOnce(new Error("db unavailable"));
+    const html = renderToStaticMarkup(await ReturnsWorkspace({ searchParams: Promise.resolve({ q: "AAA0850302567" }), warehouseMode: true }));
+    expect(html).toContain("Obavestite office ručno");
+    expect(html).toContain("Sadržaj paketa nije pouzdano povezan");
+    log.mockRestore();
+  });
 });

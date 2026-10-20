@@ -196,8 +196,9 @@ const nextConfig: NextConfig = {
         { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
         { key: "Content-Security-Policy", value: "default-src 'self'; script-src 'self'" },
       ] },
-      // Camera access is limited to the authenticated warehouse scanner document.
-      { source: "/admin/erp/preuzimanja/:id/picking", headers: [{ key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()" }] },
+      // Permit same-origin capture throughout admin: client navigation retains the
+      // policy of the initial document, including login and warehouse landing pages.
+      { source: "/admin/:path*", headers: [{ key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()" }] },
       { source: "/models/:path*.glb", headers: [{ key: "Content-Type", value: "model/gltf-binary" }] },
       { source: "/models/:path*.usdz", headers: [{ key: "Content-Type", value: "model/vnd.usdz+zip" }] },
       // Only immutable, explicitly versioned delivery files get long-lived caching.

@@ -1,3 +1,5 @@
+import { AnanasReturns } from "@/components/admin/ananas-returns";
+import { ReturnReviewRequiredError } from "@/lib/admin/return-review-error";
 import { SHIPMENT_STATUS_LABEL } from "@/lib/courier/status";
 import { ReturnEvidenceDisclosure } from "@/components/admin/return-evidence-disclosure";
 import { ScannedReturnPanel } from "@/components/admin/reclamation-return-notice";
@@ -15,7 +17,7 @@ import { markReturnLost } from "@/lib/admin/return-resolution.server";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { redirect, RedirectType } from "next/navigation";
-import { processBackgroundJob } from "@/lib/background-jobs";
+import { enqueueBackgroundJob, processBackgroundJob } from "@/lib/background-jobs";
 import { z } from "zod";
 import {
   requireAdminAction,
@@ -153,7 +155,24 @@ export async function ReturnsWorkspace({
   const scanResult = (async () => {
     if (!query || !/^[A-Z0-9]{5,40}$/.test(query)) return { scanPlan: null, scanError: "" };
     try { return { scanPlan: await scannedReturnPlan(query), scanError: "" }; }
-    catch (error) { return { scanPlan: null, scanError: error instanceof Error ? error.message : "Paket nije pronađen." }; }
+    catch (error) {
+      let notice = "";
+      if (error instanceof ReturnReviewRequiredError && error.shipmentId && error.parcelNumber) {
+        try {
+          const job = await enqueueBackgroundJob({
+            kind: "RETURN_REVIEW_OFFICE_EMAIL",
+            payload: { shipmentId: error.shipmentId, parcelNumber: error.parcelNumber },
+            idempotencyKey: `return-review:${error.shipmentId}:${error.parcelNumber}`,
+          });
+          after(() => processBackgroundJob(job.id));
+          notice = " Obaveštenje za office je evidentirano za slanje.";
+        } catch (noticeError) {
+          console.error("[return-review] scheduling failed", noticeError);
+          notice = " Obaveštenje nije potvrđeno. Obavestite office ručno.";
+        }
+      }
+      return { scanPlan: null, scanError: (error instanceof Error ? error.message : "Paket nije pronađen.") + notice };
+    }
   })();
   const [
     reshipments,
@@ -163,6 +182,7 @@ export async function ReturnsWorkspace({
     movements,
     resolutions,
     { scanPlan, scanError },
+    ananasReturns,
   ] = await Promise.all([
     loadEvidence ? db.orderReshipment.findMany({
       orderBy: { createdAt: "desc" },
@@ -213,6 +233,7 @@ export async function ReturnsWorkspace({
     }) : [],
     loadEvidence ? db.returnResolution.findMany() : [],
     scanResult,
+    AnanasReturns({ query, warehouseMode }),
   ]);
   const receiptByKey = new Map(movements.map((m) => [m.idempotencyKey, m]));
   const lostByKey = new Map(resolutions.map((r) => [r.key, r]));
@@ -666,6 +687,7 @@ export async function ReturnsWorkspace({
           </ScannedReturnPanel> : null}
           </ReturnScanner>
         </Card>
+        <details className="rounded-xl border border-border p-4" open={Boolean(query.includes("-"))}><summary className="min-h-11 cursor-pointer py-2 font-semibold">Ananas povrati i ID-evi pošiljki</summary><div className="mt-3">{ananasReturns}</div></details>
         <ReturnEvidenceDisclosure loaded={loadEvidence} href={`${returnHref}?evidence=1${query ? `&q=${encodeURIComponent(params?.q ?? "")}` : ""}`} >
         {!warehouseMode && <div className="grid gap-4 sm:grid-cols-4">
           <StatCard
