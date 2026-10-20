@@ -1,4 +1,5 @@
 import 'server-only';
+import { exportReclamations } from './reclamations.server';
 import { type ExportQuery } from './contract';
 import { exportProducts, exportInventory, exportPrices, exportLoyaltyRules, exportPromotions, exportPurchaseOrders, exportInboundInvoices } from './catalog.server';
 import { exportOrders, exportAnanasOrders, exportFiscal, exportAnanasFiscal, exportLegacyFiscal } from './sales.server';
@@ -6,6 +7,7 @@ import { exportShipments, exportCourierStatements, exportSef } from './logistics
 import { exportTraffic, exportCustomers, exportPerformance } from './metrics.server';
 export function exportResource(q: ExportQuery): Promise<{ id: string }[]> {
   switch (q.resource) {
+    case 'reclamations': return exportReclamations(q);
     case 'orders': return exportOrders(q);
     case 'ananas-orders': return exportAnanasOrders(q);
     case 'fiscal-documents': return exportFiscal(q);
