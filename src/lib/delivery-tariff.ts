@@ -9,6 +9,8 @@ export const FREE_CATEGORY_ONE_THRESHOLD_CHANGE_AT_MS = Date.parse(
 );
 /** Customer-favouring checkout estimate when an article has no usable weight data. */
 export const MISSING_UNIT_WEIGHT_FALLBACK_KG = 1;
+/** Customer delivery weight includes a 20% allowance, applied once per category. */
+export const CUSTOMER_DELIVERY_WEIGHT_MULTIPLIER = 1.2;
 
 export type DeliveryTariffProduct = {
   qty: number;
@@ -163,6 +165,14 @@ export function calculatePublishedDeliveryTariffQuote(
         : packageWeight / Math.max(product.packQty ?? 1, 1));
     totals[category].weightKg += unitWeight * product.qty;
     totals[category].subtotal += product.unitPrice * product.qty;
+  }
+
+  for (const category of [1, 2] as const) {
+    // Use the same adjusted total for customer display and tariff selection.
+    // Remove floating-point noise so an exact tariff limit stays inclusive.
+    totals[category].weightKg = Math.round(
+      totals[category].weightKg * CUSTOMER_DELIVERY_WEIGHT_MULTIPLIER * 1_000_000,
+    ) / 1_000_000;
   }
 
   const categoryOneRate =

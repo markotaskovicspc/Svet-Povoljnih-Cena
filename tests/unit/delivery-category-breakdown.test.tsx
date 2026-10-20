@@ -55,13 +55,13 @@ describe("delivery category breakdown", () => {
       total: 699,
       issue: null,
       categories: {
-        1: { weightKg: 2, subtotal: 4_000, price: 0 },
-        2: { weightKg: 3, subtotal: 12_000, price: 699 },
+        1: { weightKg: 2.4, subtotal: 4_000, price: 0 },
+        2: { weightKg: 3.6, subtotal: 12_000, price: 699 },
       },
     });
-    expect(html).toContain("I kategorija (2 kg)");
+    expect(html).toContain("I kategorija (2,4 kg)");
     expect(html).toContain("Besplatno");
-    expect(html).toContain("II kategorija (3 kg)");
+    expect(html).toContain("II kategorija (3,6 kg)");
     expect(html).toContain("699 RSD");
   });
 
@@ -85,8 +85,8 @@ describe("delivery category breakdown", () => {
       </dl>,
     );
 
-    expect(quote.total).toBe(1_699);
-    expect(html).toContain("II kategorija (67 kg)");
-    expect(html).toContain("1.699 RSD");
+    expect(quote.total).toBe(1_899);
+    expect(html).toContain("II kategorija (80,4 kg)");
+    expect(html).toContain("1.899 RSD");
   });
 });

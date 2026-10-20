@@ -44,7 +44,7 @@ describe("confirmed client rules", () => {
     });
     expect(guestTariff?.total).toBe(0);
     expect(guestTariff?.categories[1]).toEqual({
-      weightKg: 8,
+      weightKg: 9.6,
       subtotal: 4_000,
       price: 0,
     });
@@ -147,7 +147,7 @@ describe("confirmed client rules", () => {
         loggedIn: true,
         at: atChange,
       })?.categories[1],
-    ).toEqual({ weightKg: 2, subtotal: 4_000, price: 0 });
+    ).toEqual({ weightKg: 2.4, subtotal: 4_000, price: 0 });
   });
 
   it("charges the open-ended category-I rate above 30 kg", () => {
@@ -187,7 +187,7 @@ describe("confirmed client rules", () => {
       total: 2_099,
       issue: null,
       categories: {
-        2: { weightKg: 101, subtotal: 10_000, price: 2_099 },
+        2: { weightKg: 121.2, subtotal: 10_000, price: 2_099 },
       },
     });
   });
@@ -217,7 +217,7 @@ describe("confirmed client rules", () => {
       total: null,
       issue: "WEIGHT_OUTSIDE_TARIFF",
       categories: {
-        2: { weightKg: 51, subtotal: 10_000, price: null },
+        2: { weightKg: 61.2, subtotal: 10_000, price: null },
       },
     });
   });
@@ -253,8 +253,8 @@ describe("confirmed client rules", () => {
       categoryOnePrice: 299,
       categoryTwoPrice: 799,
       categories: {
-        1: { weightKg: 4, subtotal: 1_500, price: 299 },
-        2: { weightKg: 6, subtotal: 4_000, price: 799 },
+        1: { weightKg: 4.8, subtotal: 1_500, price: 299 },
+        2: { weightKg: 7.2, subtotal: 4_000, price: 799 },
       },
     });
   });
@@ -276,7 +276,7 @@ describe("confirmed client rules", () => {
       { loggedIn: false },
     );
 
-    expect(tariff?.categories[1].weightKg).toBe(2);
+    expect(tariff?.categories[1].weightKg).toBe(2.4);
     expect(tariff?.total).toBe(299);
   });
 
@@ -296,11 +296,11 @@ describe("confirmed client rules", () => {
       { loggedIn: false },
     );
 
-    expect(tariff?.categories[1].weightKg).toBe(2);
+    expect(tariff?.categories[1].weightKg).toBe(2.4);
     expect(tariff?.total).toBe(299);
   });
 
-  it("counts an article without any weight data as 1 kg per unit", () => {
+  it("adds the allowance to the 1 kg fallback for missing weight data", () => {
     const quote = calculatePublishedDeliveryTariffQuote(
       [
         {
@@ -322,7 +322,7 @@ describe("confirmed client rules", () => {
       total: 299,
       issue: null,
       categories: {
-        1: { weightKg: 3, subtotal: 1_500, price: 299 },
+        1: { weightKg: 3.6, subtotal: 1_500, price: 299 },
       },
     });
   });
