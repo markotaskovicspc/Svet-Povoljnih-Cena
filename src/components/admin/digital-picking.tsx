@@ -3,10 +3,7 @@ import { formatPickingVolume } from "@/lib/admin/picking-volume";
 import Link from "next/link";
 import { RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { flushSync } from "react-dom";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { LabelPdfActions } from "./label-pdf-actions";
-import { PickingCamera } from "./picking-camera";
 import type { getPickingSession } from "@/lib/admin/picking.server";
 import { recordPicking, finishPicking } from "@/app/admin/erp/preuzimanja/[id]/picking/actions";
 import { pickingReview } from "@/lib/admin/picking-review";
@@ -16,10 +13,6 @@ type ScanRequest = Parameters<typeof recordPicking>[0];
 export function DigitalPicking({ initial, warehouseMode = false }: { initial: Session; warehouseMode?: boolean }) {
   const [session, setSession] = useState(initial);
   const [code, setCode] = useState("");
-  const [camera, setCamera] = useState(false);
-  const [cameraStarted, setCameraStarted] = useState(false);
-  const cameraButton = useRef<HTMLButtonElement>(null);
-  const validCameraScan = useRef(false);
   const [packagesConfirmed, setPackagesConfirmed] = useState(false);
   const [labelUrl, setLabelUrl] = useState<string | null>(initial.labelsReady ? `/api/admin/erp/preuzimanja/${encodeURIComponent(initial.id)}/labels` : null);
   const [shortageReported, setShortageReported] = useState(false);
@@ -75,7 +68,7 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
             const start = updated.rows.findIndex(candidate => candidate.key === row.key) + 1;
             const remaining = [...updated.rows.slice(start), ...updated.rows.slice(0, start)].find(candidate => (updated.progress[candidate.key] ?? 0) < candidate.quantity && !updated.reviewedRows.includes(candidate.key));
             if (remaining) { setSelected(remaining.key); setQuantity(String(Math.max(0, remaining.quantity - (updated.progress[remaining.key] ?? 0)))); }
-            else { setQuantity(String(Math.max(0, row.quantity - (updated.progress[row.key] ?? 0)))); setCamera(false); setCameraStarted(false); }
+            else { setQuantity(String(Math.max(0, row.quantity - (updated.progress[row.key] ?? 0)))); }
           }
         }
         setMessage(response.message);
@@ -108,33 +101,6 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
     if (warehouseMode && scanError && (!value.trim() || value.trim() === currentRow?.barcode || value.trim() === currentRow?.sku)) {
       setScanError(false); setMessage("");
     }
-  }
-  function cameraCode(value: string) {
-    setCode(warehouseMode ? value.trim() : value);
-    if (warehouseMode && currentRow && value.trim() !== currentRow.barcode && value.trim() !== currentRow.sku) {
-      setScanError(true);
-      setMessage("Šifra ne odgovara prikazanom artiklu. Proverite barkod ili otvorite drugi artikal.");
-      return false;
-    } else {
-      if (warehouseMode) {
-        validCameraScan.current = true;
-        flushSync(() => { setCamera(false); setCameraStarted(false); setQuantity(String(remainingQuantity)); setScanError(false); setMessage(`Očitano: ${value}. Proverite količinu i kliknite Evidentiraj.`); });
-        quantityInput.current?.focus();
-      } else {
-        setScanError(false); setMessage(`Očitano: ${value}. Proverite količinu i kliknite Evidentiraj.`);
-      }
-      return true;
-    }
-  }
-  function closeCamera() {
-    validCameraScan.current = false;
-    setCamera(false); setCameraStarted(false);
-  }
-  function toggleCamera() {
-    if (warehouseMode) { input.current?.blur(); quantityInput.current?.blur(); }
-    if (camera) { closeCamera(); return; }
-    validCameraScan.current = false;
-    setScanError(false); setMessage(""); setCameraStarted(true); setCamera(true);
   }
   async function finish(mode: "labels" | "shortage") {
     if (lock.current) return;
@@ -210,25 +176,13 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
           <input id="picking-quantity" ref={quantityInput} type="number" inputMode={warehouseMode ? "numeric" : undefined} enterKeyHint={warehouseMode ? "done" : undefined} min={warehouseMode ? 0 : 1} max={warehouseMode ? remainingQuantity : 10000} value={quantity} onChange={e => setQuantity(e.target.value)} disabled={!canScan} className="block w-24 rounded border bg-background p-3" />
           {warehouseMode && <button type="button" aria-label="Povećaj količinu" disabled={!canScan || Number(quantity) >= remainingQuantity} onClick={() => setQuantity(String(Math.min(remainingQuantity, Number(quantity || 0) + 1)))} className="min-h-12 min-w-12 rounded border text-xl">+</button>}
         </div></div>
-        {warehouseMode ? <div className="flex w-full justify-between gap-3">
-          <button type="button" disabled={!canScan} ref={cameraButton} onClick={toggleCamera} className="rounded border px-4 py-3">Kamera</button>
+        <div className={warehouseMode ? "flex w-full justify-end" : undefined}>
           <button disabled={!canScan} className="rounded bg-foreground px-4 py-3 text-background">Evidentiraj</button>
-        </div> : <>
-        <button disabled={!canScan} className="rounded bg-foreground px-4 py-3 text-background">Evidentiraj</button>
-        <button type="button" disabled={!canScan} ref={cameraButton} onClick={toggleCamera} className="rounded border px-4 py-3">Kamera</button>
-        </>}
+        </div>
       </form>
-      {warehouseMode ? <Dialog open={camera} onOpenChange={open => { if (!open) closeCamera(); }}>
-        <DialogContent keepMounted={cameraStarted} showCloseButton={false} className="sm:max-w-lg" finalFocus={() => validCameraScan.current ? quantityInput.current : cameraButton.current}>
-          <DialogTitle>Skeniraj barkod</DialogTitle>
-          <DialogDescription>{currentRow?.sku} · {currentRow?.name}. Posle ispravnog barkoda proverite ponuđenu količinu.</DialogDescription>
-          {cameraStarted && <PickingCamera enabled={camera && canScan} onClose={closeCamera} onCode={cameraCode} />}
-          {scanError && <p role="alert" className="rounded-lg border border-red-500 bg-red-50 p-3 font-semibold text-red-800">{message}</p>}
-        </DialogContent>
-      </Dialog> : camera && <PickingCamera enabled={canScan} onClose={closeCamera} onCode={cameraCode} />}
       {!warehouseMode && <p className="text-sm">Ručni skener šalje šifru i Enter. Jedan sken dodaje izabranu količinu (podrazumevano 1). Za pogrešan unos koristite −1 na odgovarajućem redu.</p>}
     </section>}
-    {(!warehouseMode || !camera) && <div role={warehouseMode && scanError ? "alert" : "status"} aria-live={warehouseMode && scanError ? "assertive" : "polite"} className={warehouseMode && scanError ? "rounded-lg border border-red-500 bg-red-50 p-3 font-semibold text-red-800 print:hidden" : "print:hidden"}>{message}</div>}
+    <div role={warehouseMode && scanError ? "alert" : "status"} aria-live={warehouseMode && scanError ? "assertive" : "polite"} className={warehouseMode && scanError ? "rounded-lg border border-red-500 bg-red-50 p-3 font-semibold text-red-800 print:hidden" : "print:hidden"}>{message}</div>
     {retry && <div className="flex flex-wrap gap-3 rounded border border-amber-400 p-3 print:hidden"><button disabled={busy} onClick={() => void send(retry)} className="rounded border px-3 py-2">Ponovi isti zahtev</button><button disabled={busy} onClick={() => window.location.reload()} className="rounded border px-3 py-2">Učitaj stanje sa servera</button></div>}
     {!session.rows.length && <p>Nema aktivnih stavki za odvajanje u ovom nalogu.</p>}
     {!warehouseMode && articles}
