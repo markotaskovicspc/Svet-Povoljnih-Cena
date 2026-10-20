@@ -42,3 +42,5 @@ User explicitly requests customer name in the journal. Only history=all selects 
 
 ## SPC delivered articles for reclamation quantity rate (2026-10-21)
 User confirms claimed units / delivered units *100 and SPC only. Added authenticated read-only delivered-articles resource using the existing dashboard physical-delivery definition: Order.status ISPORUCENO, OrderItem.qty once per item; delivery date is MAX delivered ORDER_DELIVERY Shipment.deliveredAt, otherwise MIN ISPORUCENO OrderStatusEvent.createdAt. Missing dates remain null and are included for explicit incompleteness, never replaced by order creation dates. Period is Belgrade delivery date, not invoice/fiscal date. Existing signed cursor, limit, private response and metadata audit apply. No customer/monetary fields, business writes or schema change.
+
+SPC scope correction: SalesChannel includes ANANAS even on primary Order. Both denominator and the new spc-reclamations period resource explicitly exclude Order.channel ANANAS. The existing full-history reclamations journal resource remains all channels. No existing signed cursor binding is changed.

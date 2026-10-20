@@ -25,3 +25,5 @@ it('includes only customer name in full-history journal and excludes it from mat
  const selection=mocks.list.mock.calls[0][0].select;expect(selection.customerFirst).toBe(true);expect(selection.customerLast).toBe(true);expect(selection).not.toHaveProperty('customerEmail');expect(selection).not.toHaveProperty('customerPhone');expect(selection).not.toHaveProperty('customerAddress');
  await exportReclamations(parseExportQuery('reclamations',new URL('https://erp.test?from=2026-01-01&to=2026-10-21'),'secret'));expect(mocks.list.mock.calls[1][0].select).not.toHaveProperty('customerFirst');
 });
+
+it('SPC matrix claims explicitly exclude ANANAS orders without restricting the complete journal',async()=>{await exportReclamations(parseExportQuery('spc-reclamations',new URL('https://test?from=2026-01-01&to=2026-10-21'),'secret'));expect(mocks.list.mock.calls[0][0].where.order).toEqual({channel:{not:'ANANAS'}});expect(mocks.list.mock.calls[0][0].select).not.toHaveProperty('customerFirst');await exportReclamations(parseExportQuery('reclamations',new URL('https://test?history=all'),'secret'));expect(mocks.list.mock.calls[1][0].where).not.toHaveProperty('order')});

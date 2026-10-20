@@ -9,7 +9,8 @@ import { exportTraffic, exportCustomers, exportPerformance } from './metrics.ser
 export function exportResource(q: ExportQuery): Promise<{ id: string }[]> {
   switch (q.resource) {
     case 'delivered-articles': return exportDeliveredArticles(q);
-    case 'reclamations': return exportReclamations(q);
+    case 'reclamations':
+    case 'spc-reclamations': return exportReclamations(q);
     case 'orders': return exportOrders(q);
     case 'ananas-orders': return exportAnanasOrders(q);
     case 'fiscal-documents': return exportFiscal(q);

@@ -12,7 +12,7 @@ export async function exportDeliveredArticles(q: ExportQuery) {
         (SELECT MIN(e."createdAt") FROM "OrderStatusEvent" e WHERE e."orderId" = o.id AND e.status = 'ISPORUCENO')
       ) AS "deliveredAt"
     ) delivery ON true
-    WHERE o.status = 'ISPORUCENO' AND oi.id > ${q.after}
+    WHERE o.status = 'ISPORUCENO' AND o.channel <> 'ANANAS' AND oi.id > ${q.after}
       AND (delivery."deliveredAt" IS NULL OR (delivery."deliveredAt" >= ${q.period.start} AND delivery."deliveredAt" < ${q.period.endExclusive}))
     ORDER BY oi.id ASC LIMIT ${q.limit + 1}
   `;
