@@ -125,11 +125,6 @@ export const adminNav: AdminNavGroup[] = [
     items: [
       { href: "/admin/checkouti", label: "Checkouti", allowed: O },
       {
-        href: "/admin/erp/picking-pozicije",
-        label: "Picking pozicije",
-        allowed: O,
-      },
-      {
         href: "/admin/erp/operativci",
         label: "Nalozi magacionera",
         allowed: O,
