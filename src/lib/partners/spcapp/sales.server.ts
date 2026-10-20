@@ -1,3 +1,4 @@
+import {shipmentExportReferences} from './shipment-references';
 import 'server-only';
 import { z } from 'zod';
 import { db } from '@/lib/db';
@@ -11,12 +12,13 @@ export async function exportOrders(q: ExportQuery) {
     subtotal: true, savings: true, shipping: true, assemblyTotal: true, firstPurchaseDiscount: true, savedCardDiscount: true, voucherDiscount: true, total: true, paymentMethod: true, courierPaidAt: true,
     items: { select: { id: true, sku: true, qty: true, unitPriceFull: true, unitPriceSale: true, withAssembly: true, assemblyPrice: true } },
     fiscalDocuments: { where: { status: 'ISSUED' }, select: { id: true, receiptNumber: true, kind: true, issuedAt: true } },
-    shipments: { select: { id: true, provider: true, service: true, trackingNo: true, status: true } },
+    shipments: { select: { id: true, provider: true, service: true, trackingNo: true, providerOrderId: true, providerParcelNumbers: true, status: true } },
     pickupBatchLines: { select: { id: true, shipmentId: true, orderItemId: true, packedQuantity: true, packageNo: true, weightKg: true, widthCm: true, depthCm: true, heightCm: true, providerParcelNumber: true } },
     invoices: { select: { id: true, number: true, kind: true, status: true, issuedAt: true, total: true } },
     payments: { select: { id: true, status: true, amount: true, createdAt: true, updatedAt: true } },
   } });
   return rows.map(({ customerId, userId, ...row }) => ({ ...row, channel: 'SPC', erpChannel: row.channel,
+    shipments: row.shipments.map(s => ({...s,...shipmentExportReferences(s)})),
     customerKey: customerKey({ customerId, userId }), customerIdentityComplete: Boolean(customerId || userId),
     hasFiscalRefund: row.fiscalDocuments.some(d => d.kind === 'REFUND'),
     items: row.items.map(item => ({ ...item, quantity: item.qty,

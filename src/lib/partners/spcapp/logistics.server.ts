@@ -1,3 +1,4 @@
+import {shipmentExportReferences} from './shipment-references';
 import 'server-only';
 import { DOMParser } from '@xmldom/xmldom';
 import { db } from '@/lib/db';
@@ -6,11 +7,11 @@ import { type ExportQuery, money, ExportInputError } from './contract';
 
 export async function exportShipments(q: ExportQuery) {
   const rows = await db.shipment.findMany({ where: { id: { gt: q.after }, createdAt: { gte: q.period.start, lt: q.period.endExclusive } }, orderBy: { id: 'asc' }, take: q.limit + 1,
-    select: { id: true, orderId: true, provider: true, service: true, trackingNo: true, purpose: true, status: true, packageCount: true, codAmount: true, createdAt: true, updatedAt: true, shippedAt: true, deliveredAt: true,
+    select: { id: true, orderId: true, provider: true, service: true, trackingNo: true, providerOrderId: true, providerParcelNumbers: true, purpose: true, status: true, packageCount: true, codAmount: true, createdAt: true, updatedAt: true, shippedAt: true, deliveredAt: true,
       pickupBatchLines: { select: { id: true, batchId: true, orderItemId: true, packedQuantity: true, packageNo: true, providerParcelNumber: true, weightKg: true, widthCm: true, depthCm: true, heightCm: true, courierPickedUpAt: true, providerLabelCancelledAt: true } },
       order: { select: { number: true, invoices: { select: { id: true, number: true, kind: true, status: true } },
         fiscalDocuments: { where: { status: 'ISSUED' }, select: { id: true, receiptNumber: true, kind: true, issuedAt: true, lines: { where: { sku: 'DOSTAVA' }, select: { totalGross: true, totalNet: true } } } } } } } });
-  return rows.map(({ order, ...row }) => ({ ...row, orderNumber: order.number, invoices: order.invoices,
+  return rows.map(({ order, ...row }) => ({ ...row, ...shipmentExportReferences(row), orderNumber: order.number, invoices: order.invoices,
     fiscalDocuments: order.fiscalDocuments.map(({ lines, ...doc }) => ({ ...doc,
       orderShippingGross: money((doc.kind === 'REFUND' ? -1 : 1) * lines.reduce((sum, line) => sum + Number(line.totalGross), 0)),
       orderShippingNet: money((doc.kind === 'REFUND' ? -1 : 1) * lines.reduce((sum, line) => sum + Number(line.totalNet), 0)),
