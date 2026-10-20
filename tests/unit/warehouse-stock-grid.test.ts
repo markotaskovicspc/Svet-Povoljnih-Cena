@@ -21,6 +21,11 @@ function product(
     id,
     sku: id.toUpperCase(),
     name: `Artikal ${id}`,
+    supplier: null,
+    shortDescription: null,
+    shortName: null,
+    colorPrimary: null,
+    colorSecondary: null,
     stock: 0,
     incomingStock,
     cogs: 250,
@@ -33,6 +38,25 @@ function product(
 }
 
 describe("DC warehouse incoming rows", () => {
+  it("includes catalogue identity on stocked and incoming-only rows for filtering and export", () => {
+    const article = {
+      ...product("catalogue"),
+      supplier: { name: "Dobavljač" }, shortDescription: "Kratki opis",
+      shortName: "Kratki naziv", colorPrimary: "Crna", colorSecondary: "Bela",
+    };
+    const rows = buildWarehouseStockGridRows({
+      stocks: [{ id: "stock", qty: 4, warehouse, product: article }],
+      incomingOrderLines: [{ qty: 2, receivedQty: 0, warehouse, product: { ...article, id: "incoming" } }],
+      productsWithStoredIncoming: [], defaultWarehouse: warehouse,
+    });
+    for (const row of rows) {
+      expect(row.values).toMatchObject({ supplier: "Dobavljač", shortDescription: "Kratki opis",
+        shortName: "Kratki naziv", color1: "Crna", color2: "Bela" });
+    }
+    expect(filterAndSortGridRows(rows, ["supplier"], "Dobavljač", [], [])).toHaveLength(2);
+    expect(filterAndSortGridRows(rows, ["color2"], "Crna", [], [])).toHaveLength(0);
+  });
+
   it("values stock from physical quantity, not available quantity", () => {
     const reserved = product("reserved");
     reserved.orderItems = [

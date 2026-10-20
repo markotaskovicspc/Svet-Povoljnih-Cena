@@ -19,6 +19,11 @@ export type WarehouseStockGridProduct = {
   id: string;
   sku: string;
   name: string;
+  supplier: { name: string } | null;
+  shortDescription: string | null;
+  shortName: string | null;
+  colorPrimary: string | null;
+  colorSecondary: string | null;
   stock: number;
   incomingStock: number;
   cogs: number | { toNumber(): number } | null;
@@ -106,6 +111,11 @@ function createWarehouseStockGridRow(input: {
       warehouse: input.warehouse.name,
       sku: input.product.sku,
       product: input.product.name,
+      supplier: input.product.supplier?.name ?? null,
+      shortDescription: input.product.shortDescription,
+      shortName: input.product.shortName,
+      color1: input.product.colorPrimary,
+      color2: input.product.colorSecondary,
       physical,
       reserved,
       available,

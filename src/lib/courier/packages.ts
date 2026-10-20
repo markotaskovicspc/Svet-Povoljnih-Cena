@@ -380,20 +380,19 @@ function buildPompeaParcel(items: readonly PackageSourceItem[], packageNo: numbe
     };
   });
   const packedQuantity = packedItems.reduce((sum, item) => sum + item.quantity, 0);
-  const maximum = (key: "unitPackWidthCm" | "unitPackDepthCm" | "unitPackHeightCm") => {
-    const values = items.map(item => positiveNumber(item.product?.[key]));
-    return values.some(value => value != null) ? Math.max(...values.map(value => value ?? 0)) : null;
-  };
   const weights = items.map(item => courierUnitWeightKg(item.product));
-  const routingMeasurements = {
-    weightKg: weights.every(value => value != null) ? items.reduce((sum, item, i) => sum + weights[i]! * (positiveInteger(item.qty) ?? 1), 0) : null,
-    widthCm: maximum("unitPackWidthCm"), depthCm: maximum("unitPackDepthCm"), heightCm: maximum("unitPackHeightCm"),
+  const measurements = {
+    weightKg: weights.every(value => value != null)
+      ? Number(items.reduce((sum, item, i) => sum + weights[i]! * packedItems[i].quantity, 0).toFixed(3))
+      : null,
+    widthCm: 10,
+    depthCm: 10,
+    heightCm: 20,
   };
   return {
     packageNo, orderItemId: items[0].id, packedItems, packedQuantity,
     content: packedItemsContent(packedItems),
-    // Multiple soft goods need one measured shipping parcel, not multiplied unit dimensions.
-    ...(packedQuantity === 1 ? routingMeasurements : { weightKg: null, widthCm: null, depthCm: null, heightCm: null }),
-    routingMeasurements,
+    ...measurements,
+    routingMeasurements: measurements,
   };
 }

@@ -16,7 +16,7 @@ describe("one Pompea parcel per order", () => {
   it("combines all SKUs and quantities, overriding carton sizes", () => {
     const packages = derivePhysicalPackages([item("A", 3), { ...item("B", 100), unitPriceSale: 500 }]);
     expect(packages).toHaveLength(1);
-    expect(packages[0]).toMatchObject({ packageNo: 1, packedQuantity: 103, weightKg: null, widthCm: null });
+    expect(packages[0]).toMatchObject({ packageNo: 1, packedQuantity: 103, weightKg: 10.3, widthCm: 10, depthCm: 10, heightCm: 20 });
     expect(parcelOrderItemIds(packages[0])).toEqual(["A", "B"]);
     expect(packedItemsValue(packages[0].packedItems)).toBe(50750);
     expect(packages[0].packedItems).toEqual([
@@ -47,13 +47,35 @@ describe("one Pompea parcel per order", () => {
     expect(isPompeaItem({ ...legacy, sku: "OTHER", supplierName: "Modital doo" })).toBe(false);
     expect(isPompeaItem({ ...legacy, product: { barcode: "unknown" } })).toBe(false);
   });
-  it("requires measured outer dimensions before booking, while permitting preliminary picking", () => {
+  it("uses fixed outer dimensions and the sum of unit weights for picking, routing and booking", () => {
     const packages = derivePhysicalPackages([item("A", 2), item("B", 3)]);
     expect(resolveCourierProvider({ shippingMethod: "KURIR", items: packages.map(physicalPackageRouteItem) })).toEqual({ kind: "single", provider: "X_EXPRESS" });
-    expect(() => requireCompleteXExpressPackages(packages)).toThrow("stvarne mere");
+    expect(requireCompleteXExpressPackages(packages)[0]).toMatchObject({
+      weightKg: 0.5, widthCm: 10, depthCm: 10, heightCm: 20,
+    });
+    expect(packages[0].routingMeasurements).toEqual({ weightKg: 0.5, widthCm: 10, depthCm: 10, heightCm: 20 });
     const measured = { ...packages[0], routingMeasurements: undefined, weightKg: 1, widthCm: 25, depthCm: 20, heightCm: 10 };
     expect(requireCompleteXExpressPackages([measured])[0].packedItems).toEqual(packages[0].packedItems);
     expect(resolveCourierProvider({ shippingMethod: "KURIR", items: [physicalPackageRouteItem({ ...measured, weightKg: 31 })] })).toEqual({ kind: "single", provider: "MYGLS" });
+  });
+  it("uses the same dimensions for a single article, regardless of catalogue dimensions", () => {
+    expect(derivePhysicalPackages([item("A", 1)])[0]).toMatchObject({
+      weightKg: 0.1, widthCm: 10, depthCm: 10, heightCm: 20,
+    });
+  });
+  it("sums different gross weights and quantities to three decimals, falling back to unit weight", () => {
+    const a = item("A", 3);
+    const b = item("B", 2);
+    expect(derivePhysicalPackages([
+      { ...a, product: { ...a.product, grossWeightKg: "0.123" } },
+      { ...b, product: { ...b.product, grossWeightKg: 0, weightKg: "0.2" } },
+    ])[0].weightKg).toBe(0.769);
+  });
+  it("keeps an unknown total weight incomplete instead of declaring a partial sum", () => {
+    const missing = { ...item("B", 2), product: null };
+    const packages = derivePhysicalPackages([item("A", 3), missing]);
+    expect(packages[0]).toMatchObject({ weightKg: null, widthCm: 10, depthCm: 10, heightCm: 20 });
+    expect(() => requireCompleteXExpressPackages(packages)).toThrow("težina");
   });
   it("routes known bulky consolidated contents to MyGLS", () => {
     const packages = derivePhysicalPackages([item("A", 400)]);

@@ -59,7 +59,7 @@ it("does not broaden an empty explicit recovery scope to every order", async () 
   expect(mocks.insert).not.toHaveBeenCalled();
 });
 
-it("loads different Pompea SKUs into one unmeasured parcel with all contents persisted", async () => {
+it("loads different Pompea SKUs into one parcel with fixed dimensions with all contents persisted", async () => {
   mocks.items.mockResolvedValue([2, 5].map((qty, i) => ({
     id: `item-${i}`, orderId: "order", sku: `SKU-${i}`, name: `POMPEA ${i}`, qty,
     warehouseReservedQty: qty, unitPriceSale: 100 + i * 50, withAssembly: false,
@@ -67,9 +67,20 @@ it("loads different Pompea SKUs into one unmeasured parcel with all contents per
   })));
   expect(await loadEligibleOrders("batch", "actor", ["order"])).toMatchObject({ orderCount: 1, lineCount: 1, skippedInvalidDimensionsCount: 0 });
   expect(mocks.insert.mock.calls[0][0].data).toEqual([expect.objectContaining({
-    orderId: "order", quantity: 7, packedQuantity: 7, weightKg: null, widthCm: null,
+    orderId: "order", quantity: 7, packedQuantity: 7, weightKg: null, widthCm: 10, depthCm: 10, heightCm: 20,
     packedItems: [expect.objectContaining({ orderItemId: "item-0", quantity: 2, unitValue: 100 }), expect.objectContaining({ orderItemId: "item-1", quantity: 5, unitValue: 150 })],
   })]);
+});
+
+it("persists the summed Pompea weight and fixed dimensions without automatically confirming readiness", async () => {
+  mocks.items.mockResolvedValue([2, 3].map((qty, i) => ({
+    id: `item-${i}`, orderId: "order", name: `POMPEA ${i}`, qty, warehouseReservedQty: qty,
+    unitPriceSale: 100, withAssembly: false, product: { grossWeightKg: i ? 0.15 : 0.2 },
+  })));
+  expect(await loadEligibleOrders("batch", "actor", ["order"])).toMatchObject({ orderCount: 1, lineCount: 1 });
+  const [line] = mocks.insert.mock.calls[0][0].data;
+  expect(line).toMatchObject({ weightKg: 0.85, widthCm: 10, depthCm: 10, heightCm: 20, packedQuantity: 5 });
+  expect(line).not.toHaveProperty("warehouseReadyAt");
 });
 
 it("keeps two buyers' Pompea goods in separate packages when loading the same picking", async () => {
@@ -123,7 +134,7 @@ it("loads legacy Pompea into one parcel per buyer in a mixed GLS picking", async
     const lines = saved.filter((line: { orderId: string }) => line.orderId === orderId);
     expect(lines).toHaveLength(2);
     const shared = lines.find((line: { packedItems?: unknown }) => line.packedItems);
-    expect(shared).toMatchObject({ quantity: 6, packedQuantity: 6, weightKg: null, widthCm: null });
+    expect(shared).toMatchObject({ quantity: 6, packedQuantity: 6, weightKg: null, widthCm: 10, depthCm: 10, heightCm: 20 });
     expect(shared.packedItems.map((item: { orderItemId: string }) => item.orderItemId)).toEqual([
       `${orderId}-110122`, `${orderId}-110126`, `${orderId}-110129`,
     ]);
