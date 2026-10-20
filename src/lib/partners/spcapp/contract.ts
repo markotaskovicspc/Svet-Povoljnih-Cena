@@ -3,6 +3,7 @@ import { resolveReportPeriod, dateInputInTimeZone } from '@/lib/admin/report-per
 
 export const API_VERSION = '1';
 export const RESOURCES = {
+  'delivered-articles': 'Physical SPC delivered order items, quantities and recorded delivery dates; no Ananas, services, money or customer data',
   reclamations: 'Registered claims by registration date, article code and quantity; customer name only with history=all',
   orders: 'SPC orders, item amounts, discounts, courier and actual parcels',
   'ananas-orders': 'Imported Ananas orders; unavailable fields are null',

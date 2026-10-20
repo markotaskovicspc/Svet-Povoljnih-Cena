@@ -39,3 +39,6 @@ User requests the complete ERP journal with current status. Existing approved re
 
 ## Reclamation journal customer name (2026-10-21)
 User explicitly requests customer name in the journal. Only history=all selects customerFirst/customerLast; period matrix export omits them. Contact, address and payment fields remain excluded. Same spcapp:read authorization, rate limit, private responses and metadata-only audit. No schema or business-data writes. Validation and production are tracked in SCP Analytics.
+
+## SPC delivered articles for reclamation quantity rate (2026-10-21)
+User confirms claimed units / delivered units *100 and SPC only. Added authenticated read-only delivered-articles resource using the existing dashboard physical-delivery definition: Order.status ISPORUCENO, OrderItem.qty once per item; delivery date is MAX delivered ORDER_DELIVERY Shipment.deliveredAt, otherwise MIN ISPORUCENO OrderStatusEvent.createdAt. Missing dates remain null and are included for explicit incompleteness, never replaced by order creation dates. Period is Belgrade delivery date, not invoice/fiscal date. Existing signed cursor, limit, private response and metadata audit apply. No customer/monetary fields, business writes or schema change.
