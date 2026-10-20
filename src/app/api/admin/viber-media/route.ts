@@ -22,14 +22,14 @@ export async function POST(request: Request) {
     if (metadata.format !== formats[file.type] || !metadata.width || !metadata.height) {
       throw new Error("Sadržaj fajla nije ispravna slika izabranog formata.");
     }
-    // Email-compatible output, stripped metadata and bounded dimensions.
-    const resized = image.rotate().resize({ width: 2000, height: 2000, fit: "inside", withoutEnlargement: true });
-    const extension = metadata.hasAlpha ? "png" : "jpg";
-    const bytes = await (metadata.hasAlpha ? resized.png() : resized.jpeg({ quality: 85 })).toBuffer();
+    // Square canvas preserves the complete image when Viber crops its image tile.
+    const resized = image.rotate().resize({ width: 1024, height: 1024, fit: "contain", background: "#ffffff" });
+    const extension = "jpg";
+    const bytes = await resized.flatten({ background: "#ffffff" }).jpeg({ quality: 88 }).toBuffer();
     const key = `viber/${randomUUID()}.${extension}`;
     const storage = createAdminClient().storage.from(getProductMediaBucket());
     const { error } = await storage.upload(key, bytes, {
-      contentType: extension === "png" ? "image/png" : "image/jpeg",
+      contentType: "image/jpeg",
       cacheControl: "31536000", upsert: false,
     });
     if (error) return NextResponse.json({ error: "Otpremanje slike nije uspelo. Pokušajte ponovo." }, { status: 502 });

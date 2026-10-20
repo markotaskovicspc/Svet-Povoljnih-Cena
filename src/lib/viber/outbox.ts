@@ -54,12 +54,16 @@ export async function claimNthMessage() {
         db.viberCampaign.findUnique({ where: { id: tracking[1] }, select: { status: true, audience: { select: { filter: true } } } }),
       ]);
       let allowed = Boolean(user);
-      if (stored && campaign?.audience) {
-        const phone = (payload.destinations as { phoneNumber?: string }[] | undefined)?.[0]?.phoneNumber;
-        try { allowed = Boolean(phone && parseAudienceFilter(campaign.audience.filter).allStoredPhones && (parseAudienceFilter(campaign.audience.filter).channel ?? "VIBER") === channel && storedPhoneRecipientId(phone) === tracking[2]); } catch { allowed = false; }
-        if (allowed && phone) allowed = await isStoredPhoneAllowed(phone, channel);
-      }
-      const sameChannel = campaign?.audience && (parseAudienceFilter(campaign.audience.filter).channel ?? "VIBER") === channel;
+      let sameChannel = false;
+      try {
+        const filter = parseAudienceFilter(campaign?.audience?.filter);
+        sameChannel = (filter.channel ?? "VIBER") === channel;
+        if (stored) {
+          const phone = (payload.destinations as { phoneNumber?: string }[] | undefined)?.[0]?.phoneNumber;
+          allowed = Boolean(phone && sameChannel && (filter.allStoredPhones || filter.importedContacts?.some(c => c.phone === phone)) && storedPhoneRecipientId(phone) === tracking[2]);
+          if (allowed && phone) allowed = await isStoredPhoneAllowed(phone, channel);
+        }
+      } catch { allowed = false; }
       if (!allowed || !campaign || !sameChannel || !["SENDING", "SENT"].includes(campaign.status)) {
         await db.backgroundJob.updateMany({ where: { id: candidate.id, status: candidate.status, lockedAt: candidate.lockedAt }, data: { status: "VIBER_CANCELLED", completedAt: now, lockedAt: null, lastError: "consent_or_campaign_unavailable" } });
         continue;

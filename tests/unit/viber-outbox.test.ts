@@ -49,3 +49,16 @@ it('keeps SMS campaigns isolated and rechecks SMS withdrawals for guest phones',
  expect(await claimNthMessage()).toBeNull();
  expect(mocks.update.mock.calls.at(-1)[0].data.status).toBe('VIBER_CANCELLED');
 });
+
+it('allows only imported audience members and still rechecks withdrawals at worker time',async()=>{
+ const phone='381637725045';
+ mocks.candidates.mockResolvedValue([{id:'imported',status:'VIBER_QUEUED',lockedAt:null,payload:{channels:['SMS'],transactionId:`cmp:c1:rcp:${storedPhoneRecipientId(phone)}`,destinations:[{phoneNumber:phone}]}}]);
+ mocks.campaign.mockResolvedValue({status:'SENT',audience:{filter:{channel:'SMS',importedContacts:[{phone,name:'Marko'}]}}});
+ mocks.blocked.mockResolvedValue([]);mocks.update.mockResolvedValue({count:1});
+ expect((await claimNthMessage())?.id).toBe('imported');
+ mocks.blocked.mockResolvedValue([{phone}]);expect(await claimNthMessage()).toBeNull();
+ mocks.blocked.mockResolvedValue([]);
+ mocks.campaign.mockResolvedValue({status:'SENT',audience:{filter:{channel:'SMS',importedContacts:[{phone:'381641234567',name:'Ana'}]}}});
+ expect(await claimNthMessage()).toBeNull();
+ expect(mocks.update.mock.calls.at(-1)[0].data.status).toBe('VIBER_CANCELLED');
+});

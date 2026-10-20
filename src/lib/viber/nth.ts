@@ -1,4 +1,5 @@
 import "server-only";
+import { viberImageUrl } from "@/lib/messaging/viber-image";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { smsSender } from "./config";
@@ -45,7 +46,7 @@ export function buildNthPayload(input: ViberMessage, sender: string) {
     viber: {
       sender, ttl: 3600, label: m.kind,
       ...(m.template ? { template: m.template } : { text: m.text }),
-      ...(m.imageUrl ? { image: m.imageUrl } : {}),
+      ...(m.imageUrl ? { image: viberImageUrl(m.imageUrl) } : {}),
       ...(m.cta ? { buttonCaption: m.cta.label, buttonAction: m.cta.url } : {}),
     },
   };

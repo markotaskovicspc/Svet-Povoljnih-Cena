@@ -34,6 +34,8 @@ export const audienceFilterSchema = z
     lastPurchaseTo: z.string().datetime().optional(),
     includeNonCustomers: z.boolean().optional(),
     allStoredPhones: z.boolean().optional(),
+    importedContacts: z.array(z.object({ phone: z.string().regex(/^381[1-9]\d{7,8}$/), name: z.string().max(120) })).optional(),
+    importSource: z.object({ fileName: z.string().max(160), actorId: z.string(), importedAt: z.string().datetime(), declaration: z.string().max(500) }).optional(),
     consentEvidence: z.object({ source: z.string().max(200), confirmedAt: z.string().datetime() }).optional(),
   })
   .strict();
@@ -69,6 +71,16 @@ export function parseAudienceFilter(input: unknown): AudienceFilter {
 export async function resolveAudience(
   filter: AudienceFilter,
 ): Promise<AudienceRecipient[]> {
+  if (filter.importedContacts) {
+    const blocked = await blockedPhones(filter.channel);
+    const recipients = new Map<string, AudienceRecipient>();
+    if (filter.allStoredPhones) for (const r of await resolveStoredPhones(filter)) recipients.set(r.phone, r);
+    for (const contact of filter.importedContacts) {
+      const phone = nthPhoneNumber(contact.phone);
+      if (!blocked.has(phone) && !recipients.has(phone)) recipients.set(phone, { userId: storedPhoneRecipientId(phone), phone, displayName: contact.name || "Korisnik", lastCity: null });
+    }
+    return [...recipients.values()];
+  }
   if (filter.allStoredPhones) return resolveStoredPhones(filter);
   const consentFlag = filter.channel === "SMS" ? Prisma.raw('mc.sms') : Prisma.raw('mc."viber"');
   const cityFilter = filter.cities?.length
