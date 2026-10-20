@@ -147,8 +147,13 @@ One live Viber test to the operator-provided number ending 5045 was submitted
 through the production admin at 18:32 Europe/Belgrade and subsequently confirmed
 as VIBER_DELIVERED. This exercised the admin action, outbox, existing AWS worker,
 NTH API, and delivery report. The draft was not launched as a customer campaign.
-SMS has not been sent in this check; its live test still requires the existing
-`markospc` AWS session and whitelisted `spc-nth-messaging` server.
+One separate SMS test was sent from the existing whitelisted `spc-nth-messaging`
+server using the NTH API and registered sender `SvetPovCena`. NTH confirmed
+DELIVERED at 2026-10-20T16:43:12.607Z (one SMS part). An exclusive-create
+persistent test journal prevented duplicate submission; the follow-up check
+used GET only. This validates SMS provider delivery, not an SMS campaign UI.
+Exactly one Viber and one SMS test were sent to the operator-provided number.
+No customer campaign or automatic order notification was enabled.
 
 Desktop and 390px mobile UI were checked using an isolated fixture without real
 sends. The fixture was removed. The expired-purpose Ananas inspection endpoint
