@@ -203,3 +203,22 @@ Viber media controls, no browser errors and no horizontal overflow at 390px.
 The fixture was removed before publication. Worker report selection was patched
 in place on the existing server, compiled before writing and restarted active;
 the local durable journal and credentials were not replaced.
+
+## Direct one-number test — 2026-10-20
+
+The top-level “Test na jedan broj” button opens the composer directly. Its
+“Pošalji na jedan broj — test” card accepts an arbitrary operator-supplied test
+number and current message content without a title, saved audience or draft.
+This is available for SMS and Viber. The single-number action does not resolve
+an audience, save a campaign or call campaign launch. Older already-open
+saved-draft test forms remain supported with their channel checked. A successful
+test submission never starts a bulk campaign; bulk send still needs a saved
+campaign, audience review and explicit confirmation. An accepted test is reported
+as queued/awaiting delivery, not as delivered.
+
+The expanded suite passed 38 tests, including current-content one-number SMS
+and Viber tests, invalid content rejection, no campaign/audience side effects,
+and old-form compatibility. The preceding production release was checked with
+real current counts (1,997 inventory; 1,146 eligible after existing channel
+suppression) and a real OpenAI suggestion that was separately accepted in the
+composer. No customer campaign was sent during verification.

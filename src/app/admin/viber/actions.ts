@@ -10,6 +10,7 @@ import { STORED_PHONES_CONSENT, parseAudienceFilter, countAudience } from "@/lib
 import { campaignDraftSchema, sendCampaign } from "@/lib/viber/campaign";
 import { dispatch } from "@/lib/viber/transport";
 import { isViberReady, isSmsReady } from "@/lib/viber/config";
+import { parseSingleTest } from "@/lib/messaging/test-message";
 import { editMessageWithAi } from "@/lib/messaging/ai";
 import { envValue } from "@/lib/env";
 
@@ -87,8 +88,16 @@ export async function launchViberCampaign(state: AdminActionState, form: FormDat
 export async function testViberMessage(state: AdminActionState, form: FormData) {
   return withAdminState({ allowed: ["ADS"], action: "viber.campaignTest", entity: "ViberCampaign" }, async (_actor, f: FormData) => {
     const id = String(f.get("id") || "");
-    const c = await db.viberCampaign.findUniqueOrThrow({ where: { id }, include: { audience: true } });
-    if ((parseAudienceFilter(c.audience.filter).channel ?? "VIBER") !== channelFromForm(f)) throw new Error("Nacrt pripada drugom kanalu.");
+    let c: ReturnType<typeof parseSingleTest>;
+    if (f.has("body")) {
+      try { c = parseSingleTest(f); }
+      catch { return { ok: false as const, error: "Proverite tekst, sliku i link poruke pre testa." }; }
+    } else {
+      // Backward compatibility for a composer opened before this deployment.
+      const stored = await db.viberCampaign.findUniqueOrThrow({ where: { id }, include: { audience: true } });
+      if ((parseAudienceFilter(stored.audience.filter).channel ?? "VIBER") !== channelFromForm(f)) throw new Error("Nacrt pripada drugom kanalu.");
+      c = stored;
+    }
     const result = await dispatch({ channel: channelFromForm(f), to: String(f.get("phone") || ""), text: c.body.replace(/\{ime\}/g, "Test korisnik"), imageUrl: c.imageUrl, cta: c.ctaLabel && c.ctaUrl ? { label: c.ctaLabel, url: c.ctaUrl } : null, requestId: `test:${randomUUID()}` });
     if (!result.ok) return { ok: false as const, error: "Test nije predat za slanje. Proverite broj (+381…) i da li je slanje omogućeno." };
     return { ok: true as const, entityId: id, message: "Test poruka je predata za slanje samo na uneti broj. Status proverite u rezultatima." };
