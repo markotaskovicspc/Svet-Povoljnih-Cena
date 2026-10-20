@@ -56,6 +56,10 @@ export async function prepareCheckoutFollowUp(orderId: string, accessToken: stri
     const { notifyOrderWithoutEmail } = await import('./internal-order-email');
     await notifyOrderWithoutEmail(order);
   }
+  if (process.env.VIBER_ORDER_NOTIFICATIONS_ENABLED === "true" && !customerReplyDraftOnly) {
+    const { queueOrderViberNotification } = await import("@/lib/viber/order-notifications");
+    await queueOrderViberNotification(orderId, "confirmation");
+  }
   // These are independent jobs with their own retries. A broken supplier PDF
   // cannot prevent the buyer job from running. Documents retain their existing
   // courier schedule and supplier-order/payment prerequisites in the worker.

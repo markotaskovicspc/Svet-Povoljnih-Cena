@@ -4,6 +4,7 @@ import { z } from "zod";
 import { CampaignStatus, Prisma, type ViberCampaign } from "@prisma/client";
 import { db } from "@/lib/db";
 import { dispatch, type ViberDispatchResult } from "./transport";
+import { isViberReady } from "./config";
 import {
   audienceFilterSchema,
   parseAudienceFilter,
@@ -25,7 +26,7 @@ export const campaignDraftSchema = z.object({
   title: z.string().min(1).max(120),
   body: z.string().min(1).max(900),
   imageUrl: z.string().url().optional().nullable(),
-  ctaLabel: z.string().min(1).max(60).optional().nullable(),
+  ctaLabel: z.string().min(1).max(30).optional().nullable(),
   ctaUrl: z.string().url().optional().nullable(),
   scheduledAt: z.string().datetime().optional().nullable(),
 });
@@ -129,8 +130,10 @@ export async function sendCampaign(
     };
   }
 
-  await db.viberCampaign.update({
-    where: { id: campaignId },
+  if (!isViberReady()) throw new Error("Viber nije konfigurisan ili test slanja nije potvrđen.");
+
+  const claimed = await db.viberCampaign.updateMany({
+    where: { id: campaignId, status: { in: [CampaignStatus.DRAFT, CampaignStatus.SCHEDULED] } },
     data: {
       status: CampaignStatus.SENDING,
       recipients: recipients.length,
@@ -138,6 +141,8 @@ export async function sendCampaign(
       failed: 0,
     },
   });
+
+  if (claimed.count !== 1) throw new Error("Kampanja je već pokrenuta ili nije spremna za slanje.");
 
   // Capture into locals so TS narrows inside the worker closure.
   const cmpId = campaign.id;
@@ -224,6 +229,7 @@ export async function failCampaign(
  * invoked by `/api/cron` on a 5-minute schedule.
  */
 export async function runDueCampaigns(now = new Date()): Promise<SendReport[]> {
+  if (!isViberReady()) return [];
   const due = await db.viberCampaign.findMany({
     where: {
       status: CampaignStatus.SCHEDULED,

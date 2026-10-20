@@ -1,0 +1,23 @@
+[Unit]
+Description=SPC NTH Viber outbound worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=spc-nth
+Group=spc-nth
+EnvironmentFile=/etc/spc-nth/worker.env
+ExecStart=/usr/bin/python3 /opt/spc-nth/nth-worker.py
+Restart=on-failure
+RestartSec=10
+StateDirectory=spc-nth
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/spc-nth
+
+[Install]
+WantedBy=multi-user.target

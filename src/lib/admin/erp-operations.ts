@@ -2268,7 +2268,9 @@ function configured(value: string | undefined) {
 }
 
 function providerRow(provider: string, keys: string[]): ErpRow {
-  const missing = keys.filter((key) => !configured(process.env[key]));
+  const missing = keys.filter((key) => key.endsWith("_PRODUCTION_ACCEPTED")
+    ? !["true", "1", "yes", "on"].includes((process.env[key] ?? "").toLowerCase())
+    : !configured(process.env[key]));
   return {
     id: provider,
     values: {
@@ -2325,7 +2327,11 @@ async function integrationRows(): Promise<ErpRow[]> {
       "X_EXPRESS_PICKUP_CONTACT_PHONE",
     ]),
     providerRow("NEWSLETTER", ["EMAIL_PROVIDER", "EMAIL_MARKETING_FROM"]),
-    providerRow("VIBER", ["VIBER_PROVIDER", "VIBER_API_TOKEN", "VIBER_WEBHOOK_SECRET"]),
+    providerRow("VIBER", process.env.VIBER_PROVIDER === "nth"
+      ? (process.env.NTH_DELIVERY_MODE === "worker"
+        ? ["VIBER_PROVIDER", "NTH_WORKER_TOKEN", "VIBER_PRODUCTION_ACCEPTED"]
+        : ["VIBER_PROVIDER", "NTH_API_BASE_URL", "NTH_API_USERNAME", "NTH_API_PASSWORD", "VIBER_PRODUCTION_ACCEPTED"])
+      : ["VIBER_PROVIDER", "VIBER_API_TOKEN", "VIBER_WEBHOOK_SECRET", "VIBER_PRODUCTION_ACCEPTED"]),
   ];
 }
 

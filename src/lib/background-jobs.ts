@@ -837,6 +837,10 @@ async function dispatchJob(job: JobRow) {
     case "ORDER_STATUS_EMAIL": {
       const { loadOrderForEmail, lowerOrderStatus, sendOrderStatusChanged } = await import("@/lib/email");
       const args = payload as z.infer<typeof schemas.ORDER_STATUS_EMAIL>;
+      if (process.env.VIBER_ORDER_NOTIFICATIONS_ENABLED === "true") {
+        const { queueOrderViberNotification } = await import("@/lib/viber/order-notifications");
+        await queueOrderViberNotification(args.orderId, "status", args.status);
+      }
       const loaded = await loadOrderForEmail(args.orderId);
       if (!loaded?.recipient) return;
       const result = await sendOrderStatusChanged({

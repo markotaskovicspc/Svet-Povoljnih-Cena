@@ -284,6 +284,12 @@ async function processXExpressWebhookEvent(event: XExpressWebhookEventRow) {
 }
 
 async function notifyShipmentSideEffects(result: ApplyEventResult) {
+  if (process.env.VIBER_ORDER_NOTIFICATIONS_ENABLED === "true") {
+    try {
+      const { queueOrderViberNotification } = await import("@/lib/viber/order-notifications");
+      await queueOrderViberNotification(result.orderId, "status", undefined);
+    } catch { console.error("[viber] order-status queue unavailable"); }
+  }
   if (result.customerEmail) {
     try {
       const loaded = await loadOrderForEmail(result.orderId);

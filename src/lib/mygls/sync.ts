@@ -424,6 +424,12 @@ async function notifyShipmentSideEffects(
   orderStatus: PrismaOrderStatus | null,
   customerEmail: string | null,
 ) {
+  if (process.env.VIBER_ORDER_NOTIFICATIONS_ENABLED === "true") {
+    try {
+      const { queueOrderViberNotification } = await import("@/lib/viber/order-notifications");
+      await queueOrderViberNotification(orderId, "status", orderStatus ?? undefined);
+    } catch { console.error("[viber] order-status queue unavailable"); }
+  }
   if (customerEmail) {
     try {
       const loaded = await loadOrderForEmail(orderId);

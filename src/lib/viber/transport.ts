@@ -1,6 +1,7 @@
 import "server-only";
 
-import { getViberConfig } from "./config";
+import { getViberConfig, isViberReady, type ViberProvider } from "./config";
+import { dispatchNth } from "./nth";
 
 /**
  * Phase 4E — provider-agnostic Viber dispatcher.
@@ -17,33 +18,36 @@ export interface ViberMessage {
   cta?: { label: string; url: string } | null;
   /** Free-form correlation id surfaced in delivery-report webhooks. */
   trackingData?: string;
+  kind?: "promotion" | "transaction";
+  template?: { id: string; lang: string; parameters?: Record<string, string> };
+  requestId?: string;
 }
 
 export type ViberDispatchResult =
-  | { ok: true; messageToken: string; provider: "viber" | "none" }
-  | { ok: false; error: string; provider: "viber" | "none" };
+  | { ok: true; messageToken: string; provider: ViberProvider }
+  | { ok: false; error: string; provider: ViberProvider };
 
 /**
  * Send a single Viber message. Idempotency is the caller's responsibility
- * (pass a stable `trackingData` value).
+ * (`trackingData` is correlation only, not a provider deduplication guarantee).
+ * Ambiguous writes are not automatically retried.
  */
 export async function dispatch(
   msg: ViberMessage,
 ): Promise<ViberDispatchResult> {
   const cfg = getViberConfig();
 
-  if (cfg.provider === "none" || !cfg.apiKey) {
-    console.info(
-      `[viber:dev] to=${msg.to} bytes=${msg.text.length}` +
-        (msg.imageUrl ? " image=yes" : "") +
-        (msg.cta ? ` cta=${JSON.stringify(msg.cta.label)}` : ""),
-    );
-    return {
-      ok: true,
-      messageToken: `dev-${Date.now()}`,
-      provider: "none",
-    };
+  if (!isViberReady()) {
+    return { ok: false, error: "viber:not_configured_or_not_accepted", provider: cfg.provider };
   }
+  if (cfg.provider === "nth") {
+    if (cfg.deliveryMode === "worker") {
+      const { queueNthMessage } = await import("./outbox");
+      return queueNthMessage(msg, cfg);
+    }
+    return dispatchNth(msg, cfg);
+  }
+  if (!cfg.apiKey) return { ok: false, error: "viber:missing_api_token", provider: "viber" };
 
   return dispatchOfficial(msg, cfg.apiKey, cfg.sender, cfg.senderAvatar, cfg.endpoint);
 }
@@ -71,6 +75,8 @@ async function dispatchOfficial(
         "X-Viber-Auth-Token": apiKey,
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15000),
+      redirect: "error",
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -83,7 +89,7 @@ async function dispatchOfficial(
     message_token?: number | string;
   };
   // Viber returns HTTP 200 even on logical failures; status === 0 means OK.
-  if (!res.ok || (typeof json.status === "number" && json.status !== 0)) {
+  if (!res.ok || json.status !== 0 || !json.message_token) {
     return {
       ok: false,
       error: `viber:${json.status ?? res.status} ${json.status_message ?? "unknown"}`,

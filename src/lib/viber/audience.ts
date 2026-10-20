@@ -1,8 +1,10 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { nthPhoneNumber } from "./nth";
 
 /**
  * Phase 4E — Audience builder.
@@ -19,8 +21,8 @@ import { db } from "@/lib/db";
  *   - includeNonCustomers: also include users without orders (default
  *     false) — useful for newsletter-style announcements.
  *
- * Compliance: only users with `MarketingConsent.viber === true` AND a
- * non-null `phone` are returned. We never broadcast without consent.
+ * Default audience requires recorded Viber consent. The explicit allStoredPhones
+ * mode uses the dated operator declaration below, excluding recorded withdrawals.
  */
 
 export const audienceFilterSchema = z
@@ -29,6 +31,8 @@ export const audienceFilterSchema = z
     lastPurchaseFrom: z.string().datetime().optional(),
     lastPurchaseTo: z.string().datetime().optional(),
     includeNonCustomers: z.boolean().optional(),
+    allStoredPhones: z.boolean().optional(),
+    consentEvidence: z.object({ source: z.string().max(200), confirmedAt: z.string().datetime() }).optional(),
   })
   .strict();
 
@@ -63,6 +67,7 @@ export function parseAudienceFilter(input: unknown): AudienceFilter {
 export async function resolveAudience(
   filter: AudienceFilter,
 ): Promise<AudienceRecipient[]> {
+  if (filter.allStoredPhones) return resolveStoredPhones();
   const cityFilter = filter.cities?.length
     ? Prisma.sql`AND o."shipCity" = ANY(${filter.cities}::text[])`
     : Prisma.empty;
@@ -141,11 +146,86 @@ export async function resolveAudience(
     }
   }
 
-  return recipients;
+  // The same Serbian number can be stored with +381, 00381, or a local 0.
+  const unique = new Map<string, AudienceRecipient>();
+  for (const recipient of recipients) {
+    try {
+      const phone = nthPhoneNumber(recipient.phone);
+      if (!unique.has(phone)) unique.set(phone, { ...recipient, phone });
+    } catch { /* Invalid numbers cannot be submitted to this provider. */ }
+  }
+  return [...unique.values()];
 }
 
 /** Cheap count for the admin "preview audience" badge. */
 export async function countAudience(filter: AudienceFilter): Promise<number> {
   const recipients = await resolveAudience(filter);
   return recipients.length;
+}
+
+/** Counts only; raw contact numbers never leave the authenticated server. */
+export async function getViberContactSummary() {
+  const [rows, eligible, allEligible] = await Promise.all([
+    db.$queryRaw<{ phone: string }[]>(Prisma.sql`
+      SELECT DISTINCT phone FROM (
+        SELECT "phone" AS phone FROM "User" WHERE "deletedAt" IS NULL
+        UNION
+        SELECT c."phone" FROM "Customer" c LEFT JOIN "User" u ON u.id = c."userId"
+          WHERE c."userId" IS NULL OR u."deletedAt" IS NULL
+        UNION
+        SELECT o."shipPhone" FROM "Order" o LEFT JOIN "User" u ON u.id = o."userId"
+          WHERE o."userId" IS NULL OR u."deletedAt" IS NULL
+      ) contacts WHERE phone IS NOT NULL AND TRIM(phone) <> ''
+    `),
+    countAudience({ includeNonCustomers: true }),
+    countAudience({ allStoredPhones: true }),
+  ]);
+  const valid = new Set<string>();
+  let invalid = 0;
+  for (const row of rows) {
+    try { valid.add(nthPhoneNumber(row.phone)); } catch { invalid++; }
+  }
+  return { total: valid.size, eligible, allEligible, withoutConsent: Math.max(0, valid.size - eligible), invalid };
+}
+
+// Stefan confirmed consent for all existing contacts on 2026-10-14. New contacts
+// after this cutoff are not silently covered by that historical declaration.
+export const STORED_PHONES_CONSENT = { source: "Stefan: all existing numbers have Viber consent", confirmedAt: "2026-10-14T20:38:02.000Z" } as const;
+export function storedPhoneRecipientId(phone: string) { return "phone_" + createHash("sha256").update(nthPhoneNumber(phone)).digest("hex"); }
+async function blockedPhones() {
+  const rows = await db.$queryRaw<{ phone: string }[]>(Prisma.sql`
+    SELECT u.phone FROM "User" u LEFT JOIN "MarketingConsent" mc ON mc."userId"=u.id
+      WHERE u.phone IS NOT NULL AND (u."deletedAt" IS NOT NULL OR mc.viber=false)
+    UNION
+    SELECT o."shipPhone" FROM "Order" o JOIN "User" u ON u.id=o."userId" LEFT JOIN "MarketingConsent" mc ON mc."userId"=u.id
+      WHERE u."deletedAt" IS NOT NULL OR mc.viber=false
+    UNION
+    SELECT c.phone FROM "Customer" c JOIN "User" u ON u.id=c."userId" LEFT JOIN "MarketingConsent" mc ON mc."userId"=u.id
+      WHERE c.phone IS NOT NULL AND (u."deletedAt" IS NOT NULL OR mc.viber=false)
+  `);
+  const phones = new Set<string>();
+  for (const row of rows) { try { phones.add(nthPhoneNumber(row.phone)); } catch { /* invalid */ } }
+  return phones;
+}
+export async function isStoredPhoneAllowed(phone: string) {
+  let normalized: string;
+  try { normalized = nthPhoneNumber(phone); } catch { return false; }
+  return !(await blockedPhones()).has(normalized);
+}
+async function resolveStoredPhones(): Promise<AudienceRecipient[]> {
+  const cutoff = new Date(STORED_PHONES_CONSENT.confirmedAt);
+  const [rows, blocked] = await Promise.all([
+    db.$queryRaw<{ phone: string; name: string | null }[]>(Prisma.sql`
+      SELECT u.phone, u."firstName" AS name FROM "User" u WHERE u.phone IS NOT NULL AND u."deletedAt" IS NULL AND u."createdAt" <= ${cutoff}
+      UNION ALL
+      SELECT c.phone, c."firstName" FROM "Customer" c WHERE c.phone IS NOT NULL AND c."createdAt" <= ${cutoff}
+      UNION ALL
+      SELECT o."shipPhone", o."shipFirstName" FROM "Order" o WHERE o."createdAt" <= ${cutoff}
+    `), blockedPhones(),
+  ]);
+  const unique = new Map<string, AudienceRecipient>();
+  for (const row of rows) {
+    try { const phone=nthPhoneNumber(row.phone); if(!blocked.has(phone)&&!unique.has(phone)) unique.set(phone,{userId:storedPhoneRecipientId(phone),phone,displayName:row.name?.trim()||"Korisnik",lastCity:null}); } catch { /* invalid */ }
+  }
+  return [...unique.values()];
 }
