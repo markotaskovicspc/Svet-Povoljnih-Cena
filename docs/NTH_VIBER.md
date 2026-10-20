@@ -135,12 +135,22 @@ the legacy bot adapter and `/api/viber/worker` returned 404. Recovered the exist
 integration and UI from the saved implementation history, preserving the current
 checkout, return, picking, and courier changes. No schema migration is required.
 
-Recovered sources passed 29 targeted tests, ESLint, and `npm run build`. A separate
+Recovered sources passed 29 Viber/checkout tests and ESLint; the final expanded
+run passed 39 Viber/checkout/picking tests and `npm run build`. A separate
 in-memory worker-journal check verified duplicate and interrupted submissions do
 not issue another provider write. These checks do not prove live delivery.
 
-NTH email dated October 19 confirms SMS sender `SvetPovCena`. Omni Manager still
-shows both transactional templates as Pending on October 20; automatic order
-messages and scheduled campaigns have not been enabled. A live Viber/SMS test to
-the operator-provided number requires the existing `markospc` AWS session and
-whitelisted `spc-nth-messaging` server. No customer campaign was started.
+NTH email dated October 19 confirms SMS sender `SvetPovCena`. Omni Manager synchronization on October 20 refreshed both transactional templates
+to Approved. Automatic order messages and scheduled campaigns remain disabled.
+
+One live Viber test to the operator-provided number ending 5045 was submitted
+through the production admin at 18:32 Europe/Belgrade and subsequently confirmed
+as VIBER_DELIVERED. This exercised the admin action, outbox, existing AWS worker,
+NTH API, and delivery report. The draft was not launched as a customer campaign.
+SMS has not been sent in this check; its live test still requires the existing
+`markospc` AWS session and whitelisted `spc-nth-messaging` server.
+
+Desktop and 390px mobile UI were checked using an isolated fixture without real
+sends. The fixture was removed. The expired-purpose Ananas inspection endpoint
+and its helper/tests were also removed; its completed field-schema findings
+remain documented in docs/returns-2026-10-20.md.
