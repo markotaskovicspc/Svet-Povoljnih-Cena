@@ -28,8 +28,8 @@ export function audienceFormFilter(input: z.input<typeof audienceFormSchema>) {
 export function audienceDescription(filter: unknown) {
   const f = (filter ?? {}) as { importedContacts?: unknown[]; cities?: string[]; lastPurchaseFrom?: string; lastPurchaseTo?: string; includeNonCustomers?: boolean; allStoredPhones?: boolean; phoneScope?: string; channel?: string };
   if (f.importedContacts) return `Excel / CSV lista · ${f.importedContacts.length.toLocaleString("sr-RS")} brojeva${f.allStoredPhones ? " + postojeći kupci" : ""} · bez evidentiranih odjava`;
-  if (f.allStoredPhones) return f.phoneScope === "current" ? "Svi kupci i kontakti sa važećim brojem · bez evidentiranih odjava" : "Svi brojevi telefona · potvrđena saglasnost 14.10.2026.";
-  return [f.includeNonCustomers ? "Svi brojevi telefona sa Viber saglasnošću" : "Kupci sa završenom kupovinom i Viber saglasnošću", f.cities?.length ? f.cities.join(", ") : "", f.lastPurchaseFrom || f.lastPurchaseTo ? "Odabrani period kupovine" : ""].filter(Boolean).join(" · ").replaceAll("Viber", f.channel === "SMS" ? "SMS" : "Viber");
+  if (f.allStoredPhones) return f.phoneScope === "current" ? "Svi kupci i kontakti sa važećim brojem · bez evidentiranih odjava" : "Svi brojevi telefona · lista do 14.10.2026.";
+  return [f.includeNonCustomers ? "Kontakti sa uključenim Viber porukama na nalogu" : "Završene kupovine · uključene Viber poruke na nalogu", f.cities?.length ? f.cities.join(", ") : "", f.lastPurchaseFrom || f.lastPurchaseTo ? "Odabrani period kupovine" : ""].filter(Boolean).join(" · ").replaceAll("Viber", f.channel === "SMS" ? "SMS" : "Viber");
 }
 
 export const messageStatusLabel: Record<string, string> = {

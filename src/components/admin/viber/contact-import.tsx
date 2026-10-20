@@ -46,7 +46,7 @@ export function PhoneContactImport({ channel, onSaved }: { channel: "VIBER" | "S
         <p className="font-medium">Za slanje: {preview.eligible.toLocaleString("sr-RS")} primalaca</p>
         {preview.samples.length > 0 && <p className="break-words text-xs text-ink-500">Primeri: {preview.samples.map(s => `+${s.phone}${s.name ? ` (${s.name})` : ""}`).join(", ")}</p>}
         <label className="flex items-start gap-2"><input type="checkbox" className="mt-1" checked={confirmed} disabled={busy} onChange={e => setConfirmed(e.target.checked)}/><span>Potvrđujem da su ovi kontakti zainteresovani za {channel === "VIBER" ? "Viber" : "SMS"} poruke.</span></label>
-        <p className="text-xs text-ink-500">Uvoz ne menja saglasnosti na sajtu i ne vraća odjavljene brojeve.</p>
+        <p className="text-xs text-ink-500">Uvoz ne menja podešavanja naloga i ne vraća odjavljene brojeve.</p>
         <Button disabled={busy || !name.trim() || !confirmed || !preview.unique || !preview.eligible} onClick={() => void submit(true)}>{busy ? "Čuvanje…" : "Sačuvaj publiku i izaberi"}</Button>
         <p className="text-xs text-ink-500">Čuva se samo publika. Kampanju šaljete u posebnom koraku.</p>
       </div>}

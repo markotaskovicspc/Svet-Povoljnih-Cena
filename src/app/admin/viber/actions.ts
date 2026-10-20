@@ -79,7 +79,7 @@ export async function launchViberCampaign(state: AdminActionState, form: FormDat
     if (!ready(f)) return { ok: false as const, error: "Slanje trenutno nije omogućeno." };
     const preview = await db.viberCampaign.findUniqueOrThrow({ where: { id }, include: { audience: true } });
     if ((parseAudienceFilter(preview.audience.filter).channel ?? "VIBER") !== channelFromForm(f)) throw new Error("Kampanja pripada drugom kanalu.");
-    if (!await countAudience(parseAudienceFilter(preview.audience.filter))) return { ok: false as const, error: "Publika nema primaoce sa Viber saglasnošću. Izmenite izbor publike." };
+    if (!await countAudience(parseAudienceFilter(preview.audience.filter))) return { ok: false as const, error: "Publika nema važeće brojeve za slanje. Izmenite izbor publike." };
     const result = await sendCampaign(id);
     revalidatePath("/admin/viber");
     return { ok: true as const, entityId: id, message: `Predato u red za slanje: ${result.delivered}. Greške: ${result.failed}. Isporuku pratite u rezultatima.`, tone: result.failed ? "warning" as const : "success" as const };

@@ -12,7 +12,7 @@ it("interprets calendar dates in Serbia across summer/winter time and rejects in
  expect(()=>audienceFormFilter({name:'Kupci',from:'2026-07-10',to:'2026-07-01'})).toThrow();
 });
 it("describes saved audiences without exposing configuration JSON",()=>{
- expect(audienceDescription({includeNonCustomers:true})).toBe('Svi brojevi telefona sa Viber saglasnošću');
+ expect(audienceDescription({includeNonCustomers:true})).toBe('Kontakti sa uključenim Viber porukama na nalogu');
  expect(audienceDescription({cities:['Beograd']})).toContain('Beograd');
 });
 

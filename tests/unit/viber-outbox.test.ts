@@ -44,7 +44,7 @@ it('keeps SMS campaigns isolated and rechecks SMS withdrawals for guest phones',
  mocks.campaign.mockResolvedValue({status:'SENT',audience:{filter:{allStoredPhones:true,phoneScope:'current',channel:'SMS'}}});
  mocks.blocked.mockResolvedValue([]);mocks.update.mockResolvedValue({count:1});
  expect((await claimNthMessage())?.id).toBe('sms1');
- expect(mocks.blocked.mock.calls[0][0].sql).toContain('mc.sms');
+ expect(mocks.blocked.mock.calls[0][0].values).toContain('messaging.sms.disabled');
  mocks.campaign.mockResolvedValue({status:'SENT',audience:{filter:{allStoredPhones:true}}});
  expect(await claimNthMessage()).toBeNull();
  expect(mocks.update.mock.calls.at(-1)[0].data.status).toBe('VIBER_CANCELLED');

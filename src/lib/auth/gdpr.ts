@@ -1,4 +1,5 @@
 import "server-only";
+import { recordPhonePreferences } from "@/lib/messaging/phone-preferences";
 import { db } from "@/lib/db";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 
@@ -158,19 +159,23 @@ export async function setMarketingConsent(
   userId: string,
   channels: { email?: boolean; sms?: boolean; viber?: boolean },
 ) {
-  const consent = await db.marketingConsent.upsert({
-    where: { userId },
-    create: {
-      userId,
-      email: channels.email ?? false,
-      sms: channels.sms ?? false,
-      viber: channels.viber ?? false,
-    },
-    update: {
-      ...(channels.email !== undefined ? { email: channels.email } : {}),
-      ...(channels.sms !== undefined ? { sms: channels.sms } : {}),
-      ...(channels.viber !== undefined ? { viber: channels.viber } : {}),
-    },
+  const consent = await db.$transaction(async tx => {
+    const updated = await tx.marketingConsent.upsert({
+      where: { userId },
+      create: {
+        userId,
+        email: channels.email ?? false,
+        sms: channels.sms ?? false,
+        viber: channels.viber ?? false,
+      },
+      update: {
+        ...(channels.email !== undefined ? { email: channels.email } : {}),
+        ...(channels.sms !== undefined ? { sms: channels.sms } : {}),
+        ...(channels.viber !== undefined ? { viber: channels.viber } : {}),
+      },
+    });
+    await recordPhonePreferences(tx, userId, channels);
+    return updated;
   });
   if (channels.email !== undefined) {
     if (channels.email === false) {

@@ -208,16 +208,22 @@ export async function getViberContactSummary(channel: "VIBER" | "SMS" = "VIBER")
 export const STORED_PHONES_CONSENT = { source: "Stefan: all existing numbers have Viber consent", confirmedAt: "2026-10-14T20:38:02.000Z" } as const;
 export function storedPhoneRecipientId(phone: string) { return "phone_" + createHash("sha256").update(nthPhoneNumber(phone)).digest("hex"); }
 async function blockedPhones(channel: "VIBER" | "SMS" = "VIBER") {
-  const flag = channel === "SMS" ? Prisma.raw('mc.sms') : Prisma.raw('mc.viber');
+  const disabled = `messaging.${channel.toLowerCase()}.disabled`;
+  const enabled = `messaging.${channel.toLowerCase()}.enabled`;
   const rows = await db.$queryRaw<{ phone: string }[]>(Prisma.sql`
-    SELECT u.phone FROM "User" u LEFT JOIN "MarketingConsent" mc ON mc."userId"=u.id
-      WHERE u.phone IS NOT NULL AND (u."deletedAt" IS NOT NULL OR ${flag}=false)
+    WITH blocked_users AS (
+      SELECT u.id FROM "User" u
+      WHERE u."deletedAt" IS NOT NULL OR (
+        SELECT a.action FROM "AuditLog" a
+        WHERE a.entity='User' AND a."entityId"=u.id AND a.action IN (${enabled}, ${disabled})
+        ORDER BY a."createdAt" DESC, a.id DESC LIMIT 1
+      ) = ${disabled}
+    )
+    SELECT u.phone FROM "User" u JOIN blocked_users b ON b.id=u.id WHERE u.phone IS NOT NULL
     UNION
-    SELECT o."shipPhone" FROM "Order" o JOIN "User" u ON u.id=o."userId" LEFT JOIN "MarketingConsent" mc ON mc."userId"=u.id
-      WHERE u."deletedAt" IS NOT NULL OR ${flag}=false
+    SELECT o."shipPhone" FROM "Order" o JOIN blocked_users b ON b.id=o."userId"
     UNION
-    SELECT c.phone FROM "Customer" c JOIN "User" u ON u.id=c."userId" LEFT JOIN "MarketingConsent" mc ON mc."userId"=u.id
-      WHERE c.phone IS NOT NULL AND (u."deletedAt" IS NOT NULL OR ${flag}=false)
+    SELECT c.phone FROM "Customer" c JOIN blocked_users b ON b.id=c."userId" WHERE c.phone IS NOT NULL
   `);
   const phones = new Set<string>();
   for (const row of rows) { try { phones.add(nthPhoneNumber(row.phone)); } catch { /* invalid */ } }

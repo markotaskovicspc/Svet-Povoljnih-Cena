@@ -29,15 +29,16 @@ it('current scope includes recent guest customers and uses SMS withdrawals indep
  expect(rows).toHaveLength(1);
  const cutoff=mocks.query.mock.calls[0][0].values.find((v:unknown)=>v instanceof Date);
  expect(cutoff.getTime()).toBeGreaterThan(new Date('2026-10-19').getTime());
- expect(mocks.query.mock.calls[1][0].sql).toContain('mc.sms');
- expect(mocks.query.mock.calls[1][0].sql).not.toContain('mc.viber');
+ expect(mocks.query.mock.calls[1][0].values).toContain('messaging.sms.disabled');
+ expect(mocks.query.mock.calls[1][0].sql).not.toContain('MarketingConsent');
+ expect(mocks.query.mock.calls[1][0].values).not.toContain('messaging.viber.disabled');
 });
 
 it('resolves imported contacts separately and honors current withdrawals',async()=>{
  mocks.query.mockResolvedValue([{phone:'0641234567'}]);
  const rows=await resolveAudience({channel:'SMS',importedContacts:[{phone:'381637725045',name:'Marko'},{phone:'381641234567',name:'Odjavljen'},{phone:'381637725045',name:'Duplikat'}]});
  expect(rows).toHaveLength(1);expect(rows[0]).toMatchObject({phone:'381637725045',displayName:'Marko'});
- expect(mocks.query.mock.calls[0][0].sql).toContain('mc.sms');
+ expect(mocks.query.mock.calls[0][0].values).toContain('messaging.sms.disabled');
 });
 it('unions Excel and existing contacts without sending duplicates',async()=>{
  mocks.query.mockResolvedValueOnce([]).mockResolvedValueOnce([{phone:'0637725045',name:'Kupac'}]).mockResolvedValueOnce([]);

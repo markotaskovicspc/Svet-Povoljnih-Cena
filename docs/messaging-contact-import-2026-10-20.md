@@ -18,3 +18,9 @@ Novi upload slika takođe pravi kvadratnu JPEG sliku uklapanjem celog sadržaja 
 ## Provera
 
 43 ciljana testa obuhvataju pravi XLSX, CSV, mapiranje kolona, duplikate, neispravne ćelije i formule, pregled bez upisa, potvrdu uvoza, idempotentno čuvanje, spajanje publika, proveru odjava kod radnika, stvarnu obradu slika i payload zamenu logotipa, uz postojeće testove kampanja i pojedinačnog slanja. Lokalno je proverena komponenta u browseru pri desktop i mobilnoj širini 390 px; bez preliva i novih konzolnih grešaka. Nove poruke nisu slane tokom ove provere; prijem nove slike na pravom Viber telefonu ostaje za pojedinačni test operatora.
+
+## Ispravka izbora postojećih brojeva
+
+Podrazumevana `false` polja MarketingConsent.sms/viber više ne izbacuju kontakt iz opcije svih postojećih brojeva ili Excel liste. Ta polja su nastajala i pri registraciji samo za email, pa nisu pouzdan dokaz isključivanja telefonskih poruka. Nova eksplicitna uključenja/isključenja SMS/Viber poruka na podešavanjima naloga zapisuju se transakcijski u AuditLog, odvojeno po kanalu; uzima se poslednja akcija. Obrisani nalozi ostaju isključeni. Nije bilo masovnog menjanja starih polja niti automatskog pokretanja kampanja. Sačuvani uži izbori ostaju uži. Termin saglasnosti uklonjen je iz administratorskog Viber/SMS prikaza.
+
+Provera: 45 ciljanih testova, uključujući izvršavanje SQL upita na PostgreSQL kompatibilnoj PGlite bazi sa podrazumevanim false vrednostima, eksplicitnim isključivanjem, ponovnim uključivanjem, odvojenim kanalima i obrisanim nalogom. Produkcioni build prolazi.
