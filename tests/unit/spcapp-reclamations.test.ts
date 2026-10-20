@@ -19,3 +19,9 @@ it('exports complete registration history with status and binds the cursor to al
 });
 
 it('preserves existing signed cursor bindings for all ordinary period exports',()=>{const q=parseExportQuery('orders',new URL('https://erp.test?from=2026-01-01&to=2026-10-21'),'secret');const decoded=JSON.parse(Buffer.from(q.nextCursor('id').split('.')[0],'base64url').toString());expect(decoded.binding).toBe(JSON.stringify(['orders','2026-01-01','2026-10-21','day','orders',null,null]));});
+
+it('includes only customer name in full-history journal and excludes it from matrix period exports',async()=>{
+ await exportReclamations(parseExportQuery('reclamations',new URL('https://erp.test?history=all'),'secret'));
+ const selection=mocks.list.mock.calls[0][0].select;expect(selection.customerFirst).toBe(true);expect(selection.customerLast).toBe(true);expect(selection).not.toHaveProperty('customerEmail');expect(selection).not.toHaveProperty('customerPhone');expect(selection).not.toHaveProperty('customerAddress');
+ await exportReclamations(parseExportQuery('reclamations',new URL('https://erp.test?from=2026-01-01&to=2026-10-21'),'secret'));expect(mocks.list.mock.calls[1][0].select).not.toHaveProperty('customerFirst');
+});

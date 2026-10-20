@@ -36,3 +36,6 @@ Explicit user approval covers this ERP change and publication. Added read-only s
 
 ## Reclamation journal export (2026-10-21)
 User requests the complete ERP journal with current status. Existing approved read-only reclamations export now includes status and optional history=all (no date cutoff); signed cursors bind this mode and other resources reject it. No business writes, PII or schema change. Existing authentication, rate limit and metadata audit remain. Validation and production verification are tracked in SCP Analytics.
+
+## Reclamation journal customer name (2026-10-21)
+User explicitly requests customer name in the journal. Only history=all selects customerFirst/customerLast; period matrix export omits them. Contact, address and payment fields remain excluded. Same spcapp:read authorization, rate limit, private responses and metadata-only audit. No schema or business-data writes. Validation and production are tracked in SCP Analytics.

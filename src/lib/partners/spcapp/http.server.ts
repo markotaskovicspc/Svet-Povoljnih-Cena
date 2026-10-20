@@ -21,7 +21,7 @@ export async function spcappGet(request: Request, resource?: string) {
       sync: { mode: 'FULL_RESCAN_UPSERT', defaultFrom: '2025-05-01', defaultLimit: 100, maxLimit: 200, sefMaxLimit: 10,
         isolation: 'LIVE_PAGES_NOT_TRANSACTIONAL_SNAPSHOT', updatedSinceSupported: false,
         instructions: 'Keep from/to fixed across pages. Upsert by (resource,id). Only complete successful full scans can reconcile missing IDs. Re-read historical fiscal data after invoice changes; no reliable incremental feed exists yet.' },
-      limitations: ['No guarantee of complete history since 2025-05-01.', 'Ananas customer identity and parcel dimensions not captured.', 'SEF specification lines and import VAT require further classification.', 'No names, addresses, phone numbers, customer email or raw provider payloads in JSON exports.'],
+      limitations: ['No guarantee of complete history since 2025-05-01.', 'Ananas customer identity and parcel dimensions not captured.', 'SEF specification lines and import VAT require further classification.', 'No addresses, phone numbers, customer email or raw provider payloads in JSON exports; customer names only in reclamations history=all.'],
     }, { headers });
     const url = new URL(request.url);
     if (resource === 'sef-attachment') {
