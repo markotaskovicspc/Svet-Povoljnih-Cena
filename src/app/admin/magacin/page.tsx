@@ -1,3 +1,4 @@
+import { AdminRefreshButton } from "@/components/admin/refresh-button";
 import Link from "next/link";
 import { requireAdminAction } from "@/lib/admin";
 import { db } from "@/lib/db";
@@ -17,9 +18,11 @@ export default async function WarehousePicking({ searchParams }: { searchParams:
   const progress = await getPickingBatchProgress(batches);
   return <main className="space-y-5 p-4 sm:p-6">
     {forbidden && <p role="alert" className="rounded-lg border border-warning/30 p-3 text-sm">Vaš nalog ima pristup samo pickingu i povratima.</p>}
-    <div><h1 className="text-xl font-semibold">Odvajanje robe</h1><p className="mt-1 text-sm text-ink-500">Otvorite nalog, pronađite robu i potvrdite količinu.</p></div>
-
-    <p className="text-sm text-ink-500">Nalozi za rad: {batches.length}{batches.length === 100 ? " (prvih 100)" : ""}</p>
+    <div className="flex items-center justify-between gap-3">
+      <h1 className="text-xl font-semibold">Odvajanje robe</h1>
+      <div className="[&>button]:h-11 [&>button]:w-11"><AdminRefreshButton label="Osveži picking" /></div>
+    </div>
+    {batches.length === 100 && <p className="text-sm text-ink-500">Prikazano je prvih 100 naloga.</p>}
     <div className="space-y-3">{batches.map(batch => {
       const state = progress.get(batch.id)!;
       const color = state.status === "complete" ? "border-emerald-300 bg-emerald-50 text-emerald-950" : state.status === "partial" ? "border-amber-400 bg-amber-50 text-amber-950" : "border-border bg-surface";

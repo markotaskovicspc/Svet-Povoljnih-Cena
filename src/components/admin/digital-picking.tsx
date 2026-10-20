@@ -82,14 +82,9 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
   }
   function scan() {
     const value = code.trim();
-    if (!value || !canScan) return;
-    if (warehouseMode && currentRow && currentRow.barcode !== value && currentRow.sku !== value) {
-      setScanError(true);
-      setMessage("Šifra ne odgovara prikazanom artiklu. Proverite barkod ili otvorite drugi artikal.");
-      return;
-    }
-    const matches = session.rows.filter(r => (r.barcode === value || r.sku === value) && (session.progress[r.key] ?? 0) < r.quantity);
-    const row = warehouseMode ? matches.find(r => r.key === currentRow?.key) : matches.length === 1 ? matches[0] : matches.find(r => r.key === selected);
+    if (!canScan || (!warehouseMode && !value)) return;
+    const matches = warehouseMode ? [] : session.rows.filter(r => (r.barcode === value || r.sku === value) && (session.progress[r.key] ?? 0) < r.quantity);
+    const row = warehouseMode ? currentRow : matches.length === 1 ? matches[0] : matches.find(r => r.key === selected);
     if (!row) { setMessage(matches.length ? "Ista šifra je u više magacina. Izaberite odgovarajući red pa ponovite sken." : "Šifra nije na ovom nalogu ili je sva količina već odvojena."); return; }
     const amount = Number(quantity);
     if (!quantity.trim() || !Number.isSafeInteger(amount) || amount < (warehouseMode ? 0 : 1) || (warehouseMode && amount > remainingQuantity)) { setMessage(warehouseMode ? "Unesite celu količinu od 0 do preostale tražene količine." : "Unesite pozitivnu celu količinu."); quantityInput.current?.focus(); return; }
@@ -170,7 +165,7 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
     {warehouseMode && !review.complete && !labelUrl && articles}
     {session.editable && (!warehouseMode || !review.complete) && <section className="space-y-3 rounded-xl border bg-muted/20 p-4 print:hidden">
       <form onSubmit={e => { e.preventDefault(); scan(); }} className="flex flex-wrap items-end gap-3">
-        <label className="min-w-48 flex-1">Skenirajte barkod ili unesite šifru<input ref={input} inputMode={warehouseMode ? "numeric" : undefined} enterKeyHint={warehouseMode ? "done" : undefined} aria-invalid={warehouseMode && scanError ? true : undefined} autoComplete="off" value={code} onChange={e => changeCode(e.target.value)} disabled={!canScan} className="mt-1 w-full rounded border bg-background p-3" /></label>
+        {!warehouseMode && <label className="min-w-48 flex-1">Skenirajte barkod ili unesite šifru<input ref={input} autoComplete="off" value={code} onChange={e => changeCode(e.target.value)} disabled={!canScan} className="mt-1 w-full rounded border bg-background p-3" /></label>}
         <div><label htmlFor="picking-quantity">Količina</label><div className="mt-1 flex items-center gap-2">
           {warehouseMode && <button type="button" aria-label="Smanji količinu" disabled={!canScan || Number(quantity) <= 0} onClick={() => setQuantity(String(Math.max(0, Number(quantity || 0) - 1)))} className="min-h-12 min-w-12 rounded border text-xl">−</button>}
           <input id="picking-quantity" ref={quantityInput} type="number" inputMode={warehouseMode ? "numeric" : undefined} enterKeyHint={warehouseMode ? "done" : undefined} min={warehouseMode ? 0 : 1} max={warehouseMode ? remainingQuantity : 10000} value={quantity} onChange={e => setQuantity(e.target.value)} disabled={!canScan} className="block w-24 rounded border bg-background p-3" />
