@@ -9,6 +9,7 @@ import { AdminActionForm } from "@/components/admin/action-form";
 import { Card, CardTitle } from "@/components/admin/card";
 import { PageHeader } from "@/components/admin/page-header";
 import { LabelPdfActions } from "@/components/admin/label-pdf-actions";
+import { PickupPostingFeedback } from "@/components/admin/pickup-posting-feedback";
 import { PendingLinkLabel } from "@/components/admin/pending-link-label";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { Button } from "@/components/ui/button";
@@ -814,7 +815,7 @@ export default async function PickupBatchPage({
           {showCourierHandoverStatus ? (
             <p
               className={
-                handoverStatus === "Delimično preuzeto"
+                (batch.status === "DRAFT" || handoverStatus === "Delimično preuzeto")
                   ? "mt-4 rounded-lg border border-warning/25 bg-warning/10 px-3 py-2 text-sm text-warning"
                   : "mt-4 rounded-lg border border-success/25 bg-success/10 px-3 py-2 text-sm text-success"
               }
@@ -824,46 +825,19 @@ export default async function PickupBatchPage({
                 : handoverStatus === "Delimično preuzeto"
                   ? `Kurir je preuzeo ${handoverProgress.pickedUpGroups}/${handoverProgress.totalGroups} pošiljki i ${handoverProgress.pickedUpPackages}/${handoverProgress.totalPackages} paketa.`
                   : batch.status === "DRAFT"
-                    ? "Adresnice su pripremljene, ali nalog još nije proknjižen. Završite slanje kuriru."
+                    ? "Adresnice su pripremljene, ali slanje celog naloga kuriru još nije završeno. Proverite upozorenja ispod i završite slanje."
                     : "Adresnice su kreirane i nalog je proknjižen. Status preuzimanja će se automatski promeniti kada kurir evidentira da je preuzeo pošiljke."}
             </p>
-          ) : previousPostingIssue && !postingBlockReason ? (
-            <p
-              id={postingReasonId}
-              className="mt-4 rounded-lg border border-warning/25 bg-warning/10 px-3 py-2 text-sm text-warning"
-            >
-              <strong>Prethodni pokušaj nije uspeo:</strong>{" "}
-              {previousPostingIssue}
-              <span className="mt-1 block">
-                Greška je sačuvana radi dijagnostike. Dugme „Kreiraj adresnice
-                i pošalji“ je dostupno za bezbedno ponovno slanje; već uspešno
-                kreirane pošiljke neće biti duplirane.
-              </span>
-              <span className="mt-1 block">
-                Ako poruka navodi adresu ili telefon, kliknite broj porudžbine
-                u picking listi, ispravite podatke u odeljku „Adresa
-                isporuke“, vratite se ovde i ponovite slanje.
-              </span>
-            </p>
-          ) : postingBlockReason ? (
-            <p
-              id={postingReasonId}
-              className="mt-4 rounded-lg border border-warning/25 bg-warning/10 px-3 py-2 text-sm text-warning"
-            >
-              <strong>
-                „Kreiraj adresnice i pošalji“ je trenutno zaključan:
-              </strong>{" "}
-              {postingBlockReason}
-            </p>
-          ) : (
-            <p className="mt-4 rounded-lg border border-success/25 bg-success/10 px-3 py-2 text-sm text-success">
-              {myGls ? "MyGLS" : "X Express"} je spreman. Jedan klik kreira
-              adresnice i odmah šalje sve pošiljke kuriru.
-              {myGls
-                ? " Pre prvog MyGLS zahteva sistem proverava ceo nalog, tako da neispravna porudžbina ne ostavlja delimično kreirane adresnice."
-                : null}
-            </p>
-          )}
+          ) : null}
+          {canPost ? (
+            <PickupPostingFeedback
+              reasonId={postingReasonId}
+              blockReason={postingBlockReason}
+              previousIssue={previousPostingIssue}
+              showReady={!showCourierHandoverStatus}
+              myGls={myGls}
+            />
+          ) : null}
         </Card>
 
         <Card>
