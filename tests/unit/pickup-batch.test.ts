@@ -3,6 +3,7 @@ import { getErpModuleDefinition } from "@/lib/admin/erp";
 import {
   canRecreateMyGlsLabels,
   isPickupBatchEditable,
+  isPickupReplacementReady,
   nextPickupBatchNumber,
   PICKUP_BATCH_EXTERNAL_BLOCK_REASON,
   PICKUP_BATCH_STATUS_LABEL,
@@ -13,6 +14,13 @@ import {
 } from "@/lib/admin/pickup-batch";
 
 describe("ERP module 13 pickup batches", () => {
+  it("lets a batch finish after its replacement advances from ready to handed over", () => {
+    expect(isPickupReplacementReady("READY")).toBe(true);
+    expect(isPickupReplacementReady("HANDED_OVER")).toBe(true);
+    for (const status of [null, "NOT_REQUESTED", "REQUESTED", "PREPARING"]) {
+      expect(isPickupReplacementReady(status)).toBe(false);
+    }
+  });
   it("does not show the old shipment's newer tracking scan on the new picking", () => {
     const snapshot = pickupCourierSnapshot({ provider: "X_EXPRESS", purpose: "ORDER_DELIVERY", reclamationId: null, orderItemId: "i", courierPickedUpAt: null, lineGroupKey: "reshipment:r", shipments: [{ id: "old", provider: "X_EXPRESS", purpose: "ORDER_DELIVERY", reclamationId: null, status: "RETURNED", shippedAt: new Date(), lastStatusEventAt: new Date(), rawCreateResponse: { assignment: { orderItemIds: ["i"], codAmount: 0 } }, createdAt: new Date(), updatedAt: new Date() }] });
     expect(snapshot).toBeNull();

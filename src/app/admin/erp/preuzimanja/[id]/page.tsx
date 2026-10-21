@@ -33,6 +33,7 @@ import {
 } from "@/lib/admin/mygls-package-cancellation.server";
 import {
   isPickupBatchEditable,
+  isPickupReplacementReady,
   pickupCourierSnapshot,
   pickupBatchDisplayStatus,
   pickupBatchHandoverProgress,
@@ -567,7 +568,7 @@ export default async function PickupBatchPage({
   const unreadyReplacementCount = pickingGroups.filter(
     (group) =>
       group.purpose === "RECLAMATION_REPLACEMENT" &&
-      group.warehouseStatus !== "READY",
+      !isPickupReplacementReady(group.warehouseStatus),
   ).length;
   const previousPostingIssue = batch.labelsCreationStartedAt
     ? batch.configurationIssue

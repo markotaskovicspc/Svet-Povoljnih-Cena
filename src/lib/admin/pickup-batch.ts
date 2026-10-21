@@ -36,6 +36,12 @@ export const PICKUP_BATCH_STATUS_LABEL: Record<PickupBatchStatus, string> = {
   CANCELLED: "Otkazan",
 };
 
+export function isPickupReplacementReady(warehouseStatus: string | null) {
+  // Creating a replacement shipment advances READY to HANDED_OVER before
+  // the rest of the batch is announced. Retrying must preserve that progress.
+  return warehouseStatus === "READY" || warehouseStatus === "HANDED_OVER";
+}
+
 export type PickupBatchHandoverLine = {
   lineGroupKey: string;
   courierPickedUpAt: Date | null;
