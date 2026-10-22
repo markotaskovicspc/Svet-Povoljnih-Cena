@@ -3,6 +3,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { envValue } from "@/lib/env";
 import { getFiscalConfig, type BadiConfig } from "./config";
+import { refundNeedsBuyerId, validateRefundBuyerId } from "./refund-policy";
 import type {
   FiscalDispatchResult,
   FiscalInvoiceInput,
@@ -149,6 +150,7 @@ async function badiRequest<T>(
         ...vpfrHeaders,
       },
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
+      signal: AbortSignal.timeout(25_000),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -230,15 +232,37 @@ export async function fiscalizeWithBadi(
         error: "fiscal:badi refundacija zahteva broj originalnog fiskalnog računa.",
       };
     }
-    if (!input.buyerId) {
+    const identityError = validateRefundBuyerId(input.paymentMethod, input.buyerId);
+    if (identityError) {
       return {
         ok: false,
         provider: "badi",
-        error: "fiscal:badi refundacija zahteva identifikaciju kupca (buyerId).",
+        error: `fiscal:badi ${identityError}`,
       };
+    }
+    const cashlessWithoutId = !refundNeedsBuyerId(input.paymentMethod) && !input.buyerId;
+    if (cashlessWithoutId && (!input.originalReceiptDate || !Number.isFinite(Date.parse(input.originalReceiptDate)))) {
+      return { ok: false, provider: "badi", error: "fiscal:config Nedostaje PFR datum originalnog računa za bezgotovinsku refundaciju." };
     }
     // Register products first so refund items can carry the NUMERIC sku too.
     const providerSkus = await ensureBadiProducts(input.lines);
+    // The convenience /refund API requires buyerId unconditionally. The
+    // documented CreateReceipt API supports transactionType=refund with manual
+    // reference and optional buyerId. Use that contract for cashless returns;
+    // never invent an identity or reuse a staff member's ID.
+    if (cashlessWithoutId) {
+      result = await badiRequest<BadiReceiptPayload>("/fiscalization/receipts", {
+        method: "POST", vpfr: true,
+        body: {
+          ...storeIdentity, invoiceType: saleInvoiceType(), transactionType: "refund",
+          referentDocumentNumber: input.originalReceiptNumber,
+          referentDocumentDT: input.originalReceiptDate,
+          payments: { [PAYMENT_KEYS[input.paymentMethod]]: input.total },
+          items: input.lines.map(line => ({ sku: providerSkus.get(line.sku), quantity: line.qty, unitPrice: line.unitPrice })),
+          receiptDelivery: RECEIPT_DELIVERY,
+        },
+      });
+    } else {
     result = await badiRequest<BadiReceiptPayload>(
       `/fiscalization/receipts/${encodeURIComponent(input.originalReceiptNumber)}/refund`,
       {
@@ -256,6 +280,7 @@ export async function fiscalizeWithBadi(
         },
       },
     );
+    }
   } else {
     let providerSkus = await ensureBadiProducts(input.lines);
     const buildBody = (skus: Map<string, number>) => ({

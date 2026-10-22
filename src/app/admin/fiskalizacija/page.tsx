@@ -79,12 +79,14 @@ async function refundFiscalLinesAction(_state: AdminActionState, formData: FormD
       if (!fiscalLineIds.length || !paymentReturnMethod || !warehouseId) {
         return { ok: false as const, error: "Izaberite redove, način vraćanja novca i magacin." };
       }
-      if (!buyerId) {
-        return { ok: false as const, error: "Unesite identifikaciju kupca (npr. 10:PIB ili 11:JMBG) — obavezna je za refundaciju." };
+      const quantities = Object.fromEntries(fiscalLineIds.map(id => [id, Number(formData.get(`quantity:${id}`))]));
+      if (Object.values(quantities).some(qty => !Number.isInteger(qty) || qty < 1)) {
+        return { ok: false as const, error: "Unesite ceo pozitivan broj komada za svaki izabrani red." };
       }
 
       const result = await issueFiscalRefund({
         fiscalLineIds,
+        quantities,
         paymentReturnMethod,
         warehouseId,
         buyerId,
@@ -98,7 +100,7 @@ async function refundFiscalLinesAction(_state: AdminActionState, formData: FormD
           fiscalLineIds,
           paymentReturnMethod,
           warehouseId,
-          buyerId,
+          quantities,
           documents: result.documents.map((document) => document.receiptNumber),
           paymentErrors: result.paymentErrors,
         },
@@ -234,6 +236,7 @@ export default async function FiscalizationPage({
     color1: line.color1 ?? "-",
     color2: line.color2 ?? "-",
     qty: sign*line.qty,
+    remainingQty: Math.max(0, line.qty - line.refundedQty),
     unitPriceGross: formatRsd(amounts.unit),
     totalNet: formatRsd(sign*amounts.net),
     totalGross: formatRsd(sign*amounts.gross),

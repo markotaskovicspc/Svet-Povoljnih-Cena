@@ -187,3 +187,51 @@ describe("badi VPFR transport", () => {
     if (!result.ok) expect(result.error).not.toContain("provider stack");
   });
 });
+
+
+describe("cashless refund contract", () => {
+  function configure() {
+    process.env.BADI_API_KEY = "api-key";
+    process.env.BADI_API_SECRET = "api-secret";
+    process.env.BADI_BASE_URL = "https://badi.example.test/v2";
+    process.env.BADI_STORE_ID = "store-id";
+    process.env.BADI_CASHIER_ID = "cashier-id";
+    process.env.BADI_FISCAL_MODE = "vpfr";
+    process.env.BADI_VPFR_PFX = fakePfxBase64();
+    process.env.BADI_VPFR_PASSWORD = "certificate-password";
+    process.env.BADI_VPFR_PAC = "ABC123";
+    __resetFiscalConfig();
+  }
+  const input = {
+    invoiceRef: "CLAIM-2", transactionType: "REFUND" as const,
+    originalReceiptNumber: "SALE-1", originalReceiptDate: "2026-10-12T12:00:00.000Z",
+    total: 5998, paymentMethod: "TRANSFER" as const,
+    lines: [{ sku: "1001", name: "Sto", qty: 2, unitPrice: 2999 }],
+  };
+  it("uses documented receipt creation without a fabricated identity", async () => {
+    configure();
+    const fetchMock = vi.fn(async (_url: unknown, _init?: RequestInit) => { void _url; void _init; return new Response(JSON.stringify({ invoiceNumber: "REFUND-2", sdcDateTime: "2026-10-22T12:00:00Z" }), { status: 200 }); });
+    global.fetch = fetchMock as typeof fetch;
+    expect(await fiscalizeWithBadi(input)).toMatchObject({ ok: true, receipt: { receiptNumber: "REFUND-2" } });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("https://badi.example.test/v2/fiscalization/receipts");
+    const body = JSON.parse(String(init?.body));
+    expect(body).toMatchObject({ transactionType: "refund", referentDocumentNumber: "SALE-1", referentDocumentDT: input.originalReceiptDate, payments: { wiretransfer: 5998 }, items: [{ sku: 1001, quantity: 2, unitPrice: 2999 }] });
+    expect(body).not.toHaveProperty("buyerId");
+  });
+  it("does not retry or fall back to a second fiscal endpoint after a network error", async () => {
+    configure();
+    const fetchMock = vi.fn(async () => { throw new Error("connection lost"); });
+    global.fetch = fetchMock as typeof fetch;
+    expect(await fiscalizeWithBadi(input)).toMatchObject({ ok: false });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+  it("rejects a cash refund without a buyer document before dispatch", async () => {
+    configure();
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock as typeof fetch;
+    expect(await fiscalizeWithBadi({ ...input, paymentMethod: "CASH" })).toMatchObject({ ok: false });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

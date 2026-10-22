@@ -3,7 +3,7 @@ const m = vi.hoisted(() => ({
   order: vi.fn(), tx: vi.fn(), lock: vi.fn(), lines: vi.fn(), lineUpdate: vi.fn(), aggregate: vi.fn(), warehouse: vi.fn(),
   documents: vi.fn(), document: vi.fn(), createDocument: vi.fn(), updateDocument: vi.fn(),
   movements: vi.fn(), adjust: vi.fn(), fiscalize: vi.fn(), payment: vi.fn(),
-  refund: vi.fn(), createRefund: vi.fn(), ips: vi.fn(), job: vi.fn(), createJob: vi.fn(), updateJob: vi.fn(),
+  linkRefund: vi.fn(), refund: vi.fn(), createRefund: vi.fn(), ips: vi.fn(), job: vi.fn(), createJob: vi.fn(), updateJob: vi.fn(),
 }));
 vi.mock("@/lib/db", () => ({ db: {
   $transaction: m.tx,
@@ -13,7 +13,7 @@ vi.mock("@/lib/db", () => ({ db: {
   fiscalDocument: { findMany: m.documents, findUnique: m.document, create: m.createDocument, update: m.updateDocument },
   stockMovement: { findMany: m.movements },
   payment: { findFirst: m.payment },
-  paymentRefund: { findFirst: m.refund, findUnique: m.refund, create: m.createRefund },
+  paymentRefund: { findFirst: m.refund, findUnique: m.refund, create: m.createRefund, updateMany: m.linkRefund },
   backgroundJob: { findUnique: m.job, create: m.createJob, updateMany: m.updateJob },
 } }));
 vi.mock("@/lib/inventory", () => ({ adjustInventory: m.adjust }));
@@ -125,4 +125,14 @@ it("does not issue a second fiscal receipt for Ananas orders", async () => {
   expect(await issueFiscalSale({ orderId: "ananas-order" })).toMatchObject({ ok: false, error: expect.stringContaining("Ananas") });
   expect(m.fiscalize).not.toHaveBeenCalled();
   expect(m.createDocument).not.toHaveBeenCalled();
+});
+
+
+it("links the claim payout without sending money or duplicating its received stock", async () => {
+  m.refund.mockResolvedValue({ id: "payout", orderId: "order", method: "UPLATA_NA_RACUN", idempotencyKey: "reclamation-refund:claim" });
+  expect(await issueFiscalRefund({ ...input, buyerId: undefined, paymentReturnMethod: "UPLATA_NA_RACUN", manualPaymentRefundId: "payout" })).toMatchObject({ ok: true });
+  expect(m.linkRefund).toHaveBeenCalledWith({ where: { id: "payout", fiscalDocumentId: null }, data: { fiscalDocumentId: "refund" } });
+  expect(m.createRefund).not.toHaveBeenCalled();
+  expect(m.ips).not.toHaveBeenCalled();
+  expect(m.adjust).not.toHaveBeenCalled();
 });

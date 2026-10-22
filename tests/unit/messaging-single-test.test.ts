@@ -1,6 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 const m=vi.hoisted(()=>({dispatch:vi.fn(),campaign:vi.fn(),count:vi.fn(),send:vi.fn()}));
-vi.mock('@/lib/admin',()=>({requireAdminAction:vi.fn(),withAdminState:(_meta:unknown,fn:any)=>(form:FormData)=>fn('admin-test',form)}));
+vi.mock('@/lib/admin',()=>({requireAdminAction:vi.fn(),withAdminState:(_meta:unknown,fn:(actorId:string, form:FormData)=>unknown)=>(form:FormData)=>fn('admin-test',form)}));
 vi.mock('@/lib/db',()=>({db:{viberCampaign:{findUniqueOrThrow:m.campaign}}}));
 vi.mock('@/lib/viber/transport',()=>({dispatch:m.dispatch}));
 vi.mock('@/lib/viber/config',()=>({isViberReady:()=>true,isSmsReady:()=>true}));

@@ -156,6 +156,24 @@ export function hasDatabaseConnection() {
   return Boolean(getDatabaseConnectionString());
 }
 
+export function createDatabasePool(max = getDatabasePoolMax()) {
+  const connectionString = getDatabaseConnectionString();
+  if (!connectionString) throw new Error("Database connection string is not set.");
+  const adapterOptions = databaseAdapterOptions(connectionString);
+  const pool = new Pool({
+    connectionString: adapterOptions.connectionString,
+    // Next.js build workers and serverless instances each create a process-local
+    // pool. Keep the default at one so Supabase's session-mode limit is not
+    // multiplied by the worker count; deployments may raise it explicitly.
+    max,
+    idleTimeoutMillis: getDatabaseIdleTimeoutMillis(),
+    connectionTimeoutMillis: databaseConnectionTimeoutMillis(),
+    allowExitOnIdle: true,
+  });
+  if (process.env.VERCEL) attachDatabasePool(pool);
+  return pool;
+}
+
 function createClient(): PrismaClient {
   const connectionString = getDatabaseConnectionString();
   if (!connectionString) {
@@ -179,17 +197,7 @@ function createClient(): PrismaClient {
       console.info("[db-target]", JSON.stringify({ invalidUrl: true }));
     }
   }
-  const pool = new Pool({
-    connectionString: adapterOptions.connectionString,
-    // Next.js build workers and serverless instances each create a process-local
-    // pool. Keep the default at one so Supabase's session-mode limit is not
-    // multiplied by the worker count; deployments may raise it explicitly.
-    max: getDatabasePoolMax(),
-    idleTimeoutMillis: getDatabaseIdleTimeoutMillis(),
-    connectionTimeoutMillis: databaseConnectionTimeoutMillis(),
-    allowExitOnIdle: true,
-  });
-  if (process.env.VERCEL) attachDatabasePool(pool);
+  const pool = createDatabasePool();
   const adapter = new PrismaPg(pool, { schema: adapterOptions.schema });
   return new PrismaClient({
     adapter,

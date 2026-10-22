@@ -9,7 +9,7 @@ beforeEach(()=>{
  m.find.mockResolvedValue({id:'c1',status:'DRAFT',body:'Test SMS',audience:{filter:{channel:'SMS',allStoredPhones:true,phoneScope:'current'}}});
  m.resolve.mockResolvedValue(Array.from({length:1001},(_,i)=>({phone:'381637725045',userId:'guest'+i,displayName:'Gost'})));
  m.claim.mockResolvedValue({count:1});m.queue.mockResolvedValue({count:250});m.update.mockResolvedValue({});
- m.transaction.mockImplementation((fn:any)=>fn({viberCampaign:{updateMany:m.claim,update:m.update},backgroundJob:{createMany:m.queue}}));
+ m.transaction.mockImplementation((fn: (tx: { viberCampaign: { updateMany: typeof m.claim; update: typeof m.update }; backgroundJob: { createMany: typeof m.queue } }) => unknown)=>fn({viberCampaign:{updateMany:m.claim,update:m.update},backgroundJob:{createMany:m.queue}}));
 });
 it('atomically queues the full SMS audience in database batches, without an hourly recipient cap',async()=>{
  const report=await sendCampaign('c1');expect(report).toMatchObject({recipients:1001,delivered:1001,failed:0,status:'SENT'});
