@@ -689,6 +689,7 @@ export default async function PickupBatchPage({
                 variant="outline"
                 disabled={
                   !canPost ||
+                  cancelledActiveOrders.length > 0 ||
                   !activeRows.length ||
                   !posting.available ||
                   unreadyPackageCount > 0 ||
