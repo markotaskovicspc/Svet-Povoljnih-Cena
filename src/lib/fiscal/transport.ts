@@ -40,6 +40,8 @@ export interface FiscalInvoiceInput {
   invoiceType?: "NORMAL" | "ADVANCE" | "REFUND";
   /** Original fiscal receipt number required for refund documents. */
   originalReceiptNumber?: string | null;
+  /** Original PFR timestamp, required for manually referenced cashless refunds. */
+  originalReceiptDate?: string | null;
   /** Optional explicit idempotency key; falls back to invoiceRef. */
   idempotencyKey?: string;
   /** Total gross amount in RSD; redundant with `lines` but verified by gateway. */
@@ -52,7 +54,7 @@ export interface FiscalInvoiceInput {
   };
   /**
    * Buyer identification in Tax Authority format (e.g. `10:<PIB>`,
-   * `11:<JMBG>`). Mandatory for refunds; derived from `buyer.tin` for
+   * `20:<identity document>`). Required for cash refunds; derived from `buyer.tin` for
    * B2B sales when absent.
    */
   buyerId?: string | null;
@@ -133,6 +135,7 @@ export async function fiscalize(
           ref: key,
           transactionType: input.transactionType ?? "SALE",
           originalReceiptNumber: input.originalReceiptNumber ?? null,
+    originalReceiptDate: input.originalReceiptDate ?? null,
         },
       },
     };
@@ -161,6 +164,7 @@ export async function fiscalize(
     invoiceType: input.invoiceType ?? cfg.defaultInvoiceType,
     transactionType: input.transactionType ?? "SALE",
     originalReceiptNumber: input.originalReceiptNumber ?? null,
+    originalReceiptDate: input.originalReceiptDate ?? null,
     paymentMethod: input.paymentMethod,
     buyer: input.buyer ?? null,
     total: input.total,

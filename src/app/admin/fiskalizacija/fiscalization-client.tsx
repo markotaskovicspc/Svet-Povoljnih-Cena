@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { refundNeedsBuyerId } from "@/lib/fiscal/refund-policy";
 import { Combobox } from "@base-ui/react/combobox";
 import { Check, ChevronsUpDown, ReceiptText, RotateCcw } from "lucide-react";
 import type { AdminActionState } from "@/lib/admin/action-state";
@@ -49,6 +50,7 @@ export type FiscalizationRow = {
   color1: string;
   color2: string;
   qty: number;
+  remainingQty?: number;
   unitPriceGross: string;
   totalNet: string;
   totalGross: string;
@@ -296,6 +298,8 @@ export function FiscalizationClient({
         action={manualFiscalizeAction}
       />
       <RefundDialog
+        key={selectedRefundable.join(":") + suggestPaymentMethod(rows, selectedRefundable)}
+        rows={rows.filter(row => selectedRefundable.includes(row.id))}
         open={refundOpen}
         onOpenChange={setRefundOpen}
         selectedIds={selectedRefundable}
@@ -515,6 +519,7 @@ function suggestPaymentMethod(rows: FiscalizationRow[], selectedIds: string[]): 
 }
 
 function RefundDialog({
+  rows,
   open,
   onOpenChange,
   selectedIds,
@@ -524,6 +529,7 @@ function RefundDialog({
   paymentMethods,
   action,
 }: {
+  rows: FiscalizationRow[];
   open: boolean;
   onOpenChange: (value: boolean) => void;
   selectedIds: string[];
@@ -533,6 +539,8 @@ function RefundDialog({
   paymentMethods: PaymentMethodOption[];
   action: AdminFormAction;
 }) {
+  const [paymentMethod, setPaymentMethod] = useState(suggestedPaymentMethod || paymentMethods[0]?.value || "");
+  const needsBuyerId = refundNeedsBuyerId(paymentMethod);
   const defaultWarehouse = warehouses.find((warehouse) => warehouse.isDefault) ?? warehouses[0];
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -540,7 +548,7 @@ function RefundDialog({
         <DialogHeader>
           <DialogTitle>Refundacija</DialogTitle>
           <DialogDescription>
-            Refundira se cela preostala količina za {selectedIds.length} izabranih redova.
+            Unesite količinu za povrat po stavci. Dostavu birajte samo ako se i ona vraća.
           </DialogDescription>
         </DialogHeader>
         <AdminActionForm
@@ -551,11 +559,16 @@ function RefundDialog({
           {selectedIds.map((id) => (
             <input key={id} type="hidden" name="fiscalLineIds" value={id} />
           ))}
+          {rows.map(row => <label key={row.id} className="flex items-center justify-between gap-3 text-sm">
+            <span>{row.sku} · {row.shortName}<span className="block text-xs">{row.unitPriceGross} / kom · preostalo {row.remainingQty ?? row.qty} kom</span></span>
+            <input aria-label={`Količina za povrat ${row.sku}`} className="h-9 w-20 rounded-lg border border-input px-2" type="number" name={`quantity:${row.id}`} min={1} max={row.remainingQty ?? row.qty} defaultValue={row.remainingQty ?? row.qty} required />
+          </label>)}
           <label className="space-y-1 text-sm">
             <span className="font-medium text-ink-700">Način vraćanja novca</span>
             <select
               name="paymentReturnMethod"
-              defaultValue={suggestedPaymentMethod || paymentMethods[0]?.value}
+              value={paymentMethod}
+              onChange={event => setPaymentMethod(event.target.value)}
               className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
             >
               {paymentMethods.map((method) => (
@@ -583,15 +596,14 @@ function RefundDialog({
             <span className="font-medium text-ink-700">Identifikacija kupca</span>
             <input
               name="buyerId"
-              required
+              required={needsBuyerId}
               pattern="\d{1,2}:.+"
               defaultValue={suggestedBuyerId}
-              placeholder="10:PIB / 11:JMBG / 20:broj lične karte"
+              placeholder="20:broj lične karte kupca / 10:PIB"
               className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
             />
             <span className="block text-xs text-ink-500">
-              Poreska uprava zahteva identifikaciju kupca na refundacionom računu (prefiks 10 = PIB,
-              11 = JMBG, 20 = lična karta).
+              {needsBuyerId ? "Za gotovinsku isplatu unesite dokument kupca (20:lična karta ili 23:pasoš). Ne unosite dokument zaposlenog." : "Za povrat na račun ili karticu fizičkom licu dokument kupca nije potreban. Za pravno lice sačuvajte PIB."}
             </span>
           </label>
           <DialogFooter>

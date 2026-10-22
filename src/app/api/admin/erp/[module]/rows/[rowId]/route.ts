@@ -1,3 +1,4 @@
+import { lockOrderReturn } from "@/lib/fiscal/return-lock";
 import { NextResponse } from "next/server";
 import { revalidatePath, revalidateTag } from "next/cache";
 import {
@@ -1314,6 +1315,15 @@ async function persistReclamationCell(
       return null;
   }
   await db.$transaction(async (tx) => {
+    if (columnKey === "decision" || columnKey === "resolution") {
+      const claim = await tx.reclamation.findUnique({ where: { id: rowId }, select: { orderId: true, decision: true, resolution: true } });
+      if (!claim) throw new Error("Reklamacija nije pronađena.");
+      await lockOrderReturn(tx, claim.orderId);
+      if ((columnKey === "decision" && claim.decision !== data.decision) || (columnKey === "resolution" && claim.resolution !== data.resolution)) {
+        const payout = await tx.paymentRefund.findUnique({ where: { idempotencyKey: `reclamation-refund:${rowId}` }, select: { id: true } });
+        if (payout) throw new Error("Povrat novca je već započet. Odluka i način rešavanja ne mogu se menjati posle pripreme isplate.");
+      }
+    }
     await tx.reclamation.update({ where: { id: rowId }, data });
     if (columnKey === "decision" || columnKey === "resolution") {
       await queueReclamationRefundNotice(tx, rowId);

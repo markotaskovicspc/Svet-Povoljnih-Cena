@@ -14,6 +14,7 @@ import { db } from "@/lib/db";
 import { adjustInventory } from "@/lib/inventory";
 import { num } from "@/lib/api/_helpers";
 import { withOrderReturnLock } from "./return-lock";
+import { validateRefundBuyerId } from "./refund-policy";
 import { returnedStockBalance } from "./return-stock";
 import { ipsPaymentProvider } from "@/lib/payments";
 import { providerForPaymentMethod } from "@/lib/payments/types";
@@ -49,9 +50,6 @@ const VAT_FACTOR = 1 + VAT_RATE / 100;
 /** Reserved SKU for the delivery-fee service line (no OrderItem behind it). */
 export const SHIPPING_SKU = "DOSTAVA";
 const SHIPPING_NAME = "Dostava";
-
-/** Tax Authority buyer identification, e.g. `10:123456789` (10 = PIB). */
-const BUYER_ID_PATTERN = /^\d{1,2}:\S+$/;
 
 const PAYMENT_METHOD_GATEWAY: Record<PaymentMethod, "CASH" | "CARD" | "TRANSFER" | "OTHER"> = {
   POUZECE_GOTOVINA: "CASH",
@@ -349,8 +347,10 @@ export type FiscalRefundInput = {
   quantities?: Record<string, number>;
   paymentReturnMethod: PaymentMethod;
   warehouseId: string;
-  /** Tax Authority buyer identification (`10:PIB`, `11:JMBG`, `20:lična karta`), mandatory for refund receipts. */
-  buyerId: string;
+  /** Buyer identification (`10:PIB`, `20:lična karta`); required for cash paid back in person. */
+  buyerId?: string;
+  /** Existing claim-scoped manual payout; never invokes a payment provider. */
+  manualPaymentRefundId?: string;
   actorId?: string | null;
 };
 
@@ -371,14 +371,9 @@ export async function issueFiscalRefundUnderLock(input: FiscalRefundInput): Prom
     return { ok: false, reason: "invalid_request", error: "Izaberite bar jedan fiskalni red." };
   }
 
-  const buyerId = input.buyerId?.trim() ?? "";
-  if (!BUYER_ID_PATTERN.test(buyerId)) {
-    return {
-      ok: false,
-      reason: "invalid_request",
-      error: "Identifikacija kupca mora biti u formatu Poreske uprave, npr. 10:PIB ili 11:JMBG.",
-    };
-  }
+  let buyerId = input.buyerId?.trim() || null;
+  const identityError = validateRefundBuyerId(input.paymentReturnMethod, buyerId);
+  if (identityError) return { ok: false, reason: "invalid_request", error: identityError };
 
   const warehouse = await db.warehouse.findFirst({
     where: { id: input.warehouseId, active: true },
@@ -398,6 +393,21 @@ export async function issueFiscalRefundUnderLock(input: FiscalRefundInput): Prom
       orderItem: { select: { productId: true, sku: true } },
     },
   });
+
+  // A company refund keeps the original PIB even when the payout is cashless.
+  if (!buyerId && !validateRefundBuyerId(input.paymentReturnMethod)) {
+    const companyIds = [...new Set(saleLines.map(line => line.fiscalDocument.buyerId).filter((id): id is string => Boolean(id?.startsWith("10:"))))];
+    if (companyIds.length > 1) return { ok: false, reason: "invalid_request", error: "Izabrani računi imaju različite PIB-ove kupca." };
+    buyerId = companyIds[0] ?? null;
+  }
+
+  if (input.manualPaymentRefundId) {
+    const payout = await db.paymentRefund.findUnique({ where: { id: input.manualPaymentRefundId } });
+    if (!payout || payout.orderId !== saleLines[0]?.fiscalDocument.order.id || payout.method !== "UPLATA_NA_RACUN"
+      || input.paymentReturnMethod !== "UPLATA_NA_RACUN" || !payout.idempotencyKey?.startsWith("reclamation-refund:")) {
+      return { ok: false, reason: "invalid_request", error: "Nalog za ručnu isplatu reklamacije nije ispravan." };
+    }
+  }
 
   if (saleLines.length !== uniqueLineIds.length || saleLines.some(line => {
     const qty = input.quantities?.[line.id];
@@ -442,7 +452,8 @@ export async function issueFiscalRefundUnderLock(input: FiscalRefundInput): Prom
       originalReceiptNumber,
       input.paymentReturnMethod,
       warehouse.id,
-      group.map((item) => `${item.line.id}:${item.line.refundedQty}+${item.qty}`).sort().join("|"),
+      ...(input.manualPaymentRefundId ? [input.manualPaymentRefundId] : []),
+      group.map((item) => input.manualPaymentRefundId ? `${item.line.id}:${item.qty}` : `${item.line.id}:${item.line.refundedQty}+${item.qty}`).sort().join("|"),
     );
 
     const existing = await db.fiscalDocument.findUnique({
@@ -450,7 +461,7 @@ export async function issueFiscalRefundUnderLock(input: FiscalRefundInput): Prom
       include: { lines: true },
     });
     if (existing?.status === "ISSUED" && existing.receiptNumber && existing.issuedAt) {
-      const paymentJob = await db.$transaction((tx) =>
+      const paymentJob = input.manualPaymentRefundId ? null : await db.$transaction((tx) =>
         ensureFiscalPaymentRefundJob(tx, {
           orderId: order.id,
           orderNumber: order.number,
@@ -460,7 +471,7 @@ export async function issueFiscalRefundUnderLock(input: FiscalRefundInput): Prom
           actorId: input.actorId ?? null,
         }),
       );
-      const paymentError = await recordFiscalPaymentRefund({
+      const paymentError = input.manualPaymentRefundId ? null : await recordFiscalPaymentRefund({
         orderId: order.id,
         orderNumber: order.number,
         fiscalDocumentId: existing.id,
@@ -488,7 +499,7 @@ export async function issueFiscalRefundUnderLock(input: FiscalRefundInput): Prom
       };
     }
 
-    const rawRequest = buildFiscalRequestPreview({
+    const rawRequest = { ...buildFiscalRequestPreview({
       idempotencyKey,
       transactionType: "REFUND",
       originalReceiptNumber,
@@ -500,7 +511,7 @@ export async function issueFiscalRefundUnderLock(input: FiscalRefundInput): Prom
         qty: item.qty,
         unitPrice: num(item.line.unitPriceGross),
       })),
-    });
+    }), ...(input.manualPaymentRefundId ? { manualPaymentRefundId: input.manualPaymentRefundId } : {}) };
 
     const document = existing ?? (await db.fiscalDocument.create({
       data: {
@@ -533,6 +544,7 @@ export async function issueFiscalRefundUnderLock(input: FiscalRefundInput): Prom
       transactionType: "REFUND",
       invoiceType: "REFUND",
       originalReceiptNumber,
+      originalReceiptDate: first.fiscalDocument.issuedAt?.toISOString() ?? null,
       buyerId,
       total: totals.totalGross,
       paymentMethod: PAYMENT_METHOD_GATEWAY[input.paymentReturnMethod],
@@ -614,6 +626,13 @@ export async function issueFiscalRefundUnderLock(input: FiscalRefundInput): Prom
           });
         }
       }
+      if (input.manualPaymentRefundId) {
+        await tx.paymentRefund.updateMany({
+          where: { id: input.manualPaymentRefundId, fiscalDocumentId: null },
+          data: { fiscalDocumentId: document.id },
+        });
+        return null;
+      }
       return ensureFiscalPaymentRefundJob(tx, {
         orderId: order.id,
         orderNumber: order.number,
@@ -624,7 +643,7 @@ export async function issueFiscalRefundUnderLock(input: FiscalRefundInput): Prom
       });
     });
 
-    const paymentError = await recordFiscalPaymentRefund({
+    const paymentError = input.manualPaymentRefundId ? null : await recordFiscalPaymentRefund({
       orderId: order.id,
       orderNumber: order.number,
       fiscalDocumentId: document.id,

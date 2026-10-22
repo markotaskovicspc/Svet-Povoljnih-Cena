@@ -1,3 +1,5 @@
+import { lockOrderReturn } from "@/lib/fiscal/return-lock";
+import { ReclamationRefundCard } from "../refund-card";
 import { ReclamationAddressFields } from "@/components/admin/reclamation-address-fields";
 import { reclamationAddressDefaults } from "@/lib/reclamation-address";
 import { saveAddressAction } from "../address-action";
@@ -100,6 +102,7 @@ async function saveDetailsAction(_state: AdminActionState, formData: FormData) {
       const reclamation = await tx.reclamation.findUnique({
         where: { id },
         select: {
+          orderId: true,
           quantity: true,
           replacementQty: true,
           resolution: true,
@@ -115,6 +118,11 @@ async function saveDetailsAction(_state: AdminActionState, formData: FormData) {
       });
       if (!reclamation) {
         return { ok: false as const, error: "Reklamacija nije pronađena." };
+      }
+      await lockOrderReturn(tx, reclamation.orderId);
+      if (reclamation.decision !== decision || reclamation.resolution !== resolution) {
+        const payout = await tx.paymentRefund.findUnique({ where: { idempotencyKey: `reclamation-refund:${id}` }, select: { id: true } });
+        if (payout) return { ok: false as const, error: "Povrat novca je već započet. Odluka i način rešavanja ne mogu se menjati posle pripreme isplate." };
       }
       const isReplacement =
         resolution === "ZAMENA_ARTIKLA" || resolution === "ZAMENA_DELA";
@@ -282,7 +290,7 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
       include: {
         photos: true,
         events: { orderBy: { createdAt: "desc" } },
-        order: { select: { number: true, shipFirstName: true, shipLastName: true, shipPhone: true, shipStreet: true, shipHouseNumber: true, shipCity: true, shipPostalCode: true, shipXExpressTownId: true } },
+        order: { select: { channel: true, number: true, shipFirstName: true, shipLastName: true, shipPhone: true, shipStreet: true, shipHouseNumber: true, shipCity: true, shipPostalCode: true, shipXExpressTownId: true } },
         orderItem: { select: { name: true, qty: true } },
         product: { select: {
           name: true, grossWeightKg: true, weightKg: true,
@@ -352,6 +360,7 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
         actions={<div className="flex gap-2"><Link href="/admin/erp/preuzimanja/povrati" className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Povrati za prijem</Link><Link href={`/admin/erp/prodajni-nalozi/${reclamation.orderId}`} className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Porudžbina</Link></div>}
       />
       <main className="space-y-6 px-4 py-6 md:px-8">
+        {reclamation.order.channel !== "ANANAS" && reclamation.decision === "PRIHVACENA" && reclamation.resolution === "POVRAT_NOVCA" && reclamation.status !== "ODBIJENO" && <ReclamationRefundCard id={id} quantity={reclamation.quantity} />}
         <Card>
           <CardTitle description={`Porudžbina ${reclamation.order.number} · kupljeno ${reclamation.orderItem?.qty ?? "—"} kom · reklamirano ${reclamation.quantity} kom`}>
             Prijava kupca
