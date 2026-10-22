@@ -48,13 +48,15 @@ export async function receiveScannedReturn(input: { code: string; warehouseId: s
   const warehouse = await db.warehouse.findFirst({ where: { id: input.warehouseId, active: true }, select: { id: true, code: true, name: true } });
   if (!warehouse) throw new Error('Izaberite aktivan magacin prijema.');
   const plan = await scannedReturnPlan(input.code);
-  if (plan.received) return { warehouse, orderId: plan.shipment.orderId, alreadyReceived: true, jobIds: [] as string[] };
+  if (plan.received && plan.kind !== 'reclamation') return { warehouse, orderId: plan.shipment.orderId, alreadyReceived: true, jobIds: [] as string[] };
   // Physical arrival remains valid evidence if a later stock/fiscal step fails.
   // Each receipt has a stable key, so retry cannot post a unit twice.
   await confirmReturnParcelArrival({ code: input.code, actorId: input.actorId }, plan);
   const jobIds: string[] = [];
   if (plan.kind === 'reclamation') {
-    await receiveReclamationReturn({ reclamationId: plan.shipment.reclamation!.id, parcelNumber: plan.code, warehouseId: warehouse.id, actorId: input.actorId });
+    const result = await receiveReclamationReturn({ reclamationId: plan.shipment.reclamation!.id, parcelNumber: plan.code, warehouseId: warehouse.id, actorId: input.actorId });
+    if (result.refundJobId) jobIds.push(result.refundJobId);
+    if (result.refundNoticeJobId) jobIds.push(result.refundNoticeJobId);
   } else {
     for (const line of plan.lines) for (const unitNo of line.units) {
       if (plan.kind === 'reshipment') await receiveReshipmentReturn({ itemId: line.id, unitNo, warehouseId: warehouse.id, actorId: input.actorId });
@@ -64,5 +66,5 @@ export async function receiveScannedReturn(input: { code: string; warehouseId: s
       }
     }
   }
-  return { warehouse, orderId: plan.shipment.orderId, alreadyReceived: false, jobIds };
+  return { warehouse, orderId: plan.shipment.orderId, alreadyReceived: plan.received, jobIds };
 }

@@ -74,9 +74,10 @@ async function receiveReturnAction(
         ...parsed.data,
         actorId,
       });
-      if (result.refundNoticeJobId) {
+      const jobIds = [result.refundJobId, result.refundNoticeJobId].filter((id): id is string => Boolean(id));
+      if (jobIds.length) {
         try {
-          after(() => processBackgroundJob(result.refundNoticeJobId!));
+          after(async () => { for (const id of jobIds) { try { await processBackgroundJob(id); } catch { /* Durable retry; continue with the support notice. */ } } });
         } catch {
           // The durable queue/cron still sends the notice if scheduling is unavailable.
         }
@@ -905,7 +906,7 @@ async function receiveScannedAction(_state: AdminActionState, formData: FormData
     { allowed: ["OPS", "WAREHOUSE"], action: "return.parcel.receive", entity: "Shipment" },
     async (actorId, data: FormData) => {
       const result = await receiveScannedReturn({ code: String(data.get("code") ?? ""), warehouseId: String(data.get("warehouseId") ?? ""), buyerId: String(data.get("buyerId") ?? "").trim() || undefined, actorId });
-      after(async () => { for (const jobId of result.jobIds) await processBackgroundJob(jobId); });
+      after(async () => { for (const jobId of result.jobIds) { try { await processBackgroundJob(jobId); } catch { /* Durable retry; continue with the support notice. */ } } });
       revalidatePath("/admin/erp/povrati");
       revalidatePath("/admin/magacin/povrat");
       revalidatePath("/admin/erp/preuzimanja/povrati");

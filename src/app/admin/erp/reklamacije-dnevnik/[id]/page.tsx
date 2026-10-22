@@ -26,7 +26,7 @@ import { removeReclamationReplacementFromPicking } from "@/lib/admin/pickup-batc
 import { signReclamationPhotoUrls } from "@/lib/api/uploads";
 import { updateReclamationStatus } from "@/lib/api/reclamation-status";
 import { db } from "@/lib/db";
-import { queueReclamationRefundNotice } from "@/lib/admin/reclamation-refund-notice.server";
+import { queueReclamationRefundNotice, queueReclamationFiscalRefund } from "@/lib/admin/reclamation-refund-notice.server";
 import { ReclamationShipmentStatus } from "@/components/admin/reclamation-shipment-status";
 import { SHIPMENT_STATUS_LABEL } from "@/lib/courier/status";
 import { PageHeader } from "@/components/admin/page-header";
@@ -186,6 +186,7 @@ async function saveDetailsAction(_state: AdminActionState, formData: FormData) {
         },
       });
       await queueReclamationRefundNotice(tx, id);
+      await queueReclamationFiscalRefund(tx, id);
       refresh(id);
       return {
         ok: true as const,
