@@ -18,6 +18,7 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
   const [shortageReported, setShortageReported] = useState(false);
   const [message, setMessage] = useState("");
   const [scanError, setScanError] = useState(false);
+  const [finishError, setFinishError] = useState(false);
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
   const [retry, setRetry] = useState<ScanRequest | null>(null);
@@ -31,6 +32,7 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
   const total = session.rows.reduce((sum, r) => sum + r.quantity, 0);
   const done = session.rows.reduce((sum, r) => sum + (session.progress[r.key] ?? 0), 0);
   const editable = session.editable && !busy && !retry;
+  const warehouseError = warehouseMode && (scanError || finishError || Boolean(session.cancelledOrders?.length));
   // Keep outstanding work first, and completed items in confirmation order at the end.
   const lastConfirmation = new Map<string, number>();
   if (warehouseMode) session.events.forEach((event, index) => {
@@ -103,6 +105,7 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
     try {
       const response = await finishPicking({ batchId: session.id, planHash: session.planHash, mode, packagesConfirmed: packagesConfirmed || Boolean(labelUrl) });
       setMessage(response.message);
+      setFinishError(!response.ok);
       if (response.ok) {
         if (mode === "labels") {
           const href = response.result?.labelUrl;
@@ -114,7 +117,7 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
         }
         else setShortageReported(true);
       }
-    } catch { setMessage("Potvrda nije stigla. Osvežite nalog pre ponovnog pokušaja."); }
+    } catch { setFinishError(true); setMessage("Potvrda nije stigla. Osvežite nalog pre ponovnog pokušaja."); }
     finally { lock.current = false; setBusy(false); }
   }
   const articles = (<div className="space-y-3">
@@ -125,7 +128,7 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
       </div>}{visibleRows.map(row => {
       const count = session.progress[row.key] ?? 0;
       const partiallyPicked = count > 0 && count < row.quantity;
-      return <article data-picking-row={row.key} key={row.key} className={`break-inside-avoid rounded-xl border p-4 ${count === row.quantity ? "border-emerald-300 bg-emerald-50 text-emerald-950" : partiallyPicked ? "border-amber-400 bg-amber-50 text-amber-950" : ""} ${!warehouseMode && selected === row.key ? "ring-2 ring-blue-500" : ""}`}>
+      return <article data-picking-row={row.key} key={row.key} className={`break-inside-avoid rounded-xl border p-4 ${warehouseError ? "border-danger bg-danger/10 text-danger" : count === row.quantity ? "border-emerald-300 bg-emerald-50 text-emerald-950" : partiallyPicked ? "border-amber-400 bg-amber-50 text-amber-950" : ""} ${!warehouseMode && selected === row.key ? "ring-2 ring-blue-500" : ""}`}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 flex-1 gap-4"><div className="min-w-16 text-center"><span className="text-xs">POZICIJA</span><div className="text-2xl font-bold">{row.positions.join(", ") || "—"}</div></div><div className="min-w-0 break-words"><h2 className="font-semibold">{row.sku} · {row.name}</h2><p className="text-sm">{row.warehouseName} · Barkod: {row.barcode || "Nije upisan"}</p>{!warehouseMode && <p className="mt-2 text-sm">{row.allocations.map(a => `${a.orderNumber}: ${a.quantity} kom.`).join(" · ")}</p>}</div></div>
           {warehouseMode ? <div className="text-right"><strong className="text-xl">{count} / {row.quantity}</strong>{count === row.quantity && <p className="mt-1 text-sm font-semibold">✓ Odvojeno</p>}</div> : <strong className="text-xl">{count} / {row.quantity}</strong>}
@@ -134,7 +137,7 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
         {session.editable && !warehouseMode && <div className="mt-3 flex flex-wrap gap-2 print:hidden">{!warehouseMode && <><button disabled={!editable} onClick={() => setSelected(row.key)} className="rounded border px-3 py-2">{selected === row.key ? "Izabran red" : "Izaberi za sken"}</button><button disabled={!editable || count >= row.quantity} onClick={() => record(row.key, 1, "Ručna potvrda odvajanja")} className="rounded border px-4 py-2">+1</button><button disabled={!editable || count === 0} onClick={() => record(row.key, -1, "Ispravka količine")} className="rounded border px-4 py-2">−1</button></>}<button disabled={!editable} onClick={() => { setSelected(row.key); setNoteKey(row.key); setNote(`Nedostaje ${row.quantity - count} kom. za ${row.sku}. `); }} className="rounded border px-3 py-2">Nedostaje / napomena</button></div>}
       </article>;
     })}</div>);
-  return <div data-warehouse-scan-error={warehouseMode ? scanError : undefined} className={`space-y-5 p-4 md:p-8 ${warehouseMode && scanError ? "rounded-xl border-2 border-red-500 bg-red-50 text-red-800 [&_article]:border-red-500 [&_section]:border-red-500 [&_input]:border-red-500" : ""}`}>
+  return <div data-warehouse-scan-error={warehouseMode ? scanError : undefined} data-warehouse-finish-error={warehouseMode ? finishError : undefined} className={`space-y-5 p-4 md:p-8 ${warehouseError ? "rounded-xl border-2 border-danger bg-danger/10 text-danger [&_section]:border-danger [&_input]:border-danger [&_button]:border-danger" : ""}`}>
     {warehouseMode ? <div className="flex min-w-0 flex-wrap items-center justify-between gap-2" data-warehouse-picking-heading>
       <h1 className="min-w-0 flex-1 break-words text-lg font-semibold">{session.number}</h1>
       <strong className="shrink-0 whitespace-nowrap text-base tabular-nums" aria-label={`Odvojeno ${done} od ${total} komada`}>{done} / {total} kom.</strong>
@@ -148,19 +151,19 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
       {!warehouseMode ? <Link href={`/admin/erp/preuzimanja/${session.id}`} className="ml-2 font-semibold underline">Otvori nalog za uklanjanje</Link> : null}
     </div> : null}
     {session.volume && <p className="text-sm font-semibold">Ukupna zapremina: {formatPickingVolume(session.volume)}</p>}
-    {warehouseMode && total > 0 && done === total && <p className="text-sm font-semibold text-success">Odvajanje je završeno.</p>}
-    {warehouseMode && (review.complete || review.reviewed || labelUrl) && <section className="space-y-3 rounded-xl border bg-muted/20 p-4 print:hidden">
+    {warehouseMode && total > 0 && done === total && <p className={`text-sm font-semibold ${warehouseError ? "text-danger" : "text-success"}`}>Odvajanje je završeno.</p>}
+    {warehouseMode && (review.complete || review.reviewed || labelUrl) && <section className={`space-y-3 rounded-xl border p-4 print:hidden ${warehouseError ? "bg-danger/10" : "bg-muted/20"}`}>
       {review.complete && !labelUrl && <>
         <label className="flex items-center gap-3"><input type="checkbox" checked={packagesConfirmed} disabled={busy || !!retry || !session.labelsPreparationAllowed} onChange={event => setPackagesConfirmed(event.target.checked)} className="size-5" />Potvrđujem da su svi paketi spakovani i da su mere na nalogu tačne.</label>
-        <button type="button" disabled={busy || !!retry || !session.labelsPreparationAllowed || !packagesConfirmed} onClick={() => void finish("labels")} className="rounded-lg bg-foreground px-4 py-3 text-background">{busy ? "Priprema adresnica…" : "Kreiraj i otvori adresnice za štampu"}</button>
-        <p className="text-sm text-muted-foreground">Kreiraju se kurirske adresnice; PDF se šalje na magacin@svetpovoljnihcena.rs.</p>
+        <button type="button" disabled={busy || !!retry || !session.labelsPreparationAllowed || !packagesConfirmed} onClick={() => void finish("labels")} className={`rounded-lg px-4 py-3 ${warehouseError ? "bg-danger text-canvas" : "bg-foreground text-background"}`}>{busy ? "Priprema adresnica…" : "Kreiraj i otvori adresnice za štampu"}</button>
+        <p className={`text-sm ${warehouseError ? "text-danger" : "text-muted-foreground"}`}>Kreiraju se kurirske adresnice; PDF se šalje na magacin@svetpovoljnihcena.rs.</p>
       </>}
       {labelUrl && <LabelPdfActions href={labelUrl} filename={`${session.number}-adresnice.pdf`} singleAction />}
       {review.reviewed && review.shortages.length > 0 && <>
         <h2 className="font-semibold">Nedostaje roba za {review.shortages.length} artikala</h2>
         <ul className="space-y-2 text-sm">{review.shortages.map((row, index) => <li key={`${row.sku}-${index}`}>{row.sku} · Odvojeno {row.picked} / {row.required} · Nedostaje {row.missing} kom. · Porudžbine: {row.orders.map(order => order.number).join(", ")}</li>)}</ul>
         <button type="button" disabled={!editable || shortageReported} onClick={() => void finish("shortage")} className="rounded-lg border px-4 py-3">{shortageReported ? "Prijava sačuvana" : "Prijavi manje količine"}</button>
-        <p className="text-sm text-muted-foreground">Izveštaj se šalje na podrska@svetpovoljnihcena.rs. Nepotpuna roba se ne šalje automatski.</p>
+        <p className={`text-sm ${warehouseError ? "text-danger" : "text-muted-foreground"}`}>Izveštaj se šalje na podrska@svetpovoljnihcena.rs. Nepotpuna roba se ne šalje automatski.</p>
       </>}
     </section>}
     {!warehouseMode && <p className="text-sm text-muted-foreground">Redosled je po magacinu i podešenom redosledu pozicija. Kod više pozicija proverite raspoloživu robu. Stavke bez pozicije su na kraju svakog magacina. Odvajanje ne zamenjuje potvrdu spakovanih paketa.</p>}
@@ -181,7 +184,7 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
       </form>
       {!warehouseMode && <p className="text-sm">Ručni skener šalje šifru i Enter. Jedan sken dodaje izabranu količinu (podrazumevano 1). Za pogrešan unos koristite −1 na odgovarajućem redu.</p>}
     </section>}
-    <div role={warehouseMode && scanError ? "alert" : "status"} aria-live={warehouseMode && scanError ? "assertive" : "polite"} className={warehouseMode && scanError ? "rounded-lg border border-red-500 bg-red-50 p-3 font-semibold text-red-800 print:hidden" : "print:hidden"}>{message}</div>
+    {message && <div role={warehouseError ? "alert" : "status"} aria-live={warehouseError ? "assertive" : "polite"} className={warehouseError ? "rounded-lg border border-danger bg-danger/10 p-3 font-semibold text-danger print:hidden" : "print:hidden"}>{message}</div>}
     {retry && <div className="flex flex-wrap gap-3 rounded border border-amber-400 p-3 print:hidden"><button disabled={busy} onClick={() => void send(retry)} className="rounded border px-3 py-2">Ponovi isti zahtev</button><button disabled={busy} onClick={() => window.location.reload()} className="rounded border px-3 py-2">Učitaj stanje sa servera</button></div>}
     {!session.rows.length && <p>Nema aktivnih stavki za odvajanje u ovom nalogu.</p>}
     {!warehouseMode && articles}
