@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildXExpressArticleLabels, resolveXExpressArticleLabel } from "@/lib/x-express/article-labels";
+import { reclamationParcelQuantity } from "@/lib/admin/return-receipt-plan";
 import { renderXExpressBatchLabelsHtml, renderXExpressLabelsHtml, type XExpressLabelShipment } from "@/lib/x-express/labels";
 
 const items = [
@@ -120,4 +121,50 @@ it("reprints existing labels using picking quantities and rejects incomplete qua
   expect(() => renderXExpressBatchLabelsHtml([shipment], { packageQuantitiesByShipmentId: { [shipment.id]: [2] } })).toThrow("broj komada");
   // A legacy individual label without a saved box quantity must not invent it from item.qty.
   expect(renderXExpressLabelsHtml(shipment)).not.toContain("U kutiji:");
+});
+
+
+describe("return label receipt quantities", () => {
+  const item = { id: "returned-item", name: "Trpezarijski sto", sku: "110177", qty: 2,
+    product: { barcode: "670237977613", courierUnitsPerBox: 1 } };
+  const snapshot = (articleLabels: unknown) => ({ id: "return", provider: "X_EXPRESS",
+    packageCount: codes.length, providerParcelNumbers: codes, rawCreateResponse: { articleLabels } });
+
+  it("makes both parcels of a two-unit return individually receivable", () => {
+    const labels = buildXExpressArticleLabels({ codes, items: [item], purpose: "RECLAMATION_RETURN" });
+    expect(labels.map(label => label.packedQuantity)).toEqual([1, 1]);
+    for (const code of codes) expect(reclamationParcelQuantity(snapshot(labels), item, code)).toBe(1);
+  });
+
+  it("keeps full carton and remainder quantities for grouped returns", () => {
+    const grouped = { ...item, qty: 3, product: { ...item.product, courierUnitsPerBox: 2 } };
+    const labels = buildXExpressArticleLabels({ codes, items: [grouped], purpose: "RECLAMATION_RETURN" });
+    expect(codes.map(code => reclamationParcelQuantity(snapshot(labels), grouped, code))).toEqual([2, 1]);
+  });
+
+  it("preserves explicitly entered return packing instead of replacing it with catalogue packing", () => {
+    const grouped = { ...item, qty: 3 };
+    const explicit = packages.map((pkg, index) => ({ ...pkg, orderItemId: item.id, packedQuantity: index ? 2 : 1 }));
+    const labels = buildXExpressArticleLabels({ codes, packages: explicit, items: [grouped], purpose: "RECLAMATION_RETURN" });
+    expect(codes.map(code => reclamationParcelQuantity(snapshot(labels), grouped, code))).toEqual([1, 2]);
+  });
+
+  it("keeps inconsistent and historical multi-parcel contents blocked for manual review", () => {
+    const inconsistent = { ...item, qty: 3 };
+    const labels = buildXExpressArticleLabels({ codes, items: [inconsistent], purpose: "RECLAMATION_RETURN" });
+    expect(labels.every(label => label.packedQuantity === undefined)).toBe(true);
+    expect(() => reclamationParcelQuantity(snapshot(labels), inconsistent, codes[0])).toThrow("pouzdano");
+    const oversized = buildXExpressArticleLabels({ codes, items: [{ ...item, qty: 200 }], purpose: "RECLAMATION_RETURN" });
+    expect(oversized.every(label => label.packedQuantity === undefined)).toBe(true);
+    const legacy = codes.map(Code => ({ Code, sku: item.sku, name: item.name, barcode: item.product.barcode }));
+    expect(() => reclamationParcelQuantity(snapshot(legacy), item, codes[0])).toThrow("pouzdano");
+  });
+
+  it("does not infer quantities for outgoing deliveries, spare parts or mixed items", () => {
+    for (const purpose of ["ORDER_DELIVERY", "RECLAMATION_REPLACEMENT"] as const) {
+      const labels = buildXExpressArticleLabels({ codes, items: [item], purpose });
+      expect(labels.every(label => label.packedQuantity === undefined)).toBe(true);
+    }
+    expect(buildXExpressArticleLabels({ codes, items: [item, { ...item, id: "other", sku: "other" }], purpose: "RECLAMATION_RETURN" })).toEqual([]);
+  });
 });

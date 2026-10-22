@@ -27,6 +27,7 @@ vi.mock("@/lib/x-express/config", async (original) => ({
   }),
 }));
 
+import { reclamationParcelQuantity } from "@/lib/admin/return-receipt-plan";
 import { createXExpressShipmentForOrder, announceXExpressShipment } from "@/lib/x-express/shipments";
 
 const options = {
@@ -93,6 +94,16 @@ describe("X Express reclamation return preparation", () => {
     expect(raw.labelData.sender).toMatchObject({ city: "Beograd" });
     expect(raw.labelData.codAmount).toBe(0);
     expect(raw.createOrderPayload.Content).toBe("Lampa");
+  });
+
+  it("persists quantities that let each parcel of a two-unit return be received", async () => {
+    mocks.reclamation.mockResolvedValue({ id: "r1", orderId: "o1", orderItemId: "i1", quantity: 2, warehouseId: "w1" });
+    const shipment = await createXExpressShipmentForOrder("o1", options);
+    const raw = mocks.create.mock.calls[0][0].data.rawCreateResponse;
+    expect(raw.articleLabels.map((label: { packedQuantity?: number }) => label.packedQuantity)).toEqual([1, 1]);
+    for (const code of shipment.providerParcelNumbers as string[]) {
+      expect(reclamationParcelQuantity(shipment, { id: "i1", sku: "L1", qty: 2 }, code)).toBe(1);
+    }
   });
 
   it("reuses an existing shipment without another provider call or tracking allocation", async () => {

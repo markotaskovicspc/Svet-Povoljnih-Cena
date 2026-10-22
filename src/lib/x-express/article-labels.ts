@@ -1,3 +1,4 @@
+import { courierPackageCount, derivePhysicalPackages } from "@/lib/courier/packages";
 import { boxQuantity } from "@/lib/courier/label-quantity";
 import { packedItemsLabel, readPackedItems, type PackedItem } from "@/lib/courier/parcel-contents";
 import type { ShipmentPurpose } from "@prisma/client";
@@ -15,7 +16,7 @@ export type XExpressArticleItem = {
   name: string;
   qty: number;
   sku?: string;
-  product?: { barcode: string | null } | null;
+  product?: { barcode: string | null; courierUnitsPerBox?: number | null } | null;
 };
 
 export type XExpressArticleLabel = { name: string; sku: string | null; barcode: string | null; packedQuantity?: number; packedItems?: PackedItem[] };
@@ -31,8 +32,15 @@ export function buildXExpressArticleLabels(args: {
   items: readonly XExpressArticleItem[];
   purpose: ShipmentPurpose;
 }) {
+  // New return labels need the same per-box quantities as the declared
+  // catalogue packing. Historical snapshots are never inferred on receipt.
+  const item = args.purpose === "RECLAMATION_RETURN" && args.items.length === 1 ? args.items[0] : undefined;
+  const planned = !args.packages && item?.id && Number.isSafeInteger(item.qty) && item.qty > 0
+    && courierPackageCount(item.qty, item.product?.courierUnitsPerBox) === args.codes.length
+    ? derivePhysicalPackages([{ ...item, id: item.id }], { consolidatePompea: false }) : undefined;
+  const packages = args.packages ?? (planned?.length === args.codes.length ? planned : undefined);
   return args.codes.flatMap((Code, index) => {
-    const pkg = args.packages?.[index];
+    const pkg = packages?.[index];
     if (pkg?.packedItems?.length) {
       return [{ Code, name: packedItemsLabel(pkg.packedItems)!, packedItems: readPackedItems(pkg.packedItems), sku: null, barcode: null, packedQuantity: boxQuantity(pkg) }];
     }
