@@ -8,6 +8,7 @@ import { requireAdminAction } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { downloadMyGlsLabelPdf, MYGLS_PROVIDER } from "@/lib/mygls";
 import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
+import { isXExpressLabelAvailable } from "@/lib/x-express/label-availability";
 import { xExpressLabelItemSelect } from "@/lib/x-express/article-labels";
 import { renderXExpressLabelsHtml } from "@/lib/x-express/labels";
 import { fulfillmentPaymentReadiness } from "@/lib/payments/fulfillment-readiness";
@@ -66,7 +67,7 @@ export async function GET(
     );
   }
   if (shipment.provider === X_EXPRESS_PROVIDER) {
-    if (shipment.status === "FAILED" || !shipment.trackingNo) {
+    if (!isXExpressLabelAvailable(shipment)) {
       return NextResponse.json(
         {
           ok: false,

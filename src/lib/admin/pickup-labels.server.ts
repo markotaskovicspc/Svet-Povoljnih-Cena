@@ -13,6 +13,7 @@ import {
 import { usableMyGlsLabelWhere } from "@/lib/mygls/labels";
 import { packMyGlsLabels, MyGlsPrintLayoutError } from "@/lib/mygls/print-layout";
 import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
+import { usableXExpressLabelWhere } from "@/lib/x-express/label-availability";
 import { xExpressLabelItemSelect } from "@/lib/x-express/article-labels";
 import { renderXExpressBatchLabelsHtml } from "@/lib/x-express/labels";
 import { fulfillmentPaymentReadiness } from "@/lib/payments/fulfillment-readiness";
@@ -120,10 +121,7 @@ export async function buildPickupLabelsResponse(request: Request, id: string) {
                 { labelObjectKey: { not: null } },
               ],
             }
-          : {
-              status: { not: "FAILED" },
-              trackingNo: { not: null },
-            },
+          : usableXExpressLabelWhere(),
         {
           OR: [
             { orderId: { in: orderIds }, purpose: "ORDER_DELIVERY" },

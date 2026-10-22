@@ -29,7 +29,14 @@ export async function assertOrderCancellationBeforeCourier(
     select: { id: true },
   });
   const shipment = await tx.shipment.findFirst({
-    where: { orderId, purpose: "ORDER_DELIVERY", status: { not: "FAILED" } },
+    where: {
+      orderId,
+      purpose: "ORDER_DELIVERY",
+      OR: [
+        { status: { not: "FAILED" } },
+        { provider: "X_EXPRESS", providerShipmentId: { not: null } },
+      ],
+    },
     select: { id: true },
   });
   if (preparing || shipment) {

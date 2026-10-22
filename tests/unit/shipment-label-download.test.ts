@@ -30,6 +30,23 @@ it("reprints an existing label after a legacy cancellation without creating a ne
   expect(mocks.pdf).toHaveBeenCalledOnce();
 });
 
+it("retains the accepted label after the recipient refused delivery", async () => {
+  const shipment = await mocks.shipment();
+  mocks.shipment.mockResolvedValue({ ...shipment, status: "FAILED", providerShipmentId: "accepted-provider-shipment", order: { ...shipment.order, status: "OTKAZANO" } });
+  const result = await request();
+  expect(result.status).toBe(200);
+  expect(result.headers.get("content-type")).toBe("application/pdf");
+});
+
+it("still rejects a failed preparation without courier acceptance", async () => {
+  const shipment = await mocks.shipment();
+  mocks.shipment.mockResolvedValue({ ...shipment, status: "FAILED", providerShipmentId: null });
+  const result = await request();
+  expect(result.status).toBe(409);
+  expect((await result.json()).error).toBe("x_express_label_unavailable");
+  expect(mocks.pdf).not.toHaveBeenCalled();
+});
+
 it("recovers old X Express picking contents by their exact saved assignment group", async () => {
   const shipment = await mocks.shipment();
   mocks.shipment.mockResolvedValue({ ...shipment, orderId: "order", pickupBatchLines: [], rawCreateResponse: { assignment: { orderItemIds: ["item"], codAmount: 1, assignmentKey: "order:order:X_EXPRESS:deferred:original" } } });
