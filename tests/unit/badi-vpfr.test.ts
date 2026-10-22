@@ -210,7 +210,7 @@ describe("cashless refund contract", () => {
   };
   it("uses documented receipt creation without a fabricated identity", async () => {
     configure();
-    const fetchMock = vi.fn(async (_url: unknown, _init?: RequestInit) => new Response(JSON.stringify({ invoiceNumber: "REFUND-2", sdcDateTime: "2026-10-22T12:00:00Z" }), { status: 200 }));
+    const fetchMock = vi.fn(async (_url: unknown, _init?: RequestInit) => { void _url; void _init; return new Response(JSON.stringify({ invoiceNumber: "REFUND-2", sdcDateTime: "2026-10-22T12:00:00Z" }), { status: 200 }); });
     global.fetch = fetchMock as typeof fetch;
     expect(await fiscalizeWithBadi(input)).toMatchObject({ ok: true, receipt: { receiptNumber: "REFUND-2" } });
     expect(fetchMock).toHaveBeenCalledTimes(1);

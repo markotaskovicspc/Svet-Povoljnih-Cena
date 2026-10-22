@@ -20,9 +20,9 @@ it("loads existing position assignments for the stock API and export rows", asyn
   mocks.warehousePickingPosition.findMany.mockResolvedValue([
     { warehouseId: "dc", number: 12, routeOrder: 1, skus: [], supplierIds: ["supplier"] },
   ]);
-  const module = await getErpModule("stanje-po-magacinima", { includeLookupOptions: false });
-  expect(module?.columns.find(column => column.key === "pickingPosition")).toMatchObject({ label: "Picking pozicija", defaultVisible: true });
-  expect(module?.rows[0].values.pickingPosition).toBe("12");
+  const erpModule = await getErpModule("stanje-po-magacinima", { includeLookupOptions: false });
+  expect(erpModule?.columns.find(column => column.key === "pickingPosition")).toMatchObject({ label: "Picking pozicija", defaultVisible: true });
+  expect(erpModule?.rows[0].values.pickingPosition).toBe("12");
   expect(mocks.warehousePickingPosition.findMany).toHaveBeenCalledOnce();
   expect(mocks.warehouseStock.findMany.mock.calls[0][0].select.product.select.supplierId).toBe(true);
 });
