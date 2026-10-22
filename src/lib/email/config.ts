@@ -32,6 +32,7 @@ export interface EmailConfig {
   commentsNotificationTo: string;
   /** Operations inbox for received returns requiring a money refund. */
   refundNotificationTo: string;
+  reclamationRefundNotificationTo: string;
   /** Shared secret for the inbound webhook (`x-webhook-secret` header). */
   inboundSecret: string | null;
   /** Resend webhook signing secret (`svix-*` headers over the raw body). */
@@ -94,6 +95,8 @@ export function getEmailConfig(): EmailConfig {
       "office@svetpovoljnihcena.rs",
     refundNotificationTo:
       envValue("EMAIL_REFUND_NOTIFICATION_TO") ?? "office@svetpovoljnihcena.rs",
+    reclamationRefundNotificationTo:
+      envValue("EMAIL_RECLAMATION_REFUND_NOTIFICATION_TO") ?? "podrska@svetpovoljnihcena.rs",
     inboundSecret: envValue("EMAIL_INBOUND_SECRET"),
     resendWebhookSecret: envValue("RESEND_WEBHOOK_SECRET"),
     promotionsTopicId: envValue("RESEND_TOPIC_PROMOTIONS_ID"),

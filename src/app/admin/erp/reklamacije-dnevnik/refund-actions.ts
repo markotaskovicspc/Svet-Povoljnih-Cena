@@ -1,5 +1,9 @@
 "use server";
 
+import { after } from "next/server";
+import { db } from "@/lib/db";
+import { queueReclamationRefundNotice } from "@/lib/admin/reclamation-refund-notice.server";
+import { processBackgroundJob } from "@/lib/background-jobs";
 import { revalidatePath } from "next/cache";
 import { withAdminState, type AdminActionState } from "@/lib/admin";
 import { issueReclamationRefund, confirmReclamationPayout } from "@/lib/admin/reclamation-refund.server";
@@ -15,8 +19,10 @@ export async function issueClaimRefundAction(_state: AdminActionState, data: For
   return withAdminState({ allowed: ["OPS"], action: "reclamation.fiscalRefund", entity: "Reclamation" }, async (actorId, form: FormData) => {
     const id = String(form.get("id") ?? "");
     try {
-      const result = await issueReclamationRefund({ id, actorId, bankAccount: String(form.get("bankAccount") ?? ""), confirmPaid: form.get("confirmPaid") === "on" });
-      return { ok: true as const, entityId: id, diff: { payoutId: result.payoutId }, message: "Fiskalna refundacija je spremna. Posle ručne uplate na račun kupca potvrdite isplatu ispod." };
+      const result = await issueReclamationRefund({ id, actorId });
+      const noticeJobId = await db.$transaction(tx => queueReclamationRefundNotice(tx, id));
+      if (noticeJobId) after(() => processBackgroundJob(noticeJobId));
+      return { ok: true as const, entityId: id, diff: { payoutId: result.payoutId }, message: "Fiskalna refundacija je spremna. Podrška dobija mejl za proveru da li je novac već vraćen. Izvršenu uplatu možete evidentirati ispod." };
     } finally { refresh(id); }
   })(data);
 }

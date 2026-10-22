@@ -115,6 +115,7 @@ const schemas = {
   }),
   RECLAMATION_RECEIPT: z.object({ reclamationId: z.string().min(1) }),
   RETURN_REVIEW_OFFICE_EMAIL: z.object({ shipmentId: z.string().min(1), parcelNumber: z.string().regex(/^[A-Z0-9]{5,40}$/) }),
+  RECLAMATION_FISCAL_REFUND: z.object({ reclamationId: z.string().min(1) }),
   RECLAMATION_REFUND_OFFICE_EMAIL: z.object({ reclamationId: z.string().min(1) }),
   RECLAMATION_NOTIFICATION: z.object({ reclamationId: z.string().min(1) }),
   RECLAMATION_STATUS_EMAIL: z.object({
@@ -168,6 +169,7 @@ const HIGH_PRIORITY_BACKGROUND_JOB_KINDS: BackgroundJobKind[] = [
   "PAYMENT_REFUND",
   "RETURN_FISCAL_REFUND",
   "RECLAMATION_RECEIPT",
+  "RECLAMATION_FISCAL_REFUND",
   "RECLAMATION_REFUND_OFFICE_EMAIL",
   "RETURN_REVIEW_OFFICE_EMAIL",
   "RECLAMATION_NOTIFICATION",
@@ -944,6 +946,11 @@ async function dispatchJob(job: JobRow) {
     case "RETURN_REVIEW_OFFICE_EMAIL": {
       const { sendReturnReviewOfficeNotice } = await import("@/lib/email/return-review-notice");
       await sendReturnReviewOfficeNotice(schemas.RETURN_REVIEW_OFFICE_EMAIL.parse(payload));
+      return;
+    }
+    case "RECLAMATION_FISCAL_REFUND": {
+      const { issueReceivedReclamationRefund } = await import("@/lib/admin/reclamation-refund.server");
+      await issueReceivedReclamationRefund((payload as z.infer<typeof schemas.RECLAMATION_FISCAL_REFUND>).reclamationId);
       return;
     }
     case "RECLAMATION_REFUND_OFFICE_EMAIL": {

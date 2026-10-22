@@ -27,7 +27,7 @@ import {
 } from "@/lib/mygls/config";
 
 import { parseReclamationPackages } from "@/lib/admin/reclamation-packages";
-import { queueReclamationRefundNotice } from "@/lib/admin/reclamation-refund-notice.server";
+import { queueReclamationRefundNotice, queueReclamationFiscalRefund } from "@/lib/admin/reclamation-refund-notice.server";
 
 const RECLAMATION_PURPOSES: ShipmentPurpose[] = [
   "RECLAMATION_RETURN",
@@ -435,7 +435,11 @@ export async function receiveReclamationReturn(args: {
       tx.stockMovement.findMany({ where: { idempotencyKey: { startsWith: `${aggregateKey}:parcel:` } } }),
     ]);
     const existingReceipt = aggregateReceipt ?? parcelReceipts.find(row => row.idempotencyKey === key);
-    if (existingReceipt) return { movement: existingReceipt, warehouse };
+    if (existingReceipt) {
+      const refundJobId = await queueReclamationFiscalRefund(tx, reclamation.id);
+      const refundNoticeJobId = await queueReclamationRefundNotice(tx, reclamation.id);
+      return { movement: existingReceipt, warehouse, refundJobId, refundNoticeJobId };
+    }
     const receivedQty = parcelReceipts.reduce((sum, row) => sum + row.qty, 0);
     const quantity = parcelQty ?? reclamation.quantity - receivedQty;
     if (quantity <= 0 || receivedQty + quantity > reclamation.quantity) throw new Error("Povrat je već primljen ili količina prelazi reklamaciju.");
@@ -484,7 +488,8 @@ export async function receiveReclamationReturn(args: {
         status: reclamation.status === "PRIMLJENO" ? "U_OBRADI" : undefined,
       },
     });
+    const refundJobId = await queueReclamationFiscalRefund(tx, reclamation.id);
     const refundNoticeJobId = await queueReclamationRefundNotice(tx, reclamation.id);
-    return { movement, warehouse, refundNoticeJobId };
+    return { movement, warehouse, refundJobId, refundNoticeJobId };
   }, { maxWait: 10_000, timeout: 30_000 });
 }

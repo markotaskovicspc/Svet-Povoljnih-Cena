@@ -4,13 +4,13 @@ import { db } from "@/lib/db";
 import { num } from "@/lib/api/_helpers";
 import { withOrderReturnLock } from "@/lib/fiscal/return-lock";
 import { issueFiscalRefundUnderLock } from "@/lib/fiscal/issue";
-import { reclamationReturnReceiptsWhere } from "./reclamation-refund-notice.server";
-import { allocateClaimRefund, normalizeRefundBankAccount, readReclamationPayoutPlan } from "./reclamation-refund";
+import { reclamationReturnReceiptsWhere, reclamationFiscalRefundKey } from "./reclamation-refund-notice.server";
+import { allocateClaimRefund, originalPaymentEvidence, readReclamationPayoutPlan } from "./reclamation-refund";
 
 export const claimPayoutKey = (id: string) => `reclamation-refund:${id}`;
 
 async function claimForRefund(id: string) {
-  const claim = await db.reclamation.findUnique({ where: { id }, include: { order: true } });
+  const claim = await db.reclamation.findUnique({ where: { id }, include: { order: { include: { payments: true, shipments: { where: { purpose: "ORDER_DELIVERY" } } } } } });
   if (!claim || !claim.orderItemId || claim.order.channel === "ANANAS") throw new Error("Reklamacija nema SPC fiskalnu stavku za refundaciju.");
   if (claim.decision !== "PRIHVACENA" || claim.resolution !== "POVRAT_NOVCA" || claim.status === "ODBIJENO") {
     throw new Error("Prvo prihvatite reklamaciju i izaberite povrat novca.");
@@ -26,10 +26,11 @@ async function fiscalDocumentsForPayout(payoutId: string) {
 }
 
 export async function loadReclamationRefund(id: string) {
-  const [claim, payout, receipts] = await Promise.all([
+  const [claim, payout, receipts, automationJob] = await Promise.all([
     db.reclamation.findUnique({ where: { id }, select: { orderItemId: true, quantity: true, status: true } }),
     db.paymentRefund.findUnique({ where: { idempotencyKey: claimPayoutKey(id) } }),
     db.stockMovement.findMany({ where: reclamationReturnReceiptsWhere(id), select: { qty: true } }),
+    db.backgroundJob.findUnique({ where: { idempotencyKey: reclamationFiscalRefundKey(id) }, select: { status: true, lastError: true } }),
   ]);
   const lines = claim?.orderItemId ? await db.fiscalDocumentLine.findMany({
     where: { orderItemId: claim.orderItemId, fiscalDocument: { kind: "SALE", status: "ISSUED" } }, orderBy: { id: "asc" },
@@ -46,24 +47,24 @@ export async function loadReclamationRefund(id: string) {
   const issuedLines = issued.flatMap(doc => doc.lines);
   const quantitiesMatch = Boolean(plan && plan.lines.every(line => issuedLines.filter(row => row.originalSaleLineId === line.id).reduce((sum, row) => sum + row.qty, 0) === line.qty)
     && issuedLines.every(row => plan.lines.some(line => line.id === row.originalSaleLineId)));
-  return { payout, plan, documents, legacyResolved: claim?.status === "RESENO" && !payout,
+  return { payout, plan, documents, automationJob, legacyResolved: claim?.status === "RESENO" && !payout,
     received: receipts.reduce((sum, row) => sum + row.qty, 0), amount, problem,
     fiscalComplete: Boolean(payout && quantitiesMatch && documents.every(doc => doc.status === "ISSUED") && issued.length && Math.round(issued.reduce((sum, doc) => sum + num(doc.totalGross), 0) * 100) === Math.round(num(payout.amount) * 100)),
   };
 }
 
 /** No transfer is executed here. This only issues the explicitly requested fiscal document. */
-export async function issueReclamationRefund(input: { id: string; bankAccount: string; confirmPaid: boolean; actorId: string }) {
+export async function issueReclamationRefund(input: { id: string; actorId: string }) {
   const initial = await claimForRefund(input.id);
   return withOrderReturnLock(initial.orderId, async () => {
     const claim = await claimForRefund(input.id);
     const receipts = await db.stockMovement.findMany({ where: reclamationReturnReceiptsWhere(claim.id), orderBy: { createdAt: "asc" } });
     if (receipts.reduce((sum, row) => sum + row.qty, 0) < claim.quantity) throw new Error("Prvo proknjižite prijem svih komada ove reklamacije u magacin.");
-    const bankAccount = normalizeRefundBankAccount(input.bankAccount);
     let payout = await db.paymentRefund.findUnique({ where: { idempotencyKey: claimPayoutKey(claim.id) } });
     let plan = readReclamationPayoutPlan(payout?.rawRequest);
     if (!payout) {
-      if (!input.confirmPaid) throw new Error("Potvrdite da je kupac platio robu. ERP status uplate sam po sebi ne potvrđuje naplatu pouzeća.");
+      const paymentEvidence = originalPaymentEvidence(claim.order);
+      if (!paymentEvidence) throw new Error("Prijem robe je evidentiran. Fiskalna refundacija čeka proveru naplate: nema potvrđene pune uplate ni isporučenog pouzeća sa odgovarajućim iznosom. Proverite naplatu porudžbine u ERP-u.");
       if (claim.status === "RESENO") throw new Error("Reklamacija je već rešena. Proverite raniju isplatu pre novog zahteva.");
       const lines = await db.fiscalDocumentLine.findMany({
         where: { orderItemId: claim.orderItemId!, fiscalDocument: { kind: "SALE", status: "ISSUED" } }, orderBy: { id: "asc" },
@@ -82,15 +83,15 @@ export async function issueReclamationRefund(input: { id: string; bankAccount: s
         }
       }
       const allocation = allocateClaimRefund(lines, claim.quantity, reserved);
-      plan = { reclamationId: claim.id, bankAccount, quantity: claim.quantity, lines: allocation.lines, confirmedPaidBy: input.actorId };
+      plan = { reclamationId: claim.id, quantity: claim.quantity, lines: allocation.lines, paymentEvidence };
       payout = await db.paymentRefund.create({ data: {
         idempotencyKey: claimPayoutKey(claim.id), orderId: claim.orderId, method: "UPLATA_NA_RACUN", provider: "MANUAL", status: "PENDING",
         amount: new Prisma.Decimal(allocation.amount), actorId: input.actorId, rawRequest: plan,
         error: "Čeka fiskalnu refundaciju i potvrdu ručno izvršene uplate kupcu.",
       } });
     }
-    if (!plan || plan.reclamationId !== claim.id || plan.quantity !== claim.quantity || plan.bankAccount !== bankAccount) {
-      throw new Error("Sačuvani nalog se razlikuje od unetih podataka. Proverite račun kupca i količinu reklamacije pre nastavka.");
+    if (!plan || plan.reclamationId !== claim.id || plan.quantity !== claim.quantity) {
+      throw new Error("Sačuvani nalog se razlikuje od unetih podataka. Proverite količinu reklamacije pre nastavka.");
     }
     const documents = await fiscalDocumentsForPayout(payout.id);
     const issuedLines = documents.filter(doc => doc.status === "ISSUED").flatMap(doc => doc.lines);
@@ -133,4 +134,16 @@ export async function confirmReclamationPayout(input: { id: string; paidAt: stri
     });
     return state.payout.id;
   });
+}
+
+/** The warehouse receipt is the actor/evidence for automatic fiscal processing. */
+export async function issueReceivedReclamationRefund(id: string) {
+  const claim = await db.reclamation.findUnique({ where: { id }, select: { decision: true, resolution: true, status: true } });
+  if (!claim || claim.decision !== "PRIHVACENA" || claim.resolution !== "POVRAT_NOVCA" || ["ODBIJENO", "RESENO"].includes(claim.status)) {
+    const { PermanentBackgroundJobError } = await import("@/lib/background-jobs");
+    throw new PermanentBackgroundJobError("Reklamacija više nije odobrena za povrat novca. Fiskalna refundacija nije pokrenuta.");
+  }
+  const receipt = await db.stockMovement.findFirst({ where: reclamationReturnReceiptsWhere(id), orderBy: { createdAt: "desc" }, select: { actorId: true } });
+  if (!receipt?.actorId) throw new Error("Nedostaje evidentiran prijem robe sa operaterom. Proverite prijem reklamacije.");
+  return issueReclamationRefund({ id, actorId: receipt.actorId });
 }
