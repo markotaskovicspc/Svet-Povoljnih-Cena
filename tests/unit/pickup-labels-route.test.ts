@@ -214,16 +214,16 @@ it.each(["MYGLS", "X_EXPRESS"])("uses the actual 2+1 split for three sold units 
 });
 
 
-it.each(["MYGLS", "X_EXPRESS"])("excludes cancelled order labels without erasing history (%s)", async (courier) => {
+it.each(["MYGLS", "X_EXPRESS"])("preserves already created labels for every loaded package after a legacy cancellation (%s)", async (courier) => {
   provider = courier;
   lines = [line("active"), { ...line("cancelled"), order: { status: "OTKAZANO" } } as ReturnType<typeof line>];
   mocks.shipments.mockResolvedValue([shipment("active"), shipment("cancelled")]);
   const response = await request();
   expect(response.status).toBe(200);
-  expect(response.headers.get("x-courier-label-count")).toBe("1");
-  expect(mocks.orders.mock.calls[0][0].where.id.in).toEqual(["active"]);
-  if (courier === "X_EXPRESS") expect(mocks.render.mock.calls[0][0].map((s: { id: string }) => s.id)).toEqual(["shipment-active"]);
-  else expect(mocks.download.mock.calls.map(call => call[0])).toEqual(["active.pdf"]);
+  expect(response.headers.get("x-courier-label-count")).toBe("2");
+  expect(mocks.orders.mock.calls[0][0].where.id.in).toEqual(["active", "cancelled"]);
+  if (courier === "X_EXPRESS") expect(mocks.render.mock.calls[0][0].map((s: { id: string }) => s.id)).toEqual(["shipment-active", "shipment-cancelled"]);
+  else expect(mocks.download.mock.calls.map(call => call[0])).toEqual(["active.pdf", "cancelled.pdf"]);
 });
 
 

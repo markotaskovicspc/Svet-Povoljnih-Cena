@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { restoreOrderReservations } from "@/lib/order-reservations";
+import { assertOrderCancellationBeforeCourier } from "./cancellation-courier.server";
 import {
   canCustomerCancelStatus,
   OrderCancellationError,
@@ -95,6 +96,7 @@ export async function cancelWebOrderByCustomer(input: {
     if (order.reshipments?.length) {
       throw new OrderCancellationError("Za ovu porudžbinu već je pokrenuto ponovno slanje nove robe. Kontaktirajte podršku radi usaglašavanja pošiljki i povrata.", "NOT_ALLOWED");
     }
+    await assertOrderCancellationBeforeCourier(tx, order.id);
 
     const fiscalJobKeys = [
       `fiscal-advance:${order.id}`,
@@ -128,19 +130,8 @@ export async function cancelWebOrderByCustomer(input: {
         order.pickupBatchLines.map((line) => [line.batch.id, line.batch]),
       ).values(),
     );
-    const removableBatchIds = pickupBatches
-      .filter(
-        (batch) =>
-          batch.status === "DRAFT" &&
-          !batch.labelsCreationStartedAt &&
-          !batch.labelsCreatedAt,
-      )
-      .map((batch) => batch.id);
-    const removedPickupLines = removableBatchIds.length
-      ? await tx.pickupBatchLine.deleteMany({
-          where: { orderId: order.id, batchId: { in: removableBatchIds } },
-        })
-      : { count: 0 };
+    // Keep the loaded picking and its scan history until the warehouse removes it.
+    const removedPickupLines = { count: 0 };
 
     const restored = await restoreOrderReservations(tx, {
       orderId: order.id,

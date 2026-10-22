@@ -39,3 +39,9 @@ it("requires full picking and package confirmation before calling courier prepar
   expect(result.result?.labelUrl).toContain("/batch/labels");
   expect(mocks.queue).toHaveBeenCalledWith(expect.objectContaining({ payload: expect.objectContaining({ mode: "labels" }) }));
 });
+it("blocks label preparation while cancelled orders remain loaded", async () => {
+  mocks.session.mockResolvedValue({ ...session, progress: { a: 3 }, cancelledOrders: [{ id: "o", number: "SPC-CANCELLED" }] });
+  await expect(finishPicking({ ...request, mode: "labels", packagesConfirmed: true })).rejects.toThrow("otkazane porudžbine");
+  expect(mocks.labels).not.toHaveBeenCalled();
+  expect(mocks.queue).not.toHaveBeenCalled();
+});

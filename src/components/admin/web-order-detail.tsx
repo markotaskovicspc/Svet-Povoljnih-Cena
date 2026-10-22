@@ -77,6 +77,7 @@ import {
 } from "@/lib/rabalux/fulfillment-state";
 import { isRabaluxSupplierOperational } from "@/lib/rabalux/config";
 import { restoreOrderReservations } from "@/lib/order-reservations";
+import { assertOrderCancellationBeforeCourier } from "@/lib/orders/cancellation-courier.server";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle } from "@/components/admin/card";
 import { Field } from "@/components/admin/field";
@@ -432,6 +433,10 @@ async function updateStatus(_state: AdminActionState, formData: FormData) {
         }
         const supplierCancellations: string[] = [];
         await db.$transaction(async (tx) => {
+          if (status === "OTKAZANO") {
+            await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Order" WHERE "id" = ${id} FOR UPDATE`);
+            await assertOrderCancellationBeforeCourier(tx, id);
+          }
           const existing = await tx.order.findUnique({
             where: { id },
             select: {
@@ -1694,7 +1699,7 @@ export async function WebOrderDetail({ id }: { id: string }) {
                 size="sm"
                 variant="destructive"
                 pendingLabel="Otkazivanje…"
-                confirm={`Otkazati celu porudžbinu ${order.number}? Rezervacije će biti oslobođene i kupac će dobiti obaveštenje. Već kreiran kurirski nalog se ne otkazuje automatski.`}
+                confirm={`Otkazati celu porudžbinu ${order.number}? Rezervacije će biti oslobođene i kupac će dobiti obaveštenje. Otkazivanje je moguće samo pre početka izrade kurirske adresnice. Porudžbina ostaje u učitanom pickingu do ručnog uklanjanja.`}
               >
                 Otkaži porudžbinu
               </SubmitButton>

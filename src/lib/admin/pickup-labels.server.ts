@@ -1,5 +1,4 @@
 import "server-only";
-import { isCancelledDelivery } from "@/lib/courier/cancelled-delivery";
 import { renderPrintHtmlPdf } from "@/lib/pdf/print-html";
 import { boxQuantity } from "@/lib/courier/label-quantity";
 import { packedItemsLabel, parcelOrderItemIds } from "@/lib/courier/parcel-contents";
@@ -57,7 +56,6 @@ export async function buildPickupLabelsResponse(request: Request, id: string) {
   if (!batch) {
     return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
   }
-  batch.lines = batch.lines.filter((line) => !isCancelledDelivery(line));
   if (!batch.lines.length) {
     return labelConflict("Nalog nema aktivne pakete za štampu.", batch.id);
   }

@@ -21,13 +21,13 @@ it("returns a standalone PDF file for an individual X Express shipment", async (
   expect(await result.text()).toMatch(/^%PDF-/);
   expect(mocks.pdf).toHaveBeenCalledWith("<html>label</html>");
 });
-it("does not regenerate labels for cancelled outgoing goods", async () => {
+it("reprints an existing label after a legacy cancellation without creating a new shipment", async () => {
   const shipment = await mocks.shipment();
   mocks.shipment.mockResolvedValue({ ...shipment, order: { ...shipment.order, status: "OTKAZANO" } });
   const result = await request();
-  expect(result.status).toBe(409);
-  expect((await result.json()).error).toBe("order_cancelled");
-  expect(mocks.pdf).not.toHaveBeenCalled();
+  expect(result.status).toBe(200);
+  expect(result.headers.get("content-type")).toBe("application/pdf");
+  expect(mocks.pdf).toHaveBeenCalledOnce();
 });
 
 it("recovers old X Express picking contents by their exact saved assignment group", async () => {

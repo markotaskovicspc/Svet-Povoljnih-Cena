@@ -46,6 +46,7 @@ export async function finishPicking(input: z.infer<typeof finishSchema>) {
       const session = await getPickingSession(data.batchId, tx);
       if (session.planHash !== data.planHash) throw new Error("Sadržaj naloga je promenjen. Osvežite pregled.");
       const review = pickingReview(session);
+      if (data.mode === "labels" && session.cancelledOrders?.length) throw new Error("Nalog sadrži otkazane porudžbine. Ručno uklonite njihove picking grupe pre kreiranja adresnica.");
       if (data.mode === "shortage" && (!session.editable || !review.reviewed || !review.shortages.length)) throw new Error("Prvo potvrdite količine svih artikala na nalogu.");
       if (data.mode === "labels" && (!review.complete || !data.packagesConfirmed)) throw new Error("Prvo odvojite sve artikle i potvrdite spakovane pakete.");
       const operationKey = createHash("sha256").update(JSON.stringify([data.batchId, session.planHash, data.mode, review.shortages])).digest("hex");

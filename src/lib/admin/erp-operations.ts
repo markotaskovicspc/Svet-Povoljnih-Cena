@@ -25,7 +25,6 @@ import {
   pickupBatchHandoverProgress,
   pickupCourierSnapshot,
 } from "@/lib/admin/pickup-batch";
-import { isCancelledDelivery } from "@/lib/courier/cancelled-delivery";
 import {
   customerGenderLabel,
   inferCustomerGender,
@@ -2169,7 +2168,7 @@ async function pickupRows(take: number, skip = 0): Promise<ErpRow[]> {
     // Match the detail page: only active outgoing packages count, and the
     // latest matching courier shipment supplies historical handover evidence.
     const handoverProgress = pickupBatchHandoverProgress(row.lines
-      .filter(line => !line.deferredAt && !isCancelledDelivery(line))
+      .filter(line => !line.deferredAt)
       .map(line => {
         const courier = pickupCourierSnapshot({
           ...line,

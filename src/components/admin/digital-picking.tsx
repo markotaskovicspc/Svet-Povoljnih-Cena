@@ -143,6 +143,10 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
       <div><strong className="text-2xl">{done} / {total} kom.</strong><p>{total > 0 && done === total ? warehouseMode ? "Odvajanje je završeno." : "Roba je odvojena. Nastavite sa proverom pakovanja i dimenzija." : "Odvojeno / potrebno"}</p></div>
       <div className="flex gap-2 print:hidden">{!warehouseMode && <><Link href="/admin/erp/picking-pozicije" className="rounded border px-3 py-2">Pozicije</Link><button onClick={() => window.print()} className="rounded border px-3 py-2">Štampaj putanju</button></>}<button disabled={busy || !!retry} onClick={() => { window.location.reload(); }} className="rounded border px-3 py-2">Osveži</button></div>
     </div>}
+    {session.cancelledOrders?.length ? <div role="alert" className="rounded border border-danger p-3 text-sm text-danger">
+      Otkazane porudžbine ostaju u pickingu: {session.cancelledOrders.map(order => order.number).join(", ")}. Pre novih adresnica ručno uklonite njihove picking grupe i sklonite robu sa pripreme. Već predate pošiljke proverite kod kurira.
+      {!warehouseMode ? <Link href={`/admin/erp/preuzimanja/${session.id}`} className="ml-2 font-semibold underline">Otvori nalog za uklanjanje</Link> : null}
+    </div> : null}
     {session.volume && <p className="text-sm font-semibold">Ukupna zapremina: {formatPickingVolume(session.volume)}</p>}
     {warehouseMode && total > 0 && done === total && <p className="text-sm font-semibold text-success">Odvajanje je završeno.</p>}
     {warehouseMode && (review.complete || review.reviewed || labelUrl) && <section className="space-y-3 rounded-xl border bg-muted/20 p-4 print:hidden">

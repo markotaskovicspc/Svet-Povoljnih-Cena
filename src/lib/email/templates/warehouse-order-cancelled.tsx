@@ -28,7 +28,7 @@ export function WarehouseOrderCancelled({
           <br />
           {removedPickupLines > 0
             ? `${removedPickupLines} reda je automatski uklonjeno iz naloga u nacrtu.`
-            : "Nalog je već u obradi; ručno sklonite porudžbinu sa pripreme."}
+            : "Porudžbina ostaje u učitanom pickingu. Ručno uklonite njenu picking grupu pre kreiranja adresnica za preostalu robu."}
         </EmailParagraph>
       ) : null}
       {activeShipmentCount > 0 ? (

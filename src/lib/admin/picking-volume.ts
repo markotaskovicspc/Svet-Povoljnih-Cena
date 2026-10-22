@@ -1,5 +1,3 @@
-import { isCancelledDelivery } from "@/lib/courier/cancelled-delivery";
-
 type Parcel = {
   id: string; widthCm?: unknown; depthCm?: unknown; heightCm?: unknown;
   deferredAt?: Date | string | null; purpose?: string;
@@ -9,7 +7,7 @@ export function pickingVolume(lines: readonly Parcel[]) {
   let knownM3 = 0, missingPackages = 0, packageCount = 0;
   const seen = new Set<string>();
   for (const line of lines) {
-    if (seen.has(line.id) || line.deferredAt || line.purpose === "RECLAMATION_RETURN" || isCancelledDelivery(line)) continue;
+    if (seen.has(line.id) || line.deferredAt || line.purpose === "RECLAMATION_RETURN") continue;
     seen.add(line.id); packageCount++;
     const dimensions = [line.widthCm, line.depthCm, line.heightCm].map(Number);
     if (dimensions.some(value => !Number.isFinite(value) || value <= 0)) { missingPackages++; continue; }

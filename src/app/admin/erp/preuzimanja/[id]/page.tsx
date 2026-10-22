@@ -512,7 +512,6 @@ export default async function PickupBatchPage({
     .filter(isCancelledDelivery)
     .map((line) => [line.orderId, line.order])).values());
   const rows = batch.lines
-    .filter((line) => !isCancelledDelivery(line))
     .map((line) =>
       pickupLineRow(
         line,
@@ -573,7 +572,10 @@ export default async function PickupBatchPage({
   const previousPostingIssue = batch.labelsCreationStartedAt
     ? batch.configurationIssue
     : null;
-  const postingBlockReason = unreadyPackageCount
+  const cancelledActiveOrders = cancelledOrders.filter(order => batch.lines.some(line => line.orderId === order.id && !line.deferredAt && isCancelledDelivery(line)));
+  const postingBlockReason = cancelledActiveOrders.length
+    ? `Otkazane porudžbine ostaju u pickingu: ${cancelledActiveOrders.map(order => order.number).join(", ")}. Uklonite njihove picking grupe pre kreiranja adresnica.`
+    : unreadyPackageCount
     ? `${unreadyPackageCount} aktivnih paketa nije potvrđeno kao spremno. Potvrdite ih ili odložite pre slanja kuriru.`
     : unreadyReplacementCount
     ? `${unreadyReplacementCount} zamena još nema status magacina „Spremno“. Otvorite reklamaciju i završite pripremu pre knjiženja.`
@@ -718,13 +720,22 @@ export default async function PickupBatchPage({
       <div className="space-y-6 px-4 py-6 md:px-8">
         {cancelledOrders.length ? (
           <Card>
-            <CardTitle>Otkazane porudžbine — ne slati robu</CardTitle>
-            <p className="mb-3 text-sm text-danger">Ovi paketi su isključeni iz aktivnog pickinga i štampe. Otkazivanje porudžbine ne potvrđuje otkaz kod kurira. Za već najavljene X Express pošiljke tražite otkazivanje direktno od kurira i sačuvajte potvrdu.</p>
+            <CardTitle>Otkazane porudžbine u učitanom pickingu</CardTitle>
+            <p className="mb-3 text-sm text-danger">Paketi ostaju u nalogu i istoriji odvajanja. Pre kreiranja novih adresnica ručno uklonite otkazane picking grupe i sklonite robu sa pripreme. Ako adresnice već postoje ili je roba predata, proverite stvarno stanje kod kurira; otkazivanje porudžbine ne otkazuje kurirsku pošiljku.</p>
             <ul className="space-y-3 text-sm">
               {cancelledOrders.map((order) => (
                 <li key={order.id}>
                   <Link href={`/admin/erp/prodajni-nalozi/${order.id}`} className="font-semibold text-walnut hover:underline">{order.number}</Link>
-                  <span> · {batch.lines.filter((line) => line.orderId === order.id && isCancelledDelivery(line)).length} paketa isključeno</span>
+                  <span> · {batch.lines.filter((line) => line.orderId === order.id && isCancelledDelivery(line)).length} paketa ostaje u nalogu</span>
+                  {editable ? [...new Set(batch.lines.filter(line => line.orderId === order.id && isCancelledDelivery(line)).map(line => line.lineGroupKey))].map(lineGroupKey => (
+                    <AdminActionForm key={lineGroupKey} action={removeGroupAction} className="mt-2">
+                      <input type="hidden" name="batchId" value={batch.id} />
+                      <input type="hidden" name="lineGroupKey" value={lineGroupKey} />
+                      <SubmitButton size="sm" variant="destructive" pendingLabel="Uklanjanje…" confirm={`Ukloniti otkazanu picking grupu porudžbine ${order.number} iz ovog naloga?`}>
+                        Ukloni otkazanu picking grupu
+                      </SubmitButton>
+                    </AdminActionForm>
+                  )) : null}
                   {(courierShipmentsByOrder.get(order.id) ?? []).filter((shipment) => shipment.purpose === "ORDER_DELIVERY" && shipment.status !== "FAILED").map((shipment) => (
                     <p key={shipment.id} className="mt-1">Kurirski nalog: <strong>{shipment.providerOrderId ?? shipment.trackingNo ?? "nije potvrđen"}</strong> · status: {SHIPMENT_STATUS_LABEL[shipment.status]}</p>
                   ))}

@@ -263,6 +263,10 @@ export async function prepareWarehousePickupLabels(batchId: string, actorId: str
 async function claimLabelPreparation(batchId: string, data: Prisma.PickupBatchUpdateManyMutationInput, planHash?: string) {
   return db.$transaction(async tx => {
     await lockBatch(tx, batchId);
+    const lines = await tx.pickupBatchLine.findMany({ where: { batchId, deferredAt: null } });
+    const groups = pickupWorkGroups(lines);
+    await lockOrders(tx, ordinaryOrderIdsForGroups(groups));
+    await assertPickupGroupsPaymentReady(groups, tx);
     if (planHash) {
       const { getPickingSession } = await import("./picking.server");
       const { pickingReview } = await import("./picking-review");
@@ -1473,9 +1477,7 @@ async function createXExpressLabelsForPickupBatch(
     };
   }
 
-  const claimed = planHash
-    ? await claimLabelPreparation(batchId, { status: "POSTING", configurationIssue: null }, planHash)
-    : await db.pickupBatch.updateMany({ where: { id: batchId, status: "DRAFT", labelsCreatedAt: null }, data: { status: "POSTING", configurationIssue: null } });
+  const claimed = await claimLabelPreparation(batchId, { status: "POSTING", configurationIssue: null }, planHash);
   if (!claimed.count) {
     throw new Error(
       "Nalog nije nov ili drugi administrator trenutno priprema X Express adresnice.",
@@ -1709,9 +1711,7 @@ async function createMyGlsLabelsForPickupBatch(
     };
   }
 
-  const claimed = planHash
-    ? await claimLabelPreparation(batchId, { status: "POSTING", configurationIssue: null }, planHash)
-    : await db.pickupBatch.updateMany({ where: { id: batchId, status: "DRAFT" }, data: { status: "POSTING", configurationIssue: null } });
+  const claimed = await claimLabelPreparation(batchId, { status: "POSTING", configurationIssue: null }, planHash);
   if (!claimed.count) {
     throw new Error(
       "Nalog nije nov ili drugi administrator trenutno kreira MyGLS adresnice.",
@@ -2413,7 +2413,7 @@ async function assertPickupGroupsPaymentReady(
   }
   for (const order of orders) {
     if (order.status === "OTKAZANO" || order.cancelledAt) {
-      throw new Error(`Porudžbina ${order.number} je otkazana i ne može biti poslata kuriru.`);
+      throw new Error(`Porudžbina ${order.number} je otkazana. Uklonite njenu picking grupu iz naloga pre kreiranja adresnica.`);
     }
     assertFulfillmentPaymentReady({
       orderNumber: order.number,

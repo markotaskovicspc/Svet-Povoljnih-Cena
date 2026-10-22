@@ -7,12 +7,12 @@ describe("picking parcel volume", () => {
     expect(volume).toEqual({ knownM3: 0.18, missingPackages: 0, packageCount: 2 });
     expect(formatPickingVolume(volume)).toBe("0,180 m³");
   });
-  it("excludes deferred parcels, cancelled deliveries and incoming reclamation returns", () => {
+  it("retains cancelled deliveries while excluding deferred parcels and incoming returns", () => {
     expect(pickingVolume([parcel, { ...parcel, id: "p2", deferredAt: new Date() },
       { ...parcel, id: "p3", order: { status: "OTKAZANO" } },
       { ...parcel, id: "p4", purpose: "RECLAMATION_RETURN" },
       { ...parcel, id: "p5", purpose: "RECLAMATION_REPLACEMENT", order: { status: "OTKAZANO" } },
-    ])).toEqual({ knownM3: 0.12, missingPackages: 0, packageCount: 2 });
+    ])).toEqual({ knownM3: 0.18, missingPackages: 0, packageCount: 3 });
   });
   it("marks partial totals explicitly when dimensions are absent, zero or invalid", () => {
     const result = pickingVolume([parcel, ...[null, 0, "bad", -1].map((heightCm, i) => ({ ...parcel, id: String(i), heightCm }))]);

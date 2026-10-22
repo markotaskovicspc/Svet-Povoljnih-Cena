@@ -1,6 +1,5 @@
 import { readShipmentAssignment } from "@/lib/courier/shipment-assignment";
 import { isMyGlsReturn } from "@/lib/mygls/return-booking";
-import { isCancelledDelivery } from "@/lib/courier/cancelled-delivery";
 import { renderPrintHtmlPdf } from "@/lib/pdf/print-html";
 import { boxQuantity, myGlsBoxQuantities } from "@/lib/courier/label-quantity";
 import { MyGlsPrintLayoutError } from "@/lib/mygls/print-layout";
@@ -50,9 +49,6 @@ export async function GET(
   });
   if (!shipment) {
     return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
-  }
-  if (isCancelledDelivery(shipment)) {
-    return NextResponse.json({ ok: false, error: "order_cancelled", message: "Porudžbina je otkazana. Adresnice nisu dostupne za slanje robe; postojeću pošiljku proverite i otkažite kod kurira." }, { status: 409 });
   }
   const paymentReadiness = fulfillmentPaymentReadiness({
     purpose: shipment.purpose,

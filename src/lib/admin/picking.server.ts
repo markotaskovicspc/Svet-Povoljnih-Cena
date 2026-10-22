@@ -1,4 +1,5 @@
 import "server-only";
+import { isCancelledDelivery } from "@/lib/courier/cancelled-delivery";
 import { pickingVolume } from "./picking-volume";
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
@@ -10,7 +11,7 @@ type Reader = Pick<Prisma.TransactionClient, "pickupBatch" | "warehousePickingPo
 export const pickingLinesQuery = {
     orderBy: { id: "asc" }, include: {
       reclamation: { select: { resolution: true, resolutionNote: true, warehouseId: true, warehouse: { select: { name: true } } } },
-      order: { select: { id: true, number: true, status: true, items: { select: {
+      order: { select: { id: true, number: true, status: true, cancelledAt: true, items: { select: {
         id: true, sku: true, name: true, qty: true, warehouseId: true, categoryName: true, color1: true, color2: true,
         warehouse: { select: { name: true } }, product: { select: { barcode: true, supplierId: true } },
       } } } },
@@ -19,7 +20,6 @@ export const pickingLinesQuery = {
 type PickingBatch = Pick<Prisma.PickupBatchGetPayload<{ include: { lines: typeof pickingLinesQuery } }>, "id" | "lines">;
 function readPickingLines(batch: PickingBatch): PositionedLine[] {
   return batch.lines.flatMap(line => {
-    if (line.order.status === "OTKAZANO") return [];
     const packed = readPackedItems(line.packedItems);
     const contents = packed.length ? packed : [{ orderItemId: line.orderItemId, quantity: line.packedQuantity }];
     return contents.map(content => {
@@ -45,6 +45,7 @@ export async function getPickingSession(batchId: string, client: Reader = db) {
   const batch = await client.pickupBatch.findUnique({ where: { id: batchId }, include: { lines: pickingLinesQuery } });
   if (!batch) throw new Error("Picking nalog nije pronađen.");
   const lines = readPickingLines(batch);
+  const cancelledOrders = [...new Map(batch.lines.filter(line => !line.deferredAt && isCancelledDelivery(line)).map(line => [line.orderId, { id: line.orderId, number: line.order.number }])).values()];
   const positions = await client.warehousePickingPosition.findMany({ where: { warehouseId: { in: [...new Set(lines.map(l => l.warehouseId).filter(Boolean))] } } });
   const rows = buildPickingPlan(lines, positions);
   // Positions may be corrected without losing progress. Any parcel/allocation/content change requires a fresh check.
@@ -56,7 +57,8 @@ export async function getPickingSession(batchId: string, client: Reader = db) {
   return {
     id: batch.id, number: batch.number, planHash, rows, progress,
     labelsReady: Boolean(batch.labelsCreatedAt),
-    labelsPreparationAllowed: batch.status === "DRAFT",
+    cancelledOrders,
+    labelsPreparationAllowed: batch.status === "DRAFT" && !cancelledOrders.length,
     reviewedRows: [...new Set(events.filter(e => e.planHash === planHash && (e.delta > 0 || e.note.startsWith("Potvrđena količina:"))).map(e => e.rowKey))],
     volume: pickingVolume(batch.lines),
     editable: batch.status === "DRAFT" && !batch.labelsCreationStartedAt && !batch.labelsCreatedAt,

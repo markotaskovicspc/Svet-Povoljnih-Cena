@@ -21,11 +21,28 @@ it("preserves progress for location edits but invalidates changed contents", asy
  const changed=await getPickingSession("b1");
  expect(changed.planHash).not.toBe(original.planHash);expect(changed.progress).toEqual({});expect(changed.previousPlan).toBe(true);
 });
-it("uses the replacement warehouse and omits cancelled orders", async () => {
+it("uses the replacement warehouse and preserves cancelled orders and scan progress", async () => {
  mock.pickupBatch.findUnique.mockResolvedValue({...batch,lines:[{...line,reclamation:{resolution:"ZAMENA_ARTIKLA",resolutionNote:null,warehouseId:"replacement",warehouse:{name:"Replacement DC"}}}]});
  expect((await getPickingSession("b1")).rows[0].warehouseName).toBe("Replacement DC");
+ mock.pickupBatch.findUnique.mockResolvedValue(batch);
+ const original = await getPickingSession("b1");
+ mock.pickingScanEvent.findMany.mockResolvedValue([{id:"scan",batchId:"b1",rowKey:original.rows[0].key,planHash:original.planHash,delta:3,note:"",actorId:"admin",createdAt:new Date()}]);
  mock.pickupBatch.findUnique.mockResolvedValue({...batch,lines:[{...line,order:{...line.order,status:"OTKAZANO"}}]});
- expect((await getPickingSession("b1")).rows).toEqual([]);
+ const cancelled = await getPickingSession("b1");
+ expect(cancelled.rows).toEqual(original.rows);
+ expect(cancelled.planHash).toBe(original.planHash);
+ expect(cancelled.progress[original.rows[0].key]).toBe(3);
+ expect(cancelled.cancelledOrders).toEqual([{id:"o1",number:"P1"}]);
+ expect(cancelled.labelsPreparationAllowed).toBe(false);
+});
+it("blocks labels using cancelledAt as well as status, without blocking replacement goods", async () => {
+ mock.pickupBatch.findUnique.mockResolvedValue({...batch,lines:[{...line,order:{...line.order,cancelledAt:new Date()}}]});
+ expect((await getPickingSession("b1")).labelsPreparationAllowed).toBe(false);
+ mock.pickupBatch.findUnique.mockResolvedValue({...batch,lines:[{...line,purpose:"RECLAMATION_REPLACEMENT",order:{...line.order,status:"OTKAZANO",cancelledAt:new Date()}}]});
+ const replacement = await getPickingSession("b1");
+ expect(replacement.cancelledOrders).toEqual([]);
+ expect(replacement.labelsPreparationAllowed).toBe(true);
+ expect(replacement.rows).toHaveLength(1);
 });
 
 it("colors list cards from current parcel progress, including quantity corrections", async () => {
@@ -51,7 +68,7 @@ it("ignores old plans and counts all list cards with a single event query", asyn
  expect(mock.pickingScanEvent.findMany).toHaveBeenCalledTimes(1);
  expect(mock.pickingScanEvent.findMany).toHaveBeenCalledWith(expect.objectContaining({where:{batchId:{in:["b1","b2"]}}}));
 });
-it("does not mark a list card with no active picking items as ready", async () => {
+it("keeps cancelled parcels in the picking card until manually removed", async () => {
  const cancelled = {...batch,lines:[{...line,order:{...line.order,status:"OTKAZANO"}}]};
- expect((await getPickingBatchProgress([cancelled] as never)).get("b1")).toEqual({done:0,total:0,status:"empty"});
+ expect((await getPickingBatchProgress([cancelled] as never)).get("b1")).toEqual({done:0,total:3,status:"empty"});
 });

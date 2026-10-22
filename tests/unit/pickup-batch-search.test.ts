@@ -53,7 +53,7 @@ describe("pickup-batch courier search", () => {
   it.each([
     { status: "OTKAZANO", cancelledAt: null },
     { status: "SPREMNO_ZA_ISPORUKU", cancelledAt: new Date("2026-09-29T06:47:00Z") },
-  ])("marks PRE-2026-0052 complete when 12 active packages were taken and 8 were cancelled: %j", async (order) => {
+  ])("keeps all 20 loaded packages when 12 were taken and 8 were cancelled: %j", async (order) => {
     mocks.batches.mockResolvedValue([{
       ...batch, number: "PRE-2026-0052", _count: { lines: 20 },
       lines: [
@@ -61,7 +61,7 @@ describe("pickup-batch courier search", () => {
         ...Array.from({ length: 8 }, () => ({ ...line, lineGroupKey: "cancelled", order })),
       ],
     }]);
-    expect((await getOperationalErpRows("preuzimanja"))[0].values.status).toBe("Kompletno preuzeto");
+    expect((await getOperationalErpRows("preuzimanja"))[0].values.status).toBe("Delimično preuzeto");
   });
 
   it("excludes deferred packages from handover progress", async () => {

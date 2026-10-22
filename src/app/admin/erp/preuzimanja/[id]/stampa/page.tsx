@@ -33,7 +33,7 @@ export default async function PickupBatchPrintPage({
       lines: {
         orderBy: [{ orderId: "asc" }, { packageNo: "asc" }],
         include: {
-          order: { select: { status: true, cancelledAt: true } },
+          order: { select: { number: true, status: true, cancelledAt: true } },
           reclamation: {
             select: {
               resolution: true,
@@ -65,7 +65,8 @@ export default async function PickupBatchPrintPage({
   });
   if (!batch) notFound();
 
-  const activeLines = batch.lines.filter((line) => !line.deferredAt && !isCancelledDelivery(line));
+  const activeLines = batch.lines.filter((line) => !line.deferredAt);
+  const cancelledOrders = [...new Set(activeLines.filter(isCancelledDelivery).map(line => line.order.number))];
   const picking = buildPickupPrintRows(activeLines);
   const printedAt = new Intl.DateTimeFormat("sr-Latn-RS", {
     timeZone: "Europe/Belgrade", dateStyle: "short", timeStyle: "short",
@@ -105,6 +106,7 @@ export default async function PickupBatchPrintPage({
       </div>
 
       <section>
+        {cancelledOrders.length ? <div className="mb-4 border-2 border-black p-3 font-bold">Otkazane porudžbine ostaju u ovoj picking listi: {cancelledOrders.join(", ")}. Pre novih adresnica uklonite njihove picking grupe i sklonite robu sa pripreme. Već predate pošiljke proverite kod kurira.</div> : null}
         <header className="border-b-2 border-black pb-4">
           <p className="text-xs font-bold uppercase tracking-[0.16em]">Svet povoljnih cena · magacin</p>
           <h1 className="mt-1 text-3xl font-bold">Zbirna picking lista</h1>
