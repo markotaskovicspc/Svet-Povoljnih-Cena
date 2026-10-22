@@ -1,4 +1,5 @@
 import "server-only";
+import { isUnpaidCodReturn } from "@/lib/admin/reclamation-refund";
 import { num } from "@/lib/api/_helpers";
 import { db } from "@/lib/db";
 import { needsReclamationRefundNotice, reclamationRefundNoticeKey, reclamationReturnReceiptsWhere } from "@/lib/admin/reclamation-refund-notice.server";
@@ -8,9 +9,9 @@ import { trackedDispatch } from "./tracking";
 export async function sendReclamationRefundOfficeNotice(reclamationId: string) {
   const claim = await db.reclamation.findUnique({
     where: { id: reclamationId },
-    include: { order: { select: { number: true, channel: true } }, product: { select: { name: true } } },
+    include: { order: { select: { number: true, channel: true, paymentMethod: true, courierPaidAt: true, payments: { select: { status: true } }, shipments: { where: { purpose: "ORDER_DELIVERY" }, select: { purpose: true, status: true, deliveredAt: true } } } }, product: { select: { name: true } } },
   });
-  if (!claim || !needsReclamationRefundNotice(claim)) return;
+  if (!claim || !needsReclamationRefundNotice(claim) || isUnpaidCodReturn(claim.order)) return;
   const receipts = await db.stockMovement.findMany({
     where: reclamationReturnReceiptsWhere(reclamationId), orderBy: { createdAt: "desc" },
     include: { warehouse: { select: { code: true, name: true } } },

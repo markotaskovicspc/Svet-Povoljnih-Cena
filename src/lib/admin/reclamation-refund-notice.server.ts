@@ -1,4 +1,5 @@
 import "server-only";
+import { isUnpaidCodReturn } from "./reclamation-refund";
 import type { Prisma, Reclamation } from "@prisma/client";
 
 export function needsReclamationRefundNotice(claim: Pick<Reclamation, "decision" | "resolution" | "status">) {
@@ -16,9 +17,9 @@ export function reclamationReturnReceiptsWhere(id: string): Prisma.StockMovement
 /** Call in the transaction that receives the goods or saves the refund decision. */
 export async function queueReclamationRefundNotice(tx: Prisma.TransactionClient, reclamationId: string) {
   const claim = await tx.reclamation.findUnique({
-    where: { id: reclamationId }, select: { decision: true, resolution: true, status: true, quantity: true },
+    where: { id: reclamationId }, select: { decision: true, resolution: true, status: true, quantity: true, order: { select: { paymentMethod: true, courierPaidAt: true, payments: { select: { status: true } }, shipments: { where: { purpose: "ORDER_DELIVERY" }, select: { purpose: true, status: true, deliveredAt: true } } } } },
   });
-  if (!claim || !needsReclamationRefundNotice(claim)) return null;
+  if (!claim || !needsReclamationRefundNotice(claim) || isUnpaidCodReturn(claim.order)) return null;
   // READY can also mean a replacement was prepared; only the stock receipt proves return intake.
   const receipts = await tx.stockMovement.findMany({
     where: reclamationReturnReceiptsWhere(reclamationId), select: { id: true, qty: true },

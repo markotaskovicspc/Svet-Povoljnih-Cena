@@ -138,3 +138,11 @@ describe("automatic fiscal refund queue", () => {
     expect(updateJob).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "job-1", status: "FAILED" }, data: expect.objectContaining({ status: "QUEUED" }) }));
   });
 });
+
+it("does not queue or send repayment mail for a provably unpaid COD return", async () => {
+  mocks.claim.mockResolvedValue({ ...claim, order: { ...claim.order, paymentMethod: "POUZECE_GOTOVINA", courierPaidAt: null, payments: [{ status: "PENDING" }], shipments: [{ purpose: "ORDER_DELIVERY", status: "RETURNED", deliveredAt: null }] } });
+  expect(await queueReclamationRefundNotice(tx, claim.id)).toBeNull();
+  await sendReclamationRefundOfficeNotice(claim.id);
+  expect(createMany).not.toHaveBeenCalled();
+  expect(mocks.dispatch).not.toHaveBeenCalled();
+});

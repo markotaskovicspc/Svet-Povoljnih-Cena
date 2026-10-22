@@ -53,3 +53,15 @@ export function allocateClaimRefund(lines: { id: string; qty: number; refundedQt
   if (remaining) throw new Error("Nema dovoljno nerefundiranih komada na originalnim fiskalnim računima. Proverite ostale reklamacije i već pripremljene povrate.");
   return { lines: selected, amount: cents / 100 };
 }
+
+/** A pending payment alone is inconclusive: require an undelivered courier return. */
+export function isUnpaidCodReturn(order: {
+  paymentMethod: string; courierPaidAt: Date | null;
+  payments: { status: string }[];
+  shipments: { purpose: string; status: string; deliveredAt: Date | null }[];
+}) {
+  if (!["POUZECE_GOTOVINA", "POUZECE_KARTICA"].includes(order.paymentMethod) || order.courierPaidAt ||
+    order.payments.some(row => ["PAID", "PARTIAL_REFUND", "REFUNDED"].includes(row.status))) return false;
+  const deliveries = order.shipments.filter(row => row.purpose === "ORDER_DELIVERY");
+  return deliveries.some(row => row.status === "RETURNED") && deliveries.every(row => !row.deliveredAt && ["RETURNED", "FAILED"].includes(row.status));
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allocateClaimRefund, originalPaymentEvidence } from "@/lib/admin/reclamation-refund";
+import { allocateClaimRefund, originalPaymentEvidence, isUnpaidCodReturn } from "@/lib/admin/reclamation-refund";
 import { validateRefundBuyerId } from "@/lib/fiscal/refund-policy";
 
 describe("claim refund allocation", () => {
@@ -40,5 +40,18 @@ describe("automatic original payment evidence", () => {
   it("accepts reconciled courier remittance but never counts a duplicate COD collection twice", () => {
     expect(originalPaymentEvidence({ ...order, shipments: [], courierPaidAt: new Date() })?.source).toBe("COURIER_REMITTANCE");
     expect(originalPaymentEvidence({ ...order, shipments: [shipment, { ...shipment, id: "other" }] })).toBeNull();
+  });
+});
+
+describe("support mail for cash on delivery", () => {
+  const order = { paymentMethod: "POUZECE_GOTOVINA", courierPaidAt: null, payments: [{ status: "PENDING" }], shipments: [{ purpose: "ORDER_DELIVERY", status: "RETURNED", deliveredAt: null }] };
+  it("skips only unpaid undelivered COD returns", () => {
+    expect(isUnpaidCodReturn(order)).toBe(true);
+    expect(isUnpaidCodReturn({ ...order, shipments: [{ ...order.shipments[0]!, status: "DELIVERED", deliveredAt: new Date() }] })).toBe(false);
+    expect(isUnpaidCodReturn({ ...order, shipments: [{ ...order.shipments[0]!, deliveredAt: new Date() }] })).toBe(false);
+    expect(isUnpaidCodReturn({ ...order, payments: [{ status: "PAID" }] })).toBe(false);
+    expect(isUnpaidCodReturn({ ...order, courierPaidAt: new Date() })).toBe(false);
+    expect(isUnpaidCodReturn({ ...order, paymentMethod: "KARTICA" })).toBe(false);
+    expect(isUnpaidCodReturn({ ...order, shipments: [] })).toBe(false);
   });
 });

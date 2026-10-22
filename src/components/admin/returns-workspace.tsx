@@ -625,12 +625,12 @@ export async function ReturnsWorkspace({
           </Link>
         }
       />}
-      <main className="min-w-0 space-y-6 px-4 py-6 md:px-8">
+      <main className={`min-w-0 space-y-6 px-4 py-6 md:px-8 ${warehouseMode && scanPlan && !scanPlan.received ? "pb-44 md:pb-6" : ""}`}>
         {warehouseMode && <div><h1 className="text-xl font-semibold">Prijem povrata</h1><p className="mt-1 text-sm text-ink-500">Skenirajte paket, pregledajte robu i potvrdite prijem.</p></div>}
         {warehouseMode && params?.received === "1" && <p role="status" className="rounded-lg border border-success/40 bg-success/10 p-3 text-success">Paket je primljen. Spremno za sledeći paket.</p>}
         <Card>
           <CardTitle>Prijem povratnog paketa</CardTitle>
-          <ReturnScanner basePath={returnHref} key={`${params?.q ?? ""}:${params?.camera ?? ""}`} initialCode={params?.q ?? ""} initialCamera={params?.camera === "1"} warehouseId={params?.warehouse ?? ""}>
+          <ReturnScanner basePath={returnHref} key={`${params?.q ?? ""}:${params?.camera ?? ""}`} initialCode={params?.q ?? ""} initialCamera={params?.camera === "1"} awaitingReceipt={Boolean(scanPlan && !scanPlan.received)} warehouseId={params?.warehouse ?? ""}>
           {scanError ? <p role="alert" className="mt-4 text-warning">{scanError}</p> : null}
           {scanPlan ? <ScannedReturnPanel reclamationNumber={scanPlan.kind === "reclamation" ? scanPlan.shipment.reclamation?.number ?? "Povezana reklamacija" : null}>
             {warehouseMode ? <div className="space-y-4 break-words">
@@ -677,13 +677,13 @@ export async function ReturnsWorkspace({
               </table>
             </div>
             )}
-            {scanPlan.received ? <p className={scanPlan.kind === "reclamation" ? "text-amber-900" : "text-success"}>Već primljeno. Ponovni sken ne uvećava lager.</p> : <AdminActionForm action={receiveScannedAction} preserveValues toastOnSuccess={warehouseMode} className="flex flex-wrap items-end gap-3">
+            {scanPlan.received ? <p className={scanPlan.kind === "reclamation" ? "text-amber-900" : "text-success"}>Već primljeno. Ponovni sken ne uvećava lager.</p> : <AdminActionForm action={receiveScannedAction} preserveValues toastOnSuccess={warehouseMode} className={warehouseMode ? "fixed inset-x-0 bottom-0 z-30 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2 border-t border-border bg-surface text-foreground p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-lg md:static md:flex md:flex-wrap md:border-0 md:p-0 md:shadow-none" : "flex flex-wrap items-end gap-3"}>
               <input type="hidden" name="code" value={params?.q ?? ""} />
               <input type="hidden" name="returnTo" value={returnHref} />
               {warehouseSelect}
               {!warehouseMode && scanPlan.kind === "order" ? <Field label="Identifikacija kupca (ako nije na računu)"><input name="buyerId" maxLength={100} className="h-9 rounded-lg border border-input px-2" /></Field> : null}
-              <SubmitButton disabled={!warehouses.length}>Potvrdi prijem</SubmitButton>
-              <p className="w-full text-xs text-ink-500">Potvrdom prijema potvrđujete da ste pregledali sadržaj paketa. Ako je roba oštećena, izaberite magacin za proveru vraćene robe.</p>
+              <SubmitButton className="h-11" disabled={!warehouses.length}>Potvrdi prijem</SubmitButton>
+              <p className="col-span-full w-full text-xs text-muted-foreground">Potvrdom prijema potvrđujete da ste pregledali sadržaj paketa. Ako je roba oštećena, izaberite magacin za proveru vraćene robe.</p>
             </AdminActionForm>}
           </ScannedReturnPanel> : null}
           </ReturnScanner>
