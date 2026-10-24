@@ -12,7 +12,7 @@ export async function exportProducts(q: ExportQuery) {
     categories: { select: { category: { select: { id: true, name: true } } } },
     media: { where: { kind: 'IMAGE' }, orderBy: { order: 'asc' }, take: 1, select: { url: true } },
     colorPrimary: true, colorSecondary: true, cogs: true, grossWeightKg: true, packGrossWeightKg: true,
-    unitPackWidthCm: true, unitPackDepthCm: true, unitPackHeightCm: true, packWidthCm: true, packDepthCm: true, packHeightCm: true, packQty: true,
+    unitPackWidthCm: true, unitPackDepthCm: true, unitPackHeightCm: true, packWidthCm: true, packDepthCm: true, packHeightCm: true, packQty: true, containerQty: true,
     fullPrice: true, salePrice: true, loyaltyPrice: true, loyaltyDiscountPct: true, isHero: true,
     priceListEntries: { where: { priceList: { code: { contains: 'ANANAS', mode: 'insensitive' } } }, select: { price: true, validFrom: true, validTo: true, priceList: { select: { code: true, active: true } } } },
     createdAt: true, updatedAt: true,

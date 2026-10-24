@@ -47,3 +47,6 @@ SPC scope correction: SalesChannel includes ANANAS even on primary Order. Both d
 
 ## X Express identifiers for Analytics order links — 2026-10-21
 The user explicitly approved this ERP change and publication. Read-only orders/shipments exports now select existing providerOrderId and providerParcelNumbers. providerOrderId is exposed only for X_EXPRESS, matching the existing finance invoice-code matcher. Parcel values remain exact scalars. Authentication, signed pagination and metadata audit are unchanged; no carrier payloads, contacts, schema changes or business writes. The tested isolated source passed 18 export/auth tests, 17 checkout-isolation tests and the full production build. Live deployment and historical Analytics re-read are tracked in the private SCP Analytics task; build success is not proof of populated order links.
+
+## Analytics container quantity export (2026-10-24)
+The read-only products partner export now also selects existing Product.containerQty (sellable units in one standard 69 m³ container; null when not entered). SPC Analytics Poručivanje uses it before falling back to packaging dimensions. No schema change, business writes or new PII. Same spcapp:read authorization, signed pagination and metadata audit.
