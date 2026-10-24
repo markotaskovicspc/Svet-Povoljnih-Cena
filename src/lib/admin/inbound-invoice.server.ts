@@ -9,6 +9,7 @@ import {
   PurchaseOrderStatus,
 } from "@prisma/client";
 import { db } from "@/lib/db";
+import { capturePaymentSnapshot } from "@/lib/admin/purchase-payments.server";
 import {
   assertInboundCostVolumeReady,
   assertInboundInvoicePurchaseOrderLocked,
@@ -26,6 +27,7 @@ import {
 import { recomputeIncomingStockForPurchaseOrders } from "@/lib/admin/incoming-stock.server";
 
 export type SaveInboundInvoiceInput = {
+  paymentVersion?: string;
   id: string;
   number: string;
   receiptDate: Date;
@@ -170,6 +172,9 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
   });
   if (!current) throw new Error("Prijemnica ne postoji.");
   if (current.lockedAt) throw new Error("Proknjižena prijemnica se ne može menjati.");
+  const paymentSnapshot = input.paymentVersion
+    ? await capturePaymentSnapshot(input.purchaseOrderId, input.paymentVersion)
+    : current.purchaseOrderId !== input.purchaseOrderId ? Prisma.DbNull : undefined;
 
   const [purchaseOrder, warehouse, linkedInvoice] = await Promise.all([
     db.purchaseOrder.findUnique({
@@ -234,6 +239,7 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
         status: InboundInvoiceStatus.RECEIVED,
         cogsStatus: CogsStatus.CALCULATED,
         notes: input.notes,
+        paymentSnapshot,
       },
     });
     if (updated.count !== 1) {

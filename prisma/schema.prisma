@@ -548,6 +548,7 @@ model Product {
   stockMovements            StockMovement[]
   fiscalDocumentLines       FiscalDocumentLine[]
   lookupAssignments         ProductLookupAssignment[]
+  attributeAssignments      ProductAttributeAssignment[]
   priceListEntries          PriceListEntry[]
   actionPrices              ActionProduct[]
   loyaltyRules              LoyaltyRuleProduct[]
@@ -2327,10 +2328,28 @@ model PurchaseOrder {
   items               PurchaseOrderItem[]
   events              PurchaseOrderStatusEvent[]
   inboundInvoices     InboundInvoice[]
+  payments            PurchaseOrderPayment[]
 
   @@index([supplierId, createdAt])
   @@index([status, createdAt])
   @@index([archivedAt, createdAt])
+}
+
+model PurchaseOrderPayment {
+  id              String   @id @default(cuid())
+  purchaseOrderId String
+  paidAt          DateTime @db.Date
+  currency        ErpCurrency
+  amount          Decimal  @db.Decimal(12, 2)
+  amountRsd       Decimal  @db.Decimal(12, 2)
+  notes           String?  @db.Text
+  voidedAt        DateTime?
+  actorId         String
+  createdAt       DateTime @default(now())
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+
+  @@index([purchaseOrderId, paidAt])
 }
 
 model PurchaseOrderItem {
@@ -2406,6 +2425,7 @@ model InboundInvoice {
   cogsStatus           CogsStatus           @default(PENDING)
   notes                String?              @db.Text
   lockedAt             DateTime?
+  paymentSnapshot      Json?
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
 
@@ -2478,6 +2498,37 @@ enum ProductLookupKind {
   COLOR
   BENEFIT
   CERTIFICATE
+}
+
+model AttributeSection {
+  id        String @id @default(cuid())
+  name      String @unique
+  order     Int @default(0)
+  active    Boolean @default(true)
+  options   AttributeOption[]
+}
+
+model AttributeOption {
+  id          String @id @default(cuid())
+  sectionId   String
+  value       String
+  order       Int @default(0)
+  active      Boolean @default(true)
+  section     AttributeSection @relation(fields: [sectionId], references: [id], onDelete: Restrict)
+  assignments ProductAttributeAssignment[]
+
+  @@unique([sectionId, value])
+  @@index([sectionId, order])
+}
+
+model ProductAttributeAssignment {
+  productId String
+  optionId  String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  option    AttributeOption @relation(fields: [optionId], references: [id], onDelete: Restrict)
+
+  @@id([productId, optionId])
+  @@index([optionId])
 }
 
 model ProductLookupValue {

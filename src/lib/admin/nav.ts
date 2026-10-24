@@ -51,6 +51,7 @@ export const adminNav: AdminNavGroup[] = [
       { href: "/admin/promo-traka", label: "Promo traka", allowed: C },
       { href: "/admin/tabovi", label: "Desktop navigacija", allowed: C },
       { href: "/admin/kategorije", label: "Kategorije", allowed: C },
+      { href: "/admin/atributi", label: "Atributi", allowed: C },
       { href: "/admin/piktogrami", label: "Piktogrami", allowed: C },
       {
         href: "/admin/erp/landing-strane",

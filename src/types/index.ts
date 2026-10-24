@@ -122,6 +122,7 @@ export interface Product {
   colorPrimary?: string;
   colorSecondary?: string;
   attributes?: string[];
+  groupedAttributes?: import("@/lib/grouped-attributes").GroupedAttribute[];
   materials: Material[];
   pictograms: Pictogram[];
 

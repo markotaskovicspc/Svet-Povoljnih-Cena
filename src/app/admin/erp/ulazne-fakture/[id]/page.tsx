@@ -48,6 +48,8 @@ import {
   withAdminState,
 } from "@/lib/admin";
 import { db } from "@/lib/db";
+import { summarizePurchasePayments } from "@/lib/admin/purchase-payments.server";
+import { PaymentSnapshotCard } from "@/components/admin/payment-snapshot";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -185,6 +187,7 @@ async function saveAction(_state: AdminActionState, formData: FormData) {
       }
       const data = parsed.data;
       await saveInboundInvoice({
+        paymentVersion: String(actionData.get("paymentVersion") ?? "") || undefined,
         id: data.invoiceId,
         number: data.number,
         receiptDate: new Date(`${data.receiptDate}T00:00:00.000Z`),
@@ -316,6 +319,7 @@ export default async function InboundInvoicePage({
           include: {
             supplier: { select: { id: true, name: true } },
             receivingWarehouse: true,
+            payments: true,
             transportDefinition: true,
             items: {
               orderBy: { createdAt: "asc" },
@@ -401,6 +405,7 @@ export default async function InboundInvoicePage({
         exchangeRate: true,
         freightCost: true,
         freightExchangeRate: true,
+        payments: true,
         supplier: { select: { id: true, name: true } },
         items: {
           select: {
@@ -494,6 +499,7 @@ export default async function InboundInvoicePage({
           0,
         ),
         ...defaults,
+        payments: summarizePurchasePayments(order.payments),
       };
     },
   );
@@ -770,6 +776,7 @@ export default async function InboundInvoicePage({
       />
 
       <div className="space-y-6 px-4 py-6 md:px-8">
+        <PaymentSnapshotCard value={invoice.paymentSnapshot} />
         {postingBlockedByVolume &&
         (!locked || cogsNeedsBackfill || receiptNeedsCompletion) ? (
           <div

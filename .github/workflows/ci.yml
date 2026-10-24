@@ -67,7 +67,7 @@ jobs:
           ADMIN_EMAIL="$E2E_ADMIN_ADS_EMAIL" ADMIN_PASSWORD="$E2E_ADMIN_ADS_PASSWORD" ADMIN_ROLE=ADS npm run admin:create
       - run: npm run lint
       - run: npm run test:unit
-      - run: npx vitest run --config vitest.integration.config.ts tests/integration/pickup-courier-backfill.integration.test.ts tests/integration/courier-statement.integration.test.ts tests/integration/ananas-inventory.integration.test.ts tests/integration/restock-waitlist.integration.test.ts
+      - run: npx vitest run --config vitest.integration.config.ts tests/integration/grouped-attributes-payments.integration.test.ts tests/integration/pickup-courier-backfill.integration.test.ts tests/integration/courier-statement.integration.test.ts tests/integration/ananas-inventory.integration.test.ts tests/integration/restock-waitlist.integration.test.ts
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: E2E_PICKUP_COURIER_STATUS=1 npm run test:e2e -- --project=desktop --project=mobile

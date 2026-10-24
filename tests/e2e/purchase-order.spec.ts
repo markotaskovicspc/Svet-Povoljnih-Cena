@@ -14,6 +14,9 @@ loadEnv({ path: ".env.local" });
 loadEnv();
 
 const expect = baseExpect.configure({ timeout: 30_000 });
+const todayInBelgrade = () => new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Europe/Belgrade", year: "numeric", month: "2-digit", day: "2-digit",
+}).format(new Date());
 
 test.describe("ERP module 4 purchase-order acceptance", () => {
   test.skip(
@@ -431,7 +434,7 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
       );
       expect(directEdit.status()).toBe(422);
       await expect(
-        page.getByText(/informativno upozorenje.*kapacitet transporta je prekoračen/i),
+        page.getByText(/informativno upozorenje.*kapacitet transporta je prekoračen/i).filter({ visible: true }),
       ).toBeVisible();
     });
 
@@ -541,7 +544,7 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
 
     await test.step("capacity warning clears and sending before posting locks the order date", async () => {
       await expect(
-        page.getByText(/informativno upozorenje.*kapacitet transporta je prekoračen/i),
+        page.getByText(/informativno upozorenje.*kapacitet transporta je prekoračen/i).filter({ visible: true }),
       ).toBeVisible();
       await db.transportType.update({
         where: { id: transportId },
@@ -573,7 +576,7 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
       });
       expect(sent.lockedAt).toBeNull();
       expect(sent.orderDate?.toISOString().slice(0, 10)).toBe(
-        new Date().toISOString().slice(0, 10),
+        todayInBelgrade(),
       );
       await expect(
         page.getByRole("textbox", { name: /^Datum porudžbenice/ }),
@@ -588,7 +591,7 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
       );
       expect(response.status()).toBe(200);
       await page.reload({ waitUntil: "domcontentloaded" });
-      await expect(page.getByText(/poslovni podaci su zaključani/i)).toBeVisible();
+      await expect(page.getByText(/poslovni podaci su zaključani/i).filter({ visible: true })).toBeVisible();
       const posted = await db.purchaseOrder.findUniqueOrThrow({
         where: { id: purchaseOrderId! },
       });
@@ -672,7 +675,7 @@ test.describe("ERP module 4 purchase-order acceptance", () => {
       expect(message.subject).toBe(`Order NO ${order.number}`);
       expect(message.status).toBe("SENT");
       expect(order.orderDate?.toISOString().slice(0, 10)).toBe(
-        new Date().toISOString().slice(0, 10),
+        todayInBelgrade(),
       );
     });
 

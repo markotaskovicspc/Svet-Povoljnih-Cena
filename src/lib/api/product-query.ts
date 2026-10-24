@@ -28,6 +28,7 @@ export function parseListProductsInput(
     materialLabels: list(searchParams, "materials"),
     colors: list(searchParams, "colors"),
     attributes: list(searchParams, "attributes"),
+    groupedAttributes: groupedAttributes(searchParams),
     availability: availability(searchParams),
     dynamicFilters: dynamicFilters(searchParams),
     cursor: text(searchParams, "cursor"),
@@ -85,6 +86,19 @@ function dynamicFilters(searchParams: URLSearchParams) {
     if (values?.length) result[facetKey] = values;
   }
   return Object.keys(result).length ? result : undefined;
+}
+
+function groupedAttributes(searchParams: URLSearchParams) {
+  const selected: Record<string, string[]> = {};
+  for (const key of new Set(searchParams.keys())) {
+    if (!key.startsWith("attribute.")) continue;
+    const sectionId = key.slice("attribute.".length);
+    const values = list(searchParams, key);
+    if (/^[a-zA-Z0-9_-]{1,100}$/.test(sectionId) && values?.length) {
+      selected[sectionId] = values;
+    }
+  }
+  return selected;
 }
 
 function text(searchParams: URLSearchParams, key: string) {

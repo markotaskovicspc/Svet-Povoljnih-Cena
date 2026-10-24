@@ -142,13 +142,13 @@ test.describe("legacy product family admin workflow", () => {
     ]);
     await login(page, sourceId, adminEmail, adminPassword);
 
-    await expect(page.getByRole("heading", { name: "Boje u porodici" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Varijante u porodici" })).toBeVisible();
     await expect(
-      page.getByText("Unesite eksplicitnu šifru porodice u kartonu ispod."),
+      page.getByText("Artikal još nije povezan sa drugim varijantama. Pronađite postojeći SKU ispod."),
     ).toBeVisible();
     await expect(page.getByLabel("Šifra porodice")).toBeVisible();
     await expect(page.getByLabel("Boja 1")).toHaveValue("Bela");
-    await expect(page.getByPlaceholder("SKU ili naziv artikla")).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Poveži postojeći artikal" })).toBeVisible();
 
     await saveFamilyMembership(page, {
       familyCode,
@@ -277,7 +277,7 @@ test.describe("legacy product family admin workflow", () => {
     await skuInput.fill(sourceSku);
     await labelInput.fill("Plava");
     await hexInput.fill("#3B82F6");
-    await draftForm.getByRole("button", { name: "Nova boja" }).click();
+    await draftForm.getByRole("button", { name: "Napravi novi artikal" }).click();
     await expect(draftForm.getByRole("alert")).toContainText(
       `Šifra artikla ${sourceSku} već postoji.`,
       { timeout: 120_000 },
@@ -286,7 +286,7 @@ test.describe("legacy product family admin workflow", () => {
     await skuInput.fill(draftSku);
     await labelInput.fill("Crna");
     await hexInput.fill("#181716");
-    await draftForm.getByRole("button", { name: "Nova boja" }).click();
+    await draftForm.getByRole("button", { name: "Napravi novi artikal" }).click();
     await expect(draftForm.getByRole("alert")).toContainText(
       `Boja Crna je već povezana sa SKU-om ${targetSku}.`,
       { timeout: 120_000 },
@@ -297,7 +297,7 @@ test.describe("legacy product family admin workflow", () => {
     await hexInput.fill("#fff");
     expect(await hexInput.evaluate((element) => element.checkValidity())).toBe(false);
     await hexInput.fill("#9CA3AF");
-    await draftForm.getByRole("button", { name: "Nova boja" }).click();
+    await draftForm.getByRole("button", { name: "Napravi novi artikal" }).click();
     await expect(draftForm.getByRole("status")).toContainText(
       `Nova boja ${draftSku} je kreirana`,
       { timeout: 120_000 },
@@ -360,9 +360,9 @@ test.describe("legacy product family admin workflow", () => {
     });
     const sourceForm = productForm(page);
     await sourceForm.locator('input[name="familyCode"]').fill("");
-    await sourceForm.getByRole("checkbox", { name: "Glavna boja" }).uncheck();
+    await sourceForm.getByRole("checkbox", { name: "Glavna varijanta" }).uncheck();
     await sourceForm
-      .getByRole("checkbox", { name: "Boja spremna za web" })
+      .getByRole("checkbox", { name: "Varijanta spremna za web" })
       .uncheck();
     await sourceForm.getByRole("button", { name: "Sačuvaj izmene" }).click();
     await expect(sourceForm.getByRole("status")).toContainText(
@@ -470,6 +470,10 @@ function productFixture(input: {
     unitPackWidthCm: 10,
     unitPackDepthCm: 20,
     unitPackHeightCm: 30,
+    packQty: 1,
+    packWidthCm: 10,
+    packDepthCm: 20,
+    packHeightCm: 30,
     deliveryDaysMin: 2,
     deliveryDaysMax: 4,
     articleStatus: "UZ" as const,
@@ -516,13 +520,17 @@ async function saveFamilyMembership(
   await form.locator('input[name="familyColorHex"]').fill(input.colorHex);
   await form.locator('input[name="familyPosition"]').fill(input.position);
   await form
-    .getByRole("checkbox", { name: "Glavna boja" })
+    .getByRole("checkbox", { name: "Glavna varijanta" })
     .setChecked(input.primary);
   await form
-    .getByRole("checkbox", { name: "Boja spremna za web" })
+    .getByRole("checkbox", { name: "Varijanta spremna za web" })
     .setChecked(input.storefrontEnabled);
   await form.locator('input[name="colorPrimary"]').fill(input.colorPrimary);
   await form.locator('input[name="colorSecondary"]').fill(input.colorSecondary);
+  expect(await form.locator(":invalid").evaluateAll((inputs) => inputs.map((input) => ({
+    name: (input as HTMLInputElement).name,
+    message: (input as HTMLInputElement).validationMessage,
+  })))).toEqual([]);
   await form.getByRole("button", { name: "Sačuvaj izmene" }).click();
   await expect(form.getByRole("status")).toContainText("Proizvod je sačuvan.", {
     timeout: 120_000,

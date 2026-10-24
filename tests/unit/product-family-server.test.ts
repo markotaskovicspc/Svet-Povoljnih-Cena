@@ -224,6 +224,7 @@ describe("upravljanje članovima porodice boja", () => {
       assemblyCities: [],
       attachments: [],
       lookupAssignments: [],
+      attributeAssignments: [{ optionId: "shared-attribute" }],
     };
     const tx = {
       $queryRaw: vi.fn().mockResolvedValue([]),
@@ -241,6 +242,10 @@ describe("upravljanje članovima porodice boja", () => {
           .mockResolvedValueOnce(sharedSource),
         findMany: vi.fn().mockResolvedValue([{ id: "white", sku: "SKU-WHITE" }]),
         update: updateProduct,
+      },
+      productAttributeAssignment: {
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+        createMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       productFamilyMember: {
         findUnique: vi
@@ -302,6 +307,8 @@ describe("upravljanje članovima porodice boja", () => {
       where: { id: "white" },
       data: { colorPrimary: "Bela", colorSecondary: null },
     });
+    expect(tx.productAttributeAssignment.deleteMany).not.toHaveBeenCalled();
+    expect(tx.productAttributeAssignment.createMany).not.toHaveBeenCalled();
     for (const call of updateProduct.mock.calls) {
       const data = call[0].data;
       expect(data).not.toHaveProperty("fullPrice");

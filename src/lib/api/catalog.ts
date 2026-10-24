@@ -69,6 +69,8 @@ import {
 } from "@/lib/storefront/promotion-filters";
 import { buildProductDeclaration } from "@/lib/product-declaration";
 import { formatProductAttributes } from "@/lib/product-attributes";
+import { groupedAttributeFacets, projectGroupedAttributes } from "@/lib/grouped-attributes";
+import { attributeAssignmentsSelect } from "@/lib/admin/grouped-attributes.server";
 import { rabaluxPictogramPriority } from "@/lib/rabalux/pictograms";
 import { formatProductDisplayName } from "@/lib/product-name";
 import { isProductColorLabel } from "@/lib/product-colors";
@@ -143,6 +145,7 @@ const slugify = (input: string) =>
     .slice(0, 96);
 
 const productCardCoreSelect = {
+  attributeAssignments: { select: attributeAssignmentsSelect },
   id: true,
   sku: true,
   slug: true,
@@ -251,6 +254,7 @@ const productListSelect = {
 type ProductListRow = Prisma.ProductGetPayload<{ select: typeof productListSelect }>;
 
 const productFacetSelect = {
+  attributeAssignments: { select: attributeAssignmentsSelect },
   id: true,
   sku: true,
   groupId: true,
@@ -295,6 +299,7 @@ type ProductFacetRow = Prisma.ProductGetPayload<{
 }>;
 
 const productInclude = {
+  attributeAssignments: { select: attributeAssignmentsSelect },
   group: true,
   collection: true,
   action: true,
@@ -399,6 +404,7 @@ function mapProduct(
     unitPackageDimensionsCm: unitPackageDimensions(p),
     colorPrimary: p.colorPrimary ?? undefined,
     colorSecondary: p.colorSecondary ?? undefined,
+    groupedAttributes: projectGroupedAttributes(p.attributeAssignments),
     attributes: formatProductAttributes([
       p.attribute1,
       p.attribute2,
@@ -663,6 +669,7 @@ function mapProductListItem(
     categoryIds: sortedCats.map((item) => item.categoryId),
     pricingCategoryPaths: sortedCats.map((item) => item.category.path),
     description: "",
+    groupedAttributes: projectGroupedAttributes(p.attributeAssignments),
     shortDescription: p.shortDescription ?? undefined,
     sizeLabel: p.sizeLabel ?? undefined,
     dimensionsCm: {
@@ -1089,6 +1096,7 @@ export interface ListProductsInput {
   attributes?: string[];
   availability?: Availability[];
   dynamicFilters?: Record<string, string[]>;
+  groupedAttributes?: Record<string, string[]>;
   inStockOnly?: boolean;
   sort?: ProductSort;
   /** Page size (default 24, max 300). */
@@ -1384,6 +1392,13 @@ function buildProductListingWhere(
   if (input.availability?.length) {
     appendAnd(where, storefrontAvailabilityWhere(input.availability));
   }
+  for (const [sectionId, values] of Object.entries(input.groupedAttributes ?? {})) {
+    if (values.length) appendAnd(where, {
+      attributeAssignments: { some: { option: {
+        id: { in: values }, sectionId, active: true, section: { active: true },
+      } } },
+    });
+  }
   for (const [key, values] of Object.entries(input.dynamicFilters ?? {})) {
     const condition = dynamicFilterWhere(key, values);
     if (condition) appendAnd(where, condition);
@@ -1669,6 +1684,7 @@ function computeProductFacets(
 
   const result = emptyProductFacets();
   const { facets } = result;
+  const attributeProducts: Array<{ groupedAttributes: ReturnType<typeof projectGroupedAttributes> }> = [];
   const groups = new Set<string>();
   const materials = new Map<string, string>();
   const colors = new Map<string, string>();
@@ -1747,6 +1763,7 @@ function computeProductFacets(
     ) {
       continue;
     }
+    attributeProducts.push({ groupedAttributes: projectGroupedAttributes(row.attributeAssignments) });
     if (row.group?.slug) {
       groups.add(row.group.slug);
       facets.groupLabels[row.group.slug] = row.group.name;
@@ -1831,6 +1848,7 @@ function computeProductFacets(
     attributes.values(),
     facets.counts.attributes,
   );
+  facets.attributeSections = groupedAttributeFacets(attributeProducts);
   facets.dynamic = Object.fromEntries(
     Object.entries(dynamic).map(([key, values]) => [
       key,

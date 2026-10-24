@@ -7,6 +7,7 @@ import { z } from "zod";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { Card, CardTitle } from "@/components/admin/card";
 import { ConfirmSubmitButton } from "@/components/admin/confirm-submit";
+import { PurchasePayments } from "@/components/admin/purchase-payments";
 import { Field } from "@/components/admin/field";
 import { PageHeader } from "@/components/admin/page-header";
 import { PurchaseOrderImport } from "@/components/admin/purchase-order-import";
@@ -117,6 +118,7 @@ async function saveHeader(_state: AdminActionState, formData: FormData) {
           lockedAt: true,
           status: true,
           orderDate: true,
+          payments: { where: { voidedAt: null }, select: { currency: true }, take: 1 },
           items: {
             select: {
               product: { select: { supplierId: true } },
@@ -185,6 +187,9 @@ async function saveHeader(_state: AdminActionState, formData: FormData) {
           });
       const exchangeRate =
         supplier.currency === ErpCurrency.RSD ? 1 : data.exchangeRate;
+      if (current.payments.some((payment) => payment.currency !== supplier.currency)) {
+        return { ok: false as const, error: "Valuta se ne može menjati dok porudžbenica ima aktivne uplate." };
+      }
       const freightExchangeRate =
         data.freightCurrency === ErpCurrency.RSD ? 1 : data.freightExchangeRate;
       await db.purchaseOrder.update({
@@ -861,6 +866,7 @@ export default async function PurchaseOrderEditorPage({
           </Card>
         </div>
 
+        <PurchasePayments purchaseOrderId={order.id} />
         <div className="grid gap-6 lg:grid-cols-2">
           <Card id="vezani-dokumenti">
             <CardTitle description="Prijemnica povezana sa ovom porudžbenicom.">Vezani dokumenti</CardTitle>

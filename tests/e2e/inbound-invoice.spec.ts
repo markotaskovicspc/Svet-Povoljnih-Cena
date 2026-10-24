@@ -276,14 +276,17 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
           exact: true,
         }),
       ).toBeVisible();
+      await page.getByText("Prikaz tabele", { exact: true }).click();
+      await page.getByText("Filteri", { exact: true }).click();
       await page
         .getByLabel("Kolona za novi filter")
         .selectOption("invoiceValueRsd");
-      await page.getByRole("button", { name: "Filter", exact: true }).click();
+      await page.getByRole("button", { name: "Dodaj filter", exact: true }).click();
       const operator = page.getByLabel("Operator Vrednost fakture u RSD");
       await operator.selectOption("gt");
       await expect(operator).toHaveValue("gt");
       await expect(operator.locator('option[value="gt"]')).toHaveText("veće od");
+      await page.getByRole("button", { name: "Gotovo", exact: true }).click();
     });
 
     await test.step("Nova opens an editable individual invoice", async () => {
@@ -324,9 +327,9 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
       await form.locator('[name="warehouseId"]').selectOption(warehouseId);
       await expect(form.locator('[name="supplierId"]')).toHaveValue(supplierId);
       await expect(form.locator('[name="type"]')).toHaveValue("COGS");
-      await expect(form.locator('[name="currency"]')).toHaveValue("EUR");
-      await expect(form.locator('[name="invoiceValue"]')).toHaveValue("85");
-      await expect(form.locator('[name="exchangeRate"]')).toHaveValue("100");
+      await expect(form.locator('[name="currency"]')).toHaveValue("RSD");
+      await expect(form.locator('[name="invoiceValue"]')).toHaveValue("8500");
+      await expect(form.locator('[name="exchangeRate"]')).toHaveValue("1");
       await expect(form.locator('[name="invoiceValueRsd"]')).toHaveValue("8500");
       await expect(
         form.locator('[name="otherCostsAllocationBasis"]'),
@@ -380,9 +383,9 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
         net: 8_821.25,
         vat: 1_764.25,
         gross: 10_585.5,
-        currency: "EUR",
-        exchangeRate: 100,
-        invoiceValue: 85,
+        currency: "RSD",
+        exchangeRate: 1,
+        invoiceValue: 8_500,
         invoiceValueRsd: 8_500,
         customsValueRsd: 0,
         transportValueRsd: 0,
@@ -621,7 +624,7 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
       });
 
       const cogsRow = page.locator("tbody tr").filter({ hasText: fixture.sku });
-      await expect(cogsRow).toContainText("190 RSD");
+      await expect(cogsRow).toContainText("190,00 RSD");
 
       const retry = await page.request.post(
         "/api/admin/erp/ulazne-fakture/commands",
@@ -664,7 +667,7 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
         waitUntil: "domcontentloaded",
       });
       const cogsRow = page.locator("tbody tr").filter({ hasText: fixture.sku });
-      await expect(cogsRow).toContainText("190 RSD");
+      await expect(cogsRow).toContainText("190,00 RSD");
       await expect(
         page.getByRole("button", { name: "Uredi", exact: true }),
       ).toBeDisabled();
@@ -756,9 +759,9 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
         waitUntil: "domcontentloaded",
       });
       await expect(
-        page.getByText(/prijem robe nije završen.*magacin.*QA UF magacin/s),
+        page.getByText(/prijem robe nije završen.*magacin.*QA UF magacin/s).filter({ visible: true }),
       ).toBeVisible();
-      await expect(page.locator('select[name="warehouseId"]')).toHaveValue(
+      await expect(page.locator('select[name="warehouseId"]').filter({ visible: true })).toHaveValue(
         warehouseId,
       );
       await expect(
@@ -770,7 +773,7 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
         .getByRole("button", { name: "Dovrši prijem", exact: true })
         .click();
       await expect(
-        page.getByText(/roba je primljena u magacin.*QA UF magacin/i),
+        page.getByText(/roba je primljena u magacin.*QA UF magacin/i).filter({ visible: true }),
       ).toBeVisible();
 
       const [storedInvoice, storedOrder, storedItem, storedProduct, stockRow] =
@@ -1059,18 +1062,18 @@ test.describe("ERP module 5 inbound-invoice acceptance", () => {
 
       const rowA = page.locator("tbody tr").filter({ hasText: skuA });
       const rowB = page.locator("tbody tr").filter({ hasText: skuB });
-      await expect(rowA.locator("td").nth(3)).toHaveText("10.000 RSD");
-      await expect(rowA.locator("td").nth(4)).toHaveText("100 RSD");
-      await expect(rowA.locator("td").nth(5)).toHaveText("900 RSD");
-      await expect(rowA.locator("td").nth(6)).toHaveText("90 RSD");
-      await expect(rowA.locator("td").nth(7)).toHaveText("1.109 RSD");
-      await expect(rowA.locator("td").nth(9)).toHaveText("282,64 RSD");
-      await expect(rowB.locator("td").nth(3)).toHaveText("10.000 RSD");
-      await expect(rowB.locator("td").nth(4)).toHaveText("0 RSD");
-      await expect(rowB.locator("td").nth(5)).toHaveText("100 RSD");
-      await expect(rowB.locator("td").nth(6)).toHaveText("10 RSD");
-      await expect(rowB.locator("td").nth(7)).toHaveText("1.011 RSD");
-      await expect(rowB.locator("td").nth(9)).toHaveText("537 RSD");
+      await expect(rowA.locator("td").nth(5)).toHaveText("10.000,00 RSD");
+      await expect(rowA.locator("td").nth(6)).toHaveText("100,00 RSD");
+      await expect(rowA.locator("td").nth(7)).toHaveText("900,00 RSD");
+      await expect(rowA.locator("td").nth(8)).toHaveText("90,00 RSD");
+      await expect(rowA.locator("td").nth(9)).toHaveText("1.109,00 RSD");
+      await expect(rowA.locator("td").nth(11)).toHaveText("282,64 RSD");
+      await expect(rowB.locator("td").nth(5)).toHaveText("10.000,00 RSD");
+      await expect(rowB.locator("td").nth(6)).toHaveText("0,00 RSD");
+      await expect(rowB.locator("td").nth(7)).toHaveText("100,00 RSD");
+      await expect(rowB.locator("td").nth(8)).toHaveText("10,00 RSD");
+      await expect(rowB.locator("td").nth(9)).toHaveText("1.011,00 RSD");
+      await expect(rowB.locator("td").nth(11)).toHaveText("537,00 RSD");
     });
 
     await test.step("database totals reconcile and a retry is idempotent", async () => {

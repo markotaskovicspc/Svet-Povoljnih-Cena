@@ -207,7 +207,7 @@ export function FilterSidebar({
         {facets.attributes.length ? (
           <AccordionItem value="atributi">
             <AccordionTrigger className="text-sm font-medium text-ink-900">
-              <FacetTitle label="Atributi" selected={state.attributes.length} />
+              <FacetTitle label="Ostali atributi" selected={state.attributes.length} />
             </AccordionTrigger>
             <AccordionContent>
               <FacetChecklist
@@ -220,6 +220,27 @@ export function FilterSidebar({
           </AccordionItem>
         ) : null}
 
+        {(facets.attributeSections ?? []).map((section) => (
+          <AccordionItem key={section.id} value={"attribute." + section.id}>
+            <AccordionTrigger className="text-sm font-medium text-ink-900">
+              <FacetTitle label={section.label} selected={(state.groupedAttributes?.[section.id] ?? []).length} />
+            </AccordionTrigger>
+            <AccordionContent>
+              <FacetChecklist
+                values={section.values.map((value) => value.id)}
+                selected={state.groupedAttributes?.[section.id] ?? []}
+                counts={Object.fromEntries(section.values.map((value) => [value.id, value.count]))}
+                labelFor={(id) => section.values.find((value) => value.id === id)?.label ?? id}
+                onToggle={(id) => {
+                  const selected = state.groupedAttributes?.[section.id] ?? [];
+                  onChange({ ...state, groupedAttributes: { ...state.groupedAttributes,
+                    [section.id]: selected.includes(id) ? selected.filter((value) => value !== id) : [...selected, id],
+                  } });
+                }}
+              />
+            </AccordionContent>
+          </AccordionItem>
+        ))}
         <AccordionItem value="dimenzije">
           <AccordionTrigger className="text-sm font-medium text-ink-900">
             Dimenzije (cm)

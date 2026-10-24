@@ -333,8 +333,8 @@ function ListingShellInner({
       ? visibleWindow.count
       : LISTING_PAGE_SIZE;
   const chips = useMemo(
-    () => activeChips(state, extents, subFiltered),
-    [state, extents, subFiltered],
+    () => activeChips(state, extents, subFiltered, serverFacets?.attributeSections),
+    [state, extents, subFiltered, serverFacets?.attributeSections],
   );
   const shown = filtered.slice(0, visible);
   const hasLocalMore = filtered.length > shown.length;
@@ -732,7 +732,8 @@ function filterStateIsEmpty(state: FilterState) {
     state.colors.length === 0 &&
     state.attributes.length === 0 &&
     state.availability.length === 0 &&
-    Object.values(state.dynamic).every((values) => values.length === 0)
+    Object.values(state.dynamic).every((values) => values.length === 0) &&
+    Object.values(state.groupedAttributes ?? {}).every((values) => values.length === 0)
   );
 }
 

@@ -31,6 +31,8 @@ import { SubmitButton } from "@/components/admin/submit-button";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { RichTextEditor } from "@/components/admin/rich-text-editor";
 import { ProductCategorySelector } from "@/components/admin/product-category-selector";
+import { ProductAttributeSelector } from "@/components/admin/product-attribute-selector";
+import { saveProductAttributeSelection } from "@/lib/admin/grouped-attributes.server";
 import { ProductNewnessField } from "@/components/admin/product-newness-field";
 import { ProductUnitPackagingFields } from "@/components/admin/product-unit-packaging-fields";
 import {
@@ -741,6 +743,10 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
             }
             await lockSupplierOwnedFields(tx, d.id, actorId, ["categories"]);
           }
+          if (formData.get("attributeSelectionPresent") === "1") {
+            await saveProductAttributeSelection(tx, d.id,
+              formData.getAll("attributeOptionIds").filter((value): value is string => typeof value === "string"));
+          }
           await syncArticleLookupAssignments(tx, d.id, {
             attributes: [d.attribute1, d.attribute2, d.attribute3, d.attribute4],
             colors: [d.colorPrimary, d.colorSecondary],
@@ -781,6 +787,8 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
           entityId: d.id,
           diff: {
             ...data,
+            attributeOptionIds: formData.get("attributeSelectionPresent") === "1"
+              ? formData.getAll("attributeOptionIds") : undefined,
             family: {
               code: d.familyCode || null,
               label: d.familyColorLabel || null,
@@ -1303,6 +1311,7 @@ export default async function ProductDetail({
           group: true,
           collection: true,
           lookupAssignments: { include: { lookupValue: true } },
+          attributeAssignments: { select: { optionId: true } },
           warehouseStocks: {
             where: { warehouse: { active: true, isDefault: true } },
             take: 1,
@@ -1410,6 +1419,10 @@ export default async function ProductDetail({
       getDeliveryWindows(),
     ]);
   if (!product) notFound();
+  const attributeSections = await db.attributeSection.findMany({
+    orderBy: [{ order: "asc" }, { name: "asc" }],
+    include: { options: { orderBy: [{ order: "asc" }, { value: "asc" }] } },
+  });
   const syncOverrideFields = parseOverrideFields(product.syncOverrides);
   const lookupOptions = (kind: "ATTRIBUTE" | "COLOR" | "BENEFIT" | "CERTIFICATE") =>
     lookupValues.filter((row) => row.kind === kind).map((row) => row.value);
@@ -1892,6 +1905,7 @@ export default async function ProductDetail({
                 ),
               )}
             </div>
+            <ProductAttributeSelector sections={attributeSections} selected={product.attributeAssignments.map((item) => item.optionId)} />
             <datalist id="article-attributes">
               {lookupOptions("ATTRIBUTE").map((value) => <option key={value} value={value} />)}
             </datalist>

@@ -5,6 +5,7 @@
  * read layer. Keep them dependency-free and total-fn (no throws).
  */
 import type { Product } from "@/types";
+import { groupedAttributeFacets, matchesGroupedAttributes, type AttributeFacet } from "@/lib/grouped-attributes";
 import { isProductColorLabel } from "@/lib/product-colors";
 import { hasStorefrontIncomingStock } from "@/lib/storefront-incoming";
 import { lowestPublicDisplayedUnitPrice } from "@/lib/pricing";
@@ -51,6 +52,7 @@ export interface FilterState {
   colors: string[];
   /** Selected free-form article attributes. */
   attributes: string[];
+  groupedAttributes?: Record<string, string[]>;
   dimensions?: DimensionRange;
   availability: Availability[];
   /** Per-group dynamic filters: facet key → set of values. */
@@ -90,6 +92,9 @@ export function appendFilterQueryParams(
   appendAll("materials", state.materials);
   appendAll("colors", state.colors);
   appendAll("attributes", state.attributes);
+  for (const [sectionId, values] of Object.entries(state.groupedAttributes ?? {})) {
+    appendAll("attribute." + sectionId, values);
+  }
   appendAll("availability", state.availability);
 
   if (state.price) {
@@ -168,6 +173,7 @@ export function computeExtents(products: Product[]): FacetExtents {
 
 /** Distinct facet values discovered in the source list. */
 export interface FacetValues {
+  attributeSections?: AttributeFacet[];
   groups: string[];
   groupLabels: Record<string, string>;
   materials: string[];
@@ -316,6 +322,7 @@ export function computeFacetValues(products: Product[]): FacetValues {
   const sorted = (s: Set<string>, facetCounts: Record<string, number>) =>
     sortFacetValuesByCount(s, facetCounts);
   return {
+    attributeSections: groupedAttributeFacets(products),
     groups: sortFacetValuesByCount(
       groups,
       counts.groups,
@@ -348,6 +355,7 @@ export function applyFilters(products: Product[], state: FilterState): Product[]
   const dynByKey = new Map(dynFacets.map((f) => [f.key, f]));
 
   return products.filter((p) => {
+    if (!matchesGroupedAttributes(p.groupedAttributes, state.groupedAttributes)) return false;
     if (state.price) {
       const price = finalListingPrice(p);
       if (price < state.price[0] || price > state.price[1]) return false;
@@ -505,6 +513,7 @@ export function activeChips(
   state: FilterState,
   extents: FacetExtents,
   products: Product[] = [],
+  sections: AttributeFacet[] = [],
 ): ActiveChip[] {
   const chips: ActiveChip[] = [];
   if (
@@ -550,6 +559,23 @@ export function activeChips(
         attributes: s.attributes.filter((x) => x !== attribute),
       }),
     });
+  }
+  for (const [sectionId, values] of Object.entries(state.groupedAttributes ?? {})) {
+    for (const optionId of values) {
+      const attribute = products.flatMap((product) => product.groupedAttributes ?? [])
+        .find((item) => item.optionId === optionId && item.sectionId === sectionId);
+      const section = sections.find((item) => item.id === sectionId);
+      const value = section?.values.find((item) => item.id === optionId);
+      chips.push({
+        id: "grouped:" + sectionId + ":" + optionId,
+        label: attribute ? attribute.sectionName + ": " + attribute.value :
+          section && value ? section.label + ": " + value.label : "Izabrani atribut",
+        remove: (s) => ({ ...s, groupedAttributes: {
+          ...s.groupedAttributes,
+          [sectionId]: (s.groupedAttributes?.[sectionId] ?? []).filter((id) => id !== optionId),
+        } }),
+      });
+    }
   }
   const dimAxes: { key: keyof DimensionRange; label: string; ext: [number, number] }[] = [
     { key: "w", label: "Š", ext: extents.width },

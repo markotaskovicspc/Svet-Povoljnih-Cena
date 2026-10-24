@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { Field } from "@/components/admin/field";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import type { PaymentSummary } from "@/lib/admin/purchase-payments.server";
 import {
   calculateInboundInvoiceAmounts,
   calculateInboundInvoiceValueRsd,
@@ -10,6 +12,7 @@ import {
 } from "@/lib/admin/inbound-invoice";
 
 export type InboundInvoicePurchaseOrderOption = {
+  payments?: PaymentSummary;
   id: string;
   number: string;
   supplierId: string | null;
@@ -68,6 +71,9 @@ export function InboundInvoiceFields({
   const [purchaseOrderId, setPurchaseOrderId] = useState(
     initial.purchaseOrderId ?? "",
   );
+  const [paymentVersion, setPaymentVersion] = useState(
+    !hasSavedBreakdown && initialOrder?.payments?.count ? initialOrder.payments.version : "",
+  );
   const [supplier, setSupplier] = useState({
     id: initial.supplierId ?? initialOrder?.supplierId ?? "",
     name: initial.supplierName ?? initialOrder?.supplierName ?? "",
@@ -75,7 +81,8 @@ export function InboundInvoiceFields({
   const [invoiceValue, setInvoiceValue] = useState(
     moneyInput(hasSavedBreakdown
       ? initial.invoiceValueRsd!
-      : shouldUseOrderDefaults ? initialOrder?.invoiceValueRsd ?? 0
+      : shouldUseOrderDefaults ? Number(initialOrder?.payments?.count
+          ? initialOrder.payments.totalRsd : initialOrder?.invoiceValueRsd ?? 0)
       : calculateInboundInvoiceValueRsd({
           invoiceValue: initial.invoiceValue, currency: initial.currency,
           exchangeRate: initial.exchangeRate || 1,
@@ -121,7 +128,8 @@ export function InboundInvoiceFields({
       id: order?.supplierId ?? "",
       name: order?.supplierName ?? "",
     });
-    setInvoiceValue(moneyInput(order?.invoiceValueRsd ?? 0));
+    setInvoiceValue(moneyInput(Number(order?.payments?.count ? order.payments.totalRsd : order?.invoiceValueRsd ?? 0)));
+    setPaymentVersion(order?.payments?.count ? order.payments.version : "");
     setCustomsValueRsd(moneyInput(order?.customsValueRsd ?? 0));
     setTransportValueRsd(moneyInput(order?.transportValueRsd ?? 0));
     setOtherRelatedCostsRsd("0");
@@ -130,6 +138,7 @@ export function InboundInvoiceFields({
   return (
     <>
       <input type="hidden" name="supplierId" value={supplier.id} />
+      <input type="hidden" name="paymentVersion" value={paymentVersion} />
       <Field label="Naziv dobavljača" hint="Automatski se preuzima iz porudžbenice.">
         <Input value={supplier.name} readOnly aria-readonly="true" />
       </Field>
@@ -165,6 +174,19 @@ export function InboundInvoiceFields({
         <Input name="invoiceValue" type="number" min={0} step="0.01" required
           value={invoiceValue} onChange={(event) => setInvoiceValue(event.target.value)} />
       </Field>
+      {selectedOrder?.payments?.count ? (
+        <Field label="Uplate po porudžbenici" hint="Zbir izvršenih uplata je predlog vrednosti robe. Ako faktura nije potpuno plaćena, proverite konačnu vrednost pre knjiženja.">
+          <p className="text-sm">
+            Plaćeno: {Number(selectedOrder.payments.totalAmount).toLocaleString("sr-Latn-RS")} {selectedOrder.currency}
+            {" · "}{Number(selectedOrder.payments.totalRsd).toLocaleString("sr-Latn-RS")} RSD
+            {Number(selectedOrder.payments.totalAmount) < selectedOrder.invoiceValue ? " · Delimično plaćeno" : ""}
+          </p>
+          <Button type="button" aria-label="Preuzmi zbir uplata" variant="outline" size="sm" onClick={() => {
+            setInvoiceValue(moneyInput(Number(selectedOrder.payments!.totalRsd)));
+            setPaymentVersion(selectedOrder.payments!.version);
+          }}>Preuzmi zbir uplata</Button>
+        </Field>
+      ) : null}
       {selectedOrder ? (
         <Field label="Nabavna vrednost iz porudžbenice" hint="Izvorne cene se ne menjaju pri čuvanju prijemnice.">
           <Input value={`${selectedOrder.invoiceValue.toLocaleString("sr-Latn-RS", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${selectedOrder.currency}`} readOnly aria-readonly="true" />

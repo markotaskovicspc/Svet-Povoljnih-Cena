@@ -63,6 +63,7 @@ export const articleCopySelect = {
   pictograms: { select: { pictogramId: true } },
   assemblyCities: { select: { cityId: true } },
   lookupAssignments: { select: { lookupValueId: true } },
+  attributeAssignments: { select: { optionId: true } },
 } satisfies Prisma.ProductSelect;
 
 export type ArticleCopySource = Prisma.ProductGetPayload<{
@@ -186,6 +187,12 @@ export async function copyArticleRelations(
   productId: string,
   source: ArticleCopySource,
 ) {
+  if (source.attributeAssignments?.length) {
+    await tx.productAttributeAssignment.createMany({
+      data: source.attributeAssignments.map(({ optionId }) => ({ productId, optionId })),
+      skipDuplicates: true,
+    });
+  }
   if (source.categories.length) {
     await tx.productCategory.createMany({
       data: source.categories.map(({ categoryId }) => ({ productId, categoryId })),

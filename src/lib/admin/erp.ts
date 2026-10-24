@@ -470,6 +470,7 @@ const coreErpModules: ErpModule[] = [
         ],
       },
       { label: "Excel unos", tone: "neutral", href: "/admin/erp/artikli/import" },
+      { label: "Atributi", tone: "neutral", href: "/admin/atributi" },
       {
         label: "Arhiviraj",
         tone: "danger",
