@@ -126,6 +126,26 @@ describe("X Express official API contract", () => {
     expect(getXExpressConfig().apiKey).toBe("");
   });
 
+  it.each([undefined, "", "GET_FROM_X_EXPRESS"])(
+    "uses the dedicated remittance account when the override is %s",
+    (account) => {
+      vi.stubEnv("X_EXPRESS_COD_ACCOUNT", account);
+      const cfg = { ...config, cod: getXExpressConfig().cod };
+      const payload = buildXExpressCreateOrderPayload({
+        cfg, reference: "cod-account", trackingCodes: ["AAA0850300001"],
+        order, townId: 791113,
+      });
+      expect(payload.Options?.[0]?.Data).toMatchObject({
+        Account: "265-3310310005375-34", Amount: 12_345.67,
+      });
+    },
+  );
+
+  it("honors an explicitly configured courier remittance account", () => {
+    vi.stubEnv("X_EXPRESS_COD_ACCOUNT", " 340-0001000283004-51 ");
+    expect(getXExpressConfig().cod.account).toBe("340-0001000283004-51");
+  });
+
   it("accepts the confirmed first code and normalizes the legacy earlier start", () => {
     const env = {
       X_EXPRESS_ENABLED: "true",

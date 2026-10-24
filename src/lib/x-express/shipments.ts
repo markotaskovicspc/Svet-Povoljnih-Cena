@@ -23,6 +23,7 @@ import {
   buildXExpressAddressCheckPayload,
   buildXExpressCreateOrderPayload,
   isXExpressCashOnDelivery,
+  normalizeXExpressAccount,
   normalizeXExpressStreetNumber,
 } from "./payload";
 import { buildXExpressLabelData } from "./labels";
@@ -469,7 +470,18 @@ export async function announceXExpressShipment(shipmentId: string) {
       Boolean(payload.Options?.length),
       supplierPickup?.provider === "X_EXPRESS" ? supplierPickup.pickup : undefined,
     );
-    const providerResult = await new XExpressClient(cfg).createOrder(payload);
+    // Prepared labels can outlive an account change. Keep their amounts and
+    // tracking codes, but send the current remittance account to the courier.
+    const announcementPayload: XExpressCreateOrderPayload = payload.Options?.length
+      ? {
+          ...payload,
+          Options: payload.Options.map((option) => ({
+            ...option,
+            Data: { ...option.Data, Account: normalizeXExpressAccount(cfg.cod.account) },
+          })),
+        }
+      : payload;
+    const providerResult = await new XExpressClient(cfg).createOrder(announcementPayload);
     const raw = jsonRecord(existing.rawCreateResponse);
     const announcedAt = new Date().toISOString();
     return await db.shipment.update({
@@ -482,13 +494,14 @@ export async function announceXExpressShipment(shipmentId: string) {
         syncError: null,
         rawCreateResponse: {
           ...raw,
+          createOrderPayload: announcementPayload,
           createOrder: providerResult.raw,
           xExpressAnnouncement: {
             state: "ANNOUNCED",
             announcedAt,
             requestGuid: providerResult.requestGuid,
           },
-        } as Prisma.InputJsonValue,
+        } as unknown as Prisma.InputJsonValue,
         events: {
           create: {
             status: "CREATED",

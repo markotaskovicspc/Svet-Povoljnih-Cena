@@ -3,6 +3,8 @@ import { isProviderAccepted } from "@/lib/provider-acceptance";
 import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 
 export const X_EXPRESS_PROVIDER = "X_EXPRESS";
+// Courier remittances use a separate account from customer bank transfers.
+export const X_EXPRESS_DEFAULT_COD_ACCOUNT = "265-3310310005375-34";
 
 export class XExpressConfigError extends Error {}
 export class XExpressProviderError extends Error {
@@ -131,7 +133,7 @@ export function getXExpressConfig(): XExpressConfig {
     cod: {
       name: trim(process.env.X_EXPRESS_COD_NAME) || MERCHANT_LEGAL_INFO.name,
       account:
-        trim(process.env.X_EXPRESS_COD_ACCOUNT) || MERCHANT_LEGAL_INFO.bankAccount,
+        trim(process.env.X_EXPRESS_COD_ACCOUNT) || X_EXPRESS_DEFAULT_COD_ACCOUNT,
       address:
         trim(process.env.X_EXPRESS_COD_ADDRESS) || MERCHANT_LEGAL_INFO.shortAddress,
     },

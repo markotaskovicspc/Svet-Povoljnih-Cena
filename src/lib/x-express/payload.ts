@@ -421,7 +421,7 @@ function sanitizeProviderDescription(value: string, max: number) {
     .trim();
 }
 
-function normalizeXExpressAccount(value: string) {
+export function normalizeXExpressAccount(value: string) {
   const account = cleanWhitespace(value);
   if (!/^\d{3}-\d{13}-\d{2}$/.test(account)) {
     throw new XExpressConfigError(
