@@ -50,3 +50,6 @@ The user explicitly approved this ERP change and publication. Read-only orders/s
 
 ## Analytics container quantity export (2026-10-24)
 The read-only products partner export now also selects existing Product.containerQty (sellable units in one standard 69 m³ container; null when not entered). SPC Analytics Poručivanje uses it before falling back to packaging dimensions. No schema change, business writes or new PII. Same spcapp:read authorization, signed pagination and metadata audit.
+
+## Analytics supplier delivery days (2026-10-24)
+The read-only products partner export's supplier object now also selects existing Supplier.deliveryDays (rok isporuke) and Supplier.transitDays (period isporuke). SPC Analytics Porudžbine → Analize shows their sum as the total delivery time. No schema change, business writes or PII; bank/contact fields stay excluded. Same spcapp:read authorization, signed pagination and metadata audit.

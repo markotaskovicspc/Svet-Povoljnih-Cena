@@ -8,7 +8,7 @@ export async function exportProducts(q: ExportQuery) {
   const categoryTree=await db.category.findMany({select:{id:true,name:true,parentId:true,path:true}});
   const rows = await db.product.findMany({ where: { id: { gt: q.after } }, take: q.limit + 1, orderBy: { id: 'asc' }, select: {
     id: true, sku: true, name: true, shortName: true, shortDescription: true, articleStatus: true, isActive: true, deletedAt: true, stock: true,
-    supplier: { select: { id: true, name: true } }, group: { select: { id: true, name: true } }, collection: { select: { id: true, name: true } },
+    supplier: { select: { id: true, name: true, deliveryDays: true, transitDays: true } }, group: { select: { id: true, name: true } }, collection: { select: { id: true, name: true } },
     categories: { select: { category: { select: { id: true, name: true } } } },
     media: { where: { kind: 'IMAGE' }, orderBy: { order: 'asc' }, take: 1, select: { url: true } },
     colorPrimary: true, colorSecondary: true, cogs: true, grossWeightKg: true, packGrossWeightKg: true,
