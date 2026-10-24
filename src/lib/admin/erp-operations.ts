@@ -6,6 +6,8 @@ import {
   type ShipmentStatus,
   type Shipment,
 } from "@prisma/client";
+import { reclamationWarehouseStatuses } from "@/lib/admin/reclamation-warehouse-status.server";
+import { RECLAMATION_WAREHOUSE_STATUS_LABELS } from "@/lib/admin/reclamation-warehouse-status";
 import { ananasOrderRows } from "@/lib/ananas/order-rows";
 import { databaseIdentifier, db } from "@/lib/db";
 import type {
@@ -1015,7 +1017,14 @@ export const operationalErpModules: ErpModule[] = [
       text("adminNote", "Interna napomena"),
       text("resolutionNote", "Napomena o rešenju"),
       text("warehouse", "Magacin"),
-      status("warehouseStatus", "Status pripreme"),
+      {
+        ...status("warehouseStatus", "Status pripreme", Object.keys(RECLAMATION_WAREHOUSE_STATUS_LABELS), {
+          DELIVERED: "green",
+          PARTIALLY_RECEIVED: "yellow",
+          AWAITING_RETURN: "yellow",
+        }),
+        optionLabels: RECLAMATION_WAREHOUSE_STATUS_LABELS,
+      },
       date("respondedAt", "Odgovoreno"),
       date("resolvedAt", "Rešeno"),
       date("createdAt", "Primljeno"),
@@ -2598,6 +2607,7 @@ async function reclamationRows(take: number, skip = 0): Promise<ErpRow[]> {
       warehouse: { select: { code: true, name: true } },
     },
   });
+  const warehouseStatuses = await reclamationWarehouseStatuses(rows);
   return rows.map((row) => ({
     id: row.id,
     cellHrefs: {
@@ -2622,7 +2632,7 @@ async function reclamationRows(take: number, skip = 0): Promise<ErpRow[]> {
       warehouse: row.warehouse
         ? `${row.warehouse.code} · ${row.warehouse.name}`
         : null,
-      warehouseStatus: row.warehouseStatus,
+      warehouseStatus: warehouseStatuses.get(row.id) ?? row.warehouseStatus,
       respondedAt: dateTime(row.respondedAt),
       resolvedAt: dateTime(row.resolvedAt),
       createdAt: dateTime(row.createdAt),

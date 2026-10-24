@@ -1,3 +1,5 @@
+import { reclamationWarehouseStatuses } from "@/lib/admin/reclamation-warehouse-status.server";
+import { RECLAMATION_WAREHOUSE_STATUS_LABELS } from "@/lib/admin/reclamation-warehouse-status";
 import { lockOrderReturn } from "@/lib/fiscal/return-lock";
 import { ReclamationRefundCard } from "../refund-card";
 import { ReclamationAddressFields } from "@/components/admin/reclamation-address-fields";
@@ -320,6 +322,8 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
     }),
   ]);
   if (!reclamation) notFound();
+  const warehouseStatuses = await reclamationWarehouseStatuses([reclamation]);
+  const warehouseStatus = warehouseStatuses.get(reclamation.id) ?? reclamation.warehouseStatus;
   const courierCodes = [...new Set(reclamation.shipments
     .filter(shipment => shipment.provider === "X_EXPRESS")
     .flatMap(shipment => [shipment.providerStatusCode, ...shipment.events.map(event => event.providerStatusCode)])
@@ -429,6 +433,9 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
 
           <Card>
             <CardTitle description="Izaberite magacin i unesite mere paketa. Čuvanjem se zamena automatski označava kao spremna. Zamena se učitava tek kada magacioner u picking nalogu klikne „Učitaj porudžbine“.">Magacin i priprema</CardTitle>
+            <p className="mb-3 text-sm" data-testid="reclamation-warehouse-status">
+              Status pripreme: <strong>{RECLAMATION_WAREHOUSE_STATUS_LABELS[warehouseStatus] ?? warehouseStatus}</strong>
+            </p>
             <AdminActionForm action={saveWarehouseAction} refreshOnSuccess preserveValues className="space-y-3">
               <fieldset disabled={Boolean(replacementPicking || replacementShipment)} className="grid gap-3 sm:grid-cols-2 disabled:opacity-70">
               <input type="hidden" name="id" value={reclamation.id} />

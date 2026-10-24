@@ -16,6 +16,7 @@ import { ArticlePhotoPreview } from "@/components/admin/article-photo-preview";
 import {
   ArrowUp,
   ArrowDown,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -27,6 +28,7 @@ import {
   RotateCcw,
   Save,
   Settings2,
+  SlidersHorizontal,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -459,6 +461,8 @@ function ErpGridContent({
   );
   const tableSettingsRef = useRef<HTMLDetailsElement>(null);
   const [tableSettingsOpen, setTableSettingsOpen] = useState(false);
+  const filtersRef = useRef<HTMLDetailsElement>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [newFilterColumn, setNewFilterColumn] = useState(module.columns[0]?.key ?? "");
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingCell, setEditingCell] = useState<EditingCell>(null);
@@ -586,6 +590,27 @@ function ErpGridContent({
     }, 0);
     return () => window.clearTimeout(timeout);
   }, [initialView?.columnOrder, module.columns, module.slug, selectedViewId]);
+
+  useEffect(() => {
+    if (!filtersOpen) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (event.target instanceof Node && !filtersRef.current?.contains(event.target)) {
+        setFiltersOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setFiltersOpen(false);
+        filtersRef.current?.querySelector("summary")?.focus();
+      }
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [filtersOpen]);
 
   useEffect(() => {
     if (!tableSettingsOpen) return;
@@ -953,6 +978,9 @@ function ErpGridContent({
     void runCommand(activeCommand, commandInput);
   };
 
+  const activeFilterCount = [...fixedFilters, ...filters].filter((filter) => filter.value.trim()).length
+    + (module.contextFilters ?? []).filter((filter) => context[filter.key]?.trim()).length;
+
   const addFilter = () => {
     if (!newFilterColumn) return;
     const column = module.columns.find((item) => item.key === newFilterColumn);
@@ -1237,7 +1265,7 @@ function ErpGridContent({
       <div className="rounded-2xl border border-border/60 bg-surface p-4 shadow-sm">
         <div className="flex flex-col gap-4">
           <div className="min-w-0 flex-1 space-y-3">
-            <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center 2xl:flex-nowrap">
+            <div className="relative flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center 2xl:flex-nowrap">
               <select
                 value={searchColumn}
                 onChange={(event) => {
@@ -1266,151 +1294,180 @@ function ErpGridContent({
                   className="h-9"
                 />
               </div>
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <select
-                  value={newFilterColumn}
-                  onChange={(e) => setNewFilterColumn(e.target.value)}
-                  className="h-9 rounded-lg border border-input bg-surface px-2 text-sm"
-                  aria-label="Kolona za novi filter"
+              <details
+                ref={filtersRef}
+                open={filtersOpen}
+                onToggle={(event) => setFiltersOpen(event.currentTarget.open)}
+                className="group/filters"
+              >
+                <summary className="inline-flex h-9 cursor-pointer list-none items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm font-medium transition hover:bg-muted [&::-webkit-details-marker]:hidden">
+                  <SlidersHorizontal className="size-4" aria-hidden />
+                  Filteri
+                  {activeFilterCount ? <span className="rounded-full bg-brand-blue-50 px-2 py-0.5 text-xs text-brand-blue">{activeFilterCount}</span> : null}
+                  <ChevronDown className="size-4 transition group-open/filters:rotate-180" aria-hidden />
+                </summary>
+                <div
+                  role="region"
+                  aria-label="Kriterijumi filtriranja"
+                  className="fixed inset-x-4 top-20 z-[70] max-h-[70dvh] overflow-y-auto overscroll-contain rounded-2xl border border-border bg-surface p-4 shadow-xl md:absolute md:inset-x-auto md:right-0 md:top-full md:mt-2 md:w-[min(100%,680px)]"
                 >
-                  {module.columns.map((column) => (
-                    <option key={column.key} value={column.key}>
-                      {column.label}
-                    </option>
-                  ))}
-                </select>
-                <Button type="button" variant="outline" onClick={addFilter}>
-                  <Plus className="size-4" aria-hidden />
-                  Filter
-                </Button>
-              </div>
-            </div>
-
-            {module.contextFilters?.length ? (
-              <div className="flex flex-wrap gap-3">
-                {module.contextFilters.map((filter) => (
-                  <label
-                    key={filter.key}
-                    className="flex items-center gap-2 text-sm text-ink-600"
-                  >
-                    <span>{filter.label}</span>
-                    <select
-                      value={context[filter.key] ?? ""}
-                      onChange={(event) => {
-                        setPage(1);
-                        setContext((current) => ({
-                          ...current,
-                          [filter.key]: event.target.value,
-                        }));
-                      }}
-                      className="h-9 min-w-56 rounded-lg border border-input bg-surface px-2 text-sm text-ink-900"
-                      aria-label={filter.label}
-                    >
-                      {filter.options.map((option) => (
-                        <option key={option.value || "all"} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ))}
-              </div>
-            ) : null}
-
-            {filters.length ? (
-              <div className="flex flex-wrap gap-2">
-                {filters.map((filter) => {
-                  const column = module.columns.find((c) => c.key === filter.columnKey);
-                  return (
-                    <div
-                      key={filter.id}
-                      className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted-bg/50 px-2 py-1"
-                    >
-                      <span className="text-xs text-ink-500">
-                        {column?.label ?? filter.columnKey}
-                      </span>
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium text-ink-900">Kriterijumi filtriranja</p>
+                    <Button type="button" variant="outline" onClick={() => {
+                      setFiltersOpen(false);
+                      filtersRef.current?.querySelector("summary")?.focus();
+                    }}>Gotovo</Button>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                       <select
-                        value={filter.operator}
-                        onChange={(event) =>
-                          updateFilters((current) =>
-                            current.map((item) =>
-                              item.id === filter.id
-                                ? {
-                                    ...item,
-                                    operator:
-                                      event.target.value as AdminGridFilter["operator"],
-                                  }
-                                : item,
-                            ),
-                          )
-                        }
-                        className="h-7 rounded-md border border-input bg-surface px-1 text-xs"
-                        aria-label={`Operator ${column?.label ?? filter.columnKey}`}
+                        value={newFilterColumn}
+                        onChange={(e) => setNewFilterColumn(e.target.value)}
+                        className="h-9 min-w-0 flex-1 rounded-lg border border-input bg-surface px-2 text-sm"
+                        aria-label="Kolona za novi filter"
                       >
-                        {(
-                          column
-                            ? operatorsFor(column)
-                            : (["contains"] as AdminGridFilter["operator"][])
-                        ).map((operator) => (
-                          <option key={operator} value={operator}>
-                            {FILTER_OPERATOR_LABELS[operator]}
+                        {module.columns.map((column) => (
+                          <option key={column.key} value={column.key}>
+                            {column.label}
                           </option>
                         ))}
                       </select>
-                      {column?.options?.length ? (
-                        <select
-                          value={filter.value}
-                          onChange={(event) =>
-                            updateFilters((current) =>
-                              current.map((item) =>
-                                item.id === filter.id
-                                  ? { ...item, value: event.target.value }
-                                  : item,
-                              ),
-                            )
-                          }
-                          className="h-7 w-40 rounded-md border border-input bg-surface px-2 text-xs"
-                          aria-label={`Filter ${column.label}`}
-                        >
-                          <option value="">Sve</option>
-                          {column.options.map((option) => (
-                            <option key={option} value={option}>
-                              {column.optionLabels?.[option] ?? option}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <input
-                          type={inputType(column ?? { key: "", label: "" })}
-                          value={filter.value}
-                          onChange={(e) =>
-                            updateFilters((current) =>
-                              current.map((f) =>
-                                f.id === filter.id ? { ...f, value: e.target.value } : f,
-                              ),
-                            )
-                          }
-                          className="h-7 w-40 rounded-md border border-input bg-surface px-2 text-xs outline-none focus:border-ring"
-                          aria-label={`Filter ${column?.label ?? filter.columnKey}`}
-                        />
-                      )}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          updateFilters((current) =>
-                            current.filter((f) => f.id !== filter.id),
-                          )
-                        }
-                        className="text-ink-300 hover:text-danger"
-                        aria-label="Ukloni filter"
-                      >
-                        <Trash2 className="size-3.5" aria-hidden />
-                      </button>
+                      <Button type="button" variant="outline" onClick={addFilter}>
+                        <Plus className="size-4" aria-hidden />
+                        Dodaj filter
+                      </Button>
                     </div>
-                  );
-                })}
-              </div>
-            ) : null}
+                    {module.contextFilters?.length ? (
+                      <div className="flex flex-wrap gap-3">
+                        {module.contextFilters.map((filter) => (
+                          <label
+                            key={filter.key}
+                            className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-ink-600"
+                          >
+                            <span>{filter.label}</span>
+                            <select
+                              value={context[filter.key] ?? ""}
+                              onChange={(event) => {
+                                setPage(1);
+                                setContext((current) => ({
+                                  ...current,
+                                  [filter.key]: event.target.value,
+                                }));
+                              }}
+                              className="h-9 min-w-0 max-w-full rounded-lg border border-input bg-surface px-2 text-sm text-ink-900"
+                              aria-label={filter.label}
+                            >
+                              {filter.options.map((option) => (
+                                <option key={option.value || "all"} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        ))}
+                      </div>
+                    ) : null}
+
+                    {filters.length ? (
+                      <div className="space-y-2">
+                        {filters.map((filter) => {
+                          const column = module.columns.find((c) => c.key === filter.columnKey);
+                          return (
+                            <div
+                              key={filter.id}
+                              className="flex min-w-0 flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-muted-bg/50 px-2 py-1"
+                            >
+                              <span className="text-xs text-ink-500">
+                                {column?.label ?? filter.columnKey}
+                              </span>
+                              <select
+                                value={filter.operator}
+                                onChange={(event) =>
+                                  updateFilters((current) =>
+                                    current.map((item) =>
+                                      item.id === filter.id
+                                        ? {
+                                            ...item,
+                                            operator:
+                                              event.target.value as AdminGridFilter["operator"],
+                                          }
+                                        : item,
+                                    ),
+                                  )
+                                }
+                                className="h-7 rounded-md border border-input bg-surface px-1 text-xs"
+                                aria-label={`Operator ${column?.label ?? filter.columnKey}`}
+                              >
+                                {(
+                                  column
+                                    ? operatorsFor(column)
+                                    : (["contains"] as AdminGridFilter["operator"][])
+                                ).map((operator) => (
+                                  <option key={operator} value={operator}>
+                                    {FILTER_OPERATOR_LABELS[operator]}
+                                  </option>
+                                ))}
+                              </select>
+                              {column?.options?.length ? (
+                                <select
+                                  value={filter.value}
+                                  onChange={(event) =>
+                                    updateFilters((current) =>
+                                      current.map((item) =>
+                                        item.id === filter.id
+                                          ? { ...item, value: event.target.value }
+                                          : item,
+                                      ),
+                                    )
+                                  }
+                                  className="h-7 min-w-0 flex-1 basis-40 rounded-md border border-input bg-surface px-2 text-xs"
+                                  aria-label={`Filter ${column.label}`}
+                                >
+                                  <option value="">Sve</option>
+                                  {column.options.map((option) => (
+                                    <option key={option} value={option}>
+                                      {column.optionLabels?.[option] ?? option}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <input
+                                  type={inputType(column ?? { key: "", label: "" })}
+                                  value={filter.value}
+                                  onChange={(e) =>
+                                    updateFilters((current) =>
+                                      current.map((f) =>
+                                        f.id === filter.id ? { ...f, value: e.target.value } : f,
+                                      ),
+                                    )
+                                  }
+                                  className="h-7 min-w-0 flex-1 basis-40 rounded-md border border-input bg-surface px-2 text-xs outline-none focus:border-ring"
+                                  aria-label={`Filter ${column?.label ?? filter.columnKey}`}
+                                />
+                              )}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  updateFilters((current) =>
+                                    current.filter((f) => f.id !== filter.id),
+                                  )
+                                }
+                                className="text-ink-300 hover:text-danger"
+                                aria-label="Ukloni filter"
+                              >
+                                <Trash2 className="size-3.5" aria-hidden />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                    {fixedFilters.some((filter) => filter.value.trim()) ? <p className="text-xs text-ink-500">Uključeni su i stalni kriterijumi ovog prikaza.</p> : null}
+                    <p className="text-xs text-ink-500">Filteri se primenjuju odmah i ostaju aktivni kada zatvorite meni.</p>
+                  </div>
+                </div>
+              </details>
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-2 2xl:justify-end">
