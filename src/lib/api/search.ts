@@ -216,16 +216,12 @@ function allTokenMatchesSql(
   return Prisma.join(tokens.map(matcher), " AND ");
 }
 
-async function searchProductHits(
+async function querySearchRows(
   query: string,
-  limit = 8,
-  offset = 0,
-): Promise<SearchHit[]> {
+  queryLimit?: number,
+): Promise<SuggestRow[]> {
   const q = query.trim();
   if (q.length < MIN_QUERY_LEN) return [];
-  const safeLimit = Math.min(Math.max(limit, 1), 96);
-  const safeOffset = Math.max(0, Math.round(offset));
-  const queryLimit = Math.min(1000, Math.max(safeLimit + safeOffset, safeLimit) * 4);
   const tokens = tokenizeSearchQuery(q);
   if (!tokens.length) return [];
   const normalizedPhrase = tokens.join(" ");
@@ -337,27 +333,43 @@ async function searchProductHits(
                 END ASC,
                 is_hero DESC,
                 COALESCE(p."discountPct", 0) DESC,
-                COALESCE(p."salePrice", p."fullPrice") ASC
-       LIMIT ${queryLimit}
+                COALESCE(p."salePrice", p."fullPrice") ASC,
+                p.id ASC
+       ${queryLimit === undefined ? Prisma.empty : Prisma.sql`LIMIT ${queryLimit}`}
     `;
   } catch (err) {
     throw new SearchUnavailableError("Real catalog search is unavailable.", err);
   }
 
-  const normalizedQuery = q.toLocaleLowerCase("sr-Latn-RS");
+  return rows;
+}
+
+function exactSearchRows(rows: SuggestRow[], query: string) {
+  const normalizedQuery = query.trim().toLocaleLowerCase("sr-Latn-RS");
   const exactIdentifier = rows.find(
     (row) =>
       row.sku.trim().toLocaleLowerCase("sr-Latn-RS") === normalizedQuery ||
       row.barcode?.trim().toLocaleLowerCase("sr-Latn-RS") === normalizedQuery,
   );
-  if (exactIdentifier) rows = [exactIdentifier];
+  if (exactIdentifier) return { rows: [exactIdentifier], exactIdentifier: true };
   const exactNameRows = rows.filter(
     (row) => row.name.trim().toLocaleLowerCase("sr-Latn-RS") === normalizedQuery,
   );
-  if (exactNameRows.length) rows = exactNameRows;
-  if (!exactIdentifier) {
-    rows = paginateSearchSkuRows(rows, safeOffset, safeLimit);
-  }
+  return { rows: exactNameRows.length ? exactNameRows : rows, exactIdentifier: false };
+}
+
+/** Complete relevance-ordered scope for listing filters, without a page-size cap. */
+export async function searchProductSkus(query: string): Promise<string[]> {
+  const rows = await withSearchTimeout(querySearchRows(query), FULL_SEARCH_TIMEOUT_MS, "Product search scope");
+  return exactSearchRows(rows, query).rows.map((row) => row.sku);
+}
+
+async function searchProductHits(query: string, limit = 8, offset = 0): Promise<SearchHit[]> {
+  const safeLimit = Math.min(Math.max(limit, 1), 96);
+  const safeOffset = Math.max(0, Math.round(offset));
+  const queryLimit = Math.min(1000, Math.max(safeLimit + safeOffset, safeLimit) * 4);
+  const selection = exactSearchRows(await querySearchRows(query, queryLimit), query);
+  const rows = selection.exactIdentifier ? selection.rows : paginateSearchSkuRows(selection.rows, safeOffset, safeLimit);
 
   const products = await getProductCardsBySlugs(
     rows.map((row) => row.slug),

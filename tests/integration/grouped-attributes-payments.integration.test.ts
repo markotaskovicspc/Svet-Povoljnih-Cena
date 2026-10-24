@@ -10,6 +10,8 @@ import { copyArticleRelations, articleCopySelect } from "@/lib/admin/article-cop
 import { capturePaymentSnapshot, recordPurchasePayment, summarizePurchasePayments, voidPurchasePayment } from "@/lib/admin/purchase-payments.server";
 import { saveInboundInvoice } from "@/lib/admin/inbound-invoice.server";
 import { Prisma } from "@prisma/client";
+import { listSearchProducts, listSearchProductFacets } from "@/lib/api/search-listing";
+import { searchProductSkus } from "@/lib/api/search";
 
 const prefix = "ATTR-PAY-" + randomUUID();
 let categoryId: string, rootId: string, groupId: string, priceListId: string;
@@ -95,6 +97,40 @@ describe("attributes over the complete catalog scope", () => {
     productIds.push(copy.id);
     await db.$transaction((tx) => copyArticleRelations(tx, copy.id, source));
     expect(await db.productAttributeAssignment.count({ where: { productId: copy.id } })).toBe(2);
+  });
+  it("uses the complete search scope for facets, filters and cursor pagination", async () => {
+    const first = await listSearchProducts(prefix, { limit: 1 });
+    expect(first.total).toBe(41);
+    expect(first.nextCursor).toBeTruthy();
+    const second = await listSearchProducts(prefix, { limit: 1, cursor: first.nextCursor! });
+    expect(second.items[0].id).not.toBe(first.items[0].id);
+    const facets = await listSearchProductFacets(prefix);
+    expect(facets.facets.attributeSections?.find((s) => s.id === sectionId)?.values)
+      .toEqual(expect.arrayContaining([expect.objectContaining({ id: rightId, count: 1 })]));
+    const filtered = await listSearchProducts(prefix, { groupedAttributes: { [sectionId]: [rightId] } });
+    expect(filtered.items.map((item) => item.id)).toEqual([productIds[40]]);
+    expect((await listSearchProducts("nohit" + randomUUID().replaceAll("-", ""))).total).toBe(0);
+  });
+  it("does not truncate search facets at the old 1000-candidate boundary", async () => {
+    const query = "scope" + randomUUID().replaceAll("-", "");
+    const rows = Array.from({ length: 1005 }, (_, i) => ({
+      id: randomUUID(), sku: query + "-" + i, slug: query + "-" + i,
+      name: query + " " + i, description: "QA", fullPrice: 1000,
+      stock: 5, groupId, availableWebManual: true, isActive: true, articleStatus: "SP" as const,
+    }));
+    await db.product.createMany({ data: rows });
+    productIds.push(...rows.map((row) => row.id));
+    await db.productCategory.createMany({ data: rows.map((row) => ({ productId: row.id, categoryId })) });
+    await db.priceListEntry.createMany({ data: rows.map((row) => ({
+      productId: row.id, priceListId, price: 1000, validFrom: new Date("2026-01-01"),
+    })) });
+    await db.productAttributeAssignment.create({ data: { productId: rows.at(-1)!.id, optionId: rightId } });
+    expect(await searchProductSkus(query)).toHaveLength(1005);
+    const facets = await listSearchProductFacets(query);
+    expect(facets.facets.attributeSections?.find((s) => s.id === sectionId)?.values)
+      .toContainEqual(expect.objectContaining({ id: rightId, count: 1 }));
+    const filtered = await listSearchProducts(query, { groupedAttributes: { [sectionId]: [rightId] } });
+    expect(filtered.items.map((row) => row.id)).toEqual([rows.at(-1)!.id]);
   });
 });
 

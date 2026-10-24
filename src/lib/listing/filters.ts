@@ -456,6 +456,7 @@ export type ListingKind =
   | "novo"
   | "kategorija"
   | "kolekcija"
+  | "pretraga"
   | "landing";
 
 /**
@@ -493,6 +494,7 @@ function defaultSortFor(list: Product[], kind: ListingKind): Product[] {
       return list.sort((a, b) => remaining(b) - remaining(a));
     }
     case "landing":
+    case "pretraga":
       return list;
     case "kategorija":
     case "kolekcija":

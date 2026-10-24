@@ -68,6 +68,7 @@ import {
 import { OPEN_MOBILE_FILTERS_EVENT } from "@/lib/listing/mobile-filter-header";
 
 export interface ListingPageQuery {
+  searchQuery?: string;
   categoryPath?: string;
   actionSlug?: string;
   permanentOnly?: boolean;

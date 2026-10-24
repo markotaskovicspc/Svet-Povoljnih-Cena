@@ -3,6 +3,7 @@ import {
   listProducts,
 } from "@/lib/api/catalog";
 import { parseListProductsInput } from "@/lib/api/product-query";
+import { listSearchProducts } from "@/lib/api/search-listing";
 import { logOperationalError } from "@/lib/monitoring";
 
 export const runtime = "nodejs";
@@ -11,8 +12,9 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   try {
-    const input = parseListProductsInput(searchParams);
-    const result = await listProducts(input, { throwOnError: true });
+    const { searchQuery, ...input } = parseListProductsInput(searchParams);
+    const result = searchQuery ? await listSearchProducts(searchQuery, input)
+      : await listProducts(input, { throwOnError: true });
     return NextResponse.json(
       { ok: true, ...result },
       { headers: { "Cache-Control": "private, no-store" } },

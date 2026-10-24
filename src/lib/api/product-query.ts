@@ -12,11 +12,12 @@ const SORTS = new Set<ProductSort>([
 
 export function parseListProductsInput(
   searchParams: URLSearchParams,
-): ListProductsInput {
+): ListProductsInput & { searchQuery?: string } {
   const limit = number(searchParams, "limit") ?? 36;
   const sort = searchParams.get("sort");
 
   return {
+    searchQuery: text(searchParams, "searchQuery"),
     categoryPath: text(searchParams, "categoryPath"),
     actionSlug: text(searchParams, "actionSlug"),
     permanentOnly: bool(searchParams, "permanentOnly"),

@@ -1082,6 +1082,8 @@ export interface ListProductsInput {
   categoryKeyword?: string;
   /** Case-insensitive product-name fragment used by listing sub-tabs. */
   nameKeyword?: string;
+  /** Internal complete search scope, in relevance order. An empty array matches nothing. */
+  searchSkus?: string[];
   excludeSku?: string;
   /** Restrict to products at or below this effective price. */
   maxPrice?: number;
@@ -1220,6 +1222,7 @@ function buildProductListingWhere(
   monthlyHeroSkus: string[],
 ) {
   const where: Prisma.ProductWhereInput = webStorefrontProductWhere();
+  if (input.searchSkus) appendAnd(where, { sku: { in: input.searchSkus } });
 
   if (input.categoryPath) {
     appendAnd(where, {
@@ -1493,7 +1496,8 @@ async function loadProducts(
   const promoSetting = promoKey
     ? await db.adminSetting.findUnique({ where: { key: promoProductOrderKey(promoKey) }, select: { value: true } })
     : null;
-  const promoOrder = readPromoProductOrder(promoSetting?.value);
+  const promoOrder = (!input.sort || input.sort === "default") && input.searchSkus
+    ? input.searchSkus : readPromoProductOrder(promoSetting?.value);
   const promoRanks = new Map(promoOrder.map((sku, index) => [sku, index]));
 
   if (usesResolvedPrice || promoOrder.length) {

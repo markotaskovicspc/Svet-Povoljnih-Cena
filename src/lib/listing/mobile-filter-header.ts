@@ -10,6 +10,7 @@ const FILTERED_LISTING_ROUTES = new Set([
   "/outlet",
   "/specijalne-ponude",
   "/sve-do-999",
+  "/pretraga",
 ]);
 
 export function mobileFilterHeaderEnabled(pathname: string) {

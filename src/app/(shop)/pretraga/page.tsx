@@ -1,12 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
-import { ProductCard } from "@/components/product/product-card";
-import { searchProducts } from "@/lib/api/search";
-import { getProductCardsBySlugs } from "@/lib/api/catalog";
+import { ListingShell } from "@/components/listing/listing-shell";
+import { listSearchProducts } from "@/lib/api/search-listing";
 import { LISTING_PAGE_SIZE } from "@/lib/listing/filters";
 import { logOperationalError } from "@/lib/monitoring";
-import type { SearchHit } from "@/types/search";
 
 export const metadata: Metadata = {
   title: "Pretraga",
@@ -15,151 +13,44 @@ export const metadata: Metadata = {
 };
 
 interface SearchPageProps {
-  searchParams: Promise<{ q?: string | string[]; page?: string | string[] }>;
+  searchParams: Promise<{ q?: string | string[] }>;
 }
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const params = await searchParams;
-  const rawQuery = Array.isArray(params.q) ? params.q[0] : params.q;
-  const rawPage = Array.isArray(params.page) ? params.page[0] : params.page;
-  const query = (rawQuery ?? "").trim();
-  const page = Math.max(1, Number.parseInt(rawPage ?? "1", 10) || 1);
-  const offset = (page - 1) * LISTING_PAGE_SIZE;
-  const searchResult = query.length >= 3
-    ? await getHits(query, offset)
-    : { hits: [], unavailable: false };
-  const hits = searchResult.hits;
-  const hasNextPage = hits.length > LISTING_PAGE_SIZE;
-  const visibleHits = hasNextPage ? hits.slice(0, LISTING_PAGE_SIZE) : hits;
-  const productResult = visibleHits.length
-    ? await getProductsFromHits(visibleHits)
-    : { products: [], unavailable: false };
-  const unavailable = searchResult.unavailable || productResult.unavailable;
-  const products = productResult.products;
-
-  return (
-    <main className="bg-canvas pb-24">
-      <div className="mx-auto w-full max-w-[var(--container-page)] px-6 pt-6 md:pt-10">
-        <Breadcrumbs trail={[{ label: "Pretraga" }]} className="mb-6" />
-
-        <header className="border-border/60 border-b pb-6 md:pb-8">
-          <h1 className="font-display text-2xl text-ink-900 md:text-5xl">
-            {query ? `Rezultati za "${query}"` : "Pretraga"}
-          </h1>
-          <p className="mt-3 text-sm text-ink-500" aria-live="polite">
-            {query.length < 3
-              ? "Unesite najmanje 3 znaka za pretragu."
-              : unavailable
-                ? "Pretraga trenutno nije dostupna."
-                : `${products.length} ${products.length === 1 ? "rezultat" : "rezultata"} na strani ${page}`}
-          </p>
-        </header>
-
-        <section className="mt-6 md:mt-8">
-          {query.length < 3 ? (
-            <EmptyState title="Prekratak upit" text="Pretraga počinje od najmanje 3 znaka." />
-          ) : unavailable ? (
-            <EmptyState
-              title="Pretraga trenutno nije dostupna"
-              text="Došlo je do privremenog problema. Pokušajte ponovo za nekoliko trenutaka."
-              retryHref={searchPageHref(query, page)}
-            />
-          ) : products.length ? (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
-              {products.map((product) => (
-                <ProductCard key={product.sku} product={product} />
-              ))}
-            </div>
-          ) : (
-            <EmptyState title="Nema rezultata" text={`Nema proizvoda za "${query}".`} />
-          )}
-          {query.length >= 3 && !unavailable && (page > 1 || hasNextPage) ? (
-            <nav
-              aria-label="Strane pretrage"
-              className="mt-8 flex items-center justify-center gap-3"
-            >
-              <Link
-                href={searchPageHref(query, Math.max(1, page - 1))}
-                aria-disabled={page <= 1}
-                className="inline-flex h-10 items-center rounded-md border border-border px-4 text-sm font-medium text-ink-700 transition hover:border-walnut hover:text-walnut aria-disabled:pointer-events-none aria-disabled:opacity-45"
-              >
-                Prethodna
-              </Link>
-              <span className="text-sm text-ink-500">Strana {page}</span>
-              <Link
-                href={searchPageHref(query, page + 1)}
-                aria-disabled={!hasNextPage}
-                className="inline-flex h-10 items-center rounded-md border border-border px-4 text-sm font-medium text-ink-700 transition hover:border-walnut hover:text-walnut aria-disabled:pointer-events-none aria-disabled:opacity-45"
-              >
-                Sledeća
-              </Link>
-            </nav>
-          ) : null}
-        </section>
-      </div>
-    </main>
-  );
-}
-
-async function getHits(query: string, offset: number) {
-  try {
-    return {
-      hits: await searchProducts(query, LISTING_PAGE_SIZE + 1, offset),
-      unavailable: false,
-    };
-  } catch (error) {
-    logOperationalError("storefront.search_page.failed", error, {
-      queryLength: query.length,
-      offset,
-    });
-    return { hits: [] as SearchHit[], unavailable: true };
+  const query = (Array.isArray(params.q) ? params.q[0] ?? "" : params.q ?? "").trim();
+  const title = query ? `Rezultati za "${query}"` : "Pretraga";
+  let unavailable = false;
+  let result: Awaited<ReturnType<typeof listSearchProducts>> | undefined;
+  if (query.length >= 3) {
+    try {
+      result = await listSearchProducts(query, { limit: LISTING_PAGE_SIZE });
+    } catch (error) {
+      unavailable = true;
+      logOperationalError("storefront.search_page.failed", error, { queryLength: query.length });
+    }
   }
-}
-
-function searchPageHref(query: string, page: number) {
-  const params = new URLSearchParams({ q: query });
-  if (page > 1) params.set("page", String(page));
-  return `/pretraga?${params.toString()}`;
-}
-
-async function getProductsFromHits(hits: SearchHit[]) {
-  try {
-    return {
-      products: await getProductCardsBySlugs(
-        hits.map((hit) => hit.slug),
-        { throwOnError: true },
-      ),
-      unavailable: false,
-    };
-  } catch (error) {
-    logOperationalError("storefront.search_page.products_failed", error, {
-      hitCount: hits.length,
-    });
-    return { products: [], unavailable: true };
-  }
-}
-
-function EmptyState({
-  title,
-  text,
-  retryHref,
-}: {
-  title: string;
-  text: string;
-  retryHref?: string;
-}) {
-  return (
-    <div className="rounded-lg bg-surface px-6 py-16 text-center ring-1 ring-border">
-      <p className="font-display text-2xl text-ink-900">{title}</p>
-      <p className="mt-2 text-sm text-ink-500">{text}</p>
-      {retryHref ? (
-        <Link
-          href={retryHref}
-          className="mt-5 inline-flex h-10 items-center rounded-md border border-walnut px-4 text-sm font-semibold text-walnut transition hover:bg-walnut hover:text-white"
-        >
+  if (result?.items.length) return <ListingShell
+    kind="pretraga" title={title} trail={[{ label: "Pretraga" }]}
+    source={result.items} total={result.total} initialNextCursor={result.nextCursor}
+    pageQuery={{ searchQuery: query }}
+  />;
+  return <div className="bg-canvas pb-24">
+    <div className="mx-auto w-full max-w-[var(--container-page)] px-6 pt-6 md:pt-10">
+      <Breadcrumbs trail={[{ label: "Pretraga" }]} className="mb-6" />
+      <h1 className="mb-6 font-display text-2xl text-ink-900 md:text-5xl">{title}</h1>
+      <div className="rounded-lg bg-surface px-6 py-16 text-center ring-1 ring-border">
+        <p className="font-display text-2xl text-ink-900">{query.length < 3
+          ? "Prekratak upit" : unavailable ? "Pretraga trenutno nije dostupna" : "Nema rezultata"}</p>
+        <p className="mt-2 text-sm text-ink-500">{query.length < 3
+          ? "Unesite najmanje 3 znaka za pretragu." : unavailable
+            ? "Došlo je do privremenog problema. Pokušajte ponovo za nekoliko trenutaka."
+            : `Nema proizvoda za "${query}".`}</p>
+        {unavailable ? <Link href={`/pretraga?${new URLSearchParams({ q: query })}`}
+          className="mt-5 inline-flex h-10 items-center rounded-md border border-walnut px-4 text-sm font-semibold text-walnut">
           Pokušaj ponovo
-        </Link>
-      ) : null}
+        </Link> : null}
+      </div>
     </div>
-  );
+  </div>;
 }
