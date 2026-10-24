@@ -604,11 +604,32 @@ function ErpGridContent({
         filtersRef.current?.querySelector("summary")?.focus();
       }
     };
+    const fitFiltersToViewport = () => {
+      const panel = filtersRef.current?.querySelector<HTMLElement>("[data-grid-filter-panel]");
+      if (!panel) return;
+      panel.style.position = "";
+      panel.style.top = "";
+      panel.style.right = "";
+      // A toolbar near the bottom needs a viewport panel to keep controls reachable.
+      if (window.innerHeight - panel.getBoundingClientRect().top < 180) {
+        panel.style.position = "fixed";
+        panel.style.top = "80px";
+        panel.style.right = "16px";
+      }
+      const availableHeight = window.innerHeight - panel.getBoundingClientRect().top - 16;
+      panel.style.maxHeight = `${Math.max(80, Math.min(window.innerHeight * 0.7, availableHeight))}px`;
+    };
+    const frame = window.requestAnimationFrame(fitFiltersToViewport);
     document.addEventListener("pointerdown", closeOnOutsidePointer);
     document.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("resize", fitFiltersToViewport);
+    document.addEventListener("scroll", fitFiltersToViewport, true);
     return () => {
+      window.cancelAnimationFrame(frame);
       document.removeEventListener("pointerdown", closeOnOutsidePointer);
       document.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("resize", fitFiltersToViewport);
+      document.removeEventListener("scroll", fitFiltersToViewport, true);
     };
   }, [filtersOpen]);
 
@@ -1309,6 +1330,7 @@ function ErpGridContent({
                 <div
                   role="region"
                   aria-label="Kriterijumi filtriranja"
+                  data-grid-filter-panel
                   className="fixed inset-x-4 top-20 z-[70] max-h-[70dvh] overflow-y-auto overscroll-contain rounded-2xl border border-border bg-surface p-4 shadow-xl md:absolute md:inset-x-auto md:right-0 md:top-full md:mt-2 md:w-[min(100%,680px)]"
                 >
                   <div className="mb-3 flex items-center justify-between gap-3">
