@@ -62,7 +62,7 @@ export function FilterSidebar({
   const reset = () => onChange(emptyFilterState());
 
   const toggleArrayValue = (
-    key: "groups" | "materials" | "colors" | "attributes",
+    key: "groups" | "materials" | "colors",
     value: string,
   ) => {
     const arr = state[key];
@@ -199,22 +199,6 @@ export function FilterSidebar({
                 selected={state.materials}
                 counts={facets.counts.materials}
                 onToggle={(material) => toggleArrayValue("materials", material)}
-              />
-            </AccordionContent>
-          </AccordionItem>
-        ) : null}
-
-        {facets.attributes.length ? (
-          <AccordionItem value="atributi">
-            <AccordionTrigger className="text-sm font-medium text-ink-900">
-              <FacetTitle label="Ostali atributi" selected={state.attributes.length} />
-            </AccordionTrigger>
-            <AccordionContent>
-              <FacetChecklist
-                values={facets.attributes}
-                selected={state.attributes}
-                counts={facets.counts.attributes}
-                onToggle={(attribute) => toggleArrayValue("attributes", attribute)}
               />
             </AccordionContent>
           </AccordionItem>
