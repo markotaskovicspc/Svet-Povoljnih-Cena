@@ -744,8 +744,8 @@ test.describe("article master acceptance", () => {
       }),
     ).toBeVisible();
     await expect(page.getByLabel("Boja proizvoda")).toContainText("Natur");
-    await expect(page.getByLabel("Atributi proizvoda")).toContainText("HRAST");
-    await expect(page.getByLabel("Atributi proizvoda")).toContainText("METAL");
+    // Legacy Atribut 1–4 remain in ERP; the PDP displays only grouped attributes.
+    await expect(page.getByLabel("Atributi proizvoda")).toHaveCount(0);
     await page.locator("button").filter({ hasText: "Opis proizvoda" }).first().click();
     const pdpInfoDialog = page.getByRole("dialog");
     await expect(pdpInfoDialog).toBeVisible();

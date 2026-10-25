@@ -12,6 +12,7 @@ import { PdpPrice } from "@/components/product/pdp-price";
 import { PdpInfoLinks } from "@/components/product/pdp-info-links";
 import { ProductColorOptions } from "@/components/product/color-options";
 import { ProductSkuCopy } from "@/components/product/product-sku-copy";
+import { PdpAttributes } from "@/components/product/pdp-attributes";
 import { RecentlyViewedProducts } from "@/components/product/recently-viewed-products";
 import { SectionRail } from "@/components/home/section-rail";
 import { Reveal } from "@/components/motion/reveal";
@@ -246,24 +247,7 @@ export default async function ProductPage({ params }: RouteProps) {
               label="Boja proizvoda"
               showLabels
             />
-            {product.attributes?.length ? (
-              <div
-                className="mt-1.5 flex flex-wrap items-center gap-1.5"
-                aria-label="Atributi proizvoda"
-              >
-                <span className="mr-0.5 text-xs font-medium text-ink-500">
-                  Atributi:
-                </span>
-                {product.attributes.map((attribute) => (
-                  <span
-                    key={attribute}
-                    className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-ink-800 ring-1 ring-border/60"
-                  >
-                    {attribute}
-                  </span>
-                ))}
-              </div>
-            ) : null}
+            <PdpAttributes attributes={product.groupedAttributes} />
           </header>
 
           {/* Price block — only the effective price is emphasised. */}
