@@ -5,10 +5,9 @@ import {
   getErpModule,
   type AdminGridFilter,
   type AdminGridSort,
-  type ErpRow,
 } from "@/lib/admin/erp";
 import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
-import { gridTextValue, gridValueMatchesFilter } from "@/lib/admin/grid-query";
+import { filterAndSortGridRows, gridTextValue } from "@/lib/admin/grid-query";
 import { toExcelAdminDate } from "@/lib/admin/grid-export";
 import { resolveReportPeriod } from "@/lib/admin/report-period";
 
@@ -36,47 +35,6 @@ function parseDateRange(search: URLSearchParams) {
   };
 }
 
-function filterAndSortRows(
-  rows: ErpRow[],
-  columnKeys: string[],
-  query: string,
-  filters: AdminGridFilter[],
-  sorting: AdminGridSort[],
-) {
-  const needle = query.trim().toLowerCase();
-  const filtered = rows.filter((row) => {
-    if (
-      needle &&
-      !columnKeys
-        .map((key) => textValue(row.values[key]))
-        .join(" ")
-        .toLowerCase()
-        .includes(needle)
-    ) {
-      return false;
-    }
-    return filters.every((filter) =>
-      gridValueMatchesFilter(row.values[filter.columnKey], filter),
-    );
-  });
-  if (!sorting.length) return filtered;
-  return [...filtered].sort((leftRow, rightRow) => {
-    for (const sort of sorting) {
-      const left = leftRow.values[sort.columnKey];
-      const right = rightRow.values[sort.columnKey];
-      const numericLeft = typeof left === "number" ? left : Number.NaN;
-      const numericRight = typeof right === "number" ? right : Number.NaN;
-      const comparison =
-        Number.isFinite(numericLeft) && Number.isFinite(numericRight)
-          ? numericLeft - numericRight
-          : textValue(left).localeCompare(textValue(right), "sr-Latn");
-      if (comparison !== 0)
-        return sort.direction === "asc" ? comparison : -comparison;
-    }
-    return 0;
-  });
-}
-
 export async function GET(
   request: Request,
   context: { params: Promise<{ module: string }> },
@@ -95,7 +53,9 @@ export async function GET(
   const dateField = search.get("dateField");
   const dateRange = parseDateRange(search);
   const erpModule = await getErpModule(slug, {
-    take: 10_000,
+    // Match the DC rows API before applying filters; older stock can fall
+    // outside the first 10,000 warehouse balances.
+    take: slug === "stanje-po-magacinima" ? 500_000 : 10_000,
     warehouseId: search.get("warehouseId"),
     includeLookupOptions: false,
     query: search.get("q") ?? undefined,
@@ -160,7 +120,7 @@ export async function GET(
   ) {
     searchColumns.push("courierNumbers");
   }
-  const rows = filterAndSortRows(
+  const rows = filterAndSortGridRows(
     erpModule.rows,
     searchColumns,
     search.get("q") ?? "",

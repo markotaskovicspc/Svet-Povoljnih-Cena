@@ -12,7 +12,7 @@ it("loads existing position assignments for the stock API and export rows", asyn
   mocks.warehouseStock.findMany.mockResolvedValue([{
     id: "stock", qty: 4,
     warehouse: { id: "dc", name: "DC", isDefault: true, active: true },
-    product: { id: "product", sku: "001", name: "Artikal", supplierId: "supplier", supplier: null, cogs: null, partnerReservations: [], orderItems: [], availableWebManual: false, availableWholesaleManual: false, availableExportManual: false },
+    product: { id: "product", sku: "001", barcode: "0012345678905", name: "Artikal", supplierId: "supplier", supplier: null, cogs: null, partnerReservations: [], orderItems: [], availableWebManual: false, availableWholesaleManual: false, availableExportManual: false },
   }]);
   mocks.purchaseOrderItem.findMany.mockResolvedValue([]);
   mocks.product.findMany.mockResolvedValue([]);
@@ -23,6 +23,11 @@ it("loads existing position assignments for the stock API and export rows", asyn
   const erpModule = await getErpModule("stanje-po-magacinima", { includeLookupOptions: false });
   expect(erpModule?.columns.find(column => column.key === "pickingPosition")).toMatchObject({ label: "Picking pozicija", defaultVisible: true });
   expect(erpModule?.rows[0].values.pickingPosition).toBe("12");
+  expect(erpModule?.columns.find(column => column.key === "barcode")).toMatchObject({ label: "Bar kod", defaultVisible: true });
+  expect(erpModule?.rows[0].values.barcode).toBe("0012345678905");
   expect(mocks.warehousePickingPosition.findMany).toHaveBeenCalledOnce();
   expect(mocks.warehouseStock.findMany.mock.calls[0][0].select.product.select.supplierId).toBe(true);
+  expect(mocks.warehouseStock.findMany.mock.calls[0][0].select.product.select.barcode).toBe(true);
+  expect(mocks.purchaseOrderItem.findMany.mock.calls[0][0].select.product.select.barcode).toBe(true);
+  expect(mocks.product.findMany.mock.calls[0][0].select.barcode).toBe(true);
 });

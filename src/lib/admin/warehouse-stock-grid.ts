@@ -19,6 +19,7 @@ export type WarehouseStockGridWarehouse = {
 export type WarehouseStockGridProduct = {
   id: string;
   sku: string;
+  barcode: string | null;
   name: string;
   supplierId?: string | null;
   supplier: { name: string } | null;
@@ -118,6 +119,7 @@ function createWarehouseStockGridRow(input: {
     values: {
       warehouse: input.warehouse.name,
       sku: input.product.sku,
+      barcode: input.product.barcode ?? null,
       pickingPosition: positions.map(position => position.number).join(", ") || null,
       product: input.product.name,
       supplier: input.product.supplier?.name ?? null,

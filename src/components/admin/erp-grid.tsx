@@ -53,7 +53,7 @@ import type {
   ErpValue,
 } from "@/lib/admin/erp";
 import { readGridNavigation } from "@/lib/admin/grid-navigation";
-import { migrateWarehousePickingColumns } from "@/lib/admin/warehouse-picking-columns";
+import { migrateWarehouseGridColumns } from "@/lib/admin/warehouse-grid-columns";
 import { nextGridSorting } from "@/lib/admin/grid-query";
 import { createInitialGridRowsReuse } from "@/lib/admin/grid-initial-rows";
 import {
@@ -217,7 +217,7 @@ function readColumnOrder(moduleSlug: string, columns: ErpColumn[]) {
     const known = new Set(defaultOrder);
     const filteredStored = stored.filter((key) => known.has(key));
     const validStored = filteredStored.length
-      ? migrateWarehousePickingColumns(moduleSlug, [], filteredStored).columnOrder
+      ? migrateWarehouseGridColumns(moduleSlug, [], filteredStored).columnOrder
       : filteredStored;
     const missing = defaultOrder.filter((key) => !validStored.includes(key));
     const completeOrder = [...validStored, ...missing];
@@ -397,7 +397,7 @@ function ErpGridContent({
         knownColumns.has(key),
       );
       return requestedColumns.length
-        ? migrateWarehousePickingColumns(module.slug, requestedColumns, initialView?.columnOrder ?? requestedColumns).visibleColumns
+        ? migrateWarehouseGridColumns(module.slug, requestedColumns, initialView?.columnOrder ?? requestedColumns).visibleColumns
         : module.columns
             .filter((column) => column.defaultVisible)
             .map((column) => column.key);
@@ -436,7 +436,7 @@ function ErpGridContent({
     const defaultOrder = module.columns.map((column) => column.key);
     const knownColumns = new Set(defaultOrder);
     const requestedOrder = initialView?.columnOrder?.length
-      ? migrateWarehousePickingColumns(module.slug, [], initialView.columnOrder).columnOrder.filter((key) => knownColumns.has(key))
+      ? migrateWarehouseGridColumns(module.slug, [], initialView.columnOrder).columnOrder.filter((key) => knownColumns.has(key))
       : [];
     return requestedOrder.length
       ? [
@@ -525,7 +525,7 @@ function ErpGridContent({
   };
 
   function restoreView(view: SavedView) {
-    view = { ...view, ...migrateWarehousePickingColumns(module.slug, view.visibleColumns, view.columnOrder ?? []) };
+    view = { ...view, ...migrateWarehouseGridColumns(module.slug, view.visibleColumns, view.columnOrder ?? []) };
     const visible = view.visibleColumns.filter((key) => knownColumnKeys.has(key));
     updateVisibleColumns(visible.length ? visible : defaultColumns);
     if (view.columnOrder?.length) {

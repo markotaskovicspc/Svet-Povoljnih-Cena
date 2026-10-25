@@ -299,6 +299,7 @@ export const operationalErpModules: ErpModule[] = [
     columns: [
       text("warehouse", "Magacin"),
       text("sku", "SKU"),
+      text("barcode", "Bar kod"),
       text("pickingPosition", "Picking pozicija"),
       text("product", "Artikal"),
       text("supplier", "Dobavljač"),
@@ -1303,6 +1304,7 @@ async function warehouseStockRows(take: number): Promise<ErpRow[]> {
   const productSelect = {
     id: true,
     sku: true,
+    barcode: true,
     name: true,
     supplierId: true,
     supplier: { select: { name: true } },

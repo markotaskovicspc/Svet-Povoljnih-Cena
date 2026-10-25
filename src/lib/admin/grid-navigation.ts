@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { migrateWarehousePickingColumns } from "./warehouse-picking-columns";
+import { migrateWarehouseGridColumns } from "./warehouse-grid-columns";
 const filter = z.object({ id: z.string(), columnKey: z.string(), operator: z.enum(["contains", "not_contains", "equals", "not_equals", "gt", "gte", "lt", "lte", "before", "after"]), value: z.string() });
 const schema = z.object({
   version: z.literal(1), query: z.string(), searchColumn: z.string(),
@@ -18,7 +18,7 @@ export function readGridNavigation(raw: string | null, columns: string[], module
     const state = parsed.data;
     const visibleColumns = state.visibleColumns.filter(key => known.has(key));
     if (!visibleColumns.length) return null;
-    const migrated = migrateWarehousePickingColumns(moduleSlug, visibleColumns, state.columnOrder);
+    const migrated = migrateWarehouseGridColumns(moduleSlug, visibleColumns, state.columnOrder);
     const order = migrated.columnOrder.filter(key => known.has(key));
     return { ...state, visibleColumns: migrated.visibleColumns.filter(key => known.has(key)),
       columnOrder: [...new Set([...order, ...columns])],

@@ -20,6 +20,7 @@ function product(
   return {
     id,
     sku: id.toUpperCase(),
+    barcode: null,
     name: `Artikal ${id}`,
     supplier: null,
     shortDescription: null,
@@ -74,7 +75,7 @@ describe("DC warehouse incoming rows", () => {
 
   it("includes catalogue identity on stocked and incoming-only rows for filtering and export", () => {
     const article = {
-      ...product("catalogue"),
+      ...product("catalogue"), barcode: "0012345678905",
       supplier: { name: "Dobavljač" }, shortDescription: "Kratki opis",
       shortName: "Kratki naziv", colorPrimary: "Crna", colorSecondary: "Bela",
     };
@@ -84,9 +85,10 @@ describe("DC warehouse incoming rows", () => {
       productsWithStoredIncoming: [], defaultWarehouse: warehouse,
     });
     for (const row of rows) {
-      expect(row.values).toMatchObject({ supplier: "Dobavljač", shortDescription: "Kratki opis",
+      expect(row.values).toMatchObject({ barcode: "0012345678905", supplier: "Dobavljač", shortDescription: "Kratki opis",
         shortName: "Kratki naziv", color1: "Crna", color2: "Bela" });
     }
+    expect(filterAndSortGridRows(rows, ["barcode"], "0012345678905", [], [])).toHaveLength(2);
     expect(filterAndSortGridRows(rows, ["supplier"], "Dobavljač", [], [])).toHaveLength(2);
     expect(filterAndSortGridRows(rows, ["color2"], "Crna", [], [])).toHaveLength(0);
   });
