@@ -53,3 +53,6 @@ The read-only products partner export now also selects existing Product.containe
 
 ## Analytics supplier delivery days (2026-10-24)
 The read-only products partner export's supplier object now also selects existing Supplier.deliveryDays (rok isporuke) and Supplier.transitDays (period isporuke). SPC Analytics Porudžbine → Analize shows their sum as the total delivery time. No schema change, business writes or PII; bank/contact fields stay excluded. Same spcapp:read authorization, signed pagination and metadata audit.
+
+## Analytics active loyalty discount (2026-10-25)
+User explicitly approved. The read-only products partner export adds activeLoyaltyDiscountPct: the catalog-wide active LoyaltyRule discountPct chosen like storefront pricing rules (active, live window, priority desc, updatedAt desc); null without an active rule. SPC Analytics Porudžbine uses MPC = sale price × (1 − pct). No schema change, business writes or PII; same spcapp:read authorization, signed pagination and metadata audit.

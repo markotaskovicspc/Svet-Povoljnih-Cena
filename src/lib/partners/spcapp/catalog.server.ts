@@ -6,6 +6,10 @@ import { primaryRootCategory } from './category-root';
 
 export async function exportProducts(q: ExportQuery) {
   const categoryTree=await db.category.findMany({select:{id:true,name:true,parentId:true,path:true}});
+  // Active catalog-wide loyalty discount, selected exactly like storefront pricing rules (active, live window, priority, latest update).
+  const now=new Date();
+  const loyaltyRule=await db.loyaltyRule.findFirst({ where: { active: true, AND: [{ OR: [{ startsAt: null }, { startsAt: { lte: now } }] }, { OR: [{ endsAt: null }, { endsAt: { gte: now } }] }] }, orderBy: [{ priority: 'desc' }, { updatedAt: 'desc' }], select: { discountPct: true } });
+  const activeLoyaltyDiscountPct=loyaltyRule?Number(loyaltyRule.discountPct):null;
   const rows = await db.product.findMany({ where: { id: { gt: q.after } }, take: q.limit + 1, orderBy: { id: 'asc' }, select: {
     id: true, sku: true, name: true, shortName: true, shortDescription: true, articleStatus: true, isActive: true, deletedAt: true, stock: true,
     supplier: { select: { id: true, name: true, deliveryDays: true, transitDays: true } }, group: { select: { id: true, name: true } }, collection: { select: { id: true, name: true } },
@@ -19,7 +23,7 @@ export async function exportProducts(q: ExportQuery) {
   } });
   return rows.map(p => ({ ...p, analyticsCategory:primaryRootCategory(p.categories.map(x=>x.category.id),categoryTree), catalogEligible: !p.deletedAt && (p.stock > 0 || p.articleStatus === 'SP'),
     cogsNet: money(p.cogs), fullPriceGross: money(p.fullPrice), salePriceGross: money(p.salePrice), loyaltyPriceGross: money(p.loyaltyPrice),
-    ananasPriceHistory: p.priceListEntries, ananasCurrentPrice: null,
+    ananasPriceHistory: p.priceListEntries, ananasCurrentPrice: null, activeLoyaltyDiscountPct,
     notes: ['Ananas current remote catalog price is not synchronized by this endpoint; price-list entries and actual order prices are separate sources.'],
   }));
 }
