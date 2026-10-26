@@ -3,12 +3,13 @@ import { Prisma } from "@prisma/client";
 import { paymentConfirmationSchema } from "@/lib/payments/payment-confirmation";
 
 const mocks = vi.hoisted(() => ({ load: vi.fn(), dispatch: vi.fn(), payment: vi.fn(),
-  claim: vi.fn(), job: vi.fn(), update: vi.fn() }));
+  claim: vi.fn(), job: vi.fn(), update: vi.fn(), orderLink: vi.fn() }));
 vi.mock("@/lib/db", () => ({ db: { payment: { findUnique: mocks.payment },
   backgroundJob: { updateMany: mocks.claim, findUnique: mocks.job, update: mocks.update } } }));
 vi.mock("@/lib/channel-availability.server", () => ({ expirePartnerReservations: vi.fn(), disableInvalidRabaluxWebAvailability: vi.fn() }));
 vi.mock("@/lib/email/adapt", () => ({ loadOrderForEmail: mocks.load }));
 vi.mock("@/lib/email/tracking", () => ({ trackedDispatch: mocks.dispatch }));
+vi.mock("@/lib/email/order-link", () => ({ orderLinkForEmail: mocks.orderLink }));
 import { sendBankPaymentConfirmation } from "@/lib/email/bank-payment";
 import { processBackgroundJob } from "@/lib/background-jobs";
 
@@ -23,6 +24,7 @@ const receipt = () => ({ orderId: manual.orderId, status: "PAID", method: "UPLAT
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.load.mockResolvedValue({ recipient: "buyer@example.test", order: {} });
+  mocks.orderLink.mockResolvedValue("https://www.svetpovoljnihcena.rs/checkout/potvrda?order=MP-2026-000123&token=test-token");
   mocks.dispatch.mockResolvedValue({ ok: true, id: "synthetic", provider: "none" });
   mocks.payment.mockResolvedValue(receipt());
   mocks.claim.mockResolvedValue({ count: 1 });
@@ -30,7 +32,7 @@ beforeEach(() => {
   mocks.update.mockResolvedValue({});
 });
 
-it("reuses the bank confirmation text and support copy without fabricated bank references", async () => {
+it("uses the shared branded layout, working order links and support copy without fabricated bank references", async () => {
   await sendBankPaymentConfirmation(paymentConfirmationSchema.parse(manual));
   expect(mocks.dispatch).toHaveBeenCalledWith(expect.objectContaining({
     to: "buyer@example.test", bcc: ["podrska@svetpovoljnihcena.rs"],
@@ -40,6 +42,12 @@ it("reuses the bank confirmation text and support copy without fabricated bank r
     metadata: { source: "MANUAL", paymentId: "receipt" },
   }));
   expect(JSON.stringify(mocks.dispatch.mock.calls[0][0])).not.toMatch(/bankReference|statement|FT/);
+  const sent = mocks.dispatch.mock.calls[0][0];
+  expect(sent.html).toContain("/documents/garantni-list-logo.jpeg");
+  expect(sent.html).toContain("Pogledaj porudžbinu");
+  expect(sent.html).toContain('href="https://www.svetpovoljnihcena.rs/checkout/potvrda?order=MP-2026-000123&amp;token=test-token"');
+  expect(sent.html).toContain("mailto:podrska@svetpovoljnihcena.rs");
+  expect(sent.text).toContain("Pregled porudžbine: https://www.svetpovoljnihcena.rs/checkout/potvrda?order=MP-2026-000123&token=test-token");
   expect(mocks.payment).toHaveBeenCalledWith({ where: { id: manual.paymentId }, select: {
     orderId: true, status: true, method: true, provider: true, amount: true, currency: true,
   } });
@@ -90,6 +98,7 @@ it.each([
   mocks.payment.mockResolvedValue(payment);
   expect(await sendBankPaymentConfirmation(manual)).toEqual({ skipped: "PAYMENT_CHANGED" });
   expect(mocks.dispatch).not.toHaveBeenCalled();
+  expect(mocks.orderLink).not.toHaveBeenCalled();
 });
 
 it("completes a changed-receipt worker job without marking an email as sent or retrying it", async () => {

@@ -167,7 +167,9 @@ describe.skipIf(!enabled)("manual payment confirmation on real local PostgreSQL"
   it("runs the real worker once and never resends after completed-job replay", async () => {
     const order = await fixture(); await save(order);
     const receipt = await payment(order); const [job] = await confirmationJobs(order);
-    expect(await processBackgroundJob(job.id)).toEqual({ claimed: true, ok: true });
+    const result = await processBackgroundJob(job.id);
+    const processed = await db.backgroundJob.findUniqueOrThrow({ where: { id: job.id } });
+    expect(result, processed.lastError ?? "worker result").toEqual({ claimed: true, ok: true });
     expect(transport.dispatch).toHaveBeenCalledOnce();
     expect(transport.dispatch).toHaveBeenCalledWith(expect.objectContaining({
       to: order.email, bcc: ["podrska@svetpovoljnihcena.rs"],

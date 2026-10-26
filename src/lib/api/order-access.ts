@@ -3,7 +3,6 @@ import "server-only";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth/session";
 
 const TOKEN_BYTES = 32;
 
@@ -63,6 +62,9 @@ export async function canAccessOrder(args: {
   };
   token?: string | null;
 }) {
+  // Token generation also runs in background email workers, without an HTTP
+  // session. Load request authentication only when checking account ownership.
+  const { getCurrentUser } = await import("@/lib/auth/session");
   const user = await getCurrentUser();
   if (user?.userType === "customer" && args.order.userId === user.id) {
     return true;

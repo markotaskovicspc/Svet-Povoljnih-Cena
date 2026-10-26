@@ -4,6 +4,10 @@ import {loadOrderForEmail} from './adapt';
 import {trackedDispatch} from './tracking';
 import type {BankEntry} from '@/lib/payments/bank-statements';
 import type {PaymentConfirmation} from '@/lib/payments/payment-confirmation';
+import {getEmailConfig} from './config';
+import {orderLinkForEmail} from './order-link';
+import {renderEmail} from './render';
+import {BankPaymentConfirmation} from './templates/bank-payment-confirmation';
 
 const SUPPORT='podrska@svetpovoljnihcena.rs';
 const money=(amount:number,currency='RSD')=>new Intl.NumberFormat('sr-Latn-RS',{minimumFractionDigits:2,maximumFractionDigits:2}).format(amount/100)+(currency==='RSD'?' din':` ${currency}`);
@@ -24,8 +28,10 @@ export async function sendBankPaymentConfirmation(entry:PaymentConfirmation){
    return {skipped:'PAYMENT_CHANGED' as const};
   }
  }
- const text=`Poštovani,\n\nVaša uplata od ${money(entry.amountMinor,entry.currency)} za porudžbinu ${entry.orderNumber} uspešno je evidentirana.\n\nHvala na kupovini!\nKorisnička podrška | Svet Povoljnih Cena`;
- return trackedDispatch({kind:'bank_payment_confirmation',to:loaded.recipient||SUPPORT,bcc:loaded.recipient?[SUPPORT]:undefined,subject:`Uplata evidentirana — ${entry.orderNumber}`,text,html:html(text),idempotencyKey:manual?`bank-payment:manual:${entry.paymentId}`:`bank-payment:${entry.account}:${entry.bankReference}`,tags:{kind:'bank_payment_confirmation',order:entry.orderNumber},metadata:manual?{source:'MANUAL',paymentId:entry.paymentId}:{bankReference:entry.bankReference,statement:entry.statement}});
+ const orderUrl=await orderLinkForEmail(entry.orderId,loaded.order,getEmailConfig().baseUrl);
+ const rendered=await renderEmail(BankPaymentConfirmation({orderNumber:entry.orderNumber,amountMinor:entry.amountMinor,currency:entry.currency,firstName:loaded.order.shippingAddress?.firstName,orderUrl}));
+ const text=[rendered.text,orderUrl?`Pregled porudžbine: ${orderUrl}`:null].filter(Boolean).join('\n\n');
+ return trackedDispatch({kind:'bank_payment_confirmation',to:loaded.recipient||SUPPORT,bcc:loaded.recipient?[SUPPORT]:undefined,subject:`Uplata evidentirana — ${entry.orderNumber}`,text,html:rendered.html,idempotencyKey:manual?`bank-payment:manual:${entry.paymentId}`:`bank-payment:${entry.account}:${entry.bankReference}`,tags:{kind:'bank_payment_confirmation',order:entry.orderNumber},metadata:manual?{source:'MANUAL',paymentId:entry.paymentId}:{bankReference:entry.bankReference,statement:entry.statement}});
 }
 const REASONS:Record<string,string>={
  ORDER_NOT_FOUND:'Porudžbina sa tim brojem nije pronađena.',
