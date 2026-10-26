@@ -81,7 +81,7 @@ function refresh(id: string) {
 async function saveDetailsAction(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
-    { allowed: ["OPS"], action: "reclamation.detailsUpdate", entity: "Reclamation" },
+    { module: "/admin/erp/reklamacije-dnevnik", allowed: ["OPS"], action: "reclamation.detailsUpdate", entity: "Reclamation" },
     async (_actorId, formData: FormData) => db.$transaction(async (tx) => {
       const id = String(formData.get("id") ?? "");
       const decision = String(formData.get("decision") ?? "") as ReclamationDecision;
@@ -205,7 +205,7 @@ async function saveDetailsAction(_state: AdminActionState, formData: FormData) {
 async function removeReplacementAction(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
-    { allowed: ["OPS"], action: "reclamation.pickingRemove", entity: "Reclamation" },
+    { module: "/admin/erp/reklamacije-dnevnik", allowed: ["OPS"], action: "reclamation.pickingRemove", entity: "Reclamation" },
     async (actorId, data: FormData) => {
       const id = String(data.get("id") ?? "");
       if (!id) return { ok: false as const, error: "Reklamacija nije izabrana." };
@@ -226,7 +226,7 @@ async function removeReplacementAction(_state: AdminActionState, formData: FormD
 async function createShipmentAction(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
-    { allowed: ["OPS"], action: "reclamation.shipmentCreate", entity: "Reclamation" },
+    { module: "/admin/erp/reklamacije-dnevnik", allowed: ["OPS"], action: "reclamation.shipmentCreate", entity: "Reclamation" },
     async (actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
       const purpose = String(formData.get("purpose") ?? "") as ShipmentPurpose;
@@ -254,7 +254,7 @@ async function createShipmentAction(_state: AdminActionState, formData: FormData
 async function cancelShipmentAction(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
-    { allowed: ["OPS"], action: "reclamation.shipmentCancel", entity: "Shipment" },
+    { module: "/admin/erp/reklamacije-dnevnik", allowed: ["OPS"], action: "reclamation.shipmentCancel", entity: "Shipment" },
     async (actorId, formData: FormData) => {
       const shipmentId = String(formData.get("shipmentId") ?? "");
       const reclamationId = String(formData.get("reclamationId") ?? "");
@@ -269,7 +269,7 @@ async function cancelShipmentAction(_state: AdminActionState, formData: FormData
 async function saveStatusAction(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
-    { allowed: ["OPS"], action: "reclamation.statusUpdate", entity: "Reclamation" },
+    { module: "/admin/erp/reklamacije-dnevnik", allowed: ["OPS"], action: "reclamation.statusUpdate", entity: "Reclamation" },
     async (actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
       const status = String(formData.get("status") ?? "") as ReclamationStatus;
@@ -285,7 +285,7 @@ async function saveStatusAction(_state: AdminActionState, formData: FormData) {
 }
 
 export default async function ReclamationDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/reklamacije-dnevnik");
   const { id } = await params;
   const [reclamation, warehouses] = await Promise.all([
     db.reclamation.findUnique({

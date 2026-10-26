@@ -69,7 +69,7 @@ export async function createNewsletterCampaignAction(
   formData: FormData,
 ) {
   const state = await withAdminState(
-    { allowed, action: "newsletter.campaign.create", entity: "NewsletterCampaign" },
+    { module: "/admin/newsletter", allowed, action: "newsletter.campaign.create", entity: "NewsletterCampaign" },
     async (actorId, formData: FormData) => {
       const templateId = value(formData, "templateId") || null;
       const campaign = await createNewsletterCampaign(actorId, templateId);
@@ -91,7 +91,7 @@ export async function saveNewsletterCampaignAction(
   formData: FormData,
 ) {
   const state = await withAdminState(
-    { allowed, action: "newsletter.campaign.save", entity: "NewsletterCampaign" },
+    { module: "/admin/newsletter", allowed, action: "newsletter.campaign.save", entity: "NewsletterCampaign" },
     async (actorId, formData: FormData) => {
       const audienceIds = formData.getAll("audienceIds")
         .map((item) => String(item).trim())
@@ -223,7 +223,7 @@ export async function duplicateNewsletterCampaignAction(
   formData: FormData,
 ) {
   const state = await withAdminState(
-    { allowed, action: "newsletter.campaign.duplicate", entity: "NewsletterCampaign" },
+    { module: "/admin/newsletter", allowed, action: "newsletter.campaign.duplicate", entity: "NewsletterCampaign" },
     async (actorId, formData: FormData) => {
       const sourceId = value(formData, "id");
       const allContacts = formData.get("allContacts") === "on";
@@ -268,7 +268,7 @@ export async function deleteNewsletterCampaignDraftAction(
   formData: FormData,
 ) {
   const state = await withAdminState(
-    { allowed, action: "newsletter.campaign.deleteDraft", entity: "NewsletterCampaign" },
+    { module: "/admin/newsletter", allowed, action: "newsletter.campaign.deleteDraft", entity: "NewsletterCampaign" },
     async (_actorId, formData: FormData) => {
       const id = value(formData, "id");
       const campaign = await db.newsletterCampaign.findUnique({ where: { id }, select: { status: true } });
@@ -287,7 +287,7 @@ export async function saveNewsletterAudienceAction(
   formData: FormData,
 ) {
   return withAdminState(
-    { allowed, action: "newsletter.audience.save", entity: "NewsletterAudience" },
+    { module: "/admin/newsletter", allowed, action: "newsletter.audience.save", entity: "NewsletterAudience" },
     async (actorId, formData: FormData) => {
       const id = value(formData, "id");
       const name = z.string().trim().min(1).max(160).parse(value(formData, "name"));
@@ -322,7 +322,7 @@ export async function deleteNewsletterAudienceAction(
   formData: FormData,
 ) {
   return withAdminState(
-    { allowed, action: "newsletter.audience.delete", entity: "NewsletterAudience" },
+    { module: "/admin/newsletter", allowed, action: "newsletter.audience.delete", entity: "NewsletterAudience" },
     async (_actorId, formData: FormData) => {
       const id = value(formData, "id");
       const campaigns = await db.newsletterCampaign.findMany({
@@ -346,7 +346,7 @@ export async function deleteNewsletterTemplateAction(
   formData: FormData,
 ) {
   return withAdminState(
-    { allowed, action: "newsletter.template.delete", entity: "NewsletterTemplate" },
+    { module: "/admin/newsletter", allowed, action: "newsletter.template.delete", entity: "NewsletterTemplate" },
     async (_actorId, formData: FormData) => {
       const id = value(formData, "id");
       await db.newsletterTemplate.delete({ where: { id } });
@@ -361,7 +361,7 @@ export async function unsubscribeMarketingContactAction(
   formData: FormData,
 ) {
   return withAdminState(
-    { allowed, action: "newsletter.contact.unsubscribe", entity: "MarketingContact" },
+    { module: "/admin/newsletter", allowed, action: "newsletter.contact.unsubscribe", entity: "MarketingContact" },
     async (_actorId, formData: FormData) => {
       const id = value(formData, "id");
       const contact = await db.marketingContact.findUnique({ where: { id } });
@@ -378,7 +378,7 @@ export async function previewNewsletterContactImportAction(
   formData: FormData,
 ) {
   return withAdminState(
-    {
+    { module: "/admin/newsletter",
       allowed,
       action: "newsletter.contactImport.preview",
       entity: "MarketingContact",
@@ -404,7 +404,7 @@ export async function importNewsletterContactsAction(
   formData: FormData,
 ) {
   return withAdminState(
-    {
+    { module: "/admin/newsletter",
       allowed,
       action: "newsletter.contactImport.commit",
       entity: "MarketingContact",
@@ -450,7 +450,7 @@ async function campaignAction(
   entity = "NewsletterCampaign",
 ) {
   return withAdminState(
-    { allowed, action, entity },
+    { module: "/admin/newsletter", allowed, action, entity },
     async (actorId, formData: FormData) => {
       const id = value(formData, "id");
       if (!id) return { ok: false as const, error: "Kampanja nije izabrana." };

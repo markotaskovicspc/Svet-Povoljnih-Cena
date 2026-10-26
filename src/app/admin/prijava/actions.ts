@@ -28,12 +28,12 @@ export async function loginAction(formData: FormData) {
     );
   }
   try {
-    const account = await db.adminUser.findUnique({ where: { email: email.toLowerCase() }, select: { role: true } });
+    const account = await db.adminUser.findUnique({ where: { email: email.toLowerCase() }, select: { role: true, accessPolicy: true } });
     await signIn("admin-credentials", {
       email,
       password,
       redirect: true,
-      redirectTo: adminLoginDestination(account?.role, callbackUrl),
+      redirectTo: adminLoginDestination(account?.role, callbackUrl, account?.accessPolicy),
     });
   } catch (err) {
     // next-auth throws a redirect — let Next handle it. Only catch credential errors.

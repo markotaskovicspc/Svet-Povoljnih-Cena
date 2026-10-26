@@ -10,7 +10,7 @@ import { linkExistingProductVariant } from "@/lib/product-family.server";
 export const runtime = "nodejs";
 const schema = z.object({ sourceId: z.string().min(1), targetId: z.string().min(1), sourceVersion: z.iso.datetime(), targetVersion: z.iso.datetime(), label: z.string().trim().min(1).max(120) });
 export async function GET(request: Request) {
-  await requireAdminAction(["CONTENT", "OPS"]);
+  await requireAdminAction(["CONTENT", "OPS"], "/admin/erp/artikli");
   let sku: string;
   try { sku = normalizeArticleSku(new URL(request.url).searchParams.get("sku") ?? ""); }
   catch { return Response.json({ error: "Unesite ispravnu šifru postojećeg artikla (do 80 znakova, bez razmaka)." }, { status: 400 }); }
@@ -25,7 +25,7 @@ export async function GET(request: Request) {
   }, { headers: { "Cache-Control": "private, no-store" } });
 }
 export async function POST(request: Request) {
-  const admin = await requireAdminAction(["CONTENT", "OPS"]);
+  const admin = await requireAdminAction(["CONTENT", "OPS"], "/admin/erp/artikli");
   if (request.headers.get("origin") && request.headers.get("origin") !== new URL(request.url).origin) return Response.json({ error: "Nedozvoljen izvor zahteva." }, { status: 403 });
   try {
     const input = schema.parse(await request.json());

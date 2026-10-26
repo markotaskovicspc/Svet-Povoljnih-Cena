@@ -21,7 +21,7 @@ async function toggleReviewed(formData: FormData) {
   "use server";
 
   return withAdmin(
-    { allowed: ["CONTENT", "OPS"], action: "comment.toggleReviewed", entity: "Comment" },
+    { module: "/admin/komentari", allowed: ["CONTENT", "OPS"], action: "comment.toggleReviewed", entity: "Comment" },
     async (_a, formData: FormData) => {
         const id = String(formData.get("id") ?? "");
         const reviewed = formData.get("reviewed") === "true";
@@ -37,7 +37,7 @@ async function removeComment(formData: FormData) {
   "use server";
 
   return withAdmin(
-    { allowed: ["CONTENT", "OPS"], action: "comment.delete", entity: "Comment" },
+    { module: "/admin/komentari", allowed: ["CONTENT", "OPS"], action: "comment.delete", entity: "Comment" },
     async (_a, formData: FormData) => {
         const id = String(formData.get("id") ?? "");
         if (!id) return { ok: false as const, error: "Nedostaje ID." };
@@ -55,7 +55,7 @@ async function removeComment(formData: FormData) {
 }
 
 export default async function CommentsPage() {
-  await requireAdminAction(["CONTENT", "OPS"]);
+  await requireAdminAction(["CONTENT", "OPS"], "/admin/komentari");
   const comments = await db.comment.findMany({
     orderBy: [{ reviewed: "asc" }, { createdAt: "desc" }],
     take: 200,

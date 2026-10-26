@@ -28,7 +28,7 @@ async function pagePrefix(value: string | null) {
 }
 
 export async function GET(request: Request) {
-  await requireAdminAction(["CONTENT"]);
+  await requireAdminAction(["CONTENT"], "/admin/erp/landing-strane");
   try {
     const prefix = await pagePrefix(new URL(request.url).searchParams.get("pageId"));
     const storage = createAdminClient().storage.from(getProductMediaBucket());
@@ -52,7 +52,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  await requireAdminAction(["CONTENT"]);
+  await requireAdminAction(["CONTENT"], "/admin/erp/landing-strane");
   try {
     const formData = await request.formData();
     const prefix = await pagePrefix(String(formData.get("pageId") ?? ""));
@@ -108,7 +108,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  await requireAdminAction(["CONTENT"]);
+  await requireAdminAction(["CONTENT"], "/admin/erp/landing-strane");
   try {
     const body = await request.json().catch(() => null) as
       | { pageId?: string; url?: string }

@@ -21,7 +21,7 @@ export default async function AuditLogPage({
   searchParams: Promise<{ q?: string; entity?: string; page?: string }>;
 }) {
   // SUPER only — others get redirect
-  await requireAdminAction([]);
+  await requireAdminAction([], "/admin/audit-log");
   const sp = await searchParams;
   const q = sp.q?.trim() ?? "";
   const entity = sp.entity?.trim() ?? "";

@@ -2,7 +2,8 @@ import "server-only";
 import webpush from "web-push";
 import { db } from "@/lib/db";
 import { enqueueBackgroundJob, processBackgroundJob } from "@/lib/background-jobs";
-import { canReceiveOrderPush, isPushEndpoint } from "./push-policy";
+import { isPushEndpoint } from "./push-policy";
+import { canAccessAdminModule } from "./access-policy";
 
 function configured(value: string | undefined) {
   return value?.trim() && !value.trim().startsWith("GET_FROM_") ? value.trim() : null;
@@ -27,9 +28,10 @@ export async function sendAdminDevicePush(subscriptionId: string, payload: {
   title: string; body: string; url: string; tag: string;
 }) {
   const subscription = await db.adminPushSubscription.findUnique({
-    where: { id: subscriptionId }, include: { adminUser: { select: { enabled: true, role: true } } },
+    where: { id: subscriptionId }, include: { adminUser: { select: { enabled: true, role: true, accessPolicy: true } } },
   });
-  if (!subscription || !subscription.adminUser.enabled || !canReceiveOrderPush(subscription.adminUser.role)) return false;
+  const accessModule = payload.url === "/admin/erp/posete-konverzije" ? "/admin/erp/posete-konverzije" : "/admin/erp/prodajni-nalozi";
+  if (!subscription || !subscription.adminUser.enabled || !canAccessAdminModule(subscription.adminUser, accessModule, ["OPS"])) return false;
   const config = getPushConfiguration();
   if (!config) throw new Error("Admin push is not configured");
   if (!isPushEndpoint(subscription.endpoint)) throw new Error("Invalid push endpoint");
@@ -56,11 +58,12 @@ export async function fanOutOrderPush(orderId: string) {
   const order = await db.order.findUnique({ where: { id: orderId }, select: { createdAt: true } });
   if (!order || Date.now() - order.createdAt.getTime() > 3600_000) return;
   const subscriptions = await db.adminPushSubscription.findMany({
-    where: { createdAt: { lte: order.createdAt }, adminUser: { enabled: true, role: { in: ["SUPER", "OPS"] } } },
-    select: { id: true, adminUserId: true },
+    where: { createdAt: { lte: order.createdAt }, adminUser: { enabled: true } },
+    select: { id: true, adminUserId: true, adminUser: { select: { role: true, accessPolicy: true } } },
   });
   const jobs = [];
   for (const subscription of subscriptions) {
+    if (!canAccessAdminModule(subscription.adminUser, "/admin/erp/prodajni-nalozi", ["OPS"])) continue;
     jobs.push(await enqueueBackgroundJob({
       kind: "ADMIN_ORDER_PUSH_DEVICE", payload: { orderId, subscriptionId: subscription.id, adminUserId: subscription.adminUserId },
       idempotencyKey: `admin-order-push:${orderId}:${subscription.id}`,

@@ -9,7 +9,7 @@ import { configureAnanasInventory, postPendingAnanasInventory } from "@/lib/anan
 import { advanceAnanasInventoryHistory } from "@/lib/ananas/inventory-history.server";
 
 export async function saveAnanasInventory(_: AdminActionState, form: FormData): Promise<AdminActionState> {
-  return withAdminState({ allowed: ["OPS"], action: "ananas.inventory.configure", entity: "AdminSetting" }, async actorId => {
+  return withAdminState({ module: "/admin/erp/ananas", allowed: ["OPS"], action: "ananas.inventory.configure", entity: "AdminSetting" }, async actorId => {
     const policy = await configureAnanasInventory(form.get("enabled") === "on", form.get("allowNegative") === "on", actorId);
     revalidatePath("/admin/erp/ananas");
     return { ok: true, entityId: "ananas-inventory", message: "Podešavanje Ananas lagera je sačuvano.", diff: policy };
@@ -17,7 +17,7 @@ export async function saveAnanasInventory(_: AdminActionState, form: FormData): 
 }
 
 export async function runAnanasInventoryHistory() {
-  return withAdminState<[], Awaited<ReturnType<typeof advanceAnanasInventoryHistory>>>({ allowed: ["OPS"], action: "ananas.inventory.history", entity: "AdminSetting" }, async actorId => {
+  return withAdminState<[], Awaited<ReturnType<typeof advanceAnanasInventoryHistory>>>({ module: "/admin/erp/ananas", allowed: ["OPS"], action: "ananas.inventory.history", entity: "AdminSetting" }, async actorId => {
     const result = await advanceAnanasInventoryHistory(actorId);
     revalidatePath("/admin/erp/ananas"); revalidatePath("/admin/erp/stanje-po-magacinima");
     return { ok: true, entityId: "ananas-inventory", result, message: `Istorija do ${new Date(result.through).toLocaleDateString("sr-Latn-RS", { timeZone: "Europe/Belgrade" })}. Knjiženo ${result.posted} dokumenata.${result.needsReview ? " Preostale stavke traže proveru." : ""}`, diff: result };
@@ -25,7 +25,7 @@ export async function runAnanasInventoryHistory() {
 }
 
 export async function importAnanasOrders(_: AdminActionState, form: FormData): Promise<AdminActionState> {
-  return withAdminState({ allowed: ["OPS"], action: "ananas.orders.import", entity: "AnanasSyncRun" }, async () => {
+  return withAdminState({ module: "/admin/erp/ananas", allowed: ["OPS"], action: "ananas.orders.import", entity: "AnanasSyncRun" }, async () => {
     const period = resolveReportPeriod({ range: "custom", from: String(form.get("from") ?? ""), to: String(form.get("to") ?? "") });
     if (period.preset !== "custom") return { ok: false, message: "Izaberite ispravan period." };
     try {
@@ -41,7 +41,7 @@ export async function importAnanasOrders(_: AdminActionState, form: FormData): P
 
 export async function importAnanas(_: AdminActionState, form: FormData): Promise<AdminActionState> {
   const deadline = Date.now() + 210000;
-  return withAdminState({ allowed: ["OPS"], action: "ananas.import", entity: "AnanasSyncRun" }, async () => {
+  return withAdminState({ module: "/admin/erp/ananas", allowed: ["OPS"], action: "ananas.import", entity: "AnanasSyncRun" }, async () => {
     const from = String(form.get("from") ?? ""), to = String(form.get("to") ?? "");
     const period = resolveReportPeriod({ range: "custom", from, to });
     if (period.preset !== "custom") return { ok: false, message: "Izaberite ispravan period." };

@@ -8,7 +8,7 @@ import { promoProductOrderKey, promoProductOrderSchema, standardPromoPage } from
 
 export async function saveStandardPromoOrder(_state: AdminActionState, formData: FormData) {
   return withAdminState(
-    { allowed: ["CONTENT"], action: "landing.standardPromoOrder", entity: "AdminSetting" },
+    { module: "/admin/erp/landing-strane", allowed: ["CONTENT"], action: "landing.standardPromoOrder", entity: "AdminSetting" },
     async (actorId, data: FormData) => {
       const page = standardPromoPage(String(data.get("pageKey")));
       if (!page) return { ok: false as const, error: "Nepostojeća promo strana." };

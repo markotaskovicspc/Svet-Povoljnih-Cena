@@ -14,7 +14,7 @@ it("authorizes before any catalogue access and limits search results", async () 
   await expect(GET(new Request("http://localhost/api/admin/product-labels?q=stolica"))).rejects.toThrow("forbidden");
   expect(mocks.find).not.toHaveBeenCalled();
   const response = await GET(new Request("http://localhost/api/admin/product-labels?q=000001"));
-  expect(mocks.guard).toHaveBeenCalledWith(["CONTENT", "OPS"]);
+  expect(mocks.guard).toHaveBeenCalledWith(["CONTENT", "OPS"], "/admin/erp/nalepnice");
   expect(mocks.find).toHaveBeenCalledWith(expect.objectContaining({ take: 20 }));
   expect((await response.json()).articles[0]).toMatchObject({ sku: "000001", countryOfOrigin: "Kina" });
   expect(response.headers.get("cache-control")).toContain("no-store");

@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentAdmin } from "@/lib/auth/session";
+import { canAccessAdminModule } from "@/lib/admin/access-policy";
 import { db } from "@/lib/db";
-import { canReceiveOrderPush, pushEndpointSchema, pushSubscriptionSchema } from "@/lib/admin/push-policy";
+import { pushEndpointSchema, pushSubscriptionSchema } from "@/lib/admin/push-policy";
 import { getPushConfiguration, sendAdminDevicePush } from "@/lib/admin/order-push.server";
 import { checkRateLimit, rateLimitJson } from "@/lib/security/rate-limit";
 
@@ -12,7 +13,7 @@ const response = (data: unknown, status = 200) => NextResponse.json(data, { stat
 
 export async function GET() {
   const admin = await getCurrentAdmin();
-  if (!admin || !canReceiveOrderPush(admin.role)) return response({ error: "Nemate pristup." }, 403);
+  if (!admin || !canAccessAdminModule(admin, "/admin/erp/prodajni-nalozi", ["OPS"])) return response({ error: "Nemate pristup." }, 403);
   const config = getPushConfiguration();
   return response({ configured: Boolean(config), publicKey: config?.publicKey ?? null });
 }
@@ -28,7 +29,7 @@ const commandSchema = z.discriminatedUnion("operation", [
 export async function POST(request: Request) {
   if (request.headers.get("origin") !== new URL(request.url).origin) return response({ error: "Neispravan zahtev." }, 403);
   const admin = await getCurrentAdmin();
-  if (!admin || !canReceiveOrderPush(admin.role)) return response({ error: "Nemate pristup." }, 403);
+  if (!admin || !canAccessAdminModule(admin, "/admin/erp/prodajni-nalozi", ["OPS"])) return response({ error: "Nemate pristup." }, 403);
   const command = commandSchema.safeParse(await request.json().catch(() => null));
   if (!command.success) return response({ error: "Neispravno obaveštenje." }, 400);
   const data = command.data;
@@ -41,6 +42,9 @@ export async function POST(request: Request) {
     return response({ subscribed: Boolean(subscription), trafficAlerts: subscription?.trafficAlerts ?? false });
   }
   if (data.operation === "preferences") {
+    if (data.trafficAlerts && !canAccessAdminModule(admin, "/admin/erp/posete-konverzije", ["OPS"])) {
+      return response({ error: "Nemate pristup analitici poseta." }, 403);
+    }
     const result = await db.adminPushSubscription.updateMany({ where: { endpoint: data.endpoint, adminUserId: admin.id }, data: { trafficAlerts: data.trafficAlerts } });
     return result.count ? response({ ok: true }) : response({ error: "Prvo uključite obaveštenja na ovom uređaju." }, 404);
   }

@@ -9,6 +9,7 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { withAdminState, requireAdminAction } from "@/lib/admin";
+import { canAccessAdminModule } from "@/lib/admin/access-policy";
 import type { AdminActionState } from "@/lib/admin/action-state";
 import { num } from "@/lib/api/_helpers";
 import { setDefaultWarehouseStock } from "@/lib/inventory";
@@ -484,7 +485,7 @@ async function updateProduct(_state: AdminActionState, formData: FormData) {
   "use server";
 
   return withAdminState(
-    { allowed: ["CONTENT", "OPS"], action: "product.update", entity: "Product" },
+    { module: "/admin/erp/artikli", allowed: ["CONTENT", "OPS"], action: "product.update", entity: "Product" },
     async (actorId, formData: FormData) => {
         const raw = Object.fromEntries(formData);
         const bool = (k: string) =>
@@ -813,7 +814,7 @@ async function updateProductPictograms(_state: AdminActionState, formData: FormD
   "use server";
 
   return withAdminState(
-    { allowed: ["CONTENT", "OPS"], action: "product.pictograms.update", entity: "Product" },
+    { module: "/admin/erp/artikli", allowed: ["CONTENT", "OPS"], action: "product.pictograms.update", entity: "Product" },
     async (actorId, formData: FormData) => {
       const parsed = pictogramAssignmentSchema.safeParse(Object.fromEntries(formData));
       if (!parsed.success) {
@@ -882,7 +883,7 @@ async function addProductImage(_state: AdminActionState, formData: FormData) {
   "use server";
 
   return withAdminState(
-    { allowed: ["CONTENT", "OPS"], action: "product.media.create", entity: "ProductMedia" },
+    { module: "/admin/erp/artikli", allowed: ["CONTENT", "OPS"], action: "product.media.create", entity: "ProductMedia" },
     async (actorId, formData: FormData) => {
       const parsed = mediaSchema.safeParse(Object.fromEntries(formData));
       if (!parsed.success) {
@@ -967,7 +968,7 @@ async function updateProductMedia(_state: AdminActionState, formData: FormData) 
   "use server";
 
   return withAdminState(
-    { allowed: ["CONTENT", "OPS"], action: "product.media.update", entity: "ProductMedia" },
+    { module: "/admin/erp/artikli", allowed: ["CONTENT", "OPS"], action: "product.media.update", entity: "ProductMedia" },
     async (actorId, formData: FormData) => {
       const parsed = mediaUpdateSchema.safeParse(Object.fromEntries(formData));
       if (!parsed.success) {
@@ -1003,7 +1004,7 @@ async function deleteProductMedia(_state: AdminActionState, formData: FormData) 
   "use server";
 
   return withAdminState(
-    { allowed: ["CONTENT", "OPS"], action: "product.media.delete", entity: "ProductMedia" },
+    { module: "/admin/erp/artikli", allowed: ["CONTENT", "OPS"], action: "product.media.delete", entity: "ProductMedia" },
     async (actorId, formData: FormData) => {
       const parsed = mediaDeleteSchema.safeParse(Object.fromEntries(formData));
       if (!parsed.success) {
@@ -1055,7 +1056,7 @@ async function updateProductSyncOverrides(_state: AdminActionState, formData: Fo
   "use server";
 
   return withAdminState(
-    { allowed: ["CONTENT", "OPS"], action: "product.xml-overrides.update", entity: "Product" },
+    { module: "/admin/erp/artikli", allowed: ["CONTENT", "OPS"], action: "product.xml-overrides.update", entity: "Product" },
     async (actorId, formData: FormData) => {
       const productId = String(formData.get("productId") ?? "");
       if (!productId) {
@@ -1098,7 +1099,7 @@ async function syncSingleRabaluxProduct(
   "use server";
 
   return withAdminState(
-    { allowed: ["OPS"], action: "rabalux.product.sync", entity: "Product" },
+    { module: "/admin/erp/artikli", allowed: ["OPS"], action: "rabalux.product.sync", entity: "Product" },
     async (actorId, formData: FormData) => {
       const productId = String(formData.get("productId") ?? "");
       const reason = String(formData.get("reason") ?? "").trim();
@@ -1145,7 +1146,7 @@ async function retryFailedRabaluxMedia(
   "use server";
 
   return withAdminState(
-    { allowed: ["OPS"], action: "rabalux.product.media.retry", entity: "Product" },
+    { module: "/admin/erp/artikli", allowed: ["OPS"], action: "rabalux.product.media.retry", entity: "Product" },
     async (_actorId, formData: FormData) => {
       const productId = String(formData.get("productId") ?? "");
       const reason = String(formData.get("reason") ?? "").trim();
@@ -1169,7 +1170,7 @@ async function retryFailedRabaluxMedia(
 async function createFamilyColor(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
-    {
+    { module: "/admin/erp/artikli",
       allowed: ["CONTENT", "OPS"],
       action: "product.family.color.create",
       entity: "ProductFamily",
@@ -1265,7 +1266,7 @@ export default async function ProductDetail({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireAdminAction(["CONTENT", "OPS"]);
+  const admin = await requireAdminAction(["CONTENT", "OPS"], "/admin/erp/artikli");
   const { id } = await params;
   const now = new Date();
   const [
@@ -2294,7 +2295,7 @@ export default async function ProductDetail({
             </Fragment>
           </AdminActionForm>
           </Card>
-          <ArticlePurchasePrices productId={product.id} />
+          {canAccessAdminModule(admin, "/admin/erp/nabavne-cene", ["OPS"]) && <ArticlePurchasePrices productId={product.id} />}
         </div>
 
         <div className="space-y-4">

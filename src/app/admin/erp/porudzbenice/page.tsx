@@ -16,7 +16,7 @@ export default async function PurchaseOrdersOverviewPage({
 }: {
   searchParams: Promise<{ view?: string }>;
 }) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/porudzbenice");
   const isArchive = (await searchParams).view === "archive";
   const erpModule = await getErpModule("porudzbenice", { purchaseOrderArchived: isArchive });
   if (!erpModule) notFound();

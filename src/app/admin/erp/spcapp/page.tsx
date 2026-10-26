@@ -9,7 +9,7 @@ import { revokeSpcappKey } from './actions';
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'SPCApp API', robots: { index: false, follow: false } };
 export default async function SpcappPage() {
-  await requireAdminAction(['SUPER']);
+  await requireAdminAction(['SUPER'], "/admin/erp/spcapp");
   const clients = await db.partnerApiClient.findMany({ where: { scopes: { has: 'spcapp:read' } }, orderBy: { createdAt: 'desc' }, select: { id: true, name: true, enabled: true, createdAt: true, lastUsedAt: true, rateLimit: true } });
   return <><PageHeader title="SPCApp API" description="Povezivanje SPC Cash Flow aplikacije sa ERP podacima." />
     <main className="space-y-6 p-4 md:p-8">

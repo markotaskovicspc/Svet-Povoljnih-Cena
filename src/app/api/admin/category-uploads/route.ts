@@ -30,7 +30,7 @@ function noStoreJson(body: unknown, init?: ResponseInit) {
 }
 
 export async function POST(request: Request) {
-  const admin = await requireAdminAction(["CONTENT"]);
+  const admin = await requireAdminAction(["CONTENT"], "/admin/kategorije");
   const input = uploadSchema.safeParse(await request.json().catch(() => null));
   if (!input.success) {
     return noStoreJson(
@@ -73,7 +73,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const admin = await requireAdminAction(["CONTENT"]);
+  const admin = await requireAdminAction(["CONTENT"], "/admin/kategorije");
   const input = cleanupSchema.safeParse(await request.json().catch(() => null));
   if (!input.success) {
     return noStoreJson({ error: "Neispravan upload ključ." }, { status: 400 });

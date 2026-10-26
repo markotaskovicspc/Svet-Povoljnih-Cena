@@ -5,7 +5,7 @@ import { withAdminState } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { allocateSetPrice, productSetInputSchema } from "@/lib/product-sets/core";
 
-export const saveProductSet = withAdminState<[unknown], { id: string }>({ allowed: ["CONTENT", "OPS"], action: "product-set.save", entity: "ProductSet" }, async (_actor, raw) => {
+export const saveProductSet = withAdminState<[unknown], { id: string }>({ module: "/admin/erp/setovi", allowed: ["CONTENT", "OPS"], action: "product-set.save", entity: "ProductSet" }, async (_actor, raw) => {
   const input = productSetInputSchema.safeParse(raw);
   if (!input.success) return { ok: false, message: input.error.issues.map(i => i.message).join(" ") };
   const data = input.data;

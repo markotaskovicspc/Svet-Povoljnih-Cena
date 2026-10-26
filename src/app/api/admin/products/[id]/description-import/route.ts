@@ -10,7 +10,7 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const admin = await requireAdminAction(["CONTENT", "OPS"]);
+  const admin = await requireAdminAction(["CONTENT", "OPS"], "/admin/erp/artikli");
   const { id: productId } = await context.params;
   try {
     const product = await db.product.findUnique({

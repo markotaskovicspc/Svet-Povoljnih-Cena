@@ -7,6 +7,7 @@ import { Suspense } from "react";
 import { getDashboardOperations, type DashboardDataInput, type DashboardOperations } from "@/lib/admin/dashboard-data";
 import { getDashboardAnalytics } from "@/lib/admin/dashboard-analytics";
 import { requireAdminAction } from "@/lib/admin";
+import { canAccessAdminModule } from "@/lib/admin/access-policy";
 import { formatRsd } from "@/lib/format";
 import { resolveReportPeriod } from "@/lib/admin/report-period";
 import {
@@ -40,7 +41,7 @@ export default async function AdminDashboard({
 }: {
   searchParams: Promise<DashboardParams>;
 }) {
-  const admin = await requireAdminAction();
+  const admin = await requireAdminAction(undefined, "/admin");
   const sp = await searchParams;
   return (
     <>
@@ -49,7 +50,7 @@ export default async function AdminDashboard({
         description="Dnevni pregled, sačuvani poslovni periodi i jedinstven magacinski kontekst."
       />
       <Suspense fallback={<DashboardPending label="Učitavanje filtera…" />}>
-        <DashboardBody adminId={admin.id} sp={sp} canViewAnanas={admin.role === "OPS" || admin.role === "SUPER"} />
+        <DashboardBody adminId={admin.id} sp={sp} canViewAnanas={canAccessAdminModule(admin, "/admin/erp/ananas", ["OPS"])} />
       </Suspense>
     </>
   );

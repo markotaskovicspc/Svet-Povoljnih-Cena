@@ -150,7 +150,7 @@ describe("ERP returns page", () => {
     mocks.orders.mockResolvedValue(Array.from({ length: 7 }, (_, index) => returnedOrder(String(index))));
     mocks.count.mockResolvedValue(7);
     const html = renderToStaticMarkup(await ReturnsPage({ searchParams: Promise.resolve({ evidence: "1" }) }));
-    expect(mocks.authorize).toHaveBeenCalledWith(["OPS"]);
+    expect(mocks.authorize).toHaveBeenCalledWith(["OPS"], ["/admin/erp/preuzimanja/povrati", "/admin/magacin"]);
     for (let index = 0; index < 7; index++) {
       expect(html).toContain(`SPC-${index}`);
       expect(html).toContain(`TRACK-${index}`);
@@ -332,7 +332,7 @@ describe("next return after receipt", () => {
 describe("warehouse returns workspace", () => {
   it("keeps scanner lookup and evidence links inside the restricted workspace", async () => {
     const html = renderToStaticMarkup(await ReturnsWorkspace({ warehouseMode: true }));
-    expect(mocks.authorize).toHaveBeenCalledWith(["OPS", "WAREHOUSE"]);
+    expect(mocks.authorize).toHaveBeenCalledWith(["OPS", "WAREHOUSE"], ["/admin/erp/preuzimanja/povrati", "/admin/magacin"]);
     expect(html).toContain('action="/admin/magacin/povrat"');
     expect(html).toContain('/admin/magacin/povrat?evidence=1');
     expect(html).not.toContain('href="/admin/erp/');

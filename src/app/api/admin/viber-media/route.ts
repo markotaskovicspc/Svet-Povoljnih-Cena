@@ -9,7 +9,7 @@ import { validateNewsletterImageFile } from "@/lib/newsletter/image-file";
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  await requireAdminAction(["ADS"]);
+  await requireAdminAction(["ADS"], "/admin/viber");
   try {
     const form = await request.formData();
     const file = form.get("file");

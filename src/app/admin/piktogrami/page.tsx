@@ -122,7 +122,7 @@ async function upsert(_state: AdminActionState, formData: FormData) {
   "use server";
 
   return withAdminState(
-    { allowed: ["CONTENT"], action: "pictogram.upsert", entity: "Pictogram" },
+    { module: "/admin/piktogrami", allowed: ["CONTENT"], action: "pictogram.upsert", entity: "Pictogram" },
     async (_a, formData: FormData) => {
       const parsed = schema.safeParse(Object.fromEntries(formData));
       if (!parsed.success) {
@@ -209,7 +209,7 @@ async function remove(_state: AdminActionState, formData: FormData) {
   "use server";
 
   return withAdminState(
-    { allowed: ["CONTENT"], action: "pictogram.delete", entity: "Pictogram" },
+    { module: "/admin/piktogrami", allowed: ["CONTENT"], action: "pictogram.delete", entity: "Pictogram" },
     async (_a, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
       if (!id) return { ok: false as const, error: "Nedostaje ID." };
@@ -259,7 +259,7 @@ async function remove(_state: AdminActionState, formData: FormData) {
 }
 
 export default async function PictogramsPage() {
-  await requireAdminAction(["CONTENT"]);
+  await requireAdminAction(["CONTENT"], "/admin/piktogrami");
   const items = await db.pictogram.findMany({
     orderBy: { code: "asc" },
     include: {

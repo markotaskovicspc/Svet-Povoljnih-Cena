@@ -22,7 +22,7 @@ const REQUIRED_NEW_ARTICLE_HEADERS = new Set([
 ]);
 
 export async function GET() {
-  await requireAdminAction(["CONTENT"]);
+  await requireAdminAction(["CONTENT"], "/admin/erp/artikli");
 
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "Svet povoljnih cena";

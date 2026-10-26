@@ -60,7 +60,7 @@ async function saveMobileSearch(_state: AdminActionState, formData: FormData) {
   "use server";
 
   return withAdminState(
-    {
+    { module: "/admin/mobilna-pretraga",
       allowed: ["CONTENT"],
       action: "mobileSearch.save",
       entity: "AdminSetting",
@@ -208,7 +208,7 @@ async function saveMobileSearch(_state: AdminActionState, formData: FormData) {
 }
 
 export default async function MobileSearchAdminPage() {
-  await requireAdminAction(["CONTENT"]);
+  await requireAdminAction(["CONTENT"], "/admin/mobilna-pretraga");
   const [setting, fallback, actions, landingPages, categories] = await Promise.all([
     db.adminSetting.findUnique({
       where: { key: MOBILE_SEARCH_SETTING_KEY },

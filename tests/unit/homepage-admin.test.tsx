@@ -66,7 +66,7 @@ async function save(key: string) {
 describe("homepage category selection", () => {
   it("offers parent and child hamburger pages in all six forms alongside existing destinations", async () => {
     const html = renderToStaticMarkup(await HomeAdminPage());
-    expect(mocks.authorize).toHaveBeenCalledWith(["CONTENT"]);
+    expect(mocks.authorize).toHaveBeenCalledWith(["CONTENT"], "/admin/pocetna");
     expect(html.match(/value="category:travel"/g)).toHaveLength(6);
     expect(html.match(/value="category:suitcases"/g)).toHaveLength(6);
     expect(html).toContain("Koferi (/k/putovanje/koferi)");

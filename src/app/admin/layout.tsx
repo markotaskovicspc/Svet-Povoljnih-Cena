@@ -12,7 +12,6 @@ import {
   adminNavPreferencesFromColumns,
   allowedNavFor,
   applyAdminNavPreferences,
-  isAuthorized,
 } from "@/lib/admin";
 import { withSavedViewLinks } from "@/lib/admin/nav";
 import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
@@ -20,8 +19,8 @@ import { getErpModuleDefinition } from "@/lib/admin/erp";
 import { Button } from "@/components/ui/button";
 import { AdminRefreshButton } from "@/components/admin/refresh-button";
 import { OrderNotifications } from "@/components/admin/order-notifications";
-import { canReceiveOrderPush } from "@/lib/admin/push-policy";
 import { WarehouseShell } from "@/components/admin/warehouse-shell";
+import { adminAccessHome, adminModuleForPage, canAccessAdminModule, usesModuleAccess } from "@/lib/admin/access-policy";
 import "./theme.css";
 
 export const dynamic = "force-dynamic";
@@ -58,13 +57,19 @@ export default async function AdminLayout({
     redirect(`${warehousePath ? "/admin/magacin/prijava" : "/admin/prijava"}?callbackUrl=${encodeURIComponent(pathname)}`);
   }
 
-  if (user.role === "WAREHOUSE" && !warehousePath) redirect("/admin/magacin");
+  if (usesModuleAccess(user) && pathname !== "/admin/pristup-odbijen") {
+    const accessModule = adminModuleForPage(pathname);
+    if (!accessModule || !canAccessAdminModule(user, accessModule)) {
+      redirect(pathname === "/admin" ? adminAccessHome(user) : "/admin/pristup-odbijen");
+    }
+  }
+  if (user.role === "WAREHOUSE" && !warehousePath && pathname !== "/admin/pristup-odbijen") redirect("/admin/magacin");
   if (warehousePath) {
-    if (!isAuthorized(user.role, ["OPS", "WAREHOUSE"])) redirect("/admin?forbidden=1");
+    if (!canAccessAdminModule(user, "/admin/magacin", ["OPS", "WAREHOUSE"])) redirect("/admin/pristup-odbijen");
     return <AdminThemeProvider initialTheme={initialTheme}><WarehouseShell name={user.name} adminHref={user.role !== "WAREHOUSE" ? "/admin/erp" : undefined}>{children}</WarehouseShell></AdminThemeProvider>;
   }
 
-  const availableNav = allowedNavFor(user.role);
+  const availableNav = allowedNavFor(user);
   const savedNavigation = await db.adminSavedView.findMany({
     where: {
       adminUserId: user.id,
@@ -90,7 +95,7 @@ export default async function AdminLayout({
     const allowed = allowedRolesForErpModule(view.module);
     return definition &&
       !definition.redirectHref &&
-      isAuthorized(user.role, allowed)
+      canAccessAdminModule(user, `/admin/erp/${view.module}`, allowed)
       ? [{ ...view, title: definition.title, allowed }]
       : [];
   });
@@ -135,7 +140,7 @@ export default async function AdminLayout({
               <div className="flex shrink-0 items-center gap-2">
                 <AdminRefreshButton />
                 <AdminThemeToggle />
-                {canReceiveOrderPush(user.role) && <OrderNotifications adminId={user.id} />}
+                {canAccessAdminModule(user, "/admin/erp/prodajni-nalozi", ["OPS"]) && <OrderNotifications adminId={user.id} />}
                 <Link
                   href="/"
                   className="inline-flex h-8 w-9 items-center justify-center rounded-lg border border-border bg-background transition hover:bg-muted"

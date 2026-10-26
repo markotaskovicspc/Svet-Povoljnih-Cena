@@ -10,7 +10,7 @@ export async function POST(
   _req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const admin = await requireAdminAction(["OPS"]);
+  const admin = await requireAdminAction(["OPS"], "/admin/erp/prodajni-nalozi");
   const { id } = await ctx.params;
   const invoice = await db.invoice.findUnique({
     where: { id },

@@ -9,7 +9,7 @@ export async function GET(
   _req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/prodajni-nalozi");
   const { id } = await ctx.params;
   const result = await buildBuyerReceiptPdfForInvoice(id);
   if (!result) {

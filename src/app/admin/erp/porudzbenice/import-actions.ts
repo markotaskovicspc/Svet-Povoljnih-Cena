@@ -10,7 +10,7 @@ import { purchaseOrderImportPreview, applyPurchaseOrderImport } from "@/lib/admi
 const rowsSchema = z.array(z.object({ row: z.number().int().min(2), sku: z.string().trim().min(1).max(100), qty: z.number().int().min(1).max(MAX_PURCHASE_ORDER_IMPORT_QTY) })).min(1).max(MAX_PURCHASE_ORDER_IMPORT_ROWS);
 
 export async function previewPurchaseOrderImport(form: FormData) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/porudzbenice");
   try {
     const file = form.get("file");
     if (!(file instanceof File) || !file.size || file.size > 512_000) throw new Error("Izaberite CSV ili XLSX datoteku do 500 KB.");
@@ -43,7 +43,7 @@ export async function previewPurchaseOrderImport(form: FormData) {
 }
 
 export async function applyPurchaseOrderImportAction(_state: AdminActionState, form: FormData) {
-  return withAdminState({ allowed: ["OPS"], action: "po.items.import", entity: "PurchaseOrder" }, async (_actor, data: FormData) => {
+  return withAdminState({ module: "/admin/erp/porudzbenice", allowed: ["OPS"], action: "po.items.import", entity: "PurchaseOrder" }, async (_actor, data: FormData) => {
     const orderId = z.string().min(1).max(100).parse(data.get("orderId"));
     const input = rowsSchema.parse(JSON.parse(String(data.get("rows") ?? "[]")));
     const fingerprint = z.string().regex(/^[a-f0-9]{64}$/).parse(data.get("fingerprint"));

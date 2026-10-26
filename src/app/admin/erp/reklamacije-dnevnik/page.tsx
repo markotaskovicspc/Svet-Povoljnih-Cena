@@ -70,7 +70,7 @@ async function createManualReclamation(
   "use server";
 
   return withAdminState(
-    {
+    { module: "/admin/erp/reklamacije-dnevnik",
       allowed: ["OPS"],
       action: "reclamation.manualCreate",
       entity: "Reclamation",
@@ -187,7 +187,7 @@ export default async function ReclamationsPage({
 }: {
   searchParams: Promise<{ status?: string; reclamation?: string }>;
 }) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/reklamacije-dnevnik");
   const sp = await searchParams;
   const status = sp.status as ReclamationStatus | undefined;
   const where = {

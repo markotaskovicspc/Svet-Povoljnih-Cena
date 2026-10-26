@@ -12,7 +12,7 @@ export const metadata = {
 };
 
 export default async function DispatchNotesOverviewPage() {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/otpremnice");
   const erpModule = await getErpModule("otpremnice");
   if (!erpModule) notFound();
   return (

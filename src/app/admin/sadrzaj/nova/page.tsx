@@ -9,7 +9,7 @@ export const metadata = {
 };
 
 export default async function NewContentPage() {
-  await requireAdminAction(["CONTENT"]);
+  await requireAdminAction(["CONTENT"], "/admin/sadrzaj");
   return (
     <>
       <PageHeader

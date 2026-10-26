@@ -6,7 +6,7 @@ import { ArticleImportForm } from "./article-import-form";
 export const dynamic = "force-dynamic";
 
 export default async function ArticleImportPage() {
-  await requireAdminAction(["CONTENT"]);
+  await requireAdminAction(["CONTENT"], "/admin/erp/artikli");
   return (
     <>
       <PageHeader

@@ -50,5 +50,5 @@ it("explains missing supplier setup and retains existing history", async () => {
 
 it("places the purchasing component after the article form and outside its Card", () => {
   const page = readFileSync(new URL("../../src/app/admin/erp/artikli/[id]/page.tsx", import.meta.url), "utf8");
-  expect(page).toMatch(/<\/AdminActionForm>\s*<\/Card>\s*<ArticlePurchasePrices productId=\{product.id\}/);
+  expect(page).toMatch(/<\/AdminActionForm>\s*<\/Card>\s*\{canAccessAdminModule\(admin, "\/admin\/erp\/nabavne-cene", \["OPS"\]\) && <ArticlePurchasePrices productId=\{product.id\}/);
 });

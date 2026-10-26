@@ -17,7 +17,7 @@ it("lists recorded bounces independently of the latest recipient status and rece
   const bouncedAt = new Date("2026-09-19T15:00:00Z");
   mocks.findMany.mockResolvedValue([{ id: "old-bounce", email: "example@example.com", bouncedAt }]);
   const result = await getNewsletterBounces({ campaignId: "campaign" });
-  expect(mocks.guard).toHaveBeenCalledWith(["ADS"]);
+  expect(mocks.guard).toHaveBeenCalledWith(["ADS"], "/admin/newsletter");
   expect(mocks.findMany.mock.calls[0][0].where).toEqual({ campaignId: "campaign", bouncedAt: { not: null } });
   expect(result).toEqual({ items: [{ id: "old-bounce", email: "example@example.com", bouncedAt: bouncedAt.toISOString() }], nextCursor: null });
 });

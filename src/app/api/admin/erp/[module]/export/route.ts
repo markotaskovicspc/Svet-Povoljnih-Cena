@@ -40,7 +40,7 @@ export async function GET(
   context: { params: Promise<{ module: string }> },
 ) {
   const { module: slug } = await context.params;
-  await requireAdminAction(allowedRolesForErpModule(slug));
+  await requireAdminAction(allowedRolesForErpModule(slug), `/admin/erp/${slug}`);
   // Downloads are expensive and must only be prepared for an explicit request.
   // Old open admin tabs may still contain Next links that prefetch this route.
   const purpose = `${request.headers.get("purpose") ?? ""} ${request.headers.get("sec-purpose") ?? ""}`;

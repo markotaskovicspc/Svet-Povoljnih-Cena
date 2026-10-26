@@ -29,7 +29,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Izmena landing strane", robots: { index: false, follow: false } };
 
 export default async function EditLandingPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireAdminAction(["CONTENT"]);
+  await requireAdminAction(["CONTENT"], "/admin/erp/landing-strane");
   const { id } = await params;
   const standard = id.startsWith("standard-") ? standardPromoPage(id.slice("standard-".length)) : undefined;
   if (standard) {

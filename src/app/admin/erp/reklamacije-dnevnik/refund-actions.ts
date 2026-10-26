@@ -16,7 +16,7 @@ function refresh(id: string) {
 }
 
 export async function issueClaimRefundAction(_state: AdminActionState, data: FormData) {
-  return withAdminState({ allowed: ["OPS"], action: "reclamation.fiscalRefund", entity: "Reclamation" }, async (actorId, form: FormData) => {
+  return withAdminState({ module: "/admin/erp/reklamacije-dnevnik", allowed: ["OPS"], action: "reclamation.fiscalRefund", entity: "Reclamation" }, async (actorId, form: FormData) => {
     const id = String(form.get("id") ?? "");
     try {
       const result = await issueReclamationRefund({ id, actorId });
@@ -28,7 +28,7 @@ export async function issueClaimRefundAction(_state: AdminActionState, data: For
 }
 
 export async function confirmClaimPayoutAction(_state: AdminActionState, data: FormData) {
-  return withAdminState({ allowed: ["OPS"], action: "reclamation.payoutConfirmed", entity: "Reclamation" }, async (actorId, form: FormData) => {
+  return withAdminState({ module: "/admin/erp/reklamacije-dnevnik", allowed: ["OPS"], action: "reclamation.payoutConfirmed", entity: "Reclamation" }, async (actorId, form: FormData) => {
     const id = String(form.get("id") ?? "");
     try {
       const payoutId = await confirmReclamationPayout({ id, actorId, paidAt: String(form.get("paidAt") ?? ""), reference: String(form.get("reference") ?? ""), confirmed: form.get("confirmed") === "on" });

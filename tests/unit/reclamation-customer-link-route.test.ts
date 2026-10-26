@@ -15,7 +15,7 @@ describe("admin copyable reclamation link", () => {
   });
   it("returns an expiring reclamation-only URL and does not send email", async () => {
     const response = await POST(request());
-    expect(mocks.auth).toHaveBeenCalledWith(["OPS"]);
+    expect(mocks.auth).toHaveBeenCalledWith(["OPS"], "/admin/erp/reklamacije-dnevnik");
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     const data = await response.json();
     const url = new URL(data.path, "https://example.test");

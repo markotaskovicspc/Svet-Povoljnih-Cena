@@ -12,7 +12,7 @@ beforeEach(()=>{vi.clearAllMocks();mock.rate.mockResolvedValue({ok:true});mock.s
 it("switches from warehouse entry to ERP using the new account role",async()=>{
  mock.account.mockResolvedValue({role:"SUPER"});await loginAction(form());
  expect(mock.signIn).toHaveBeenCalledWith("admin-credentials",expect.objectContaining({redirectTo:"/admin/erp",redirect:true}));
- expect(mock.account).toHaveBeenCalledWith({where:{email:"super@example.invalid"},select:{role:true}});
+ expect(mock.account).toHaveBeenCalledWith({where:{email:"super@example.invalid"},select:{role:true,accessPolicy:true}});
 });
 it("still authenticates warehouse credentials and returns to warehouse",async()=>{
  mock.account.mockResolvedValue({role:"WAREHOUSE"});await loginAction(form());

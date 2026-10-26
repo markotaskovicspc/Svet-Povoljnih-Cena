@@ -34,7 +34,7 @@ async function upsert(_state: AdminActionState, formData: FormData) {
   "use server";
 
   return withAdminState(
-    { allowed: ["CONTENT"], action: "promobar.upsert", entity: "PromoBar" },
+    { module: "/admin/promo-traka", allowed: ["CONTENT"], action: "promobar.upsert", entity: "PromoBar" },
     async (_a, formData: FormData) => {
         const parsed = schema.safeParse({
           ...Object.fromEntries(formData),
@@ -68,7 +68,7 @@ async function remove(formData: FormData) {
   "use server";
 
   return withAdmin(
-    { allowed: ["CONTENT"], action: "promobar.delete", entity: "PromoBar" },
+    { module: "/admin/promo-traka", allowed: ["CONTENT"], action: "promobar.delete", entity: "PromoBar" },
     async (_a, formData: FormData) => {
         const id = String(formData.get("id") ?? "");
         if (!id) return { ok: false as const, error: "Nedostaje ID." };
@@ -82,7 +82,7 @@ async function remove(formData: FormData) {
 }
 
 export default async function PromoBarPage() {
-  await requireAdminAction(["CONTENT"]);
+  await requireAdminAction(["CONTENT"], "/admin/promo-traka");
   const bars = await db.promoBar.findMany({ orderBy: { updatedAt: "desc" } });
 
   return (

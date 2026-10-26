@@ -165,7 +165,7 @@ export async function upsertAction(
   formData: FormData,
 ) {
   return withAdminState(
-    { allowed: ["CONTENT"], action: "action.upsert", entity: "Action" },
+    { module: "/admin/erp/akcije", allowed: ["CONTENT"], action: "action.upsert", entity: "Action" },
     async (_actorId, formData: FormData) => {
       const parsed = actionSchema.safeParse({
         ...Object.fromEntries(formData),
@@ -216,7 +216,7 @@ export async function deleteAction(
   formData: FormData,
 ) {
   return withAdminState(
-    { allowed: ["CONTENT"], action: "action.delete", entity: "Action" },
+    { module: "/admin/erp/akcije", allowed: ["CONTENT"], action: "action.delete", entity: "Action" },
     async (_actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
       if (!id) return { ok: false as const, error: "Nedostaje ID akcije." };
@@ -338,7 +338,7 @@ function mapProductDetails(
 }
 
 export async function lookupActionProduct(actionId: string, rawSku: string) {
-  await requireAdminAction(["CONTENT"]);
+  await requireAdminAction(["CONTENT"], "/admin/erp/akcije");
   const identifier = rawSku.trim();
   if (!identifier) {
     return { ok: false as const, message: "Unesite šifru artikla." };
@@ -389,7 +389,7 @@ export async function saveActionProduct(
   formData: FormData,
 ) {
   return withAdminState(
-    {
+    { module: "/admin/erp/akcije",
       allowed: ["CONTENT"],
       action: "action.product.upsert",
       entity: "ActionProduct",
@@ -541,7 +541,7 @@ export async function deleteActionProduct(
   formData: FormData,
 ) {
   return withAdminState(
-    {
+    { module: "/admin/erp/akcije",
       allowed: ["CONTENT"],
       action: "action.product.delete",
       entity: "ActionProduct",
@@ -589,7 +589,7 @@ export async function upsertLoyaltyRule(
   formData: FormData,
 ) {
   return withAdminState(
-    { allowed: ["CONTENT"], action: "loyalty.upsert", entity: "LoyaltyRule" },
+    { module: "/admin/erp/akcije", allowed: ["CONTENT"], action: "loyalty.upsert", entity: "LoyaltyRule" },
     async (_actorId, formData: FormData) => {
       const parsed = loyaltySchema.safeParse({
         ...Object.fromEntries(formData),
@@ -667,7 +667,7 @@ export async function deleteLoyaltyRule(
   formData: FormData,
 ) {
   return withAdminState(
-    { allowed: ["CONTENT"], action: "loyalty.delete", entity: "LoyaltyRule" },
+    { module: "/admin/erp/akcije", allowed: ["CONTENT"], action: "loyalty.delete", entity: "LoyaltyRule" },
     async (_actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
       if (!id) {
@@ -690,7 +690,7 @@ export async function upsertLinearPromotion(
   formData: FormData,
 ) {
   return withAdminState(
-    {
+    { module: "/admin/erp/akcije",
       allowed: ["CONTENT"],
       action: "linear-promotion.upsert",
       entity: "LinearPromotion",
@@ -788,7 +788,7 @@ export async function deleteLinearPromotion(
   formData: FormData,
 ) {
   return withAdminState(
-    {
+    { module: "/admin/erp/akcije",
       allowed: ["CONTENT"],
       action: "linear-promotion.delete",
       entity: "LinearPromotion",

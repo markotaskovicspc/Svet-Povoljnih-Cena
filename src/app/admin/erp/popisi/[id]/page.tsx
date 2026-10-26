@@ -77,7 +77,7 @@ async function saveHeaderAction(
 ) {
   "use server";
   return withAdminState(
-    {
+    { module: "/admin/erp/popisi",
       allowed: ["OPS"],
       action: "stocktake-dispatch.header.save",
       entity: "DispatchNote",
@@ -113,7 +113,7 @@ async function saveHeaderAction(
 async function addItemAction(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
-    {
+    { module: "/admin/erp/popisi",
       allowed: ["OPS"],
       action: "stocktake-dispatch.item.add",
       entity: "DispatchNoteItem",
@@ -141,7 +141,7 @@ async function addItemAction(_state: AdminActionState, formData: FormData) {
 async function updateItemAction(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
-    {
+    { module: "/admin/erp/popisi",
       allowed: ["OPS"],
       action: "stocktake-dispatch.item.update",
       entity: "DispatchNoteItem",
@@ -169,7 +169,7 @@ async function updateItemAction(_state: AdminActionState, formData: FormData) {
 async function removeItemAction(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
-    {
+    { module: "/admin/erp/popisi",
       allowed: ["OPS"],
       action: "stocktake-dispatch.item.remove",
       entity: "DispatchNoteItem",
@@ -192,7 +192,7 @@ async function removeItemAction(_state: AdminActionState, formData: FormData) {
 async function postAction(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
-    {
+    { module: "/admin/erp/popisi",
       allowed: ["OPS"],
       action: "stocktake-dispatch.post",
       entity: "DispatchNote",
@@ -226,7 +226,7 @@ export default async function StocktakeDispatchPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/popisi");
   const { id } = await params;
   const [dispatch, warehouses] = await Promise.all([
     db.dispatchNote.findFirst({

@@ -8,7 +8,7 @@ import { audienceDescription } from "@/lib/viber/ui";
 
 export const runtime = "nodejs";
 export async function POST(request: Request) {
-  const actor = await requireAdminAction(["ADS"]);
+  const actor = await requireAdminAction(["ADS"], "/admin/viber");
   const reply = (data: unknown, status = 200) => NextResponse.json(data, { status, headers: { "Cache-Control": "private, no-store" } });
   try {
     const form = await request.formData();

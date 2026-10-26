@@ -4,7 +4,7 @@ import { readInvoiceXml } from "@/lib/sef/ubl";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/sef");
   const doc = await db.sefDocument.findUnique({ where: { id: (await params).id } });
   if (!doc) return new Response("Dokument ne postoji.", { status: 404 });
   const index = new URL(request.url).searchParams.get("attachment");

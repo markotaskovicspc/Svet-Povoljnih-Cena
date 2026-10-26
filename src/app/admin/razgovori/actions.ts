@@ -2,7 +2,7 @@
 import {requireAdminAction} from '@/lib/admin';
 import {logAudit} from '@/lib/admin/audit';
 export async function actOnConversation(input:{id:string,action:'pause'|'resume'|'reply',text?:string,requestId?:string}){
- const actor=await requireAdminAction(['OPS']);
+ const actor=await requireAdminAction(['OPS'], "/admin/razgovori");
  if(typeof input?.id!=='string'||input.id.length>200||!['pause','resume','reply'].includes(input.action))return {ok:false,message:'Neispravna komanda.'};
  if(input.action==='reply'&&(typeof input.text!=='string'||!input.text.trim()||input.text.length>1800||!/^[0-9a-f-]{36}$/i.test(input.requestId??'')))return {ok:false,message:'Unesite poruku do 1.800 znakova.'};
  const secret=process.env.SOCIAL_INTEGRATION_SECRET;if(!secret||secret.startsWith('GET_FROM_'))return {ok:false,message:'Veza sa chatom nije podešena.'};

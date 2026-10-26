@@ -39,7 +39,7 @@ async function updateMonthlyActionMetadata(
   "use server";
 
   return withAdminState(
-    {
+    { module: "/admin/erp/akcije",
       allowed: ["CONTENT"],
       action: "storefront.monthlyActionMetadata.update",
       entity: "AdminSetting",
@@ -83,7 +83,7 @@ export default async function ActionsPage({
 }: {
   searchParams: Promise<{ edit?: string }>;
 }) {
-  await requireAdminAction(["CONTENT"]);
+  await requireAdminAction(["CONTENT"], "/admin/erp/akcije");
   const params = await searchParams;
   const [
     actions,

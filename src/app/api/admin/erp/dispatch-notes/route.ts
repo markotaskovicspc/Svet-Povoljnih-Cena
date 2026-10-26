@@ -4,7 +4,7 @@ import { logAudit, requireAdminAction } from "@/lib/admin";
 import { createDispatchNote } from "@/lib/admin/dispatch-note.server";
 
 export async function POST(request: Request) {
-  const admin = await requireAdminAction(["OPS"]);
+  const admin = await requireAdminAction(["OPS"], "/admin/erp/otpremnice");
   const input = await request.json().catch(() => null);
   try {
     const note = await createDispatchNote(input, admin.id);

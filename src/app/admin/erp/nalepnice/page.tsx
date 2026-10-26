@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Nalepnice za kutije", robots: { index: false, follow: false } };
 
 export default async function ProductLabelsPage({ searchParams }: { searchParams: Promise<{ product?: string }> }) {
-  await requireAdminAction(["CONTENT", "OPS"]);
+  await requireAdminAction(["CONTENT", "OPS"], "/admin/erp/nalepnice");
   const { product: id } = await searchParams;
   const product = id ? await db.product.findUnique({ where: { id }, select: productLabelSelect }) : null;
   return <>

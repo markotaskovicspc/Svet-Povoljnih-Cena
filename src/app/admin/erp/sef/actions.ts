@@ -2,16 +2,16 @@
 import { ensureSefInventoryPosted } from "@/lib/sef/inventory.server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireAdminAction, logAudit } from "@/lib/admin";
+import { requireAdminAction, logAudit, withAdminState } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { queueSefSync, prepareSefInvoice, sendSefInvoice, refreshSefInvoice, sefXmlDigest } from "@/lib/sef/documents.server";
 import { readInvoiceXml } from "@/lib/sef/ubl";
 import { parseStatementFile } from "@/lib/courier/statement-file";
-import { previewStatement } from "@/lib/courier/finance.server";
+import { previewStatement, importStatement } from "@/lib/courier/finance.server";
 import { carrierSchema } from "@/lib/courier/finance";
 
 async function action<T>(name: string, run: (actorId: string) => Promise<T>) {
-  const actor = await requireAdminAction(["OPS"]);
+  const actor = await requireAdminAction(["OPS"], "/admin/erp/sef");
   try {
     const result = await run(actor.id);
     await logAudit({ actorId: actor.id, action: name, entity: "SefDocument", diff: { ok: true } });
@@ -39,18 +39,37 @@ export async function submitInvoice(id: string, fingerprint: string) {
     return { message: `Faktura ${doc.number} je predata SEF-u. SEF ID: ${doc.remoteId}.` };
   });
 }
+async function readSefCourierPreview(id: unknown, index: unknown, providerInput: unknown) {
+  const documentId = z.string().trim().min(1).max(200).parse(id);
+  const attachmentIndex = z.coerce.number().int().min(0).parse(index);
+  const provider = carrierSchema.parse(providerInput);
+  const doc = await db.sefDocument.findUniqueOrThrow({ where: { id: documentId } });
+  if (doc.direction !== "IN" || doc.currency !== "RSD") throw new Error("Izaberite ulazni kurirski račun u RSD.");
+  const attachment = readInvoiceXml(doc.xml).attachments[attachmentIndex];
+  if (!attachment || !/\.(xlsx|csv)$/i.test(attachment.filename)) throw new Error("PDF prilog prepišite u kurirski CSV obrazac pa otvorite pregled u Kurirskom obračunu.");
+  const rows = await parseStatementFile(Buffer.from(attachment.base64, "base64"), attachment.filename, provider, doc.issueDate.toISOString().slice(0, 10));
+  const preview = await previewStatement({ provider, documentNo: doc.number, filename: attachment.filename, rows });
+  if (Math.abs(preview.costNet - Number(doc.net)) > .01 || rows.some(row => row.kind !== "COST")) throw new Error("Specifikacija nije potpuna ili zbir troškova ne odgovara SEF računu. Pregledajte PDF i koristite standardni obrazac.");
+  return preview;
+}
+
 export async function previewSefCourierAttachment(form: FormData) {
-  return action("sef.courier.preview", async () => {
-    const doc = await db.sefDocument.findUniqueOrThrow({ where: { id: String(form.get("id") || "") } });
-    if (doc.direction !== "IN" || doc.currency !== "RSD") throw new Error("Izaberite ulazni kurirski račun u RSD.");
-    const attachment = readInvoiceXml(doc.xml).attachments[z.coerce.number().int().min(0).parse(form.get("index"))];
-    if (!attachment || !/\.(xlsx|csv)$/i.test(attachment.filename)) throw new Error("PDF prilog prepišite u kurirski CSV obrazac pa otvorite pregled u Kurirskom obračunu.");
-    const provider = carrierSchema.parse(form.get("provider"));
-    const rows = await parseStatementFile(Buffer.from(attachment.base64, "base64"), attachment.filename, provider, doc.issueDate.toISOString().slice(0, 10));
-    const preview = await previewStatement({ provider, documentNo: doc.number, filename: attachment.filename, rows });
-    if (Math.abs(preview.costNet - Number(doc.net)) > .01 || rows.some(r => r.kind !== "COST")) throw new Error("Specifikacija nije potpuna ili zbir troškova ne odgovara SEF računu. Pregledajte PDF i koristite standardni obrazac.");
-    return preview;
-  });
+  return action("sef.courier.preview", () => readSefCourierPreview(form.get("id"), form.get("index"), form.get("provider")));
+}
+
+export async function confirmSefCourierAttachment(id: string, index: number, provider: string, fingerprint: string) {
+  return withAdminState({ module: "/admin/erp/sef", allowed: ["OPS"], action: "sef.courier.import", entity: "CourierStatement" }, async actorId => {
+    const expected = z.string().regex(/^[a-f0-9]{64}$/).parse(fingerprint);
+    // Rebuild exclusively from the authenticated SEF document and its actual attachment.
+    // Client-supplied CSV rows or courier import payloads are never accepted here.
+    const preview = await readSefCourierPreview(id, index, provider);
+    if (preview.fingerprint !== expected) throw new Error("Specifikacija je promenjena. Ponovo otvorite pregled SEF priloga.");
+    const result = await importStatement(preview.input, expected, actorId);
+    revalidatePath("/admin/erp/sef");
+    revalidatePath("/admin/erp/kurirski-obracun");
+    return { ok: true as const, entityId: result.id, diff: { sefDocumentId: id, attachmentIndex: index, provider, ...result }, result,
+      message: result.alreadyImported ? "Dokument je već uvezen. Nema dupliranja." : `Uvezeno. Povezano ${result.matched} stavki.` };
+  })();
 }
 
 export async function refreshInvoice(form: FormData) {

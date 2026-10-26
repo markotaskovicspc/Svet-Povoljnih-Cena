@@ -21,7 +21,7 @@ export async function GET(
   context: { params: Promise<{ module: string }> },
 ) {
   const { module: slug } = await context.params;
-  await requireAdminAction(allowedRolesForErpModule(slug));
+  await requireAdminAction(allowedRolesForErpModule(slug), `/admin/erp/${slug}`);
   const search = new URL(request.url).searchParams;
   const page = Math.max(1, Number.parseInt(search.get("page") ?? "1", 10) || 1);
   const pageSize = Math.max(

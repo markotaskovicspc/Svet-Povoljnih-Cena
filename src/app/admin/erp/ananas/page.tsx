@@ -22,7 +22,7 @@ function staleRun(startedAt: Date) { return Date.now() - startedAt.getTime() > 3
 const date = (value: Date) => value.toLocaleString("sr-Latn-RS", { timeZone: "Europe/Belgrade" });
 
 export default async function AnanasPage({ searchParams }: { searchParams: Promise<{ from?: string; to?: string; page?: string; q?: string; kind?: string; view?: string }> }) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/ananas");
   const sp = await searchParams;
   const period = resolveReportPeriod({ range: "custom", from: sp.from, to: sp.to });
   const q = (sp.q ?? "").trim().slice(0, 200);

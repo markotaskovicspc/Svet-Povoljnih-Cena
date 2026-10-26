@@ -152,7 +152,7 @@ async function saveMobileShortcut(
   "use server";
 
   return withAdminState(
-    {
+    { module: "/admin/erp/mobilni-tabovi",
       allowed: ["CONTENT"],
       action: "mobileShortcut.save",
       entity: "MobileTab",
@@ -274,7 +274,7 @@ async function moveMobileShortcut(formData: FormData) {
   "use server";
 
   return withAdmin(
-    {
+    { module: "/admin/erp/mobilni-tabovi",
       allowed: ["CONTENT"],
       action: "mobileShortcut.move",
       entity: "MobileTab",
@@ -359,7 +359,7 @@ function rowIsCurrentlyActive(row: AdminMobileShortcutRow) {
 }
 
 export default async function MobileShortcutsPage() {
-  await requireAdminAction(["CONTENT"]);
+  await requireAdminAction(["CONTENT"], "/admin/erp/mobilni-tabovi");
   const [storedRows, actions, landingPages, categories, pictograms] =
     await Promise.all([
       db.mobileTab.findMany({

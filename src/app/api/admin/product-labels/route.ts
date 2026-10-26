@@ -11,7 +11,7 @@ export const maxDuration = 60;
 const privateHeaders = { "cache-control": "private, no-store, max-age=0" };
 
 export async function GET(request: Request) {
-  await requireAdminAction(["CONTENT", "OPS"]);
+  await requireAdminAction(["CONTENT", "OPS"], "/admin/erp/nalepnice");
   const q = new URL(request.url).searchParams.get("q")?.trim().slice(0, 100) ?? "";
   if (q.length < 2) return NextResponse.json({ articles: [] }, { headers: privateHeaders });
   const products = await db.product.findMany({
@@ -21,7 +21,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  await requireAdminAction(["CONTENT", "OPS"]);
+  await requireAdminAction(["CONTENT", "OPS"], "/admin/erp/nalepnice");
   let payload: unknown;
   try { payload = await request.json(); }
   catch { return NextResponse.json({ error: "Neispravan zahtev za štampu." }, { status: 400, headers: privateHeaders }); }

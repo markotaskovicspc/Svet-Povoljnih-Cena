@@ -59,7 +59,7 @@ async function saveSupplier(formData: FormData) {
   "use server";
 
   return withAdmin(
-    { allowed: ["OPS"], action: "supplier.save", entity: "Supplier" },
+    { module: "/admin/xml-import", allowed: ["OPS"], action: "supplier.save", entity: "Supplier" },
     async (_a, formData: FormData) => {
         const id = String(formData.get("id") ?? "") || null;
         const name = String(formData.get("name") ?? "").trim();
@@ -110,7 +110,7 @@ async function saveRabaluxLoadingLocations(formData: FormData) {
   "use server";
 
   return withAdmin(
-    {
+    { module: "/admin/xml-import",
       allowed: ["OPS"],
       action: "rabalux.loadingLocations.save",
       entity: "SupplierLoadingLocation",
@@ -180,7 +180,7 @@ async function previewRabalux(
   "use server";
 
   return withAdminState(
-    { allowed: ["OPS"], action: "rabalux.syncPreview", entity: "Supplier" },
+    { module: "/admin/xml-import", allowed: ["OPS"], action: "rabalux.syncPreview", entity: "Supplier" },
     async (actorId, formData: FormData) => {
       const target = parseRabaluxSyncTarget(formData.get("target"));
       if (!target) return { ok: false as const, error: "Nepoznata akcija." };
@@ -207,7 +207,7 @@ async function executeRabalux(
   "use server";
 
   return withAdminState(
-    { allowed: ["OPS"], action: "rabalux.syncExecute", entity: "Supplier" },
+    { module: "/admin/xml-import", allowed: ["OPS"], action: "rabalux.syncExecute", entity: "Supplier" },
     async (actorId, formData: FormData) => {
       const target = parseRabaluxSyncTarget(formData.get("target"));
       if (!target) return { ok: false as const, error: "Nepoznata akcija." };
@@ -261,7 +261,7 @@ async function previewRabaluxWeeklyStock(
   "use server";
 
   return withAdminState(
-    {
+    { module: "/admin/xml-import",
       allowed: ["OPS"],
       action: "rabalux.weeklyStock.preview",
       entity: "ImportRun",
@@ -294,7 +294,7 @@ async function applyRabaluxWeeklyStockAction(
   "use server";
 
   return withAdminState(
-    {
+    { module: "/admin/xml-import",
       allowed: ["OPS"],
       action: "rabalux.weeklyStock.apply",
       entity: "ImportRun",
@@ -335,7 +335,7 @@ async function saveRabaluxMapping(
   "use server";
 
   return withAdminState(
-    { allowed: ["OPS"], action: "rabalux.mapping.save", entity: "SupplierCategoryMapping" },
+    { module: "/admin/xml-import", allowed: ["OPS"], action: "rabalux.mapping.save", entity: "SupplierCategoryMapping" },
     async (actorId, formData: FormData) => {
       const result = await saveRabaluxCategoryMapping({
         actorId,
@@ -361,7 +361,7 @@ async function reviewRabaluxProductAction(
   "use server";
 
   return withAdminState(
-    { allowed: ["OPS"], action: "rabalux.product.review", entity: "Product" },
+    { module: "/admin/xml-import", allowed: ["OPS"], action: "rabalux.product.review", entity: "Product" },
     async (actorId, formData: FormData) => {
       const decision = String(formData.get("decision") ?? "");
       if (decision !== "APPROVE" && decision !== "REJECT") {
@@ -392,7 +392,7 @@ async function reviewRabaluxPriceAction(
   "use server";
 
   return withAdminState(
-    { allowed: ["OPS"], action: "rabalux.price.review", entity: "SupplierSyncChange" },
+    { module: "/admin/xml-import", allowed: ["OPS"], action: "rabalux.price.review", entity: "SupplierSyncChange" },
     async (actorId, formData: FormData) => {
       const decision = String(formData.get("decision") ?? "");
       if (decision !== "APPROVE" && decision !== "REJECT") {
@@ -423,7 +423,7 @@ async function rollbackRabaluxAction(
   "use server";
 
   return withAdminState(
-    { allowed: ["OPS"], action: "rabalux.sync.rollback", entity: "ImportRun" },
+    { module: "/admin/xml-import", allowed: ["OPS"], action: "rabalux.sync.rollback", entity: "ImportRun" },
     async (actorId, formData: FormData) => {
       const importRunId = String(formData.get("importRunId") ?? "");
       const phrase = String(formData.get("phrase") ?? "").trim();
@@ -451,7 +451,7 @@ async function triggerImport(formData: FormData) {
   "use server";
 
   return withAdmin(
-    { allowed: ["OPS"], action: "supplier.import", entity: "Supplier" },
+    { module: "/admin/xml-import", allowed: ["OPS"], action: "supplier.import", entity: "Supplier" },
     async (_a, formData: FormData) => {
         const id = String(formData.get("id") ?? "");
         if (!id) return { ok: false as const, error: "Nedostaje ID dobavljača." };
@@ -475,7 +475,7 @@ async function retryRabaluxMediaQueue(
   "use server";
 
   return withAdminState(
-    {
+    { module: "/admin/xml-import",
       allowed: ["OPS"],
       action: "rabalux.mediaQueue.retryRecoverable",
       entity: "BackgroundJob",
@@ -504,7 +504,7 @@ async function repairRabaluxBinaryMedia(
   "use server";
 
   return withAdminState(
-    {
+    { module: "/admin/xml-import",
       allowed: ["OPS"],
       action: "rabalux.mediaQueue.repairBinaryV2",
       entity: "ImportRun",
@@ -578,7 +578,7 @@ export default async function XmlImportPage({
 }: {
   searchParams: Promise<{ supplier?: string }>;
 }) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/xml-import");
   const sp = await searchParams;
   const [suppliers, edit, recentRuns] = await Promise.all([
     db.supplier.findMany({

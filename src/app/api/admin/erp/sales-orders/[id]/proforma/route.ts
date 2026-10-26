@@ -12,7 +12,7 @@ export async function GET(
   _request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/prodajni-nalozi");
   const { id } = await context.params;
   const order = await getVpProformaData(id);
   if (!order) {

@@ -1,5 +1,5 @@
 import type { AdminRoleName } from "@prisma/client";
-import { isAuthorized } from "@/lib/admin/authorization";
+import { canAccessAdminModule, type AdminAccessPrincipal } from "@/lib/admin/access-policy";
 
 export type ReportDestination = {
   href: string;
@@ -73,9 +73,10 @@ export const REPORT_DESTINATIONS: readonly ReportDestination[] = [
 ];
 
 export function reportDestinationsForRole(
-  role: AdminRoleName | null | undefined,
+  roleOrPrincipal: AdminRoleName | AdminAccessPrincipal | null | undefined,
 ) {
+  const principal = typeof roleOrPrincipal === "string" ? { role: roleOrPrincipal } : roleOrPrincipal;
   return REPORT_DESTINATIONS.filter((destination) =>
-    isAuthorized(role, destination.allowed),
+    canAccessAdminModule(principal, destination.href, destination.allowed),
   );
 }

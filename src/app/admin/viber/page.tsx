@@ -9,7 +9,7 @@ import { previewAudience, saveViberDraft, launchViberCampaign, testViberMessage,
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Viber i SMS poruke", robots: { index: false, follow: false } };
 export default async function ViberPage({ searchParams }: { searchParams: Promise<{ campaign?: string; channel?: string }> }) {
-  await requireAdminAction(["ADS"]);
+  await requireAdminAction(["ADS"], "/admin/viber");
   const params = await searchParams;
   const channel = params.channel === "sms" ? "SMS" : "VIBER";
   const allAudiences = await db.viberAudienceQuery.findMany({ orderBy: { name: "asc" } });

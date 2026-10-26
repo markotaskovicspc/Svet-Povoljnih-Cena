@@ -5,7 +5,7 @@ import { landingStorefrontProductWhere } from "@/lib/landing-pages/admin-product
 import { resolveSupabaseStorageUrl } from "@/lib/supabase/storage";
 
 export async function GET(request: Request) {
-  await requireAdminAction(["CONTENT"]);
+  await requireAdminAction(["CONTENT"], ["/admin/erp/landing-strane","/admin/mobilna-pretraga"]);
   const query = new URL(request.url).searchParams.get("q")?.trim() ?? "";
   if (query.length < 2) return NextResponse.json({ products: [] });
   const products = await db.product.findMany({

@@ -60,7 +60,7 @@ async function removeStagedObjects(keys: string[]) {
 }
 
 export async function POST(request: Request) {
-  const admin = await requireAdminAction(["CONTENT"]);
+  const admin = await requireAdminAction(["CONTENT"], "/admin/baneri");
   if ((request.headers.get("content-type") ?? "").includes("multipart/form-data")) {
     const formData = await request.formData();
     const file = formData.get("file");
@@ -200,7 +200,7 @@ export async function POST(request: Request) {
  * it before the browser is given a public preview URL.
  */
 export async function PUT(request: Request) {
-  const admin = await requireAdminAction(["CONTENT"]);
+  const admin = await requireAdminAction(["CONTENT"], "/admin/baneri");
   const input = finalizeSvgSchema.safeParse(
     await request.json().catch(() => null),
   );
@@ -345,7 +345,7 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const admin = await requireAdminAction(["CONTENT"]);
+  const admin = await requireAdminAction(["CONTENT"], "/admin/baneri");
   const input = cleanupSchema.safeParse(await request.json().catch(() => null));
   if (!input.success) {
     return noStoreJson({ error: "Neispravan upload ključ." }, { status: 400 });

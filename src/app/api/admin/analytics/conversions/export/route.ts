@@ -23,7 +23,7 @@ function styleHeader(row: ExcelJS.Row) {
 }
 
 export async function GET(request: Request) {
-  await requireAdminAction(["ADS", "OPS"]);
+  await requireAdminAction(["ADS", "OPS"], "/admin/erp/posete-konverzije");
   const search = new URL(request.url).searchParams;
   const period = resolveReportPeriod({
     range: search.get("range") ?? undefined,

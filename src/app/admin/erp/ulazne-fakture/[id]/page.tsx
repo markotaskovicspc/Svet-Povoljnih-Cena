@@ -147,7 +147,7 @@ function cogsSnapshotBySku(value: unknown) {
 async function createAction() {
   "use server";
   const state = await withAdminState(
-    {
+    { module: "/admin/erp/ulazne-fakture",
       allowed: ["OPS"],
       action: "inbound-invoice.create",
       entity: "InboundInvoice",
@@ -170,7 +170,7 @@ async function saveAction(_state: AdminActionState, formData: FormData) {
   "use server";
   const shouldPost = formData.get("intent") === "post";
   return withAdminState(
-    {
+    { module: "/admin/erp/ulazne-fakture",
       allowed: ["OPS"],
       action: shouldPost
         ? "inbound-invoice.save-and-post"
@@ -241,7 +241,7 @@ async function saveAction(_state: AdminActionState, formData: FormData) {
 async function postAction(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
-    {
+    { module: "/admin/erp/ulazne-fakture",
       allowed: ["OPS"],
       action: "inbound-invoice.post",
       entity: "InboundInvoice",
@@ -279,7 +279,7 @@ async function postAction(_state: AdminActionState, formData: FormData) {
 async function cancelAction(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
-    {
+    { module: "/admin/erp/ulazne-fakture",
       allowed: ["OPS"],
       action: "inbound-invoice.cancel",
       entity: "InboundInvoice",
@@ -307,7 +307,7 @@ export default async function InboundInvoicePage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ mode?: string }>;
 }) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/ulazne-fakture");
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const [invoice, purchaseOrders, warehouses] = await Promise.all([
     db.inboundInvoice.findUnique({

@@ -55,7 +55,7 @@ async function receiveReturnAction(
 ) {
   "use server";
   return withAdminState(
-    {
+    { module: ["/admin/erp/preuzimanja/povrati","/admin/magacin"],
       allowed: ["OPS", "WAREHOUSE"],
       action: "reclamation.return.receive",
       entity: "Reclamation",
@@ -109,7 +109,7 @@ async function receiveOrderUnitAction(
 ) {
   "use server";
   return withAdminState(
-    {
+    { module: ["/admin/erp/preuzimanja/povrati","/admin/magacin"],
       allowed: ["OPS", "WAREHOUSE"],
       action: "order.return.receive",
       entity: "OrderItem",
@@ -147,7 +147,7 @@ async function receiveOrderUnitAction(
 export async function ReturnsWorkspace({
   searchParams, warehouseMode = false,
 }: { searchParams?: Promise<{ view?: string; q?: string; evidence?: string; camera?: string; warehouse?: string; received?: string }>; warehouseMode?: boolean } = {}) {
-  await requireAdminAction(warehouseMode ? ["OPS", "WAREHOUSE"] : ["OPS"]);
+  await requireAdminAction(warehouseMode ? ["OPS", "WAREHOUSE"] : ["OPS"], ["/admin/erp/preuzimanja/povrati","/admin/magacin"]);
   const returnHref = warehouseMode ? "/admin/magacin/povrat" : "/admin/erp/povrati";
   const params = await searchParams;
   const view = params?.view === "completed" ? "completed" : params?.view === "verification" ? "verification" : "active";
@@ -828,7 +828,7 @@ export async function ReturnsWorkspace({
 async function markLostAction(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
-    { allowed: ["OPS", "WAREHOUSE"], action: "return.lost", entity: "ReturnResolution" },
+    { module: ["/admin/erp/preuzimanja/povrati","/admin/magacin"], allowed: ["OPS", "WAREHOUSE"], action: "return.lost", entity: "ReturnResolution" },
     async (actorId, data: FormData) => {
       const result = await markReturnLost({
         kind: String(data.get("kind") ?? ""),
@@ -856,7 +856,7 @@ async function receiveReshipmentReturnAction(
 ) {
   "use server";
   return withAdminState(
-    {
+    { module: ["/admin/erp/preuzimanja/povrati","/admin/magacin"],
       allowed: ["OPS", "WAREHOUSE"],
       action: "order.reshipment.return.receive",
       entity: "OrderReshipmentItem",
@@ -903,7 +903,7 @@ function ReturnShipmentCodes({ shipment, received = false }: { shipment: ReturnS
 async function receiveScannedAction(_state: AdminActionState, formData: FormData) {
   "use server";
   const state = await withAdminState(
-    { allowed: ["OPS", "WAREHOUSE"], action: "return.parcel.receive", entity: "Shipment" },
+    { module: ["/admin/erp/preuzimanja/povrati","/admin/magacin"], allowed: ["OPS", "WAREHOUSE"], action: "return.parcel.receive", entity: "Shipment" },
     async (actorId, data: FormData) => {
       const result = await receiveScannedReturn({ code: String(data.get("code") ?? ""), warehouseId: String(data.get("warehouseId") ?? ""), buyerId: String(data.get("buyerId") ?? "").trim() || undefined, actorId });
       after(async () => { for (const jobId of result.jobIds) { try { await processBackgroundJob(jobId); } catch { /* Durable retry; continue with the support notice. */ } } });
@@ -917,7 +917,7 @@ async function receiveScannedAction(_state: AdminActionState, formData: FormData
   )(formData);
   // Redirect only after receipt AND its audit have succeeded; errors stay on the parcel.
   if (state.ok) {
-    const admin = await requireAdminAction(["OPS", "WAREHOUSE"]);
+    const admin = await requireAdminAction(["OPS", "WAREHOUSE"], ["/admin/erp/preuzimanja/povrati","/admin/magacin"]);
     const returnTo = admin.role === "WAREHOUSE" || formData.get("returnTo") === "/admin/magacin/povrat" ? "/admin/magacin/povrat" : "/admin/erp/povrati";
     redirect(`${returnTo}?camera=1&warehouse=${encodeURIComponent(String(formData.get("warehouseId") ?? ""))}${returnTo === "/admin/magacin/povrat" ? "&received=1" : ""}`, RedirectType.replace);
   }

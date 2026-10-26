@@ -13,7 +13,7 @@ import { ConfirmSubmitButton } from "@/components/admin/confirm-submit";
 
 async function add(_state: AdminActionState, formData: FormData) {
   "use server";
-  return withAdminState({ allowed: ["OPS"], action: "po.payment.record", entity: "PurchaseOrderPayment" },
+  return withAdminState({ module: "/admin/erp/porudzbenice", allowed: ["OPS"], action: "po.payment.record", entity: "PurchaseOrderPayment" },
     async (actorId, form: FormData) => {
       const payment = await recordPurchasePayment(Object.fromEntries(form.entries()), actorId);
       revalidatePath("/admin/erp/porudzbenice/" + payment.purchaseOrderId);
@@ -26,7 +26,7 @@ async function add(_state: AdminActionState, formData: FormData) {
 
 async function voidPayment(_state: AdminActionState, formData: FormData) {
   "use server";
-  return withAdminState({ allowed: ["OPS"], action: "po.payment.void", entity: "PurchaseOrderPayment" },
+  return withAdminState({ module: "/admin/erp/porudzbenice", allowed: ["OPS"], action: "po.payment.void", entity: "PurchaseOrderPayment" },
     async (_actorId, form: FormData) => {
       const purchaseOrderId = String(form.get("purchaseOrderId") ?? "");
       const paymentId = String(form.get("paymentId") ?? "");

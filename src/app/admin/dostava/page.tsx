@@ -100,7 +100,7 @@ async function updateDeliveryWindows(
   "use server";
 
   return withAdminState(
-    {
+    { module: "/admin/dostava",
       allowed: ["OPS"],
       action: "delivery.windows.update",
       entity: "AdminSetting",
@@ -151,7 +151,7 @@ async function updateDeliveryTariff(
   "use server";
 
   return withAdminState(
-    {
+    { module: "/admin/dostava",
       allowed: ["OPS"],
       action: "delivery.tariff.update",
       entity: "AdminSetting",
@@ -220,7 +220,7 @@ async function upsertRule(_state: AdminActionState, formData: FormData) {
   "use server";
 
   return withAdminState(
-    { allowed: ["OPS"], action: "delivery.upsert", entity: "DeliveryPriceRule" },
+    { module: "/admin/dostava", allowed: ["OPS"], action: "delivery.upsert", entity: "DeliveryPriceRule" },
     async (_a, formData: FormData) => {
         const parsed = ruleSchema.safeParse(Object.fromEntries(formData));
         if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
@@ -266,7 +266,7 @@ async function createCity(_state: AdminActionState, formData: FormData) {
   "use server";
 
   return withAdminState(
-    {
+    { module: "/admin/dostava",
       allowed: ["OPS"],
       action: "delivery.city.create",
       entity: "DeliveryCity",
@@ -315,7 +315,7 @@ async function removeRule(formData: FormData) {
   "use server";
 
   return withAdmin(
-    { allowed: ["OPS"], action: "delivery.delete", entity: "DeliveryPriceRule" },
+    { module: "/admin/dostava", allowed: ["OPS"], action: "delivery.delete", entity: "DeliveryPriceRule" },
     async (_a, formData: FormData) => {
         const id = String(formData.get("id") ?? "");
         if (!id) return { ok: false as const, error: "Nedostaje ID." };
@@ -330,7 +330,7 @@ async function toggleTruck(_state: AdminActionState, formData: FormData) {
   "use server";
 
   return withAdminState(
-    { allowed: ["OPS"], action: "city.toggleTruck", entity: "DeliveryCity" },
+    { module: "/admin/dostava", allowed: ["OPS"], action: "city.toggleTruck", entity: "DeliveryCity" },
     async (_a, formData: FormData) => {
         const id = String(formData.get("id") ?? "");
         const enabled = formData.get("enabled") === "1";
@@ -351,7 +351,7 @@ async function syncXExpressDictionariesAction() {
   "use server";
 
   return withAdminState(
-    { allowed: ["OPS"], action: "delivery.xExpressDictionarySync", entity: "CourierSyncRun" },
+    { module: "/admin/dostava", allowed: ["OPS"], action: "delivery.xExpressDictionarySync", entity: "CourierSyncRun" },
     async () => {
       const { syncXExpressDictionaries } = await import("@/lib/x-express/sync");
       const result = await syncXExpressDictionaries();
@@ -365,7 +365,7 @@ async function syncMyGlsMasterDataAction() {
   "use server";
 
   return withAdminState(
-    { allowed: ["OPS"], action: "delivery.myGlsMasterDataSync", entity: "CourierSyncRun" },
+    { module: "/admin/dostava", allowed: ["OPS"], action: "delivery.myGlsMasterDataSync", entity: "CourierSyncRun" },
     async () => {
       const { syncMyGlsMasterData } = await import("@/lib/mygls/sync");
       const result = await syncMyGlsMasterData();
@@ -376,7 +376,7 @@ async function syncMyGlsMasterDataAction() {
 }
 
 export default async function DeliveryPage() {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/dostava");
   const [
     rules,
     cities,

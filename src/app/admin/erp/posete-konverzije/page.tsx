@@ -76,7 +76,7 @@ export default async function AnalyticsConversionPage({
     group?: string | string[];
   }>;
 }) {
-  await requireAdminAction(allowedRolesForErpModule("posete-konverzije"));
+  await requireAdminAction(allowedRolesForErpModule("posete-konverzije"), "/admin/erp/posete-konverzije");
   const params = await searchParams;
   const now = new Date();
   const period = resolveReportPeriod(

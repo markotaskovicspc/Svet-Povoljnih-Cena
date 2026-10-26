@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
-import { requireAdminAction, isAuthorized } from "@/lib/admin";
+import { requireAdminAction } from "@/lib/admin";
+import { canAccessAdminModule } from "@/lib/admin/access-policy";
 import { db } from "@/lib/db";
 import { getErpModuleDefinition } from "@/lib/admin/erp";
 import {
@@ -22,6 +23,9 @@ import {
 } from "@/lib/admin/saved-views";
 
 const ADMIN_NAVIGATION_MODULE = "admin-navigation";
+function savedViewPermissionModule(slug: string) {
+  return slug === "dashboard" ? "/admin" : slug === ADMIN_NAVIGATION_MODULE ? "/admin/erp" : `/admin/erp/${slug}`;
+}
 
 const GRID_OPERATORS = new Set([
   "contains",
@@ -100,7 +104,7 @@ function toView(row: {
 }
 
 export async function GET(request: Request) {
-  const admin = await requireAdminAction();
+  const admin = await requireAdminAction(undefined, "/admin/erp");
   const moduleSlug =
     new URL(request.url).searchParams.get("module")?.trim() ?? "";
   if (
@@ -114,8 +118,7 @@ export async function GET(request: Request) {
     );
   }
   if (
-    getErpModuleDefinition(moduleSlug) &&
-    !isAuthorized(admin.role, allowedRolesForErpModule(moduleSlug))
+    !canAccessAdminModule(admin, savedViewPermissionModule(moduleSlug), getErpModuleDefinition(moduleSlug) ? allowedRolesForErpModule(moduleSlug) : undefined)
   ) {
     return NextResponse.json(
       { error: "Nemate pristup ovom modulu." },
@@ -140,7 +143,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const admin = await requireAdminAction();
+  const admin = await requireAdminAction(undefined, "/admin/erp");
   const body = (await request
     .json()
     .catch(() => null)) as SavedViewPayload | null;
@@ -162,8 +165,7 @@ export async function POST(request: Request) {
   }
 
   if (
-    definition &&
-    !isAuthorized(admin.role, allowedRolesForErpModule(moduleSlug))
+    !canAccessAdminModule(admin, savedViewPermissionModule(moduleSlug), definition ? allowedRolesForErpModule(moduleSlug) : undefined)
   ) {
     return NextResponse.json(
       { error: "Nemate pristup ovom modulu." },
@@ -215,7 +217,7 @@ export async function POST(request: Request) {
     const allowed = allowedRolesForErpModule(view.module);
     return viewDefinition &&
       !viewDefinition.redirectHref &&
-      isAuthorized(admin.role, allowed)
+      canAccessAdminModule(admin, savedViewPermissionModule(view.module), allowed)
       ? [{ ...view, title: viewDefinition.title, allowed }]
       : [];
   });
@@ -223,7 +225,7 @@ export async function POST(request: Request) {
     moduleSlug === ADMIN_NAVIGATION_MODULE
       ? [
           ...withSavedViewLinks(
-            allowedNavFor(admin.role),
+            allowedNavFor(admin),
             allowedNavigationViews,
           ).flatMap((group) => group.items.map((item) => item.href)),
           ...allowedNavigationViews
@@ -452,13 +454,18 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const admin = await requireAdminAction();
+  const admin = await requireAdminAction(undefined, "/admin/erp");
   const body = (await request.json().catch(() => null)) as {
     id?: unknown;
   } | null;
   const id = typeof body?.id === "string" ? body.id : "";
   if (!id)
     return NextResponse.json({ error: "Nedostaje pogled." }, { status: 400 });
+  const existing = await db.adminSavedView.findFirst({ where: { id, adminUserId: admin.id }, select: { module: true } });
+  if (!existing) return NextResponse.json({ error: "Pogled nije pronađen." }, { status: 404 });
+  if (!canAccessAdminModule(admin, savedViewPermissionModule(existing.module))) {
+    return NextResponse.json({ error: "Nemate pristup ovom modulu." }, { status: 403 });
+  }
   const deleted = await db.adminSavedView.deleteMany({
     where: { id, adminUserId: admin.id },
   });
@@ -472,7 +479,7 @@ export async function DELETE(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const admin = await requireAdminAction();
+  const admin = await requireAdminAction(undefined, "/admin/erp");
   const body = (await request.json().catch(() => null)) as {
     id?: unknown;
     name?: unknown;
@@ -490,7 +497,7 @@ export async function PATCH(request: Request) {
     );
   if (
     !getErpModuleDefinition(existing.module) ||
-    !isAuthorized(admin.role, allowedRolesForErpModule(existing.module))
+    !canAccessAdminModule(admin, savedViewPermissionModule(existing.module), allowedRolesForErpModule(existing.module))
   ) {
     return NextResponse.json(
       { error: "Nemate pristup ovom modulu." },

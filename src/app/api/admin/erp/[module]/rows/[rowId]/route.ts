@@ -95,7 +95,7 @@ export async function PATCH(
   ctx: { params: Promise<{ module: string; rowId: string }> },
 ) {
   const { module, rowId } = await ctx.params;
-  const admin = await requireAdminAction(allowedRolesForErpModule(module));
+  const admin = await requireAdminAction(allowedRolesForErpModule(module), `/admin/erp/${module}`);
   const body = (await req.json().catch(() => null)) as
     | { columnKey?: unknown; value?: unknown }
     | null;

@@ -1,7 +1,7 @@
 // Acceptance: SEC-01
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient, type AdminRole } from "@prisma/client";
+import { PrismaClient, type AdminRoleName } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const cases = [
@@ -32,7 +32,7 @@ test.describe("isolated admin role acceptance", () => {
 
   const runId = `${Date.now()}-${process.pid}`;
   const password = `QaRoles!${runId}x`;
-  const credentials = new Map<AdminRole, { email: string; password: string }>();
+  const credentials = new Map<AdminRoleName, { email: string; password: string }>();
   let db: PrismaClient;
 
   test.beforeAll(async () => {

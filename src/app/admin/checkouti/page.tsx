@@ -23,7 +23,7 @@ export default async function AdminCheckoutsPage({
 }: {
   searchParams: Promise<{ q?: string; status?: string; page?: string }>;
 }) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/checkouti");
   const sp = await searchParams;
   const q = sp.q?.trim() ?? "";
   const status = sp.status?.trim() ?? "";

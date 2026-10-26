@@ -76,7 +76,7 @@ async function savePackageAction(
 ) {
   "use server";
   return withAdminState(
-    {
+    { module: "/admin/erp/preuzimanja",
       allowed: ["OPS"],
       action: "pickup-batch.package.save",
       entity: "PickupBatchLine",
@@ -111,7 +111,7 @@ async function loadOrdersAction(
 ) {
   "use server";
   return withAdminState(
-    {
+    { module: "/admin/erp/preuzimanja",
       allowed: ["OPS"],
       action: "pickup-batch.orders.load",
       entity: "PickupBatch",
@@ -141,7 +141,7 @@ async function removeGroupAction(
 ) {
   "use server";
   return withAdminState(
-    {
+    { module: "/admin/erp/preuzimanja",
       allowed: ["OPS"],
       action: "pickup-batch.order.remove",
       entity: "PickupBatchLine",
@@ -179,7 +179,7 @@ async function deleteAction(
 ) {
   "use server";
   const state = await withAdminState(
-    {
+    { module: "/admin/erp/preuzimanja",
       allowed: ["OPS"],
       action: "pickup-batch.delete",
       entity: "PickupBatch",
@@ -208,7 +208,7 @@ async function postAction(
 ) {
   "use server";
   return withAdminState(
-    {
+    { module: "/admin/erp/preuzimanja",
       allowed: ["OPS"],
       action: "pickup-batch.post",
       entity: "PickupBatch",
@@ -236,7 +236,7 @@ async function deferPackageAction(
 ) {
   "use server";
   return withAdminState(
-    {
+    { module: "/admin/erp/preuzimanja",
       allowed: ["OPS"],
       action: "pickup-batch.package.defer",
       entity: "PickupBatchLine",
@@ -266,7 +266,7 @@ async function reschedulePackageAction(
 ) {
   "use server";
   return withAdminState(
-    {
+    { module: "/admin/erp/preuzimanja",
       allowed: ["OPS"],
       action: "pickup-batch.package.reschedule",
       entity: "PickupBatchLine",
@@ -300,7 +300,7 @@ async function setPackageReadyAction(
 ) {
   "use server";
   return withAdminState(
-    {
+    { module: "/admin/erp/preuzimanja",
       allowed: ["OPS"],
       action: "pickup-batch.package.ready",
       entity: "PickupBatchLine",
@@ -337,7 +337,7 @@ async function confirmAllReadyAction(
 ) {
   "use server";
   return withAdminState(
-    {
+    { module: "/admin/erp/preuzimanja",
       allowed: ["OPS"],
       action: "pickup-batch.packages.ready-all",
       entity: "PickupBatch",
@@ -363,7 +363,7 @@ async function deferBeforeBookingAction(
 ) {
   "use server";
   return withAdminState(
-    {
+    { module: "/admin/erp/preuzimanja",
       allowed: ["OPS"],
       action: "pickup-batch.package.defer-before-booking",
       entity: "PickupBatchLine",
@@ -392,7 +392,7 @@ async function rescheduleBeforeBookingAction(
 ) {
   "use server";
   return withAdminState(
-    {
+    { module: "/admin/erp/preuzimanja",
       allowed: ["OPS"],
       action: "pickup-batch.package.restore-before-booking",
       entity: "PickupBatchLine",
@@ -422,7 +422,7 @@ export default async function PickupBatchPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ mode?: string }>;
 }) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/preuzimanja");
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const batch = await db.pickupBatch.findUnique({
     where: { id },

@@ -36,7 +36,7 @@ const entrySchema = z.object({
 async function saveEntry(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
-    { allowed: ["OPS"], action: "priceList.entry.upsert", entity: "PriceListEntry" },
+    { module: "/admin/erp/cenovnici", allowed: ["OPS"], action: "priceList.entry.upsert", entity: "PriceListEntry" },
     async (actorId, actionData: FormData) => {
       const parsed = entrySchema.safeParse(Object.fromEntries(actionData));
       if (!parsed.success) {
@@ -110,7 +110,7 @@ async function saveEntry(_state: AdminActionState, formData: FormData) {
 async function deleteEntry(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
-    { allowed: ["OPS"], action: "priceList.entry.delete", entity: "PriceListEntry" },
+    { module: "/admin/erp/cenovnici", allowed: ["OPS"], action: "priceList.entry.delete", entity: "PriceListEntry" },
     async (actorId, actionData: FormData) => {
       const id = String(actionData.get("id") ?? "");
       const entry = await db.priceListEntry.findUnique({
@@ -167,7 +167,7 @@ export default async function PriceListDetail({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ sku?: string }>;
 }) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/cenovnici");
   const [{ id }, search] = await Promise.all([params, searchParams]);
   const priceList = await db.priceList.findUnique({
     where: { id },

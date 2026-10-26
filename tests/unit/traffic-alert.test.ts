@@ -7,7 +7,7 @@ vi.mock('@/lib/background-jobs',()=>({enqueueBackgroundJob:m.enqueue,processBack
 vi.mock('@/lib/admin/order-push.server',()=>({getPushConfiguration:m.config,sendAdminDevicePush:m.send}));
 import { evaluateTrafficAlert, deliverTrafficPush } from '@/lib/admin/traffic-push.server';
 const now=new Date('2026-10-13T20:00:00Z');
-beforeEach(()=>{vi.resetAllMocks();m.config.mockReturnValue({});m.lock.mockResolvedValue([{acquired:true}]);m.read.mockResolvedValue(null);m.count.mockResolvedValue(20);m.subscriptions.mockResolvedValue([{id:'s1'}]);m.enqueue.mockResolvedValue({id:'j1'});});
+beforeEach(()=>{vi.resetAllMocks();m.config.mockReturnValue({});m.lock.mockResolvedValue([{acquired:true}]);m.read.mockResolvedValue(null);m.count.mockResolvedValue(20);m.subscriptions.mockResolvedValue([{id:'s1',adminUser:{role:'OPS',accessPolicy:null}}]);m.enqueue.mockResolvedValue({id:'j1'});});
 it('uses threshold 20 and sends at most once per hour and remains quiet while the audience stays high',()=>{
  expect(shouldAlertTraffic(19,null,3600000)).toBe(false);expect(shouldAlertTraffic(20,null,3600000)).toBe(true);
  expect(shouldAlertTraffic(25,1,3600000)).toBe(false);expect(shouldAlertTraffic(20,0,3600000)).toBe(true);expect(shouldAlertTraffic(25,0,3600000,true)).toBe(false);
@@ -33,4 +33,12 @@ it('does not repeat an alert for a sustained crowd after an hour, but re-arms be
  await evaluateTrafficAlert(now);expect(m.enqueue).not.toHaveBeenCalled();
  m.count.mockResolvedValue(19);await evaluateTrafficAlert(new Date(now.getTime()+20000));
  expect(m.save.mock.calls.at(-1)?.[0].update.value.aboveThreshold).toBe(false);
+});
+
+it('does not consume the cooldown or queue for a revoked custom analytics policy',async()=>{
+ m.subscriptions.mockResolvedValue([{id:'s1',adminUser:{role:'CUSTOM',accessPolicy:{version:1,modules:['/admin/erp/prodajni-nalozi']}}}]);
+ await evaluateTrafficAlert(now);
+ expect(m.enqueue).not.toHaveBeenCalled();expect(m.process).not.toHaveBeenCalled();
+ expect(m.save.mock.calls[0][0].update.value.lastAlertAt).toBeNull();
+ expect(m.subscriptions).toHaveBeenCalledWith({where:{trafficAlerts:true,adminUser:{enabled:true}},select:{id:true,adminUser:{select:{role:true,accessPolicy:true}}}});
 });

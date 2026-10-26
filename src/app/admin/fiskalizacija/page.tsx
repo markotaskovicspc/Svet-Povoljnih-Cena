@@ -31,7 +31,7 @@ async function manualFiscalizeAction(_state: AdminActionState, formData: FormDat
   "use server";
 
   return withAdminState(
-    { allowed: ["OPS"], action: "fiscal.sale.manual", entity: "FiscalDocument" },
+    { module: "/admin/fiskalizacija", allowed: ["OPS"], action: "fiscal.sale.manual", entity: "FiscalDocument" },
     async (_actorId, formData: FormData) => {
       const orderId = String(formData.get("orderId") ?? "");
       const orderItemIds = formData.getAll("orderItemIds").map(String).filter(Boolean);
@@ -70,7 +70,7 @@ async function refundFiscalLinesAction(_state: AdminActionState, formData: FormD
   "use server";
 
   return withAdminState(
-    { allowed: ["OPS"], action: "fiscal.refund", entity: "FiscalDocument" },
+    { module: "/admin/fiskalizacija", allowed: ["OPS"], action: "fiscal.refund", entity: "FiscalDocument" },
     async (actorId, formData: FormData) => {
       const fiscalLineIds = formData.getAll("fiscalLineIds").map(String).filter(Boolean);
       const paymentReturnMethod = enumValue(PaymentMethod, String(formData.get("paymentReturnMethod") ?? ""));
@@ -126,7 +126,7 @@ export default async function FiscalizationPage({
     items?: string;
   }>;
 }) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/fiskalizacija");
   await ensureDefaultWarehouse();
 
   const sp = await searchParams;

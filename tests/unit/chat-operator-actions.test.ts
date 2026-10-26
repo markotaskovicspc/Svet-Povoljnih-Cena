@@ -7,7 +7,7 @@ beforeEach(()=>{mocks.auth.mockResolvedValue({id:'operator'});mocks.audit.mockRe
 afterEach(()=>{vi.unstubAllGlobals();vi.unstubAllEnvs();});
 it('requires ERP operator login before any backend mutation',async()=>{
  const fetcher=vi.fn();vi.stubGlobal('fetch',fetcher);mocks.auth.mockRejectedValueOnce(new Error('Login required'));
- await expect(actOnConversation({id:'web:spc:test',action:'pause'})).rejects.toThrow('Login required');expect(fetcher).not.toHaveBeenCalled();expect(mocks.auth).toHaveBeenCalledWith(['OPS']);
+ await expect(actOnConversation({id:'web:spc:test',action:'pause'})).rejects.toThrow('Login required');expect(fetcher).not.toHaveBeenCalled();expect(mocks.auth).toHaveBeenCalledWith(['OPS'], '/admin/razgovori');
 });
 it('audits and binds authenticated actor server-side; never returns credential',async()=>{
  const fetcher=vi.fn().mockResolvedValue({ok:true,json:async()=>({ok:true})});vi.stubGlobal('fetch',fetcher);

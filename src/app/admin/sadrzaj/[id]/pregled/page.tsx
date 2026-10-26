@@ -21,7 +21,7 @@ export default async function ContentPagePreview({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireAdminAction(["CONTENT"]);
+  await requireAdminAction(["CONTENT"], "/admin/sadrzaj");
   const { id } = await params;
   const page = await db.contentPage.findUnique({ where: { id } });
   if (!page) notFound();

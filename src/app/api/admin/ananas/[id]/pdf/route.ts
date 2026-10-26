@@ -5,7 +5,7 @@ import { AnanasClient } from "@/lib/ananas/client";
 import { ananasError } from "@/lib/ananas/sync";
 export const dynamic = "force-dynamic";
 export async function GET(_: Request, context: { params: Promise<{ id: string }> }) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/ananas");
   const { id } = await context.params;
   const document = await db.ananasDocument.findUnique({ where: { id } });
   const headers = { "Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer" };

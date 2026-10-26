@@ -63,7 +63,7 @@ async function saveSection(_state: AdminActionState, formData: FormData) {
   "use server";
 
   return withAdminState(
-    { allowed: ["CONTENT"], action: "homeSection.upsert", entity: "HomeSectionSlot" },
+    { module: "/admin/pocetna", allowed: ["CONTENT"], action: "homeSection.upsert", entity: "HomeSectionSlot" },
     async (_actorId, formData: FormData) => {
       const parsed = schema.safeParse({
         ...Object.fromEntries(formData),
@@ -168,7 +168,7 @@ async function saveSection(_state: AdminActionState, formData: FormData) {
 }
 
 export default async function HomeAdminPage() {
-  await requireAdminAction(["CONTENT"]);
+  await requireAdminAction(["CONTENT"], "/admin/pocetna");
 
   const [slots, actions, landingPages, categories] = await Promise.all([
     db.homeSectionSlot.findMany({ orderBy: { slotKey: "asc" } }),

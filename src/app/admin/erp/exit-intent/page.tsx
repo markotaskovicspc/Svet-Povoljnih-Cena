@@ -13,7 +13,7 @@ const percent = (n: number, d: number) => d ? `${(100 * n / d).toLocaleString("s
 const money = (n: number) => `${n.toLocaleString("sr-Latn-RS", { maximumFractionDigits: 0 })} RSD`;
 
 export default async function ExitIntentReport({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  await requireAdminAction(allowedRolesForErpModule("exit-intent"));
+  await requireAdminAction(allowedRolesForErpModule("exit-intent"), "/admin/erp/exit-intent");
   const params = await searchParams;
   const field = (name: string) => typeof params[name] === "string" ? params[name].slice(0, 30) : undefined;
   const period = resolveReportPeriod({ range: field("range"), from: field("from"), to: field("to") });

@@ -16,7 +16,7 @@ export default async function NewSalesOrderPage({
 }: {
   searchParams: Promise<{ channel?: string; returnTo?: string }>;
 }) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/prodajni-nalozi");
   const search = await searchParams;
   const options = await getSalesOrderFormOptions();
   return (

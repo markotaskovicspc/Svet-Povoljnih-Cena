@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Kurirski obračun · ERP", robots: { index: false, follow: false } };
 const rsd = (value: number | null) => value == null ? "Nedostaje podatak" : `${value.toLocaleString("sr-RS", {minimumFractionDigits:2})} RSD`;
 export default async function Page({ searchParams }: { searchParams: Promise<Record<string,string | string[] | undefined>> }) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/kurirski-obracun");
   const params=await searchParams; const first=(key:string)=>Array.isArray(params[key]) ? params[key][0] : params[key];
   const period=resolveReportPeriod({range:first("range"),from:first("from"),to:first("to")});
   const report=await courierFinanceReport(period,first("provider"));

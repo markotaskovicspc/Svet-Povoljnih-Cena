@@ -9,7 +9,7 @@ it("awaits the PDF renderer and returns a private document attachment",async()=>
  expect(await result.text()).toBe("%PDF-preview");
  expect(result.headers.get("content-disposition")).toContain('otpremnica-13-26.pdf');
  expect(result.headers.get("cache-control")).toBe("private, no-store");
- expect(mocks.admin).toHaveBeenCalledWith(["OPS"]);
+ expect(mocks.admin).toHaveBeenCalledWith(["OPS"], "/admin/erp/otpremnice");
 });
 it("does not build a PDF for a missing or unauthorized dispatch note",async()=>{
  mocks.note.mockResolvedValueOnce(null);

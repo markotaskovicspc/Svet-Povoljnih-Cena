@@ -38,7 +38,7 @@ async function upsert(_state: AdminActionState, formData: FormData) {
   "use server";
 
   return withAdminState(
-    { allowed: ["CONTENT"], action: "tab.upsert", entity: "Tab" },
+    { module: "/admin/tabovi", allowed: ["CONTENT"], action: "tab.upsert", entity: "Tab" },
     async (_a, formData: FormData) => {
         const parsed = schema.safeParse({
           ...Object.fromEntries(formData),
@@ -144,7 +144,7 @@ async function remove(formData: FormData) {
   "use server";
 
   return withAdmin(
-    { allowed: ["CONTENT"], action: "tab.delete", entity: "Tab" },
+    { module: "/admin/tabovi", allowed: ["CONTENT"], action: "tab.delete", entity: "Tab" },
     async (_a, formData: FormData) => {
         const id = String(formData.get("id") ?? "");
         if (!id) return { ok: false as const, error: "Nedostaje ID." };
@@ -163,7 +163,7 @@ export default async function TabsPage({
 }: {
   searchParams: Promise<{ edit?: string; slot?: string }>;
 }) {
-  await requireAdminAction(["CONTENT"]);
+  await requireAdminAction(["CONTENT"], "/admin/tabovi");
   const params = await searchParams;
   const [tabs, categories, pictograms, landingPages] = await Promise.all([
     db.tab.findMany({

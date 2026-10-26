@@ -213,7 +213,7 @@ function statusFlags(status: ArticleStatus) {
 }
 
 export async function POST(request: Request) {
-  const admin = await requireAdminAction(["CONTENT"]);
+  const admin = await requireAdminAction(["CONTENT"], "/admin/erp/artikli");
   const form = await request.formData();
   const mode = form.get("mode") === "apply" ? "apply" : "preview";
   const file = form.get("file");

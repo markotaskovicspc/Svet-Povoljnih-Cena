@@ -57,7 +57,7 @@ async function upsert(formData: FormData) {
   "use server";
 
   return withAdmin(
-    { allowed: ["CONTENT"], action: "rec.upsert", entity: "RecommendationRule" },
+    { module: "/admin/preporuke", allowed: ["CONTENT"], action: "rec.upsert", entity: "RecommendationRule" },
     async (_a, formData: FormData) => {
         const parsed = schema.safeParse({
           ...Object.fromEntries(formData),
@@ -140,7 +140,7 @@ async function remove(formData: FormData) {
   "use server";
 
   return withAdmin(
-    { allowed: ["CONTENT"], action: "rec.delete", entity: "RecommendationRule" },
+    { module: "/admin/preporuke", allowed: ["CONTENT"], action: "rec.delete", entity: "RecommendationRule" },
     async (_a, formData: FormData) => {
         const id = String(formData.get("id") ?? "");
         if (!id) return { ok: false as const, error: "Nedostaje ID." };
@@ -152,7 +152,7 @@ async function remove(formData: FormData) {
 }
 
 export default async function RecsPage() {
-  await requireAdminAction(["CONTENT"]);
+  await requireAdminAction(["CONTENT"], "/admin/preporuke");
   const [rules, groups] = await Promise.all([
     db.recommendationRule.findMany({
       orderBy: [{ order: "asc" }],

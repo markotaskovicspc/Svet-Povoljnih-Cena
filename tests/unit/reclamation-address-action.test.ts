@@ -17,7 +17,7 @@ it("acknowledges the saved address without waiting for another server render", a
   const diff = { before: null, after: { shipStreet: "Nova" } };
   mocks.save.mockResolvedValue(diff);
   const result = await saveAddressAction({ ok: false, message: "" }, data);
-  expect(mocks.metadata).toHaveBeenCalledWith({ allowed: ["OPS"], action: "reclamation.addressUpdate", entity: "Reclamation" });
+  expect(mocks.metadata).toHaveBeenCalledWith({ allowed: ["OPS"], module: "/admin/erp/reklamacije-dnevnik", action: "reclamation.addressUpdate", entity: "Reclamation" });
   expect(mocks.save).toHaveBeenCalledWith("claim-1", expect.objectContaining({ shipStreet: "Nova", shipHouseNumber: "25A", shipXExpressTownId: 802824 }));
   expect(result).toMatchObject({ ok: true, entityId: "claim-1", diff, message: expect.stringContaining("Adresa reklamacije je sačuvana") });
   expect(mocks.revalidate).not.toHaveBeenCalled();

@@ -8,7 +8,7 @@ import {
 } from "@/lib/admin/daily-finance-report.server";
 
 export async function GET(request: Request) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/dnevni-promet");
   const search = new URL(request.url).searchParams;
   const period = resolveReportPeriod({
     range: search.get("range") ?? undefined,

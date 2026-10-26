@@ -32,7 +32,7 @@ async function updateMethod(_state: AdminActionState, formData: FormData) {
   "use server";
 
   return withAdminState(
-    { allowed: ["OPS"], action: "payment.update", entity: "PaymentMethodConfig" },
+    { module: "/admin/placanje", allowed: ["OPS"], action: "payment.update", entity: "PaymentMethodConfig" },
     async (_a, formData: FormData) => {
         const method = String(formData.get("method") ?? "") as PaymentMethod;
         if (!Object.values(PaymentMethod).includes(method)) {
@@ -67,7 +67,7 @@ async function updateMethod(_state: AdminActionState, formData: FormData) {
 }
 
 export default async function PaymentsPage() {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/placanje");
   const configs = await getCheckoutPaymentMethods({ enabledOnly: false });
   const map = new Map(configs.map((c) => [clientPaymentMethodToDb(c.id), c]));
 

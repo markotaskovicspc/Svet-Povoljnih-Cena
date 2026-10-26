@@ -71,7 +71,7 @@ function formatCheckedAt(value: string) {
 }
 
 export default async function SystemStatusPage() {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/sistem");
 
   const [snapshot, sefHealth] = await Promise.all([
     getOperationsSnapshot(),

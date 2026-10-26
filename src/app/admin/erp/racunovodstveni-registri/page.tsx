@@ -22,7 +22,7 @@ export default async function AccountingReportsPage({
 }: {
   searchParams: Promise<{ prikaz?: string | string[] }>;
 }) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/racunovodstveni-registri");
   const selectedView = getAccountingSectionView((await searchParams).prikaz);
   const sourceModule = await getErpModule(selectedView.moduleSlug);
   if (!sourceModule) notFound();

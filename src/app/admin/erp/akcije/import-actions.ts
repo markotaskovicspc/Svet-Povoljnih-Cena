@@ -7,7 +7,7 @@ import { parseActionPriceRows, parseActionPriceText, MAX_ACTION_IMPORT_ROWS } fr
 import { actionPriceImportPreview } from "@/lib/admin/action-price-import.server";
 const rowsSchema = z.array(z.object({ row: z.number().int().min(2), sku: z.string().trim().min(1).max(100), salePrice: z.number().finite().positive() })).min(1).max(MAX_ACTION_IMPORT_ROWS);
 export async function previewActionPriceImport(form: FormData) {
-  await requireAdminAction(["CONTENT"]);
+  await requireAdminAction(["CONTENT"], "/admin/erp/akcije");
   try {
     const file = form.get("file");
     if (!(file instanceof File) || !file.size || file.size > 512_000) throw new Error("Izaberite CSV ili XLSX datoteku do 500 KB.");
@@ -36,7 +36,7 @@ export async function previewActionPriceImport(form: FormData) {
   } catch (error) { return { ok: false as const, error: error instanceof Error ? error.message : "Uvoz nije pročitan." }; }
 }
 export async function applyActionPriceImport(_state: AdminActionState, form: FormData) {
-  return withAdminState({ allowed: ["CONTENT"], action: "action.products.import", entity: "Action" }, async (_actor, data: FormData) => {
+  return withAdminState({ module: "/admin/erp/akcije", allowed: ["CONTENT"], action: "action.products.import", entity: "Action" }, async (_actor, data: FormData) => {
     const actionId = String(data.get("actionId") ?? "");
     const input = rowsSchema.parse(JSON.parse(String(data.get("rows") ?? "[]")));
     const rows = parseActionPriceRows([["Šifra", "Akcijska cena"], ...input.map(row => [row.sku, row.salePrice.toFixed(2)])]);

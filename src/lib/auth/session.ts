@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth/auth";
 import type { AdminRoleName } from "@prisma/client";
 import { db } from "@/lib/db";
+import { canAccessAdminModule, usesModuleAccess } from "@/lib/admin/access-policy";
 
 /**
  * Thin wrappers around `auth()` for server components / route handlers.
@@ -26,7 +27,7 @@ export const getCurrentAdmin = cache(async () => {
   if (!user || user.userType !== "admin") return null;
   const admin = await db.adminUser.findUnique({
     where: { id: user.id },
-    select: { id: true, email: true, firstName: true, lastName: true, role: true, enabled: true },
+    select: { id: true, email: true, firstName: true, lastName: true, role: true, enabled: true, accessPolicy: true },
   });
   if (!admin?.enabled) return null;
   return {
@@ -35,6 +36,7 @@ export const getCurrentAdmin = cache(async () => {
     email: admin.email,
     name: [admin.firstName, admin.lastName].filter(Boolean).join(" ") || admin.email,
     role: admin.role,
+    accessPolicy: admin.accessPolicy,
   };
 });
 
@@ -49,11 +51,11 @@ export async function requireUser(returnTo?: string) {
   return user;
 }
 
-export async function requireAdmin(roles?: AdminRoleName[]) {
+export async function requireAdmin(roles?: AdminRoleName[], module?: string | readonly string[]) {
   const admin = await getCurrentAdmin();
   if (!admin) redirect("/admin/prijava");
-  if ((admin.role === "WAREHOUSE" && !roles?.includes("WAREHOUSE")) || (roles && admin.role !== "SUPER" && !roles.includes(admin.role))) {
-    redirect(admin.role === "WAREHOUSE" ? "/admin/magacin?forbidden=1" : "/admin?forbidden=1");
+  if (!canAccessAdminModule(admin, module, roles)) {
+    redirect(usesModuleAccess(admin) ? "/admin/pristup-odbijen" : admin.role === "WAREHOUSE" ? "/admin/magacin?forbidden=1" : "/admin?forbidden=1");
   }
   return admin;
 }

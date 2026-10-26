@@ -10,7 +10,7 @@ const inputSchema = z.object({
 });
 
 export async function getNewsletterBounces(input: { campaignId: string; afterId?: string }) {
-  await requireAdminAction(["ADS"]);
+  await requireAdminAction(["ADS"], "/admin/newsletter");
   const { campaignId, afterId } = inputSchema.parse(input);
   // Use the same event predicate as the campaign's bounce count. A later
   // complaint/status transition must not hide an earlier bounce.

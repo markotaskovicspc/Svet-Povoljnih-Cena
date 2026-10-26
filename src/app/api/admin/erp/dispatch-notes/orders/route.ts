@@ -3,7 +3,7 @@ import { requireAdminAction } from "@/lib/admin";
 import { getDispatchOrderLines } from "@/lib/admin/dispatch-note.server";
 
 export async function GET(request: Request) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/otpremnice");
   const search = new URL(request.url).searchParams;
   try {
     const lines = await getDispatchOrderLines({

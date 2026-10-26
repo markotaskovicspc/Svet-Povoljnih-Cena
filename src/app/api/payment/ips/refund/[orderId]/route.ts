@@ -13,7 +13,7 @@ export async function POST(
   req: Request,
   ctx: { params: Promise<{ orderId: string }> },
 ) {
-  const admin = await requireAdminAction(["OPS"]);
+  const admin = await requireAdminAction(["OPS"], ["/admin/erp/prodajni-nalozi","/admin/fiskalizacija"]);
   const { orderId } = await ctx.params;
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const order = await db.order.findFirst({

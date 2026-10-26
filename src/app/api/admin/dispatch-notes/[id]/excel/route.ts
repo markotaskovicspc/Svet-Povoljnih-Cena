@@ -14,7 +14,7 @@ export async function GET(
   _request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/otpremnice");
   const { id } = await context.params;
   const note = await getDispatchNotePrintData(id);
   if (!note) {

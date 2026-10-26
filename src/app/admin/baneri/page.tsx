@@ -357,7 +357,7 @@ async function upsertBanner(_state: AdminActionState, formData: FormData) {
   "use server";
 
   return withAdminState(
-    { allowed: ["CONTENT"], action: "banner.upsert", entity: "Banner" },
+    { module: "/admin/baneri", allowed: ["CONTENT"], action: "banner.upsert", entity: "Banner" },
     async (actorId, formData: FormData) => {
       const rawPlacement = String(formData.get("placement") ?? "");
       const desktopUploadKey = selectedUploadKey(
@@ -581,7 +581,7 @@ async function deleteBanner(formData: FormData) {
   "use server";
 
   return withAdmin(
-    { allowed: ["CONTENT"], action: "banner.delete", entity: "Banner" },
+    { module: "/admin/baneri", allowed: ["CONTENT"], action: "banner.delete", entity: "Banner" },
     async (_actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
       if (!id) return { ok: false as const, error: "Nedostaje ID." };
@@ -611,7 +611,7 @@ async function reorderBanner(formData: FormData) {
   "use server";
 
   return withAdmin(
-    { allowed: ["CONTENT"], action: "banner.reorder", entity: "Banner" },
+    { module: "/admin/baneri", allowed: ["CONTENT"], action: "banner.reorder", entity: "Banner" },
     async (_actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
       const dir = String(formData.get("dir") ?? "");
@@ -673,7 +673,7 @@ function isActiveNow(banner: AdminBanner, now = new Date()) {
 }
 
 export default async function BannersPage() {
-  await requireAdminAction(["CONTENT"]);
+  await requireAdminAction(["CONTENT"], "/admin/baneri");
   const databaseBanners = await db.banner.findMany({
     orderBy: [{ order: "asc" }, { createdAt: "desc" }],
   });

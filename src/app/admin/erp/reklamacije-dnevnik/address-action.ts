@@ -5,7 +5,7 @@ import { saveReclamationAddress } from "@/lib/admin/reclamation-address.server";
 // Acknowledge the committed change first; the form refreshes the page separately.
 export async function saveAddressAction(_state: AdminActionState, formData: FormData) {
   return withAdminState(
-    { allowed: ["OPS"], action: "reclamation.addressUpdate", entity: "Reclamation" },
+    { module: "/admin/erp/reklamacije-dnevnik", allowed: ["OPS"], action: "reclamation.addressUpdate", entity: "Reclamation" },
     async (_actorId, data: FormData) => {
       const id = String(data.get("id") ?? "");
       if (!id) return { ok: false as const, error: "Reklamacija nije izabrana." };

@@ -124,7 +124,7 @@ export async function initializeFunctionalContentPageAction(
   formData: FormData,
 ) {
   const state = await withAdminState(
-    {
+    { module: "/admin/sadrzaj",
       allowed: ["CONTENT"],
       action: "content-page.initializeFunctional",
       entity: "ContentPage",
@@ -203,7 +203,7 @@ export async function saveContentPageAction(
       ? "content-page.publish"
       : "content-page.saveDraft";
   const state = await withAdminState(
-    { allowed: ["CONTENT"], action: auditAction, entity: "ContentPage" },
+    { module: "/admin/sadrzaj", allowed: ["CONTENT"], action: auditAction, entity: "ContentPage" },
     async (actorId, formData: FormData) => {
       const parsed = parseContentPageInput(formData);
       if (!parsed.success) {
@@ -359,7 +359,7 @@ export async function restoreContentRevisionAction(
   formData: FormData,
 ) {
   return withAdminState(
-    { allowed: ["CONTENT"], action: "content-page.restore", entity: "ContentPage" },
+    { module: "/admin/sadrzaj", allowed: ["CONTENT"], action: "content-page.restore", entity: "ContentPage" },
     async (actorId, formData: FormData) => {
       const pageId = String(formData.get("pageId") ?? "");
       const revisionId = String(formData.get("revisionId") ?? "");
@@ -433,7 +433,7 @@ export async function archiveContentPageAction(
   formData: FormData,
 ) {
   return withAdminState(
-    { allowed: ["CONTENT"], action: "content-page.archive", entity: "ContentPage" },
+    { module: "/admin/sadrzaj", allowed: ["CONTENT"], action: "content-page.archive", entity: "ContentPage" },
     async (_actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
       const page = await db.contentPage.findUnique({ where: { id } });
@@ -465,7 +465,7 @@ export async function unarchiveContentPageAction(
   formData: FormData,
 ) {
   return withAdminState(
-    { allowed: ["CONTENT"], action: "content-page.unarchive", entity: "ContentPage" },
+    { module: "/admin/sadrzaj", allowed: ["CONTENT"], action: "content-page.unarchive", entity: "ContentPage" },
     async (_actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
       const page = await db.contentPage.findUnique({ where: { id } });
@@ -487,7 +487,7 @@ export async function deleteContentPageDraftAction(
   formData: FormData,
 ) {
   const state = await withAdminState(
-    { allowed: ["CONTENT"], action: "content-page.deleteDraft", entity: "ContentPage" },
+    { module: "/admin/sadrzaj", allowed: ["CONTENT"], action: "content-page.deleteDraft", entity: "ContentPage" },
     async (_actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
       const page = await db.contentPage.findUnique({ where: { id } });

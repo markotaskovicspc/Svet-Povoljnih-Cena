@@ -41,7 +41,7 @@ export async function generateMetadata({
 }: RouteProps): Promise<Metadata> {
   const [{ slug }, query] = await Promise.all([params, searchParams]);
   const preview = query.preview === "1";
-  if (preview) await requireAdmin();
+  if (preview) await requireAdmin(undefined, "/admin/erp/landing-strane");
   const page = preview
     ? await getLandingPageForAdminPreview(slug)
     : await getLandingPageForStorefront(slug);
@@ -88,7 +88,7 @@ export async function generateMetadata({
 export default async function LandingPageRoute({ params, searchParams }: RouteProps) {
   const [{ slug }, query] = await Promise.all([params, searchParams]);
   const preview = query.preview === "1";
-  if (preview) await requireAdmin();
+  if (preview) await requireAdmin(undefined, "/admin/erp/landing-strane");
   const page = preview
     ? await getLandingPageForAdminPreview(slug)
     : await getLandingPageForStorefront(slug);

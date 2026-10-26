@@ -6,7 +6,7 @@ import { parseStatementFile } from "@/lib/courier/statement-file";
 import { previewStatement, importStatement, linkStatementLine } from "@/lib/courier/finance.server";
 const path = "/admin/erp/kurirski-obracun";
 export async function previewCourierFile(form: FormData) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/kurirski-obracun");
   try {
     const file = form.get("file");
     if (!(file instanceof File) || file.size > 2 * 1024 * 1024) throw new Error("Izaberite datoteku do 2 MB.");
@@ -16,14 +16,14 @@ export async function previewCourierFile(form: FormData) {
   } catch (e) { return { ok: false as const, message: e instanceof Error ? e.message : "Uvoz nije pročitan." }; }
 }
 export async function confirmCourierFile(input: unknown, fingerprint: string) {
-  return withAdminState({ allowed: ["OPS"], action: "courier.statement.import", entity: "CourierStatement" }, async actorId => {
+  return withAdminState({ module: "/admin/erp/kurirski-obracun", allowed: ["OPS"], action: "courier.statement.import", entity: "CourierStatement" }, async actorId => {
     const result = await importStatement(statementInputSchema.parse(input), fingerprint, actorId);
     revalidatePath(path);
     return { ok: true as const, entityId: result.id, diff: result, message: result.alreadyImported ? "Dokument je već uvezen. Nema dupliranja." : `Uvezeno. Povezano ${result.matched} stavki.`, result };
   })();
 }
 export async function connectCourierLine(form: FormData) {
-  return withAdminState({ allowed: ["OPS"], action: "courier.statement.link", entity: "CourierStatementLine" }, async () => {
+  return withAdminState({ module: "/admin/erp/kurirski-obracun", allowed: ["OPS"], action: "courier.statement.link", entity: "CourierStatementLine" }, async () => {
     const id = String(form.get("id") ?? "");
     await linkStatementLine(id, String(form.get("trackingNo") ?? "").trim());
     revalidatePath(path);

@@ -5,6 +5,8 @@ import { boxQuantity, myGlsBoxQuantities } from "@/lib/courier/label-quantity";
 import { MyGlsPrintLayoutError } from "@/lib/mygls/print-layout";
 import { NextResponse } from "next/server";
 import { requireAdminAction } from "@/lib/admin";
+import { canAccessAdminModule } from "@/lib/admin/access-policy";
+import { shipmentLabelPermissionModules } from "@/lib/admin/shipment-label-access";
 import { db } from "@/lib/db";
 import { downloadMyGlsLabelPdf, MYGLS_PROVIDER } from "@/lib/mygls";
 import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
@@ -21,7 +23,7 @@ export async function GET(
   _req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  await requireAdminAction(["OPS"]);
+  const admin = await requireAdminAction(["OPS"], ["/admin/erp/prodajni-nalozi","/admin/erp/preuzimanja","/admin/erp/reklamacije-dnevnik"]);
   const { id } = await ctx.params;
   const shipment = await db.shipment.findUnique({
     where: { id },
@@ -50,6 +52,9 @@ export async function GET(
   });
   if (!shipment) {
     return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
+  }
+  if (!canAccessAdminModule(admin, shipmentLabelPermissionModules(shipment.purpose), ["OPS"])) {
+    return NextResponse.json({ ok: false, error: "Nemate pristup adresnici za ovu vrstu pošiljke." }, { status: 403 });
   }
   const paymentReadiness = fulfillmentPaymentReadiness({
     purpose: shipment.purpose,

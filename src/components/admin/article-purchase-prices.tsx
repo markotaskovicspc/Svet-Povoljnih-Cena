@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { isAuthorized, requireAdminAction } from "@/lib/admin";
+import { requireAdminAction } from "@/lib/admin";
+import { canAccessAdminModule } from "@/lib/admin/access-policy";
 import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
 import { PURCHASE_PRICE_MAX } from "@/lib/admin/purchase-price";
 import { addArticlePurchasePrice } from "@/app/admin/erp/artikli/[id]/purchase-price-actions";
@@ -11,10 +12,10 @@ import { Input } from "@/components/ui/input";
 import { SubmitButton } from "./submit-button";
 
 export async function ArticlePurchasePrices({ productId }: { productId: string }) {
-  const admin = await requireAdminAction(["CONTENT", "OPS"]);
+  const admin = await requireAdminAction(["CONTENT", "OPS"], "/admin/erp/nabavne-cene");
   // The article card is also available to CONTENT; purchasing permissions stay
   // identical to the existing purchase-price module.
-  if (!isAuthorized(admin.role, allowedRolesForErpModule("nabavne-cene"))) return null;
+  if (!canAccessAdminModule(admin, "/admin/erp/nabavne-cene", allowedRolesForErpModule("nabavne-cene"))) return null;
   const [product, prices] = await Promise.all([
     db.product.findUnique({ where: { id: productId, deletedAt: null }, select: {
       id: true, sku: true, supplier: { select: { name: true, currency: true, parity: true } },

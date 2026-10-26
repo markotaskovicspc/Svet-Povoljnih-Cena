@@ -69,7 +69,7 @@ export default async function NewsletterPage({
 }: {
   searchParams: Promise<{ view?: string; q?: string; audienceId?: string }>;
 }) {
-  await requireAdminAction(["ADS"]);
+  await requireAdminAction(["ADS"], "/admin/newsletter");
   const params = await searchParams;
   const view = views.some(([key]) => key === params.view) ? params.view! : "campaigns";
   const q = params.q?.trim() ?? "";

@@ -35,7 +35,7 @@ describe("newsletter image upload", () => {
     const response = await POST(request(await image()));
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ url: "https://media.example.test/newsletter/image.png" });
-    expect(mocks.guard).toHaveBeenCalledWith(["ADS"]);
+    expect(mocks.guard).toHaveBeenCalledWith(["ADS"], "/admin/newsletter");
     expect(mocks.from).toHaveBeenCalledWith("product-media");
     const [key, bytes, options] = mocks.upload.mock.calls[0];
     expect(key).toMatch(/^newsletter\/campaign-test\/[a-f0-9-]+\.png$/);

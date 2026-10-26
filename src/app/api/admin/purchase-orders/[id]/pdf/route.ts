@@ -12,7 +12,7 @@ export async function GET(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/porudzbenice");
   const { id } = await context.params;
   const previewForSending =
     new URL(request.url).searchParams.get("mode") === "send-preview";

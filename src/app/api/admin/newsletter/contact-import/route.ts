@@ -5,7 +5,7 @@ import { startContactImport, importContactBatch } from "@/lib/newsletter/import-
 export const runtime = "nodejs";
 export const maxDuration = 60;
 export async function POST(request: Request) {
-  const admin = await requireAdminAction(["ADS"]);
+  const admin = await requireAdminAction(["ADS"], "/admin/newsletter");
   if (request.headers.get("origin") && request.headers.get("origin") !== new URL(request.url).origin) return NextResponse.json({ error: "Nedozvoljen izvor zahteva." }, { status: 403 });
   const raw = await request.text();
   if (Buffer.byteLength(raw) > 2_500_000) return NextResponse.json({ error: "Paket je prevelik." }, { status: 413 });

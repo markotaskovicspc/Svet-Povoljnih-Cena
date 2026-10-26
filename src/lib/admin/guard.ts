@@ -10,11 +10,12 @@ import {
   type AdminActionFieldErrors,
   type AdminActionState,
 } from "./action-state";
-import { isAuthorized } from "./authorization";
+import { canAccessAdminModule, usesModuleAccess } from "./access-policy";
 
 export { isAuthorized } from "./authorization";
 
 export const ADMIN_ROLE_LABEL: Record<AdminRoleName, string> = {
+  CUSTOM: "Prilagođen pristup",
   WAREHOUSE: "Magacioner",
   SUPER: "Super admin",
   CONTENT: "Sadržaj",
@@ -31,17 +32,18 @@ export const ADMIN_ROLE_LABEL: Record<AdminRoleName, string> = {
  * Server-component / route-handler guard. Returns the admin session or
  * redirects. Never returns null on success.
  */
-export async function requireAdminAction(allowed?: readonly AdminRoleName[]) {
+export async function requireAdminAction(allowed?: readonly AdminRoleName[], module?: string | readonly string[]) {
   const admin = await getCurrentAdmin();
   if (!admin) redirect(allowed?.includes("WAREHOUSE") ? "/admin/magacin/prijava" : "/admin/prijava");
-  if ((admin.role === "WAREHOUSE" && !allowed?.includes("WAREHOUSE")) || (allowed && !isAuthorized(admin.role, allowed))) {
-    redirect(admin.role === "WAREHOUSE" ? "/admin/magacin?forbidden=1" : "/admin?forbidden=1");
+  if (!canAccessAdminModule(admin, module, allowed)) {
+    redirect(usesModuleAccess(admin) ? "/admin/pristup-odbijen" : admin.role === "WAREHOUSE" ? "/admin/magacin?forbidden=1" : "/admin?forbidden=1");
   }
   return admin;
 }
 
 type AdminActionMeta = {
   allowed?: readonly AdminRoleName[];
+  module?: string | readonly string[];
   action: string;
   entity: string;
 };
@@ -71,7 +73,7 @@ export function withAdminState<TArgs extends unknown[], TOut>(
   fn: AdminActionHandler<TArgs, TOut>,
 ): (...args: TArgs) => Promise<AdminActionState<TOut>> {
   return async (...args: TArgs) => {
-    const admin = await requireAdminAction(meta.allowed);
+    const admin = await requireAdminAction(meta.allowed, meta.module);
     const { finalizeAudit, logAudit } = await import("./audit");
     const requestId = randomUUID();
     let attemptAuditId: string;

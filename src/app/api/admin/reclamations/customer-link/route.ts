@@ -4,7 +4,7 @@ import { lookupOrderForReclamation } from "@/lib/api/reclamations";
 import { createReclamationLinkToken } from "@/lib/api/reclamation-link-token";
 
 export async function POST(request: Request) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/reklamacije-dnevnik");
   const body = await request.json().catch(() => null);
   const number = typeof body?.orderNumberOrFiscal === "string" ? body.orderNumberOrFiscal.trim() : "";
   if (number.length < 3 || number.length > 80) return NextResponse.json({ message: "Unesite broj porudžbine ili fiskalnog računa." }, { status: 400 });

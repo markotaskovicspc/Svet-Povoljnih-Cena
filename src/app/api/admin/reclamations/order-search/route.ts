@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { reclamationHistorySelect, serializeReclamationHistory } from "@/lib/reclamation-options";
 
 export async function GET(request: Request) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/reklamacije-dnevnik");
   const query = new URL(request.url).searchParams.get("q")?.trim() ?? "";
   if (query.length < 3) {
     return NextResponse.json({ ok: true, data: [] });

@@ -30,12 +30,12 @@ async function resolveFilter(form: FormData) {
   return filterFromForm(form);
 }
 export async function previewAudience(form: FormData) {
-  await requireAdminAction(["ADS"]);
+  await requireAdminAction(["ADS"], "/admin/viber");
   try { return { ok: true, count: await countAudience(await resolveFilter(form)) }; }
   catch { return { ok: false, error: "Proverite gradove i period kupovine. Broj primalaca trenutno nije dostupan." }; }
 }
 export async function saveViberDraft(state: AdminActionState, form: FormData) {
-  return withAdminState({ allowed: ["ADS"], action: "viber.campaignSave", entity: "ViberCampaign" }, async (_actor, f: FormData) => {
+  return withAdminState({ module: "/admin/viber", allowed: ["ADS"], action: "viber.campaignSave", entity: "ViberCampaign" }, async (_actor, f: FormData) => {
     const id = String(f.get("id") || "");
     const scheduledRaw = String(f.get("scheduledAt") || "");
     const schedule = f.get("mode") === "scheduled";
@@ -74,7 +74,7 @@ export async function saveViberDraft(state: AdminActionState, form: FormData) {
   })(form);
 }
 export async function launchViberCampaign(state: AdminActionState, form: FormData) {
-  return withAdminState({ allowed: ["ADS"], action: "viber.campaignSend", entity: "ViberCampaign" }, async (_actor, f: FormData) => {
+  return withAdminState({ module: "/admin/viber", allowed: ["ADS"], action: "viber.campaignSend", entity: "ViberCampaign" }, async (_actor, f: FormData) => {
     const id = String(f.get("id") || "");
     if (!ready(f)) return { ok: false as const, error: "Slanje trenutno nije omogućeno." };
     const preview = await db.viberCampaign.findUniqueOrThrow({ where: { id }, include: { audience: true } });
@@ -86,7 +86,7 @@ export async function launchViberCampaign(state: AdminActionState, form: FormDat
   })(form);
 }
 export async function testViberMessage(state: AdminActionState, form: FormData) {
-  return withAdminState({ allowed: ["ADS"], action: "viber.campaignTest", entity: "ViberCampaign" }, async (_actor, f: FormData) => {
+  return withAdminState({ module: "/admin/viber", allowed: ["ADS"], action: "viber.campaignTest", entity: "ViberCampaign" }, async (_actor, f: FormData) => {
     const id = String(f.get("id") || "");
     let c: ReturnType<typeof parseSingleTest>;
     if (f.has("body")) {
@@ -104,7 +104,7 @@ export async function testViberMessage(state: AdminActionState, form: FormData) 
   })(form);
 }
 export async function deleteViberDraft(state: AdminActionState, form: FormData) {
-  return withAdminState({ allowed: ["ADS"], action: "viber.campaignDelete", entity: "ViberCampaign" }, async (_actor, f: FormData) => {
+  return withAdminState({ module: "/admin/viber", allowed: ["ADS"], action: "viber.campaignDelete", entity: "ViberCampaign" }, async (_actor, f: FormData) => {
     const id = String(f.get("id") || "");
     const existing = await db.viberCampaign.findUniqueOrThrow({ where: { id }, include: { audience: true } });
     if ((parseAudienceFilter(existing.audience.filter).channel ?? "VIBER") !== channelFromForm(f)) throw new Error("Nacrt pripada drugom kanalu.");
@@ -115,7 +115,7 @@ export async function deleteViberDraft(state: AdminActionState, form: FormData) 
 }
 
 export async function suggestMessageEdit(form: FormData) {
-  await requireAdminAction(["ADS"]);
+  await requireAdminAction(["ADS"], "/admin/viber");
   try { return { ok: true, text: await editMessageWithAi({ channel: channelFromForm(form), body: String(form.get("body") ?? ""), instruction: String(form.get("instruction") ?? "") }) }; }
   catch (e) { return { ok: false, error: e instanceof Error ? e.message : "AI predlog nije uspeo. Originalna poruka je sačuvana." }; }
 }

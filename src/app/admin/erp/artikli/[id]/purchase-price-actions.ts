@@ -11,7 +11,7 @@ export async function addArticlePurchasePrice(
   _state: AdminActionState,
   formData: FormData,
 ) {
-  return withAdminState({
+  return withAdminState({ module: "/admin/erp/nabavne-cene",
     allowed: allowedRolesForErpModule("nabavne-cene"),
     action: "article.purchase-price.create",
     entity: "PurchasePrice",

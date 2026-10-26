@@ -21,7 +21,7 @@ export default async function DispatchNoteDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ mode?: string }>;
 }) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/otpremnice");
   const { id } = await params;
   const search = await searchParams;
   const [detail, options] = await Promise.all([

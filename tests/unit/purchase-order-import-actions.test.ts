@@ -18,7 +18,7 @@ describe("purchase order import upload boundary", () => {
   it("authorizes OPS before parsing any upload", async () => {
     mocks.auth.mockRejectedValue(new Error("forbidden"));
     await expect(previewPurchaseOrderImport(form(new File(["sku,qty\nA,2"], "rows.csv")))).rejects.toThrow("forbidden");
-    expect(mocks.auth).toHaveBeenCalledWith(["OPS"]); expect(mocks.preview).not.toHaveBeenCalled();
+    expect(mocks.auth).toHaveBeenCalledWith(["OPS"], "/admin/erp/porudzbenice"); expect(mocks.preview).not.toHaveBeenCalled();
   });
   it("reads XLSX text SKUs and omits persistence-only snapshots from client payload", async () => {
     const result = await previewPurchaseOrderImport(form(await xlsx()));

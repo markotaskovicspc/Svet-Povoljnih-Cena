@@ -20,6 +20,7 @@ import {
   postInboundInvoice,
 } from "@/lib/admin/inbound-invoice.server";
 import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
+import { isErpCommandBoundToModule } from "@/lib/admin/erp-command-module-access";
 import { articleSlug } from "@/lib/article-master";
 import { nextArticleSku } from "@/lib/admin/article-master.server";
 import { normalizeArticleSku } from "@/lib/article-sku";
@@ -81,7 +82,7 @@ export async function POST(
   ctx: { params: Promise<{ module: string }> },
 ) {
   const { module } = await ctx.params;
-  const admin = await requireAdminAction(allowedRolesForErpModule(module));
+  const admin = await requireAdminAction(allowedRolesForErpModule(module), `/admin/erp/${module}`);
   const body = (await req.json().catch(() => null)) as
     | { action?: unknown; ids?: unknown; input?: unknown }
     | null;
@@ -93,6 +94,10 @@ export async function POST(
 
   if (!action) {
     return NextResponse.json({ ok: false, error: "Nedostaje komanda." }, { status: 400 });
+  }
+
+  if (!isErpCommandBoundToModule(module, action)) {
+    return NextResponse.json({ ok: false, error: "Komanda nije dostupna u ovom ERP modulu." }, { status: 403 });
   }
 
   try {

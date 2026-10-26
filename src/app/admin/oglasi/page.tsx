@@ -27,7 +27,7 @@ async function saveFlag(_state: AdminActionState, formData: FormData) {
   "use server";
 
   return withAdminState(
-    { allowed: ["ADS"], action: "ad.flagSave", entity: "AdFlag" },
+    { module: "/admin/oglasi", allowed: ["ADS"], action: "ad.flagSave", entity: "AdFlag" },
     async (_a, formData: FormData) => {
         const channel = String(formData.get("channel") ?? "") as AdChannel;
         if (!Object.values(AdChannel).includes(channel)) {
@@ -68,7 +68,7 @@ async function toggleProductCatalog(_state: AdminActionState, formData: FormData
   "use server";
 
   return withAdminState(
-    { allowed: ["ADS"], action: "ad.productToggle", entity: "Product" },
+    { module: "/admin/oglasi", allowed: ["ADS"], action: "ad.productToggle", entity: "Product" },
     async (_a, formData: FormData) => {
         const productId = String(formData.get("productId") ?? "");
         const channel = String(formData.get("channel") ?? "") as AdChannel;
@@ -102,7 +102,7 @@ export default async function AdsPage({
 }: {
   searchParams: Promise<{ q?: string }>;
 }) {
-  await requireAdminAction(["ADS"]);
+  await requireAdminAction(["ADS"], "/admin/oglasi");
   const sp = await searchParams;
   const q = sp.q?.trim() ?? "";
 

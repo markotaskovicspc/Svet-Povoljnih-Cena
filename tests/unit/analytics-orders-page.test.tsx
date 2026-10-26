@@ -16,7 +16,7 @@ beforeEach(() => {
 });
 it("preserves report filters and renders order links, quantities, and pagination", async () => {
   const html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve(params) }));
-  expect(mocks.admin).toHaveBeenCalledWith(["ADS", "OPS"]);
+  expect(mocks.admin).toHaveBeenCalledWith(["ADS", "OPS"], "/admin/erp/posete-konverzije");
   expect(mocks.orders).toHaveBeenCalledWith(expect.objectContaining({ fromInput: "2026-10-01", toInput: "2026-10-02" }), "month", "/p/stolica", "2026-10-01", 1);
   expect(html).toContain("Trpezarijska stolica");
   expect(html).toContain("53 porudžbina");

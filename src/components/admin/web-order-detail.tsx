@@ -105,7 +105,7 @@ export const metadata = {
 async function recordPackageHandoverAction(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
-    { allowed: ["OPS"], action: "order.package-handover.record", entity: "Shipment" },
+    { module: "/admin/erp/prodajni-nalozi", allowed: ["OPS"], action: "order.package-handover.record", entity: "Shipment" },
     async (actorId, data: FormData) => {
       const orderId = String(data.get("orderId") ?? "");
       const shipmentId = String(data.get("shipmentId") ?? "");
@@ -130,7 +130,7 @@ async function updateWebOrderItemQuantityAction(
   "use server";
 
   return withAdminState(
-    { allowed: ["OPS"], action: "order.webItemUpdate", entity: "OrderItem" },
+    { module: "/admin/erp/prodajni-nalozi", allowed: ["OPS"], action: "order.webItemUpdate", entity: "OrderItem" },
     async (actorId, formData: FormData) => {
       const orderId = String(formData.get("orderId") ?? "");
       const orderItemId = String(formData.get("orderItemId") ?? "");
@@ -177,7 +177,7 @@ async function addWebOrderItemAction(
   "use server";
 
   return withAdminState(
-    { allowed: ["OPS"], action: "order.webItemAdd", entity: "OrderItem" },
+    { module: "/admin/erp/prodajni-nalozi", allowed: ["OPS"], action: "order.webItemAdd", entity: "OrderItem" },
     async (actorId, formData: FormData) => {
       const orderId = String(formData.get("orderId") ?? "");
       const sku = String(formData.get("sku") ?? "").trim();
@@ -240,7 +240,7 @@ async function updateWebOrderPaymentMethodAction(
   "use server";
 
   return withAdminState(
-    {
+    { module: "/admin/erp/prodajni-nalozi",
       allowed: ["OPS"],
       action: "order.webPaymentMethodUpdate",
       entity: "Payment",
@@ -299,7 +299,7 @@ async function updateShippingAddressAction(
   "use server";
 
   return withAdminState(
-    { allowed: ["OPS"], action: "order.shippingAddressUpdate", entity: "Order" },
+    { module: "/admin/erp/prodajni-nalozi", allowed: ["OPS"], action: "order.shippingAddressUpdate", entity: "Order" },
     async (actorId, formData: FormData) => {
       const orderId = String(formData.get("orderId") ?? "");
       const result = await updateWebOrderShippingContact({
@@ -331,7 +331,7 @@ async function updateShippingPhoneAction(
   "use server";
 
   return withAdminState(
-    { allowed: ["OPS"], action: "order.shippingPhoneUpdate", entity: "Order" },
+    { module: "/admin/erp/prodajni-nalozi", allowed: ["OPS"], action: "order.shippingPhoneUpdate", entity: "Order" },
     async (actorId, formData: FormData) => {
       const orderId = String(formData.get("orderId") ?? "");
       const result = await updateWebOrderShippingContact({
@@ -404,7 +404,7 @@ function shippingContactActionResult(
 async function reshipOrderAction(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
-    { allowed: ["OPS"], action: "order.reshipment.create", entity: "Order" },
+    { module: "/admin/erp/prodajni-nalozi", allowed: ["OPS"], action: "order.reshipment.create", entity: "Order" },
     async (actorId, data: FormData) => {
       const orderId = String(data.get("orderId") ?? "");
       const shipmentId = String(data.get("shipmentId") ?? "");
@@ -424,7 +424,7 @@ async function updateStatus(_state: AdminActionState, formData: FormData) {
   "use server";
 
   return withAdminState(
-    { allowed: ["OPS"], action: "order.statusUpdate", entity: "Order" },
+    { module: "/admin/erp/prodajni-nalozi", allowed: ["OPS"], action: "order.statusUpdate", entity: "Order" },
     async (actorId, formData: FormData) => {
         const id = String(formData.get("id") ?? "");
         const status = String(formData.get("status") ?? "") as OrderStatus;
@@ -551,7 +551,7 @@ async function createCourierShipment(_state: AdminActionState, formData: FormDat
   "use server";
 
   return withAdminState(
-    { allowed: ["OPS"], action: "order.courierCreate", entity: "Shipment" },
+    { module: "/admin/erp/prodajni-nalozi", allowed: ["OPS"], action: "order.courierCreate", entity: "Shipment" },
     async (_actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
       const providerValue = String(formData.get("provider") ?? "").trim();
@@ -685,7 +685,7 @@ async function announceXExpressCourierShipment(
   "use server";
 
   return withAdminState(
-    { allowed: ["OPS"], action: "order.xExpressAnnounce", entity: "Shipment" },
+    { module: "/admin/erp/prodajni-nalozi", allowed: ["OPS"], action: "order.xExpressAnnounce", entity: "Shipment" },
     async (_actorId, formData: FormData) => {
       const shipmentId = String(formData.get("shipmentId") ?? "");
       const orderId = String(formData.get("orderId") ?? "");
@@ -715,7 +715,7 @@ async function confirmBankTransferPaymentAction(
   "use server";
 
   return withAdminState(
-    { allowed: ["OPS"], action: "order.bankTransferConfirm", entity: "Payment" },
+    { module: "/admin/erp/prodajni-nalozi", allowed: ["OPS"], action: "order.bankTransferConfirm", entity: "Payment" },
     async (actorId, formData: FormData) => {
       const orderId = String(formData.get("orderId") ?? "");
       const paymentId = String(formData.get("paymentId") ?? "");
@@ -785,7 +785,7 @@ async function syncCourierShipment(_state: AdminActionState, formData: FormData)
   "use server";
 
   return withAdminState(
-    { allowed: ["OPS"], action: "order.courierStatusSync", entity: "Shipment" },
+    { module: "/admin/erp/prodajni-nalozi", allowed: ["OPS"], action: "order.courierStatusSync", entity: "Shipment" },
     async (_actorId, formData: FormData) => {
       const shipmentId = String(formData.get("shipmentId") ?? "");
       const orderId = String(formData.get("orderId") ?? "");
@@ -812,7 +812,7 @@ async function deleteMyGlsShipment(_state: AdminActionState, formData: FormData)
   "use server";
 
   return withAdminState(
-    { allowed: ["OPS"], action: "order.myGlsDeleteLabels", entity: "Shipment" },
+    { module: "/admin/erp/prodajni-nalozi", allowed: ["OPS"], action: "order.myGlsDeleteLabels", entity: "Shipment" },
     async (_actorId, formData: FormData) => {
       const shipmentId = String(formData.get("shipmentId") ?? "");
       const orderId = String(formData.get("orderId") ?? "");
@@ -839,7 +839,7 @@ async function modifyMyGlsCOD(_state: AdminActionState, formData: FormData) {
   "use server";
 
   return withAdminState(
-    { allowed: ["OPS"], action: "order.myGlsModifyCOD", entity: "Shipment" },
+    { module: "/admin/erp/prodajni-nalozi", allowed: ["OPS"], action: "order.myGlsModifyCOD", entity: "Shipment" },
     async (_actorId, formData: FormData) => {
       const shipmentId = String(formData.get("shipmentId") ?? "");
       const orderId = String(formData.get("orderId") ?? "");
@@ -880,7 +880,7 @@ async function issueFiscalReceiptAction(_state: AdminActionState, formData: Form
   "use server";
 
   return withAdminState(
-    { allowed: ["OPS"], action: "order.fiscalIssue", entity: "FiscalReceipt" },
+    { module: "/admin/erp/prodajni-nalozi", allowed: ["OPS"], action: "order.fiscalIssue", entity: "FiscalReceipt" },
     async (_actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
       if (!id) return { ok: false as const, error: "Nedostaje ID porudžbine." };
@@ -919,7 +919,7 @@ async function resendBuyerReceiptAction(_state: AdminActionState, formData: Form
   "use server";
 
   return withAdminState(
-    { allowed: ["OPS"], action: "invoice.buyerReceiptResend", entity: "Invoice" },
+    { module: "/admin/erp/prodajni-nalozi", allowed: ["OPS"], action: "invoice.buyerReceiptResend", entity: "Invoice" },
     async (_actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
       if (!id) return { ok: false as const, error: "Nedostaje ID porudžbine." };
@@ -949,7 +949,7 @@ async function confirmSupplierFulfillmentAction(
   "use server";
 
   return withAdminState(
-    {
+    { module: "/admin/erp/prodajni-nalozi",
       allowed: ["OPS"],
       action: "supplierFulfillment.confirm",
       entity: "SupplierFulfillment",
@@ -1073,7 +1073,7 @@ async function resendSupplierOrderAction(
   "use server";
 
   return withAdminState(
-    {
+    { module: "/admin/erp/prodajni-nalozi",
       allowed: ["OPS"],
       action: "supplierFulfillment.resend",
       entity: "SupplierFulfillment",
@@ -1181,7 +1181,7 @@ async function markFiscalized(_state: AdminActionState, formData: FormData) {
   "use server";
 
   return withAdminState(
-    { allowed: ["OPS"], action: "order.markFiscalized", entity: "Order" },
+    { module: "/admin/erp/prodajni-nalozi", allowed: ["OPS"], action: "order.markFiscalized", entity: "Order" },
     async (_a, formData: FormData) => {
         const id = String(formData.get("id") ?? "");
         const receiptNumber = String(formData.get("receiptNumber") ?? "").trim();
@@ -1208,7 +1208,7 @@ async function refundIpsPaymentAction(_state: AdminActionState, formData: FormDa
   "use server";
 
   return withAdminState(
-    { allowed: ["OPS"], action: "order.ipsRefund", entity: "Payment" },
+    { module: "/admin/erp/prodajni-nalozi", allowed: ["OPS"], action: "order.ipsRefund", entity: "Payment" },
     async (actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
       const amount = Number(formData.get("amount") ?? "");
@@ -1296,7 +1296,7 @@ async function refundIpsPaymentAction(_state: AdminActionState, formData: FormDa
 }
 
 export async function WebOrderDetail({ id }: { id: string }) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/prodajni-nalozi");
   const order = await db.order.findUnique({
     where: { id },
     include: {

@@ -11,8 +11,8 @@ export const metadata = {
 };
 
 export default async function ReportsHubPage() {
-  const admin = await requireAdminAction(["CONTENT", "OPS", "ADS"]);
-  const destinations = reportDestinationsForRole(admin.role);
+  const admin = await requireAdminAction(["CONTENT", "OPS", "ADS"], "/admin/izvestaji");
+  const destinations = reportDestinationsForRole(admin);
 
   return (
     <>

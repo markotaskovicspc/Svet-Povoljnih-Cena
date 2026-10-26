@@ -42,7 +42,7 @@ const FUNCTIONAL_PUBLIC_PAGES = [
 ] as const;
 
 export default async function ContentAdminPage() {
-  await requireAdminAction(["CONTENT"]);
+  await requireAdminAction(["CONTENT"], "/admin/sadrzaj");
   const pages = await db.contentPage.findMany({
     orderBy: [{ archivedAt: "asc" }, { updatedAt: "desc" }, { title: "asc" }],
     include: {

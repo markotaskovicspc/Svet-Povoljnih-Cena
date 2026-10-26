@@ -64,7 +64,7 @@ export default async function NewsletterCampaignPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const admin = await requireAdminAction(["ADS"]);
+  const admin = await requireAdminAction(["ADS"], "/admin/newsletter");
   const { id } = await params;
   const [campaign, recipients, contactOverview, retrySummary] = await Promise.all([
     db.newsletterCampaign.findUnique({

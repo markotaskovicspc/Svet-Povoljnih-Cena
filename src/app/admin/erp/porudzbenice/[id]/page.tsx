@@ -102,7 +102,7 @@ const headerSchema = z.object({
 async function saveHeader(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
-    { allowed: ["OPS"], action: "po.header.save", entity: "PurchaseOrder" },
+    { module: "/admin/erp/porudzbenice", allowed: ["OPS"], action: "po.header.save", entity: "PurchaseOrder" },
     async (_actorId, actionData: FormData) => {
       const parsed = headerSchema.safeParse(Object.fromEntries(actionData.entries()));
       if (!parsed.success) {
@@ -230,7 +230,7 @@ const addLineSchema = z.object({
 async function addLine(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
-    { allowed: ["OPS"], action: "po.line.add", entity: "PurchaseOrderItem" },
+    { module: "/admin/erp/porudzbenice", allowed: ["OPS"], action: "po.line.add", entity: "PurchaseOrderItem" },
     async (_actorId, actionData: FormData) => {
       const parsed = addLineSchema.safeParse(Object.fromEntries(actionData.entries()));
       if (!parsed.success) {
@@ -255,7 +255,7 @@ async function addLine(_state: AdminActionState, formData: FormData) {
 async function updateLine(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
-    { allowed: ["OPS"], action: "po.line.update", entity: "PurchaseOrderItem" },
+    { module: "/admin/erp/porudzbenice", allowed: ["OPS"], action: "po.line.update", entity: "PurchaseOrderItem" },
     async (_actorId, actionData: FormData) => {
       const id = String(actionData.get("id") ?? "");
       const poId = String(actionData.get("poId") ?? "");
@@ -283,7 +283,7 @@ async function updateLine(_state: AdminActionState, formData: FormData) {
 async function deleteLine(formData: FormData) {
   "use server";
   return withAdmin(
-    { allowed: ["OPS"], action: "po.line.delete", entity: "PurchaseOrderItem" },
+    { module: "/admin/erp/porudzbenice", allowed: ["OPS"], action: "po.line.delete", entity: "PurchaseOrderItem" },
     async (_actorId, actionData: FormData) => {
       const id = String(actionData.get("id") ?? "");
       const item = await db.purchaseOrderItem.findUnique({
@@ -311,7 +311,7 @@ async function deleteLine(formData: FormData) {
 async function statusAction(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
-    { allowed: ["OPS"], action: "po.status", entity: "PurchaseOrder" },
+    { module: "/admin/erp/porudzbenice", allowed: ["OPS"], action: "po.status", entity: "PurchaseOrder" },
     async (actorId, actionData: FormData) => {
       const id = String(actionData.get("poId") ?? "");
       const parsed = z.nativeEnum(PurchaseOrderStatus).safeParse(
@@ -331,7 +331,7 @@ async function statusAction(_state: AdminActionState, formData: FormData) {
 async function sendAction(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
-    { allowed: ["OPS"], action: "po.send", entity: "PurchaseOrder" },
+    { module: "/admin/erp/porudzbenice", allowed: ["OPS"], action: "po.send", entity: "PurchaseOrder" },
     async (actorId, actionData: FormData) => {
       const id = String(actionData.get("poId") ?? "");
       await sendPurchaseOrder(id, actorId);
@@ -351,7 +351,7 @@ export default async function PurchaseOrderEditorPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/porudzbenice");
   const { id } = await params;
   const [order, suppliers, transports, products, pricingRules] = await Promise.all([
     db.purchaseOrder.findUnique({

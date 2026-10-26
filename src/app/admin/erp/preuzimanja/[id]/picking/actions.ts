@@ -9,7 +9,7 @@ import { createHash } from "node:crypto";
 import { pickingReview } from "@/lib/admin/picking-review";
 const schema = z.object({ id: z.string().uuid(), batchId: z.string().min(1), planHash: z.string().length(64), rowKey: z.string().min(1).max(500), delta: z.number().int().min(-10000).max(10000), note: z.string().max(1000) });
 export async function recordPicking(input: z.infer<typeof schema>) {
-  return withAdminState({ allowed: ["OPS", "WAREHOUSE"], action: "picking.scan", entity: "PickupBatch" }, async actorId => {
+  return withAdminState({ module: ["/admin/erp/preuzimanja", "/admin/magacin"], allowed: ["OPS", "WAREHOUSE"], action: "picking.scan", entity: "PickupBatch" }, async actorId => {
     const data = schema.parse(input);
     const result = await db.$transaction(async tx => {
       await tx.$queryRaw`SELECT id FROM "PickupBatch" WHERE id = ${data.batchId} FOR UPDATE`;
@@ -37,7 +37,7 @@ export async function recordPicking(input: z.infer<typeof schema>) {
 
 const finishSchema = z.object({ batchId: z.string().min(1), planHash: z.string().length(64), mode: z.enum(["labels", "shortage"]), packagesConfirmed: z.boolean() });
 export async function finishPicking(input: z.infer<typeof finishSchema>) {
-  return withAdminState({ allowed: ["OPS", "WAREHOUSE"], action: "picking.finish", entity: "PickupBatch" }, async actorId => {
+  return withAdminState({ module: ["/admin/erp/preuzimanja", "/admin/magacin"], allowed: ["OPS", "WAREHOUSE"], action: "picking.finish", entity: "PickupBatch" }, async actorId => {
     const data = finishSchema.parse(input);
     const { enqueueBackgroundJob } = await import("@/lib/background-jobs");
     // The report and its queue entry share the same batch lock as scans/collection.

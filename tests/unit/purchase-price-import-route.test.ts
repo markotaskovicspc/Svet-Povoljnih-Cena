@@ -23,7 +23,7 @@ describe("purchase price import HTTP boundary", () => {
     await expect(POST(request())).rejects.toBe(denied);
     await expect(POST(request("apply", "token"))).rejects.toBe(denied);
     await expect(GET()).rejects.toBe(denied);
-    expect(mocks.auth).toHaveBeenCalledWith(["OPS"]);
+    expect(mocks.auth).toHaveBeenCalledWith(["OPS"], "/admin/erp/nabavne-cene");
     expect(mocks.read).not.toHaveBeenCalled(); expect(mocks.apply).not.toHaveBeenCalled();
   });
   it("rejects a foreign origin and oversized request before parsing", async () => {

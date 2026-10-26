@@ -50,7 +50,7 @@ it("exports daily site totals and zero days even when page details use weekly gr
   const response = await GET(new Request(
     "http://localhost/api/admin/analytics/conversions/export?range=custom&from=2026-09-10&to=2026-09-11&group=week",
   ));
-  expect(mocks.authorize).toHaveBeenCalledWith(["ADS", "OPS"]);
+  expect(mocks.authorize).toHaveBeenCalledWith(["ADS", "OPS"], "/admin/erp/posete-konverzije");
   expect(mocks.daily).toHaveBeenCalledWith(expect.objectContaining({
     fromInput: "2026-09-10", toInput: "2026-09-11",
   }));

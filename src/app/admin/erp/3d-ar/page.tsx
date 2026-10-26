@@ -14,7 +14,7 @@ export const metadata = { title: "3D i AR · Analitika", robots: { index: false,
 const percent = (n: number, d: number) => d ? `${(100 * n / d).toLocaleString("sr-Latn-RS", { maximumFractionDigits: 1 })}%` : "—";
 
 export default async function ProductArReport({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  await requireAdminAction(allowedRolesForErpModule("3d-ar"));
+  await requireAdminAction(allowedRolesForErpModule("3d-ar"), "/admin/erp/3d-ar");
   const params = await searchParams;
   const field = (key: string) => (Array.isArray(params[key]) ? params[key][0] : params[key])?.slice(0, 120) || "";
   const period = resolveReportPeriod({ range: field("range"), from: field("from"), to: field("to") });

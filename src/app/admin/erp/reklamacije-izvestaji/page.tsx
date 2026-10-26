@@ -36,7 +36,7 @@ const RESOLUTION_LABELS: Record<string, string> = {
 };
 
 export default async function ReclamationReportsPage() {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/reklamacije-dnevnik");
   const [rows, deliveredBySupplier, deliveredByProduct] = await Promise.all([
     db.$queryRaw<ReclamationAnalyticsRow[]>`
       SELECT

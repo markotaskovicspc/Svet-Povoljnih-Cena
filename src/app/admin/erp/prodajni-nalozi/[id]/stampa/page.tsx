@@ -17,7 +17,7 @@ export default async function SalesOrderPrintPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/prodajni-nalozi");
   const { id } = await params;
   const detail = await getSalesOrderDetail(id);
   if (!detail || detail.channel === "WEB" || detail.channel === "ANANAS") {

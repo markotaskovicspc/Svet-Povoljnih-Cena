@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
-  admin: { id: "admin-a", role: "SUPER" },
+  admin: { id: "admin-a", role: "SUPER", accessPolicy: null as unknown },
   findMany: vi.fn(),
   findFirst: vi.fn(),
   findFirstOrThrow: vi.fn(),
@@ -55,6 +55,7 @@ function request(method: string, data: unknown) {
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.admin.role = "SUPER";
+  mocks.admin.accessPolicy = null;
   mocks.findFirst.mockResolvedValue(null);
   mocks.findMany.mockResolvedValue([row]);
   mocks.create.mockResolvedValue(row);
@@ -194,10 +195,26 @@ describe("saved view ownership and mutations", () => {
     expect((await DELETE(request("DELETE", { id: "foreign" }))).status).toBe(
       404,
     );
-    expect(mocks.deleteMany.mock.calls[0][0].where).toEqual({
-      id: "foreign",
-      adminUserId: "admin-a",
+    expect(mocks.findFirst).toHaveBeenLastCalledWith({
+      where: { id: "foreign", adminUserId: "admin-a" },
+      select: { module: true },
     });
+    expect(mocks.deleteMany).not.toHaveBeenCalled();
+  });
+  it("checks the owned view's module before deleting with the same ownership constraint", async () => {
+    mocks.findFirst.mockResolvedValue({ module: row.module });
+    mocks.deleteMany.mockResolvedValue({ count: 1 });
+    expect((await DELETE(request("DELETE", { id: row.id }))).status).toBe(200);
+    expect(mocks.findFirst).toHaveBeenCalledWith({ where: { id: row.id, adminUserId: "admin-a" }, select: { module: true } });
+    expect(mocks.deleteMany).toHaveBeenCalledWith({ where: { id: row.id, adminUserId: "admin-a" } });
+  });
+  it("does not delete an owned view after its custom module permission is revoked", async () => {
+    mocks.admin.role = "CUSTOM";
+    mocks.admin.accessPolicy = { version: 1, modules: ["/admin/erp/artikli"] };
+    mocks.findFirst.mockResolvedValue({ module: "prodajni-nalozi" });
+    expect((await DELETE(request("DELETE", { id: row.id }))).status).toBe(403);
+    expect(mocks.findFirst).toHaveBeenCalledWith({ where: { id: row.id, adminUserId: "admin-a" }, select: { module: true } });
+    expect(mocks.deleteMany).not.toHaveBeenCalled();
   });
   it("renames and unpins without losing filters or table state", async () => {
     mocks.findFirst.mockResolvedValue(row);

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireAdminAction } from "@/lib/admin";
+import { canAccessAdminModule } from "@/lib/admin/access-policy";
 import { PageHeader } from "@/components/admin/page-header";
 import { StatCard } from "@/components/admin/card";
 import { DataTable } from "@/components/admin/data-table";
@@ -11,7 +12,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Order bump · Analitika", robots: { index: false, follow: false } };
 
 export default async function OrderBumpReport({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const admin = await requireAdminAction(["ADS", "OPS"]);
+  const admin = await requireAdminAction(["ADS", "OPS"], "/admin/erp/order-bump");
   const params = await searchParams;
   const field = (key: string) => (Array.isArray(params[key]) ? params[key][0] : params[key])?.slice(0, 120) || "";
   const period = resolveReportPeriod({ range: field("range"), from: field("from"), to: field("to") });
@@ -20,7 +21,7 @@ export default async function OrderBumpReport({ searchParams }: { searchParams: 
 
   return <>
     <PageHeader title="Order bump" description="Kupovine preko dodatnih ponuda u korpi, sa odvojenim rezultatom isporuke."
-      actions={admin.role === "SUPER" ? <Link className="text-sm underline" href="/admin/preporuke">Podesi povezane proizvode</Link> : undefined} />
+      actions={canAccessAdminModule(admin, "/admin/preporuke", ["CONTENT"]) ? <Link className="text-sm underline" href="/admin/preporuke">Podesi povezane proizvode</Link> : undefined} />
     <div className="space-y-6 p-6 lg:p-8">
       <form className="grid gap-3 rounded-xl border border-border/60 bg-surface p-4 sm:grid-cols-2 lg:grid-cols-4">
         <label className="grid gap-1 text-xs">Period<select className={inputClass} name="range" defaultValue={period.preset}>{REPORT_PERIOD_PRESETS.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}<option value="custom">Odabrani datumi</option></select></label>

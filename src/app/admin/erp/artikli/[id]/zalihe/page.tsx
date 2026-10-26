@@ -53,7 +53,7 @@ export default async function ArticleStockPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ warehouseId?: string; customer?: string }>;
 }) {
-  await requireAdminAction(["CONTENT", "OPS"]);
+  await requireAdminAction(["CONTENT", "OPS"], "/admin/erp/artikli");
   const [{ id }, search] = await Promise.all([params, searchParams]);
   const warehouseId = search.warehouseId?.trim() || "";
   const customer = search.customer?.trim() || "";

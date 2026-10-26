@@ -12,7 +12,7 @@ export const metadata = { title: "SEF fakture · ERP", robots: { index: false, f
 const money = (n: unknown) => Number(n).toLocaleString("sr-RS", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const labels: Record<string, string> = { DOWNLOADED: "Preuzeto", DRAFT: "Nacrt", SUBMITTED: "Predato SEF-u", SENDING: "Slanje u toku", ERROR: "Odbijeno / greška", UNKNOWN: "Proveriti ishod na SEF-u", Approved: "Prihvaćena na SEF-u", Rejected: "Odbijena na SEF-u", Sent: "Poslata", Cancelled: "Otkazana", Storno: "Stornirana", Seen: "Pregledana" };
 export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/sef");
   let environment: string | null = null;
   try { environment = requireSefConfig().environment; } catch { /* readiness below explains configuration */ }
   const search = await searchParams;

@@ -211,7 +211,7 @@ export async function saveLandingPageAction(
 ) {
   const intent = formData.get("intent") === "publish" ? "publish" : "save";
   const state = await withAdminState(
-    {
+    { module: "/admin/erp/landing-strane",
       allowed: ["CONTENT"],
       action: intent === "publish" ? "landing-page.publish" : "landing-page.saveDraft",
       entity: "LandingPage",
@@ -306,7 +306,7 @@ export async function restoreLandingRevisionAction(
   formData: FormData,
 ) {
   return withAdminState(
-    { allowed: ["CONTENT"], action: "landing-page.restore", entity: "LandingPage" },
+    { module: "/admin/erp/landing-strane", allowed: ["CONTENT"], action: "landing-page.restore", entity: "LandingPage" },
     async (actorId, submitted: FormData) => {
       const pageId = String(submitted.get("pageId") ?? "");
       const revisionId = String(submitted.get("revisionId") ?? "");
@@ -351,7 +351,7 @@ async function changeLandingState(
   formData: FormData,
 ) {
   return withAdminState(
-    { allowed: ["CONTENT"], action: `landing-page.${state}`, entity: "LandingPage" },
+    { module: "/admin/erp/landing-strane", allowed: ["CONTENT"], action: `landing-page.${state}`, entity: "LandingPage" },
     async (_actorId, submitted: FormData) => {
       const id = String(submitted.get("id") ?? "");
       const page = await db.landingPage.findUnique({ where: { id } });
@@ -389,7 +389,7 @@ export async function duplicateLandingPageAction(
   formData: FormData,
 ) {
   const state = await withAdminState(
-    { allowed: ["CONTENT"], action: "landing-page.duplicate", entity: "LandingPage" },
+    { module: "/admin/erp/landing-strane", allowed: ["CONTENT"], action: "landing-page.duplicate", entity: "LandingPage" },
     async (actorId, submitted: FormData) => {
       const id = String(submitted.get("id") ?? "");
       const page = await db.landingPage.findUnique({
@@ -452,7 +452,7 @@ export async function deleteLandingDraftAction(
   formData: FormData,
 ) {
   const state = await withAdminState(
-    { allowed: ["CONTENT"], action: "landing-page.deleteDraft", entity: "LandingPage" },
+    { module: "/admin/erp/landing-strane", allowed: ["CONTENT"], action: "landing-page.deleteDraft", entity: "LandingPage" },
     async (_actorId, submitted: FormData) => {
       const id = String(submitted.get("id") ?? "");
       const page = await db.landingPage.findUnique({ where: { id } });

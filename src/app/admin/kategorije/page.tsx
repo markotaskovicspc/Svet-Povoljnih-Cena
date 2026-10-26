@@ -62,7 +62,7 @@ async function upsert(_state: AdminActionState, formData: FormData) {
   "use server";
 
   return withAdminState(
-    { allowed: ["CONTENT"], action: "category.upsert", entity: "Category" },
+    { module: "/admin/kategorije", allowed: ["CONTENT"], action: "category.upsert", entity: "Category" },
     async (actorId, formData: FormData) => {
         const parsed = schema.safeParse(Object.fromEntries(formData));
         if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
@@ -214,7 +214,7 @@ async function remove(_state: AdminActionState, formData: FormData) {
   "use server";
 
   return withAdminState(
-    { allowed: ["CONTENT"], action: "category.delete", entity: "Category" },
+    { module: "/admin/kategorije", allowed: ["CONTENT"], action: "category.delete", entity: "Category" },
     async (_a, formData: FormData) => {
         const id = String(formData.get("id") ?? "");
         if (!id) return { ok: false as const, error: "Nedostaje ID." };
@@ -250,7 +250,7 @@ export default async function CategoriesPage({
 }: {
   searchParams: Promise<{ edit?: string; new?: string }>;
 }) {
-  await requireAdminAction(["CONTENT"]);
+  await requireAdminAction(["CONTENT"], "/admin/kategorije");
   const params = await searchParams;
   const cats = await db.category.findMany();
   const flat = flattenCategoryTree(cats);

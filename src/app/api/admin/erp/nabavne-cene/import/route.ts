@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 export const maxDuration = 90;
 
 export async function GET() {
-  await requireAdminAction(allowedRolesForErpModule("nabavne-cene"));
+  await requireAdminAction(allowedRolesForErpModule("nabavne-cene"), "/admin/erp/nabavne-cene");
   return new Response(`\uFEFF${PURCHASE_PRICE_IMPORT_HEADERS.join(";")}\r\n`, {
     headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="nabavne-cene-sablon.csv"', "Cache-Control": "no-store" },
   });
@@ -35,7 +35,7 @@ async function boundedFormData(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const admin = await requireAdminAction(allowedRolesForErpModule("nabavne-cene"));
+  const admin = await requireAdminAction(allowedRolesForErpModule("nabavne-cene"), "/admin/erp/nabavne-cene");
   const origin = request.headers.get("origin");
   // Next's development server may rewrite request.url to localhost while the
   // browser and HTTP Host correctly use 127.0.0.1. Host is the actual request

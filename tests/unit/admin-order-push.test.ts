@@ -21,7 +21,7 @@ beforeEach(() => {
   vi.stubEnv("VAPID_SUBJECT", "mailto:admin@example.com");
   mocks.find.mockResolvedValue({ id: "s1", adminUserId: "a1", endpoint: "https://web.push.apple.com/device", p256dh: "key", auth: "auth", adminUser: { enabled: true, role: "OPS" } });
   mocks.order.mockResolvedValue({ number: "SPC-123", createdAt: new Date(), total: new Prisma.Decimal("12345.67") });
-  mocks.subscriptions.mockResolvedValue([{ id: "s1", adminUserId: "a1" }, { id: "s2", adminUserId: "a2" }]);
+  mocks.subscriptions.mockResolvedValue([{ id: "s1", adminUserId: "a1", adminUser: { role: "OPS", accessPolicy: null } }, { id: "s2", adminUserId: "a2", adminUser: { role: "SUPER", accessPolicy: null } }]);
   mocks.enqueue.mockImplementation(async ({ idempotencyKey }) => ({ id: idempotencyKey }));
   mocks.send.mockResolvedValue({ statusCode: 201 });
 });
@@ -50,7 +50,37 @@ it("queues per-device durable work with stable keys before contacting providers"
     "admin-order-push:o1:s1", "admin-order-push:o1:s2", "admin-order-push:o1:s1", "admin-order-push:o1:s2",
   ]);
   expect(queuedCounts).toEqual([2, 2, 4, 4]);
-  expect(mocks.subscriptions.mock.calls[0][0].where.adminUser).toEqual({ enabled: true, role: { in: ["SUPER", "OPS"] } });
+  expect(mocks.subscriptions).toHaveBeenCalledWith({
+    where: { createdAt: { lte: expect.any(Date) }, adminUser: { enabled: true } },
+    select: { id: true, adminUserId: true, adminUser: { select: { role: true, accessPolicy: true } } },
+  });
+});
+
+it("fans out only to fresh sales-order permissions and rechecks revocation before delivery", async () => {
+  mocks.subscriptions.mockResolvedValue([
+    { id: "allowed", adminUserId: "a1", adminUser: { role: "CUSTOM", accessPolicy: { version: 1, modules: ["/admin/erp/prodajni-nalozi"] } } },
+    { id: "revoked", adminUserId: "a2", adminUser: { role: "CUSTOM", accessPolicy: { version: 1, modules: ["/admin/viber"] } } },
+    { id: "malformed", adminUserId: "a3", adminUser: { role: "CUSTOM", accessPolicy: null } },
+  ]);
+  await fanOutOrderPush("o1");
+  expect(mocks.enqueue).toHaveBeenCalledTimes(1);
+  expect(mocks.enqueue.mock.calls[0][0].payload.subscriptionId).toBe("allowed");
+  mocks.find.mockResolvedValue({ id: "allowed", adminUserId: "a1", adminUser: {
+    enabled: true, role: "CUSTOM", accessPolicy: { version: 1, modules: ["/admin/viber"] },
+  } });
+  await deliverOrderPush("o1", "allowed", "a1");
+  expect(mocks.send).not.toHaveBeenCalled();
+  expect(mocks.find).toHaveBeenLastCalledWith({
+    where: { id: "allowed" }, include: { adminUser: { select: { enabled: true, role: true, accessPolicy: true } } },
+  });
+});
+
+it("requires analytics permission for traffic payloads at the final outbound boundary", async () => {
+  mocks.find.mockResolvedValue({ id: "s1", endpoint: "https://web.push.apple.com/device", p256dh: "key", auth: "auth", adminUser: {
+    enabled: true, role: "CUSTOM", accessPolicy: { version: 1, modules: ["/admin/erp/prodajni-nalozi"] },
+  } });
+  expect(await sendAdminDevicePush("s1", { title: "Traffic", body: "20 visitors", url: "/admin/erp/posete-konverzije", tag: "traffic" })).toBe(false);
+  expect(mocks.send).not.toHaveBeenCalled();
 });
 
 it("never sends old orders, disabled users, removed permissions, or transferred subscriptions", async () => {

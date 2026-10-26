@@ -4,7 +4,7 @@ import { logAudit, requireAdminAction } from "@/lib/admin";
 import { createManualSalesOrder } from "@/lib/admin/sales-order.server";
 
 export async function POST(request: Request) {
-  const admin = await requireAdminAction(["OPS"]);
+  const admin = await requireAdminAction(["OPS"], "/admin/erp/prodajni-nalozi");
   const input = await request.json().catch(() => null);
   try {
     const order = await createManualSalesOrder(input, admin.id);

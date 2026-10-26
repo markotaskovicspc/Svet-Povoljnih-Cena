@@ -3995,6 +3995,7 @@ model ContentPageRevision {
 // ──────────────────────────────────────────────────────────────────────
 
 enum AdminRoleName {
+  CUSTOM
   WAREHOUSE
   SUPER
   CONTENT
@@ -4009,6 +4010,7 @@ model AdminUser {
   firstName    String?
   lastName     String?
   role         AdminRoleName @default(CONTENT)
+  accessPolicy Json?
   enabled      Boolean       @default(true)
   lastLoginAt  DateTime?
   createdAt    DateTime      @default(now())

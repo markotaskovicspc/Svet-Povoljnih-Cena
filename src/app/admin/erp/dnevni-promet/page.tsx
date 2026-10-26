@@ -32,7 +32,7 @@ export default async function DailyFinanceReportPage({
     channel?: string | string[];
   }>;
 }) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/dnevni-promet");
   const params = await searchParams;
   const period = resolveReportPeriod({
     range: first(params.range),

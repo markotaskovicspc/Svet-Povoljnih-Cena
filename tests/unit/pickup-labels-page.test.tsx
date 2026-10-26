@@ -7,7 +7,7 @@ beforeEach(() => vi.clearAllMocks());
 
 it("opens the alphabetically sorted PDF directly without an intermediate print screen", async () => {
   await expect(PickupLabelsPage({ params: Promise.resolve({ id: "batch" }) })).rejects.toThrow("redirect");
-  expect(admin).toHaveBeenCalledWith(["OPS"]);
+  expect(admin).toHaveBeenCalledWith(["OPS"], "/admin/erp/preuzimanja");
   expect(redirect).toHaveBeenCalledWith("/api/admin/erp/preuzimanja/batch/labels?sort=name");
 });
 it("does not redirect when the operator is unauthorized", async () => {

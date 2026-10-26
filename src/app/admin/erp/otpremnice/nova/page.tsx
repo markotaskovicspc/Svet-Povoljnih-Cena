@@ -11,7 +11,7 @@ export const metadata = {
 };
 
 export default async function NewDispatchNotePage() {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/otpremnice");
   const options = await getDispatchNoteFormOptions();
   return (
     <>

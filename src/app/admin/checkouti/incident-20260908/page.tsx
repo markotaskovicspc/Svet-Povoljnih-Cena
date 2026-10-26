@@ -9,7 +9,7 @@ export const metadata = { title: "Servisna poruka · 8. septembar", robots: { in
 
 async function sendApproved() {
   "use server";
-  const admin = await requireAdminAction(["SUPER"]);
+  const admin = await requireAdminAction(["SUPER"], "/admin/checkouti");
   await logAudit({ actorId: admin.id, action: "checkout.incident_notice.authorized", entity: "EmailMessage", diff: { incident: "2026-09-08", approvedRecipients: 7 } });
   const recipients = await incidentRecipients();
   for (const recipient of recipients) await sendIncidentNotice(recipient.email, admin.id);
@@ -17,7 +17,7 @@ async function sendApproved() {
 }
 
 export default async function IncidentPage() {
-  await requireAdminAction(["SUPER"]);
+  await requireAdminAction(["SUPER"], "/admin/checkouti");
   const recipients = await incidentRecipients();
   const cfg = getEmailConfig();
   const closed = incidentSendingClosed();

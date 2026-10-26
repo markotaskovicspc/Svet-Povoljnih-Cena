@@ -52,7 +52,7 @@ async function upsert(formData: FormData) {
   "use server";
 
   return withAdmin(
-    { allowed: ["OPS"], action: "voucher.upsert", entity: "Voucher" },
+    { module: "/admin/vauceri", allowed: ["OPS"], action: "voucher.upsert", entity: "Voucher" },
     async (_a, formData: FormData) => {
         const parsed = schema.safeParse({
           ...Object.fromEntries(formData),
@@ -86,7 +86,7 @@ async function remove(formData: FormData) {
   "use server";
 
   return withAdmin(
-    { allowed: ["OPS"], action: "voucher.delete", entity: "Voucher" },
+    { module: "/admin/vauceri", allowed: ["OPS"], action: "voucher.delete", entity: "Voucher" },
     async (_a, formData: FormData) => {
         const code = String(formData.get("code") ?? "");
         if (!code) return { ok: false as const, error: "Nedostaje kod." };
@@ -108,7 +108,7 @@ export default async function VouchersPage({
 }: {
   searchParams: Promise<{ edit?: string; new?: string }>;
 }) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/vauceri");
   const params = await searchParams;
   const vouchers = await db.voucher.findMany({
     orderBy: { createdAt: "desc" },

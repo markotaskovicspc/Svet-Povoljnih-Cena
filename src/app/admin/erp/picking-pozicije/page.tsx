@@ -9,7 +9,7 @@ import { savePosition } from "./actions";
 import styles from "./picking-map.module.css";
 export const dynamic = "force-dynamic";
 export default async function PickingPositionsPage({ searchParams }: { searchParams: Promise<{ warehouse?: string; position?: string; q?: string }> }) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/picking-pozicije");
   const params = await searchParams;
   const warehouses = await db.warehouse.findMany({ where: { active: true }, orderBy: [{ isDefault: "desc" }, { name: "asc" }] });
   const warehouse = warehouses.find(w => w.id === params.warehouse) ?? warehouses[0];

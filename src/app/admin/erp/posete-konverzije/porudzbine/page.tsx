@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdminAction } from "@/lib/admin";
+import { canAccessAdminModule } from "@/lib/admin/access-policy";
 import { db } from "@/lib/db";
 import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
 import { resolveReportPeriod, REPORT_TIME_ZONE } from "@/lib/admin/report-period";
@@ -36,7 +37,7 @@ function first(value: string | string[] | undefined) {
 export default async function AnalyticsOrdersPage({ searchParams }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const admin = await requireAdminAction(allowedRolesForErpModule("posete-konverzije"));
+  const admin = await requireAdminAction(allowedRolesForErpModule("posete-konverzije"), "/admin/erp/posete-konverzije");
   const params = await searchParams;
   const path = first(params.path);
   const bucket = first(params.bucket);
@@ -65,7 +66,7 @@ export default async function AnalyticsOrdersPage({ searchParams }: {
     paged.set("page", String(value));
     return `/admin/erp/posete-konverzije/porudzbine?${paged}`;
   };
-  const canOpenOrder = admin.role === "SUPER" || admin.role === "OPS";
+  const canOpenOrder = canAccessAdminModule(admin, "/admin/erp/prodajni-nalozi", ["SUPER", "OPS"]);
   const dateFormatter = new Intl.DateTimeFormat("sr-Latn-RS", {
     dateStyle: "medium", timeStyle: "short", timeZone: REPORT_TIME_ZONE,
   });

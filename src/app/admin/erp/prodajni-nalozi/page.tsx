@@ -12,7 +12,7 @@ export const metadata = {
 };
 
 export default async function SalesOrdersOverviewPage({ searchParams }: { searchParams: Promise<{ channel?: string; loyalty?: string }> }) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/prodajni-nalozi");
   const params = await searchParams;
   const loyalty = params.loyalty === "guest";
   const requestedChannel = loyalty ? "WEB" : params.channel;

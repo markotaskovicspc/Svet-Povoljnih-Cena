@@ -22,7 +22,7 @@ export default async function PickupBatchPrintPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ section?: string; autoprint?: string }>;
 }) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/preuzimanja");
   const [{ id }, query] = await Promise.all([params, searchParams]);
   if (query.section === "labels") {
     redirect(`/admin/erp/preuzimanja/${id}/adresnice`);

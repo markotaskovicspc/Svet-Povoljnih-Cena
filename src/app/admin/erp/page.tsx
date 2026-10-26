@@ -3,8 +3,9 @@ import { Boxes, ChevronRight, FileSpreadsheet, Package, ReceiptText, Truck } fro
 import { getErpDashboardModules } from "@/lib/admin/erp";
 import { PageHeader } from "@/components/admin/page-header";
 import { Card, CardTitle, StatCard } from "@/components/admin/card";
-import { requireAdminAction, isAuthorized } from "@/lib/admin";
+import { requireAdminAction } from "@/lib/admin";
 import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
+import { adminModuleForPage, canAccessAdminModule } from "@/lib/admin/access-policy";
 import { ERP_REQUIREMENTS } from "@/lib/admin/erp-requirements";
 import { DataTable } from "@/components/admin/data-table";
 
@@ -18,16 +19,17 @@ export const metadata = {
 const ICONS = [Package, Truck, FileSpreadsheet, Boxes, FileSpreadsheet, FileSpreadsheet];
 
 export default async function ErpDashboardPage() {
-  const admin = await requireAdminAction();
+  const admin = await requireAdminAction(undefined, "/admin/erp");
   const visibleModules = (await getErpDashboardModules()).filter((module) =>
-    isAuthorized(admin.role, allowedRolesForErpModule(module.slug)),
+    canAccessAdminModule(admin, module.href, allowedRolesForErpModule(module.slug)),
   );
   const ready = visibleModules.filter((m) => m.status === "ready");
   const blocked = visibleModules.filter((m) => m.status === "blocked_external");
-  const implementedRequirements = ERP_REQUIREMENTS.filter((item) => item.status === "implemented").length;
-  const partialRequirements = ERP_REQUIREMENTS.filter((item) => item.status === "partial").length;
-  const externalRequirements = ERP_REQUIREMENTS.filter((item) => item.status === "blocked_external").length;
-  const deferredRequirements = ERP_REQUIREMENTS.filter((item) => item.status === "deferred_user").length;
+  const visibleRequirements = ERP_REQUIREMENTS.filter(item => canAccessAdminModule(admin, adminModuleForPage(item.route) ?? undefined));
+  const implementedRequirements = visibleRequirements.filter((item) => item.status === "implemented").length;
+  const partialRequirements = visibleRequirements.filter((item) => item.status === "partial").length;
+  const externalRequirements = visibleRequirements.filter((item) => item.status === "blocked_external").length;
+  const deferredRequirements = visibleRequirements.filter((item) => item.status === "deferred_user").length;
 
   return (
     <>
@@ -35,16 +37,16 @@ export default async function ErpDashboardPage() {
         title="ERP sistem"
         description="Jedinstven operativni admin prostor za katalog, nabavku, cene, zalihe, prodaju, logistiku, kupce, sadržaj i izveštavanje."
         actions={
-          <Link
+          canAccessAdminModule(admin, "/admin/erp/artikli", ["CONTENT", "OPS"]) ? <Link
             href="/admin/erp/artikli"
             className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
           >
             Otvori artikle
-          </Link>
+          </Link> : undefined
         }
       />
       <div className="space-y-8 px-8 py-6">
-        {isAuthorized(admin.role, ["OPS"]) && <Card><CardTitle>Ananas</CardTitle><p className="mb-3 text-sm text-ink-500">Preuzimanje fiskalnih računa i refundacija, pregled prometa i status povezivanja.</p><Link className="text-sm underline" href="/admin/erp/ananas">Otvori Ananas →</Link></Card>}
+        {canAccessAdminModule(admin, "/admin/erp/ananas", ["OPS"]) && <Card><CardTitle>Ananas</CardTitle><p className="mb-3 text-sm text-ink-500">Preuzimanje fiskalnih računa i refundacija, pregled prometa i status povezivanja.</p><Link className="text-sm underline" href="/admin/erp/ananas">Otvori Ananas →</Link></Card>}
         <div className="grid grid-cols-3 gap-4">
           <StatCard
             label="Moduli"
@@ -127,7 +129,7 @@ export default async function ErpDashboardPage() {
               { key: "evidence", label: "Acceptance dokaz" },
               { key: "note", label: "Napomena" },
             ]}
-            rows={ERP_REQUIREMENTS.map((requirement) => ({
+            rows={visibleRequirements.map((requirement) => ({
               id: String(requirement.id),
               cells: {
                 id: requirement.id,

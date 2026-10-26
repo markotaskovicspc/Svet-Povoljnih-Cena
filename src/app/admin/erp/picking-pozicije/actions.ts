@@ -7,7 +7,7 @@ import type { AdminActionState } from "@/lib/admin/action-state";
 
 const schema = z.object({ warehouseId: z.string().min(1), number: z.coerce.number().int().min(1).max(240), routeOrder: z.coerce.number().int().min(1).max(10000), note: z.string().max(1000), version: z.string() });
 export async function savePosition(_state: AdminActionState, form: FormData) {
-  return withAdminState({ allowed: ["OPS"], action: "picking.position.save", entity: "WarehousePickingPosition" }, async () => {
+  return withAdminState({ module: "/admin/erp/picking-pozicije", allowed: ["OPS"], action: "picking.position.save", entity: "WarehousePickingPosition" }, async () => {
     const input = schema.parse(Object.fromEntries(form));
     const skus = [...new Set(String(form.get("skus") ?? "").split(/[\n,;]+/).map(s => s.trim()).filter(Boolean))];
     const supplierIds = [...new Set(form.getAll("supplierIds").map(String))];

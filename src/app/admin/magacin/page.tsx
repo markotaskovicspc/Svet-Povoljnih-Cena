@@ -7,7 +7,7 @@ import { getPickingBatchProgress, pickingLinesQuery } from "@/lib/admin/picking.
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Magacin · Picking", robots: { index: false, follow: false } };
 export default async function WarehousePicking({ searchParams }: { searchParams: Promise<{ q?: string; forbidden?: string }> }) {
-  await requireAdminAction(["OPS", "WAREHOUSE"]);
+  await requireAdminAction(["OPS", "WAREHOUSE"], "/admin/magacin");
   const { forbidden } = await searchParams;
   const q = "";
   const batches = await db.pickupBatch.findMany({

@@ -32,7 +32,7 @@ export const metadata = { title: "Lager", robots: { index: false, follow: false 
 async function adjustStock(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
-    { allowed: ["OPS"], action: "inventory.adjust", entity: "StockMovement" },
+    { module: "/admin/erp/stanje-po-magacinima", allowed: ["OPS"], action: "inventory.adjust", entity: "StockMovement" },
     async (actorId, formData: FormData) => {
       const sku = String(formData.get("sku") ?? "").trim();
       const qtyDelta = Number(formData.get("qtyDelta"));
@@ -71,7 +71,7 @@ async function importOpeningInventory(
 ) {
   "use server";
   return withAdminState(
-    { allowed: ["OPS"], action: "inventory.openingImport", entity: "WarehouseStock" },
+    { module: "/admin/erp/stanje-po-magacinima", allowed: ["OPS"], action: "inventory.openingImport", entity: "WarehouseStock" },
     async (actorId, formData: FormData) => {
       const file = formData.get("file");
       const apply = formData.get("mode") === "apply";
@@ -268,7 +268,7 @@ export default async function InventoryPage({
 }: {
   searchParams: Promise<{ prikaz?: string | string[] }>;
 }) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/stanje-po-magacinima");
   const requestedView = (await searchParams).prikaz;
   const managementView =
     (Array.isArray(requestedView) ? requestedView[0] : requestedView) ===

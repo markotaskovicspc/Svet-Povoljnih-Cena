@@ -10,7 +10,7 @@ import { validateNewsletterImageFile } from "@/lib/newsletter/image-file";
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  await requireAdminAction(["ADS"]);
+  await requireAdminAction(["ADS"], "/admin/newsletter");
   try {
     const form = await request.formData();
     const campaignId = String(form.get("campaignId") ?? "");

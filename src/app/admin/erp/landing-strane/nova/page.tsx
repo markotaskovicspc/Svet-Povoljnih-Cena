@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Nova landing strana", robots: { index: false, follow: false } };
 
 export default async function NewLandingPage() {
-  await requireAdminAction(["CONTENT"]);
+  await requireAdminAction(["CONTENT"], "/admin/erp/landing-strane");
   return <>
     <PageHeader
       title="Nova landing strana"

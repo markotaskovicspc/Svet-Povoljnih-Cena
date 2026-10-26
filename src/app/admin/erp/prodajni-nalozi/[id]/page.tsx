@@ -26,7 +26,7 @@ export default async function SalesOrderDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ mode?: string; returnTo?: string }>;
 }) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/prodajni-nalozi");
   const { id } = await params;
   if (id.startsWith("ananas-")) return <AnanasOrderDetail id={id.slice(7)} />;
   const search = await searchParams;

@@ -13,7 +13,7 @@ export const metadata = { title: 'Performans artikala', robots: { index: false, 
 const format = (value: number | null) => value === null ? '—' : value.toLocaleString('sr-Latn-RS', { maximumFractionDigits: 2 });
 const money = (value: number | null) => value === null ? '—' : formatRsd(value);
 export default async function ProductPerformancePage({ searchParams }: { searchParams: Promise<Record<string,string|string[]|undefined>> }) {
-  await requireAdminAction(['OPS']);
+  await requireAdminAction(['OPS'], "/admin/erp/performans-artikala");
   const raw = await searchParams, params = Object.fromEntries(Object.entries(raw).map(([k,v]) => [k,Array.isArray(v)?v[0]:v]));
   const now = new Date(), period = resolveReportPeriod({ range: params.range, from: params.from, to: params.to }, now);
   const sort = PERFORMANCE_SORTS.includes(params.sort as PerformanceSort) ? params.sort as PerformanceSort : 'revenue';

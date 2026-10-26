@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { canAccessAdminModule } from "./access-policy";
 import { enqueueBackgroundJob, processBackgroundJob } from "@/lib/background-jobs";
 import { getPushConfiguration, sendAdminDevicePush } from "./order-push.server";
 import { PRESENCE_WINDOW_MS, TRAFFIC_ALERT_THRESHOLD, shouldAlertTraffic } from "@/lib/analytics/presence";
@@ -18,9 +19,10 @@ export async function evaluateTrafficAlert(now = new Date()) {
     const count = await tx.siteVisitorPresence.count({ where: { lastSeenAt: { gte: new Date(now.getTime() - PRESENCE_WINDOW_MS), lte: now } } });
     const alert = shouldAlertTraffic(count, Number.isFinite(parsed) ? parsed : null, now.getTime(), Number.isFinite(parsed) && state?.aboveThreshold === true);
     const subscriptions = alert ? await tx.adminPushSubscription.findMany({
-      where: { trafficAlerts: true, adminUser: { enabled: true, role: { in: ["SUPER", "OPS"] } } }, select: { id: true },
+      where: { trafficAlerts: true, adminUser: { enabled: true } }, select: { id: true, adminUser: { select: { role: true, accessPolicy: true } } },
     }) : [];
-    const lastAlertAt = subscriptions.length ? now.toISOString() : state?.lastAlertAt ?? null;
+    const permittedSubscriptions = subscriptions.filter(subscription => canAccessAdminModule(subscription.adminUser, "/admin/erp/posete-konverzije", ["OPS"]));
+    const lastAlertAt = permittedSubscriptions.length ? now.toISOString() : state?.lastAlertAt ?? null;
     const aboveThreshold = count >= TRAFFIC_ALERT_THRESHOLD;
     await tx.adminSetting.upsert({ where: { key: "traffic-alert-state" },
       create: { key: "traffic-alert-state", value: { lastAlertAt, aboveThreshold }, updatedAt: now },
@@ -28,7 +30,7 @@ export async function evaluateTrafficAlert(now = new Date()) {
     });
     // Queue inside this transaction: a crash cannot consume the cooldown without a durable notification.
     const jobs = [];
-    for (const subscription of subscriptions) jobs.push(await enqueueBackgroundJob({
+    for (const subscription of permittedSubscriptions) jobs.push(await enqueueBackgroundJob({
       kind: "ADMIN_TRAFFIC_PUSH_DEVICE",
       payload: { subscriptionId: subscription.id, count, measuredAt: now.toISOString() },
       idempotencyKey: `traffic-push:${now.getTime()}:${subscription.id}`,

@@ -16,7 +16,7 @@ it("rejects cross-origin imports without writing contacts", async () => {
 it("passes the authenticated actor and rejects oversized requests", async () => {
   mocks.start.mockResolvedValue({ id: "i" });
   const response = await POST(new Request("https://example.com/api/admin/newsletter/contact-import", { method: "POST", body: JSON.stringify({ operation: "start" }) }));
-  expect(response.status).toBe(200); expect(mocks.admin).toHaveBeenCalledWith(["ADS"]);
+  expect(response.status).toBe(200); expect(mocks.admin).toHaveBeenCalledWith(["ADS"], "/admin/newsletter");
   expect(mocks.start).toHaveBeenCalledWith({ operation: "start" }, "admin");
   expect((await POST(new Request("https://example.com/api/admin/newsletter/contact-import", { method: "POST", body: "x".repeat(2_500_001) }))).status).toBe(413);
 });

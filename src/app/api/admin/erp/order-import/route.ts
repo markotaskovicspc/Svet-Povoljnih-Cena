@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
 import { z } from "zod";
 import { getCurrentAdmin } from "@/lib/auth/session";
-import { isAuthorized, logAudit } from "@/lib/admin";
+import { logAudit } from "@/lib/admin";
+import { canAccessAdminModule } from "@/lib/admin/access-policy";
 import { db } from "@/lib/db";
 import { envValue } from "@/lib/env";
 import { checkRateLimitForRequest, rateLimitJson } from "@/lib/security/rate-limit";
@@ -29,7 +30,7 @@ import { searchImportTowns } from "@/lib/admin/order-import/towns";
 export async function GET(req: NextRequest) {
   const admin = await getCurrentAdmin();
   if (!admin) return fail("Prijavite se u ERP ponovo.", 401);
-  if (!isAuthorized(admin.role, ["OPS"])) return fail("Nemate pristup.", 403);
+  if (!canAccessAdminModule(admin, "/admin/erp/porudzbina-iz-chata", ["OPS"])) return fail("Nemate pristup.", 403);
   const townQuery = req.nextUrl.searchParams.get("town");
   if (townQuery !== null) {
     if (townQuery.trim().length < 2 || townQuery.length > 100) return fail("Unesite naziv mesta.");
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const admin = await getCurrentAdmin();
   if (!admin) return fail("Prijavite se u ERP ponovo.", 401);
-  if (!isAuthorized(admin.role, ["OPS"])) return fail("Nemate pristup.", 403);
+  if (!canAccessAdminModule(admin, "/admin/erp/porudzbina-iz-chata", ["OPS"])) return fail("Nemate pristup.", 403);
   if (req.headers.get("origin") !== req.nextUrl.origin || req.headers.get("sec-fetch-site") === "cross-site") return fail("Zahtev nije dozvoljen.", 403);
   const limited = await checkRateLimitForRequest(req, `order-import-${admin.id}`, { limit: 12, windowMs: 60000 });
   if (!limited.ok) return rateLimitJson(limited);

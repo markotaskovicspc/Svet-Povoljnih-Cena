@@ -6,7 +6,7 @@ import { saveReclamationWarehouse } from "@/lib/admin/reclamation-fulfillment.se
 export async function saveWarehouseAction(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
-    { allowed: ["OPS"], action: "reclamation.warehouseUpdate", entity: "Reclamation" },
+    { module: "/admin/erp/reklamacije-dnevnik", allowed: ["OPS"], action: "reclamation.warehouseUpdate", entity: "Reclamation" },
     async (actorId, formData: FormData) => {
       const id = String(formData.get("id") ?? "");
       const warehouseId = String(formData.get("warehouseId") ?? "");

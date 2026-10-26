@@ -12,7 +12,7 @@ export const metadata = {
 };
 
 export default async function InboundInvoicesOverviewPage() {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/ulazne-fakture");
   const erpModule = await getErpModule("ulazne-fakture");
   if (!erpModule) notFound();
 

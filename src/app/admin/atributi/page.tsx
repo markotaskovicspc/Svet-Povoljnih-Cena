@@ -22,7 +22,7 @@ const schema = z.object({
 async function save(_state: AdminActionState, formData: FormData) {
   "use server";
   return withAdminState(
-    { allowed: ["CONTENT"], action: "attribute.save", entity: "AttributeSection" },
+    { module: "/admin/atributi", allowed: ["CONTENT"], action: "attribute.save", entity: "AttributeSection" },
     async (_actorId, form: FormData) => {
       const parsed = schema.safeParse(Object.fromEntries(form.entries()));
       if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Proverite unos." };
@@ -71,7 +71,7 @@ function AttributeForm({ id, sectionId, name = "", order = 0, active = true }: {
 }
 
 export default async function AttributesPage() {
-  await requireAdminAction(["CONTENT"]);
+  await requireAdminAction(["CONTENT"], "/admin/atributi");
   const sections = await db.attributeSection.findMany({
     orderBy: [{ order: "asc" }, { name: "asc" }],
     include: { options: { orderBy: [{ order: "asc" }, { value: "asc" }],

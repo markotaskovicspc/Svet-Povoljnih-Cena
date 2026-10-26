@@ -8,7 +8,7 @@ const formatRsd = (value: number) => formatMoney(value, true);
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Prodajni setovi · ERP", robots: { index: false, follow: false } };
 export default async function ProductSetsAdmin({ searchParams }: { searchParams: Promise<{ id?: string }> }) {
-  await requireAdminAction(["CONTENT", "OPS"]);
+  await requireAdminAction(["CONTENT", "OPS"], "/admin/erp/setovi");
   const { id } = await searchParams;
   const sets = await db.productSet.findMany({ orderBy: { updatedAt: "desc" }, include: { components: { orderBy: { position: "asc" }, include: { product: { select: { sku: true, name: true } } } } } });
   const selected = sets.find(s => s.id === id);

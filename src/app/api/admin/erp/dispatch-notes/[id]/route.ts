@@ -15,7 +15,7 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const admin = await requireAdminAction(["OPS"]);
+  const admin = await requireAdminAction(["OPS"], "/admin/erp/otpremnice");
   const { id } = await context.params;
   const input = await request.json().catch(() => null);
   try {
@@ -47,7 +47,7 @@ export async function DELETE(
   _request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const admin = await requireAdminAction(["OPS"]);
+  const admin = await requireAdminAction(["OPS"], "/admin/erp/otpremnice");
   const { id } = await context.params;
   try {
     const [deleted] = await deleteDispatchNotes([id]);

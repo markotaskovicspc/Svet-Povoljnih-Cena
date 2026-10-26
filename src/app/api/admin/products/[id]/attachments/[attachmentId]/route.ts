@@ -20,7 +20,7 @@ function refreshProduct(productId: string, slug: string) {
 }
 
 export async function DELETE(_request: Request, context: RouteContext) {
-  const admin = await requireAdminAction(["CONTENT", "OPS"]);
+  const admin = await requireAdminAction(["CONTENT", "OPS"], "/admin/erp/artikli");
   const { id: productId, attachmentId } = await context.params;
   const attachment = await db.productAttachment.findFirst({
     where: { id: attachmentId, productId, origin: "ADMIN_UPLOAD" },

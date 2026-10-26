@@ -3,7 +3,7 @@ import { requireAdminAction } from "@/lib/admin";
 import { getSalesOrderProduct } from "@/lib/admin/sales-order.server";
 
 export async function GET(request: Request) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/prodajni-nalozi");
   const search = new URL(request.url).searchParams;
   try {
     const product = await getSalesOrderProduct(
