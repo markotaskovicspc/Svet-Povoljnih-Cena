@@ -80,7 +80,7 @@ import {
   resolveDeliveryWindowForQuantity,
 } from "@/lib/delivery-windows";
 import { deliveryCategory } from "@/lib/delivery-tariff";
-import { formatDate, formatRsd } from "@/lib/format";
+import { formatDate, formatNumber, formatRsd } from "@/lib/format";
 import {
   RABALUX_PUBLIC_STOCK_THRESHOLD,
   RABALUX_SUPPLIER_STOCK_STATUS_LABELS,
@@ -1423,10 +1423,29 @@ export default async function ProductDetail({
       getDeliveryWindows(),
     ]);
   if (!product) notFound();
-  const attributeSections = await db.attributeSection.findMany({
-    orderBy: [{ order: "asc" }, { name: "asc" }],
-    include: { options: { orderBy: [{ order: "asc" }, { value: "asc" }] } },
-  });
+  const canViewPurchasePrices = canAccessAdminModule(admin, "/admin/erp/nabavne-cene", ["OPS"]);
+  // Purchase-price periods are calendar dates, inclusive through validTo.
+  const purchasePriceDate = new Date(`${new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Belgrade", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(now)}T00:00:00.000Z`);
+  const [attributeSections, purchasePrice] = await Promise.all([
+    db.attributeSection.findMany({
+      orderBy: [{ order: "asc" }, { name: "asc" }],
+      include: { options: { orderBy: [{ order: "asc" }, { value: "asc" }] } },
+    }),
+    canViewPurchasePrices ? db.purchasePrice.findFirst({
+      where: {
+        productId: product.id,
+        validFrom: { lte: purchasePriceDate },
+        AND: [
+          { OR: [{ validTo: null }, { validTo: { gte: purchasePriceDate } }] },
+          { OR: [{ supplierId: null }, { supplierId: product.supplierId }] },
+        ],
+      },
+      orderBy: [{ validFrom: "desc" }, { createdAt: "desc" }, { id: "asc" }],
+      select: { price: true, currency: true },
+    }) : null,
+  ]);
   const syncOverrideFields = parseOverrideFields(product.syncOverrides);
   const lookupOptions = (kind: "ATTRIBUTE" | "COLOR" | "BENEFIT" | "CERTIFICATE") =>
     lookupValues.filter((row) => row.kind === kind).map((row) => row.value);
@@ -2059,6 +2078,14 @@ export default async function ProductDetail({
                 Cene, ulazi i isporuka — izvedeno iz izvora
               </legend>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+                {canViewPurchasePrices && <SourceSummary
+                  label="Nabavna cena"
+                  value={purchasePrice
+                    ? `${formatNumber(Number(purchasePrice.price), 2)} ${purchasePrice.currency}`
+                    : "Nema važeće cene"}
+                  source="Nabavne cene"
+                  href="#nabavne-cene"
+                />}
                 <SourceSummary
                   label="MP cena"
                   value={formatRsd(retailPrice.price)}

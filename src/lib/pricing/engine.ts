@@ -186,7 +186,10 @@ function pricedOffer({
     Math.min(requestedPct, Math.max(cap, basePct)),
   );
   const effective = Math.round(full * (1 - appliedPct / 100));
-  const resolvedKind = kind === "full" && effective < full ? "linear" : kind;
+  const resolvedKind =
+    kind === "full" && linearDiscountPct > 0 && effective < full
+      ? "linear"
+      : kind;
   return {
     effective,
     full,
@@ -294,7 +297,10 @@ export function resolveProductPriceQuote(
       })
     : null;
   const eligible = options.loggedIn ?? product.loyaltyEligible ?? false;
-  const rawActionOffer = publicPrice.effective < full ? publicPrice : null;
+  // Whole-dinar rounding alone is not a promotion on a fractional retail price.
+  const rawActionOffer = publicPrice.onSale && publicPrice.effective < full
+    ? publicPrice
+    : null;
   const reference =
     product.referencePrice != null &&
     Number.isFinite(product.referencePrice) &&

@@ -50,6 +50,28 @@ function quote({
 }
 
 describe("PDP price and benefit display", () => {
+  it.each([false, true])("does not show a fake action for SKU 210037 when loyalty eligibility is %s", (loyaltyEligible) => {
+    const current = { ...product, sku: "210037", fullPrice: 1_427.14, loyaltyDiscountPct: 30 };
+    const currentQuote = resolveProductPriceQuote(current, { loggedIn: loyaltyEligible });
+    const desktop = renderToStaticMarkup(
+      <PdpPriceContent product={current} quote={currentQuote} loyaltyEligible={loyaltyEligible} />,
+    );
+    const mobile = renderToStaticMarkup(
+      <PdpMobilePriceContent quote={currentQuote} regularPrice={current.fullPrice} />,
+    );
+    for (const markup of [desktop, mobile]) {
+      expect(markup).toContain("1.427 RSD");
+      expect(markup).toContain("999 RSD");
+      expect(markup).toContain("Loyalty cena");
+      expect(markup).not.toContain("Akcijska cena");
+      expect(markup).not.toContain("line-through");
+      expect(markup).not.toContain("Najniža");
+    }
+    expect(currentQuote.payable).toMatchObject(loyaltyEligible
+      ? { effective: 999, kind: "loyalty" }
+      : { effective: 1_427, kind: "full", onSale: false });
+  });
+
   it("shows the October retail price while retaining September history as the action reference", () => {
     const priceList = { id: "mp", code: "MP", name: "MP", active: true, validFrom: null, validTo: null };
     const entries = [

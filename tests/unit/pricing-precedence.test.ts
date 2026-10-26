@@ -8,6 +8,34 @@ import {
 const now = new Date("2026-07-18T12:00:00.000Z");
 
 describe("ERP pricing precedence", () => {
+  it.each([1_427, 1_427.14, 1_427.5, 1_427.99])(
+    "does not turn whole-dinar rounding of %s into a public promotion",
+    (fullPrice) => {
+      const quote = resolveProductPriceQuote(
+        { fullPrice, referencePrice: 1_000, loyaltyDiscountPct: 30 },
+        { now, loggedIn: false },
+      );
+      expect(quote.full).toBe(fullPrice);
+      expect(quote.actionOffer).toBeNull();
+      expect(quote.payable).toMatchObject({
+        effective: Math.round(fullPrice), kind: "full", onSale: false,
+        discountPct: 0, linearDiscountPct: 0,
+      });
+      expect(quote.loyaltyOffer?.effective).toBe(Math.round(fullPrice * 0.7));
+    },
+  );
+
+  it("does not invent a promotion when a fractional-price product action expires", () => {
+    const quote = resolveProductPriceQuote({
+      fullPrice: 1_427.14,
+      loyaltyDiscountPct: 30,
+      actionPrices: [{ price: 1_100, priority: 10, startsAt: "2026-06-01", endsAt: "2026-06-30" }],
+    }, { now, loggedIn: false });
+    expect(quote.actionOffer).toBeNull();
+    expect(quote.payable).toMatchObject({ kind: "full", onSale: false, actionExpired: true });
+    expect(quote.loyaltyOffer?.effective).toBe(999);
+  });
+
   it("uses the highest-priority live product action and stacks a linear promotion", () => {
     const price = resolvePromotionPrice(
       {
