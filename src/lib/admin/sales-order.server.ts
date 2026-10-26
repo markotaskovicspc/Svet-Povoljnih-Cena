@@ -2,7 +2,6 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import {
-  PaymentStatus,
   Prisma,
   SalesChannel,
   StockMovementKind,
@@ -22,7 +21,7 @@ import {
   resolveSalesOrderWarehouse,
   type ManualSalesOrderInput,
 } from "@/lib/admin/sales-order";
-import { providerForPaymentMethod } from "@/lib/payments/types";
+import { setManualSalesOrderPayment } from "@/lib/admin/manual-payment.server";
 
 const MANUAL_CHANNELS: SalesChannel[] = [
   SalesChannel.MP,
@@ -789,47 +788,6 @@ function orderHeaderData(
   } satisfies Prisma.OrderUncheckedUpdateInput;
 }
 
-async function setManualPayment(
-  tx: Prisma.TransactionClient,
-  args: {
-    orderId: string;
-    paymentMethod: ManualSalesOrderInput["paymentMethod"];
-    paid: boolean;
-    amount: number;
-    currency: string;
-  },
-) {
-  const manualPayment = await tx.payment.findFirst({
-    where: { orderId: args.orderId },
-    orderBy: { createdAt: "desc" },
-  });
-  if (manualPayment) {
-    await tx.payment.update({
-      where: { id: manualPayment.id },
-      data: {
-        amount: new Prisma.Decimal(args.amount.toFixed(2)),
-        currency: args.currency,
-        method: args.paymentMethod,
-        provider: providerForPaymentMethod(args.paymentMethod),
-        status: args.paid ? PaymentStatus.PAID : PaymentStatus.PENDING,
-        paidAt: args.paid ? manualPayment.paidAt ?? new Date() : null,
-      },
-    });
-    return;
-  }
-  await tx.payment.create({
-    data: {
-      orderId: args.orderId,
-      method: args.paymentMethod,
-      provider: providerForPaymentMethod(args.paymentMethod),
-      status: args.paid ? PaymentStatus.PAID : PaymentStatus.PENDING,
-      amount: new Prisma.Decimal(args.amount.toFixed(2)),
-      currency: args.currency,
-      paidAt: args.paid ? new Date() : null,
-    },
-  });
-}
-
 export async function createManualSalesOrder(input: unknown, actorId: string) {
   const data = parseInput(input);
   const operationKey = randomUUID();
@@ -867,8 +825,9 @@ export async function createManualSalesOrder(input: unknown, actorId: string) {
       },
       select: { id: true, number: true },
     });
-    await setManualPayment(tx, {
+    await setManualSalesOrderPayment(tx, {
       orderId: order.id,
+      orderNumber: order.number,
       paymentMethod: data.paymentMethod,
       paid: data.paid,
       amount: totals.gross,
@@ -1006,8 +965,9 @@ export async function updateManualSalesOrder(
           : {}),
       },
     });
-    await setManualPayment(tx, {
+    await setManualSalesOrderPayment(tx, {
       orderId,
+      orderNumber: existing.number,
       paymentMethod: data.paymentMethod,
       paid: data.paid,
       amount: totals.gross,

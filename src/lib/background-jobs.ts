@@ -3,6 +3,7 @@ import "server-only";
 import { Prisma, type ShipmentStatus } from "@prisma/client";
 import { z } from "zod";
 import {bankEntrySchema} from '@/lib/payments/bank-statements';
+import { paymentConfirmationSchema } from '@/lib/payments/payment-confirmation';
 import { db } from "@/lib/db";
 import { SefApiError } from "@/lib/sef/client";
 import { BackgroundJobDeferredError } from "@/lib/background-job-deferral";
@@ -21,7 +22,7 @@ const schemas = {
   ADMIN_ORDER_PUSH: z.object({ orderId: z.string().min(1) }),
   ADMIN_ORDER_PUSH_DEVICE: z.object({ orderId: z.string().min(1), subscriptionId: z.string().min(1), adminUserId: z.string().min(1) }),
   BANK_TRANSFER_RECONCILE: bankEntrySchema,
-  BANK_PAYMENT_EMAIL: bankEntrySchema.extend({orderId:z.string().min(1)}),
+  BANK_PAYMENT_EMAIL: paymentConfirmationSchema,
   BANK_PAYMENT_REVIEW_EMAIL: bankEntrySchema.extend({reason:z.string().min(1).max(100)}),
   BANK_STATEMENT_REVIEW_EMAIL:z.object({sourceHash:z.string().regex(/^[a-f0-9]{64}$/),reason:z.string().regex(/^BANK_[A-Z_]{1,80}$/)}),
   CHECKOUT_POST_COMMIT: z.object({
@@ -910,6 +911,7 @@ async function dispatchJob(job: JobRow) {
     case 'BANK_PAYMENT_EMAIL': {
       const {sendBankPaymentConfirmation}=await import('@/lib/email/bank-payment');
       const result=await sendBankPaymentConfirmation(schemas.BANK_PAYMENT_EMAIL.parse(payload));
+      if('skipped' in result)return;
       if(!result.ok)throw new Error(result.error);return;
     }
     case 'BANK_PAYMENT_REVIEW_EMAIL': {

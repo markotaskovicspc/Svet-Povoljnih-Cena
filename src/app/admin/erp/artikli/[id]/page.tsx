@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { AdminActionForm } from "@/components/admin/action-form";
+import { ArticlePurchasePrices } from "@/components/admin/article-purchase-prices";
 import { RichTextEditor } from "@/components/admin/rich-text-editor";
 import { ProductCategorySelector } from "@/components/admin/product-category-selector";
 import { ProductAttributeSelector } from "@/components/admin/product-attribute-selector";
@@ -2281,6 +2282,7 @@ export default async function ProductDetail({
             </Fragment>
           </AdminActionForm>
           </Card>
+          <ArticlePurchasePrices productId={product.id} />
         </div>
 
         <div className="space-y-4">

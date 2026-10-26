@@ -1,16 +1,31 @@
 import 'server-only';
+import {db} from '@/lib/db';
 import {loadOrderForEmail} from './adapt';
 import {trackedDispatch} from './tracking';
 import type {BankEntry} from '@/lib/payments/bank-statements';
+import type {PaymentConfirmation} from '@/lib/payments/payment-confirmation';
 
 const SUPPORT='podrska@svetpovoljnihcena.rs';
-const money=(amount:number)=>new Intl.NumberFormat('sr-Latn-RS',{minimumFractionDigits:2,maximumFractionDigits:2}).format(amount/100)+' din';
+const money=(amount:number,currency='RSD')=>new Intl.NumberFormat('sr-Latn-RS',{minimumFractionDigits:2,maximumFractionDigits:2}).format(amount/100)+(currency==='RSD'?' din':` ${currency}`);
 const html=(text:string)=>'<div style="font-family:Arial,sans-serif;white-space:pre-line">'+text.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')+'</div>';
-export async function sendBankPaymentConfirmation(entry:BankEntry&{orderId:string}){
+export async function sendBankPaymentConfirmation(entry:PaymentConfirmation){
  const loaded=await loadOrderForEmail(entry.orderId);
  if(!loaded)throw Error('BANK_EMAIL_ORDER_NOT_FOUND');
- const text=`Poštovani,\n\nVaša uplata od ${money(entry.amountMinor)} za porudžbinu ${entry.orderNumber} uspešno je evidentirana.\n\nHvala na kupovini!\nKorisnička podrška | Svet Povoljnih Cena`;
- return trackedDispatch({kind:'bank_payment_confirmation',to:loaded.recipient||SUPPORT,bcc:loaded.recipient?[SUPPORT]:undefined,subject:`Uplata evidentirana — ${entry.orderNumber}`,text,html:html(text),idempotencyKey:`bank-payment:${entry.account}:${entry.bankReference}`,tags:{kind:'bank_payment_confirmation',order:entry.orderNumber},metadata:{bankReference:entry.bankReference,statement:entry.statement}});
+ const manual='source' in entry;
+ if(manual){
+  // A queued snapshot may have been corrected or marked unpaid before the
+  // worker runs. Only acknowledge the exact receipt that is still paid now.
+  const payment=await db.payment.findUnique({where:{id:entry.paymentId},select:{
+   orderId:true,status:true,method:true,provider:true,amount:true,currency:true,
+  }});
+  if(!payment||payment.orderId!==entry.orderId||payment.status!=='PAID'||
+   payment.method!=='UPLATA_NA_RACUN'||payment.provider!=='MANUAL'||
+   payment.currency!==entry.currency||!payment.amount.mul(100).equals(entry.amountMinor)){
+   return {skipped:'PAYMENT_CHANGED' as const};
+  }
+ }
+ const text=`Poštovani,\n\nVaša uplata od ${money(entry.amountMinor,entry.currency)} za porudžbinu ${entry.orderNumber} uspešno je evidentirana.\n\nHvala na kupovini!\nKorisnička podrška | Svet Povoljnih Cena`;
+ return trackedDispatch({kind:'bank_payment_confirmation',to:loaded.recipient||SUPPORT,bcc:loaded.recipient?[SUPPORT]:undefined,subject:`Uplata evidentirana — ${entry.orderNumber}`,text,html:html(text),idempotencyKey:manual?`bank-payment:manual:${entry.paymentId}`:`bank-payment:${entry.account}:${entry.bankReference}`,tags:{kind:'bank_payment_confirmation',order:entry.orderNumber},metadata:manual?{source:'MANUAL',paymentId:entry.paymentId}:{bankReference:entry.bankReference,statement:entry.statement}});
 }
 const REASONS:Record<string,string>={
  ORDER_NOT_FOUND:'Porudžbina sa tim brojem nije pronađena.',
