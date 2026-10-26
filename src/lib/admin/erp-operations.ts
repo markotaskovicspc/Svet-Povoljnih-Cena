@@ -41,8 +41,8 @@ import { actionGrossMarginPct } from "@/lib/pricing/action-bm";
 import { storefrontPublicationBlockers } from "@/lib/web-storefront-availability";
 import {
   buildWarehouseStockGridRows,
-  WAREHOUSE_GRID_INCOMING_ORDER_STATUSES,
 } from "@/lib/admin/warehouse-stock-grid";
+import { INCOMING_PURCHASE_ORDER_WHERE } from "@/lib/admin/purchase-order-incoming";
 import {
   ADMIN_PAYMENT_METHOD_OPTIONS,
   ADMIN_PAYMENT_STATUS_OPTIONS,
@@ -311,6 +311,8 @@ export const operationalErpModules: ErpModule[] = [
       number("reserved", "Rezervisano"),
       number("available", "Raspoloživo"),
       number("incoming", "U dolasku"),
+      date("firstIncomingDate", "Prvi očekivani dolazak"),
+      number("firstIncomingQty", "Količina prvog dolaska"),
       money("cogs", "COGS / kom"),
       money("cogsValue", "COGS vrednost"),
       bool("web", "Web"),
@@ -1094,7 +1096,7 @@ export async function getOperationalErpRows(
     case "magacini":
       return warehouseRows(take, skip);
     case "stanje-po-magacinima":
-      return warehouseStockRows(take);
+      return warehouseStockRows();
     case "kretanja-zaliha":
       return stockMovementRows(take);
     case "popisi":
@@ -1299,7 +1301,7 @@ async function warehouseRows(take: number, skip = 0): Promise<ErpRow[]> {
   }));
 }
 
-async function warehouseStockRows(take: number): Promise<ErpRow[]> {
+async function warehouseStockRows(): Promise<ErpRow[]> {
   const now = new Date();
   const productSelect = {
     id: true,
@@ -1350,7 +1352,6 @@ async function warehouseStockRows(take: number): Promise<ErpRow[]> {
   const [stocks, incomingOrderLines, productsWithStoredIncoming, defaultWarehouse, pickingPositions] =
     await Promise.all([
       db.warehouseStock.findMany({
-        take,
         orderBy: { updatedAt: "desc" },
         select: {
           id: true,
@@ -1360,13 +1361,10 @@ async function warehouseStockRows(take: number): Promise<ErpRow[]> {
         },
       }),
       db.purchaseOrderItem.findMany({
-        take,
         where: {
           productId: { not: null },
           product: { deletedAt: null },
-          purchaseOrder: {
-            status: { in: [...WAREHOUSE_GRID_INCOMING_ORDER_STATUSES] },
-          },
+          purchaseOrder: INCOMING_PURCHASE_ORDER_WHERE,
         },
         select: {
           qty: true,
@@ -1374,13 +1372,14 @@ async function warehouseStockRows(take: number): Promise<ErpRow[]> {
           product: { select: productSelect },
           purchaseOrder: {
             select: {
+              deliveryDate: true,
+              status: true,
               receivingWarehouse: { select: warehouseSelect },
             },
           },
         },
       }),
       db.product.findMany({
-        take,
         where: { deletedAt: null, incomingStock: { gt: 0 } },
         select: productSelect,
       }),
@@ -1402,6 +1401,8 @@ async function warehouseStockRows(take: number): Promise<ErpRow[]> {
             {
               qty: line.qty,
               receivedQty: line.receivedQty,
+              deliveryDate: line.purchaseOrder.deliveryDate,
+              status: line.purchaseOrder.status,
               warehouse: line.purchaseOrder.receivingWarehouse,
               product: line.product,
             },

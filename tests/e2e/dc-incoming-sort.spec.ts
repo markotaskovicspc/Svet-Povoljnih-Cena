@@ -17,6 +17,7 @@ test.describe("MARKO-106 — DC sortiranje po koloni U dolasku", () => {
   );
   test.describe.configure({ mode: "serial" });
   test.setTimeout(240_000);
+  test.use({ actionTimeout: 20_000 });
 
   const runId = `${Date.now()}-${process.pid}`;
   const prefix = `QA-INCOMING-${runId}`;
@@ -25,6 +26,9 @@ test.describe("MARKO-106 — DC sortiranje po koloni U dolasku", () => {
   let adminId = "";
   let warehouseId = "";
   let createdWarehouse = false;
+  let draftProduct: { id: string; sku: string; name: string };
+  let storedProductId = "";
+  const additionalWarehouseIds: string[] = [];
   const productIds: string[] = [];
   const purchaseOrderIds: string[] = [];
 
@@ -83,11 +87,12 @@ test.describe("MARKO-106 — DC sortiranje po koloni U dolasku", () => {
     });
 
     const draft = await createProduct("DRAFT-100");
+    draftProduct = draft;
     const sent = await createProduct("SENT-10");
     const confirmed = await createProduct("CONFIRMED-5");
-    await createProduct("STORED-7", {
+    storedProductId = (await createProduct("STORED-7", {
       incomingStock: 7,
-    });
+    })).id;
     const synthetic = await createProduct("SYNTHETIC-50", {
       withWarehouseStock: false,
     });
@@ -95,13 +100,14 @@ test.describe("MARKO-106 — DC sortiranje po koloni U dolasku", () => {
     const cancelled = await createProduct("CANCELLED-888");
     const fullyReceived = await createProduct("FULL-RECEIVED-20");
 
-    await createPurchaseOrder("DRAFT-A", "DRAFT", draft, 60, 0);
-    await createPurchaseOrder("DRAFT-B", "DRAFT", draft, 40, 0);
-    await createPurchaseOrder("SENT", "SENT", sent, 15, 5);
-    await createPurchaseOrder("CONFIRMED", "CONFIRMED", confirmed, 5, 0);
-    await createPurchaseOrder("SYNTHETIC", "DRAFT", synthetic, 50, 0);
-    await createPurchaseOrder("RECEIVED", "RECEIVED", received, 999, 0);
-    await createPurchaseOrder("CANCELLED", "CANCELLED", cancelled, 888, 0);
+    await createPurchaseOrder("DRAFT-A", "DRAFT", draft, 30, 0, "2026-11-05");
+    await createPurchaseOrder("DRAFT-B", "DRAFT", draft, 30, 0, "2026-11-05");
+    await createPurchaseOrder("DRAFT-C", "DRAFT", draft, 40, 0, "2026-11-10", true);
+    await createPurchaseOrder("SENT", "SENT", sent, 15, 5, "2026-11-07");
+    await createPurchaseOrder("CONFIRMED", "CONFIRMED", confirmed, 5, 0, "2026-11-06");
+    await createPurchaseOrder("SYNTHETIC", "DRAFT", synthetic, 50, 0, "2026-11-08");
+    await createPurchaseOrder("RECEIVED", "RECEIVED", received, 999, 0, "2026-11-02", true);
+    await createPurchaseOrder("CANCELLED", "CANCELLED", cancelled, 888, 0, "2026-10-01");
     await createPurchaseOrder(
       "FULL-RECEIVED",
       "CONFIRMED",
@@ -139,11 +145,15 @@ test.describe("MARKO-106 — DC sortiranje po koloni U dolasku", () => {
       product: { id: string; sku: string; name: string },
       qty: number,
       receivedQty: number,
+      deliveryDate?: string,
+      archived = false,
     ) {
       const order = await db.purchaseOrder.create({
         data: {
           number: `QA-106-${runId}-${suffix}`.slice(0, 80),
           status,
+          deliveryDate: deliveryDate ? new Date(`${deliveryDate}T00:00:00Z`) : null,
+          archivedAt: archived ? new Date() : null,
           receivingWarehouseId: warehouseId,
           items: {
             create: {
@@ -185,6 +195,9 @@ test.describe("MARKO-106 — DC sortiranje po koloni U dolasku", () => {
       if (createdWarehouse && warehouseId) {
         await db.warehouse.deleteMany({ where: { id: warehouseId } });
       }
+      if (additionalWarehouseIds.length) {
+        await db.warehouse.deleteMany({ where: { id: { in: additionalWarehouseIds } } });
+      }
     } finally {
       await db?.$disconnect();
     }
@@ -212,17 +225,18 @@ test.describe("MARKO-106 — DC sortiranje po koloni U dolasku", () => {
       sorting: ascending,
       pageSize: 100,
     });
-    expect(asc.total).toBe(5);
-    expect(incomingValues(asc)).toEqual([5, 7, 10, 50, 100]);
+    expect(asc.total).toBe(6);
+    expect(incomingValues(asc)).toEqual([5, 7, 10, 50, 100, 999]);
 
     const desc = await fetchRows(page, {
       filters: positiveFilter,
       sorting: descending,
       pageSize: 100,
     });
-    expect(incomingValues(desc)).toEqual([100, 50, 10, 7, 5]);
-    expect(desc.rows[0]?.values.sku).toContain("DRAFT-100");
-    expect(desc.rows[1]?.id).toContain("incoming:");
+    expect(incomingValues(desc)).toEqual([999, 100, 50, 10, 7, 5]);
+    // RECEIVED with an unreceived remainder is still incoming; only CANCELLED is excluded.
+    expect(desc.rows[0]?.values.sku).toContain("RECEIVED-999");
+    expect(desc.rows[2]?.id).toContain("incoming:");
 
     const secondPage = await fetchRows(page, {
       filters: positiveFilter,
@@ -231,7 +245,7 @@ test.describe("MARKO-106 — DC sortiranje po koloni U dolasku", () => {
       pageSize: 2,
     });
     expect(secondPage.pageCount).toBe(3);
-    expect(incomingValues(secondPage)).toEqual([10, 7]);
+    expect(incomingValues(secondPage)).toEqual([50, 10]);
 
     const searched = await fetchRows(page, {
       filters: positiveFilter,
@@ -276,25 +290,26 @@ test.describe("MARKO-106 — DC sortiranje po koloni U dolasku", () => {
     await expect(page.getByText("Strana 1 od 2", { exact: true })).toBeVisible();
     await expect(incomingHeader).toContainText("↑");
 
+    await page.getByText("Filteri", { exact: true }).click();
     await page.getByLabel("Kolona za novi filter").selectOption("incoming");
-    await page.getByRole("button", { name: "Filter", exact: true }).click();
+    await page.getByRole("button", { name: "Dodaj filter", exact: true }).click();
     await page.getByLabel("Operator U dolasku").selectOption("gt");
     await page.getByLabel("Filter U dolasku").fill("0");
-    await expect(page.getByText("5 ukupno", { exact: false })).toBeVisible();
-    await expectIncomingValues(page, [5, 7, 10, 50, 100]);
+    await page.getByRole("button", { name: "Gotovo", exact: true }).click();
+    await expect(page.getByText("6 ukupno", { exact: false })).toBeVisible();
+    await expectIncomingValues(page, [5, 7, 10, 50, 100, 999]);
 
     await incomingHeader.click();
     await expect(incomingHeader).toContainText("↓");
-    await expectIncomingValues(page, [100, 50, 10, 7, 5]);
+    await expectIncomingValues(page, [999, 100, 50, 10, 7, 5]);
 
-    await page.getByRole("button", { name: "Snimi pogled" }).click();
-    await page.getByLabel("Naziv ERP pogleda").fill("QA U dolasku DESC");
-    await page.getByRole("button", { name: "Sačuvaj pogled" }).click();
-    await expect(
-      page.getByRole("status").filter({
-        hasText: "Pogled „QA U dolasku DESC” je snimljen u bazu.",
-      }),
-    ).toBeVisible();
+    await page.getByRole("button", { name: "Sačuvaj pogled", exact: true }).click();
+    await page.getByLabel("Naziv pogleda", { exact: true }).fill("QA U dolasku DESC");
+    await page.getByRole("dialog").getByRole("button", { name: "Sačuvaj", exact: true }).click();
+    // Saving changes the selected view and refreshes the server component;
+    // assert persisted state instead of the transient pre-refresh status text.
+    await expect(page).toHaveURL(/savedView=/);
+    await expect(page.getByText("Pogled: QA U dolasku DESC", { exact: true })).toBeVisible();
 
     await incomingHeader.click();
     await expect(incomingHeader).not.toContainText(/[↑↓]/);
@@ -304,7 +319,7 @@ test.describe("MARKO-106 — DC sortiranje po koloni U dolasku", () => {
       .getByRole("button", { name: "QA U dolasku DESC", exact: true })
       .click();
     await expect(incomingHeader).toContainText("↓");
-    await expectIncomingValues(page, [100, 50, 10, 7, 5]);
+    await expectIncomingValues(page, [999, 100, 50, 10, 7, 5]);
 
     await page.getByLabel("Opseg brze pretrage").selectOption("sku");
     await page
@@ -313,13 +328,73 @@ test.describe("MARKO-106 — DC sortiranje po koloni U dolasku", () => {
     await expect(page.getByText("1 ukupno", { exact: false })).toBeVisible();
     await expectIncomingValues(page, [50]);
     await page.getByPlaceholder("Pretraga: SKU").fill("");
-    await expect(page.getByText("5 ukupno", { exact: false })).toBeVisible();
+    await expect(page.getByText("6 ukupno", { exact: false })).toBeVisible();
 
     await page.getByRole("button", { name: /^SKU(?: [↑↓])?$/ }).click();
     await expect(incomingHeader).not.toContainText(/[↑↓]/);
     await expect(page.getByRole("button", { name: /^SKU ↑$/ })).toBeVisible();
 
     expect(runtimeErrors).toEqual([]);
+  });
+
+  test("prvi dolazak podržava sortiranje i filter, a kartica koristi samo default DC", async ({ context, page }) => {
+    await authenticate(context);
+    const beforeSeventh = [{ id: "date", columnKey: "firstIncomingDate", operator: "before", value: "2026-11-07" }];
+    const dated = await fetchRows(page, { filters: beforeSeventh, sorting: [{ columnKey: "firstIncomingDate", direction: "asc" }] });
+    expect(dated.rows.map(row => [row.values.firstIncomingDate, row.values.firstIncomingQty])).toEqual([
+      ["2026-11-02", 999], ["2026-11-05", 60], ["2026-11-06", 5],
+    ]);
+    const byQuantity = await fetchRows(page, {
+      filters: [{ id: "first-qty", columnKey: "firstIncomingQty", operator: "gt", value: "50" }],
+      sorting: [{ columnKey: "firstIncomingQty", direction: "asc" }],
+    });
+    expect(byQuantity.rows.map(row => row.values.firstIncomingQty)).toEqual([60, 999]);
+
+    const secondary = await db.warehouse.create({ data: { code: `QA-OTHER-${runId}`.slice(0, 40), name: "QA drugi magacin", active: true, isDefault: false } });
+    additionalWarehouseIds.push(secondary.id);
+    const otherOrder = await db.purchaseOrder.create({ data: {
+      number: `QA-106-${runId}-OTHER`, status: "DRAFT", receivingWarehouseId: secondary.id,
+      deliveryDate: new Date("2026-11-01T00:00:00Z"),
+      items: { create: { productId: draftProduct.id, sku: draftProduct.sku, name: draftProduct.name, purchasePrice: 100, qty: 70 } },
+    } });
+    purchaseOrderIds.push(otherOrder.id);
+    const split = await fetchRows(page, { q: draftProduct.sku, searchColumn: "sku", sorting: [{ columnKey: "firstIncomingDate", direction: "asc" }] });
+    expect(split.rows.map(row => [row.values.firstIncomingDate, row.values.firstIncomingQty, row.values.incoming])).toEqual([
+      ["2026-11-01", 70, 70], ["2026-11-05", 60, 100],
+    ]);
+
+    await page.goto("/admin/erp/stanje-po-magacinima", { waitUntil: "domcontentloaded" });
+    await page.getByLabel("Opseg brze pretrage").selectOption("sku");
+    await page.getByPlaceholder("Pretraga: SKU").fill(draftProduct.sku);
+    await expect(page.getByText("2 ukupno", { exact: false })).toBeVisible();
+    const dateHeader = page.getByRole("button", { name: /^Prvi očekivani dolazak(?: [↑↓])?$/ });
+    await dateHeader.click();
+    await expect(dateHeader).toContainText("↑");
+    await expect.poll(() => incomingColumnTexts(page, "Količina prvog dolaska")).toEqual(["70", "60"]);
+    const quantityHeader = page.getByRole("button", { name: /^Količina prvog dolaska(?: [↑↓])?$/ });
+    await quantityHeader.click();
+    await expect.poll(() => incomingColumnTexts(page, "Količina prvog dolaska")).toEqual(["60", "70"]);
+    await page.getByText("Filteri", { exact: true }).click();
+    await page.getByLabel("Kolona za novi filter").selectOption("firstIncomingDate");
+    await page.getByRole("button", { name: "Dodaj filter", exact: true }).click();
+    await page.getByLabel("Operator Prvi očekivani dolazak").selectOption("before");
+    await page.getByLabel("Filter Prvi očekivani dolazak").fill("2026-11-03");
+    await page.getByRole("button", { name: "Gotovo", exact: true }).click();
+    await expect(page.getByText("1 ukupno", { exact: false })).toBeVisible();
+    await expect.poll(() => incomingColumnTexts(page, "Količina prvog dolaska")).toEqual(["70"]);
+
+    await page.goto(`/admin/erp/artikli/${draftProduct.id}`, { waitUntil: "domcontentloaded" });
+    await expect(page.getByText("U dolasku", { exact: true }).locator("..")).toContainText("100 kom");
+    const cardDate = page.getByText("Prvi očekivani dolazak", { exact: true }).locator("..");
+    const cardQty = page.getByText("Količina prvog dolaska", { exact: true }).locator("..");
+    await expect(cardDate).toContainText("05.11.2026.");
+    await expect(cardQty).toContainText("60 kom");
+    await expect(cardDate.locator("input")).toHaveCount(0);
+    await expect(cardQty.locator("input")).toHaveCount(0);
+    await page.goto(`/admin/erp/artikli/${storedProductId}`, { waitUntil: "domcontentloaded" });
+    await expect(page.getByText("U dolasku", { exact: true }).locator("..")).toContainText("7 kom");
+    await expect(page.getByText("Prvi očekivani dolazak", { exact: true }).locator("..").locator("p").nth(1)).toHaveText("—");
+    await expect(page.getByText("Količina prvog dolaska", { exact: true }).locator("..").locator("p").nth(1)).toHaveText("—");
   });
 
   async function authenticate(context: BrowserContext) {
@@ -384,6 +459,8 @@ async function fetchRows(
       "reserved",
       "available",
       "incoming",
+      "firstIncomingDate",
+      "firstIncomingQty",
       "web",
       "wholesale",
       "export",
@@ -398,6 +475,15 @@ async function fetchRows(
 
 function incomingValues(payload: RowsPayload) {
   return payload.rows.map((row) => row.values.incoming);
+}
+
+async function incomingColumnTexts(page: Page, label: string) {
+  const table = page.locator("table").last();
+  const headers = await table.locator("thead th").allInnerTexts();
+  const index = headers.findIndex(header => header.includes(label));
+  if (index < 0) throw new Error(`Kolona ${label} nije pronađena.`);
+  const rows = await table.locator("tbody tr").all();
+  return Promise.all(rows.map(row => row.locator("td").nth(index).innerText().then(value => value.trim())));
 }
 
 async function incomingColumnValues(page: Page) {

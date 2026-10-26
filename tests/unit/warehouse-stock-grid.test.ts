@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { filterAndSortGridRows } from "@/lib/admin/grid-query";
 import {
   buildWarehouseStockGridRows,
-  WAREHOUSE_GRID_INCOMING_ORDER_STATUSES,
   type WarehouseStockGridProduct,
 } from "@/lib/admin/warehouse-stock-grid";
+import { INCOMING_PURCHASE_ORDER_WHERE, incomingWarehouseKey, summarizePurchaseOrderIncoming } from "@/lib/admin/purchase-order-incoming";
 
 const warehouse = {
   id: "dc",
@@ -118,12 +118,8 @@ describe("DC warehouse incoming rows", () => {
     });
   });
 
-  it("treats every non-final purchase-order status as incoming", () => {
-    expect(WAREHOUSE_GRID_INCOMING_ORDER_STATUSES).toEqual([
-      "DRAFT",
-      "SENT",
-      "CONFIRMED",
-    ]);
+  it("includes all non-cancelled purchase orders without archived, invoice or lock requirements", () => {
+    expect(INCOMING_PURCHASE_ORDER_WHERE).toEqual({ status: { not: "CANCELLED" } });
   });
 
   it("includes and sorts an incoming-only product without a stock row", () => {
@@ -284,5 +280,61 @@ describe("DC warehouse incoming rows", () => {
         defaultWarehouse: null,
       }),
     ).toEqual([]);
+  });
+
+  it("shows the first dated remainder, includes RECEIVED remainders and keeps cancelled dates out", () => {
+    const article = product("scheduled", 40);
+    const lines = [
+      { qty: 15, receivedQty: 0, deliveryDate: new Date("2026-11-12"), status: "DRAFT", warehouse, product: article },
+      { qty: 10, receivedQty: 4, deliveryDate: new Date("2026-11-05"), status: "RECEIVED", warehouse, product: article },
+      { qty: 5, receivedQty: 1, deliveryDate: new Date("2026-11-05"), status: "CONFIRMED", warehouse, product: article },
+      { qty: 100, receivedQty: 0, deliveryDate: new Date("2026-10-01"), status: "CANCELLED", warehouse, product: article },
+      { qty: 10, receivedQty: 10, deliveryDate: new Date("2026-10-02"), status: "RECEIVED", warehouse, product: article },
+      { qty: 8, receivedQty: 0, deliveryDate: null, status: "SENT", warehouse, product: article },
+    ];
+    const build = (incomingOrderLines: typeof lines) => buildWarehouseStockGridRows({
+      stocks: [{ id: "scheduled", qty: 0, warehouse, product: article }],
+      incomingOrderLines, productsWithStoredIncoming: [article], defaultWarehouse: warehouse,
+    })[0];
+    expect(build(lines).values).toMatchObject({ incoming: 40, firstIncomingDate: "2026-11-05", firstIncomingQty: 10 });
+    expect(build([...lines].reverse()).values).toEqual(build(lines).values);
+  });
+
+  it("matches the article card's default-DC summary while keeping other warehouses separate", () => {
+    const secondary = { id: "nis", name: "Niš", active: true, isDefault: false };
+    const article = product("multi-date", 20);
+    const lines = [
+      { qty: 8, receivedQty: 3, deliveryDate: new Date("2026-11-20"), warehouse, product: article },
+      { qty: 3, receivedQty: 0, deliveryDate: new Date("2026-11-01"), warehouse: secondary, product: article },
+    ];
+    const rows = buildWarehouseStockGridRows({
+      stocks: [], incomingOrderLines: lines,
+      productsWithStoredIncoming: [article], defaultWarehouse: warehouse,
+    });
+    const cardSummary = summarizePurchaseOrderIncoming({
+      lines: lines.map(line => ({ ...line, productId: article.id, warehouseId: line.warehouse.id })),
+      storedIncoming: [{ productId: article.id, incomingStock: article.incomingStock }], defaultWarehouseId: "dc",
+    }).get(incomingWarehouseKey(article.id, "dc"));
+    expect(rows.find(row => row.values.warehouse === "DC")?.values).toMatchObject({
+      incoming: cardSummary?.incoming, firstIncomingDate: cardSummary?.firstIncomingDate, firstIncomingQty: cardSummary?.firstIncomingQty,
+    });
+    expect(rows.map(row => [row.values.warehouse, row.values.incoming, row.values.firstIncomingDate, row.values.firstIncomingQty])).toEqual([
+      ["DC", 17, "2026-11-20", 5], ["Niš", 3, "2026-11-01", 3],
+    ]);
+    expect(filterAndSortGridRows(rows, ["firstIncomingDate"], "", [], [{ columnKey: "firstIncomingDate", direction: "asc" }]).map(row => row.values.warehouse)).toEqual(["Niš", "DC"]);
+    expect(filterAndSortGridRows(rows, ["firstIncomingQty"], "", [{ id: "qty", columnKey: "firstIncomingQty", operator: "gt", value: "3" }], []).map(row => row.values.warehouse)).toEqual(["DC"]);
+  });
+
+  it("does not invent dates or first quantities for undated, stored-only or zero incoming", () => {
+    const article = product("undated");
+    const stored = product("stored", 12);
+    const rows = buildWarehouseStockGridRows({
+      stocks: [{ id: "none", qty: 0, warehouse, product: product("none") }],
+      incomingOrderLines: [{ qty: 5, receivedQty: 0, warehouse: null, product: article }],
+      productsWithStoredIncoming: [stored], defaultWarehouse: warehouse,
+    });
+    expect(rows.map(row => [row.values.incoming, row.values.firstIncomingDate, row.values.firstIncomingQty])).toEqual([
+      [0, null, null], [5, null, null], [12, null, null],
+    ]);
   });
 });

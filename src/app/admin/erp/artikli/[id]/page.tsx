@@ -71,11 +71,15 @@ import {
 import { lockSupplierOwnedFields } from "@/lib/rabalux/ownership.server";
 import { resolveRetailPrice } from "@/lib/pricing/retail-price";
 import {
+  INCOMING_PURCHASE_ORDER_WHERE,
+  summarizeArticleIncoming,
+} from "@/lib/admin/purchase-order-incoming";
+import {
   getDeliveryWindows,
   resolveDeliveryWindowForQuantity,
 } from "@/lib/delivery-windows";
 import { deliveryCategory } from "@/lib/delivery-tariff";
-import { formatRsd } from "@/lib/format";
+import { formatDate, formatRsd } from "@/lib/format";
 import {
   RABALUX_PUBLIC_STOCK_THRESHOLD,
   RABALUX_SUPPLIER_STOCK_STATUS_LABELS,
@@ -1294,18 +1298,16 @@ export default async function ProductDetail({
           },
           purchaseOrderItems: {
             where: {
-              purchaseOrder: {
-                lockedAt: { not: null },
-                status: { notIn: ["RECEIVED", "CANCELLED"] },
-                inboundInvoices: {
-                  some: { status: { in: ["RECEIVED", "POSTED"] } },
-                },
-              },
+              purchaseOrder: INCOMING_PURCHASE_ORDER_WHERE,
             },
             select: {
               purchaseOrderId: true,
               qty: true,
               receivedQty: true,
+              purchaseOrder: { select: {
+                status: true, deliveryDate: true,
+                receivingWarehouse: { select: { id: true, active: true } },
+              } },
             },
           },
           supplier: true,
@@ -1467,10 +1469,8 @@ export default async function ProductDetail({
   const loyaltyPrice = loyaltyDiscountPct === null
     ? null
     : Math.max(0, loyaltyBasePrice * (1 - loyaltyDiscountPct / 100));
-  const incomingStock = product.purchaseOrderItems.reduce(
-    (sum, item) => sum + Math.max(item.qty - item.receivedQty, 0),
-    0,
-  );
+  const incomingDc = summarizeArticleIncoming(product, defaultWarehouse?.id ?? null);
+  const incomingStock = incomingDc?.incoming ?? 0;
   const rabaluxOperational = isRabaluxSupplierOperational(product.supplier);
   const rabaluxSupplierStock =
     product.supplier?.integrationKey === "RABALUX" &&
@@ -2099,8 +2099,20 @@ export default async function ProductDetail({
                 <SourceSummary
                   label="U dolasku"
                   value={`${incomingStock} kom`}
-                  source="Prijemnice / porudžbenice"
-                  href="/admin/erp/ulazne-fakture"
+                  source="DC · Porudžbenice i evidentirani dolaz"
+                  href="/admin/erp/porudzbenice"
+                />
+                <SourceSummary
+                  label="Prvi očekivani dolazak"
+                  value={incomingDc?.firstIncomingDate ? formatDate(incomingDc.firstIncomingDate) : "—"}
+                  source="DC · Najraniji datum iz porudžbenica"
+                  href="/admin/erp/porudzbenice"
+                />
+                <SourceSummary
+                  label="Količina prvog dolaska"
+                  value={incomingDc?.firstIncomingQty == null ? "—" : `${incomingDc.firstIncomingQty} kom`}
+                  source="DC · Preostala količina za taj datum"
+                  href="/admin/erp/porudzbenice"
                 />
                 <SourceSummary
                   label="Rok isporuke"

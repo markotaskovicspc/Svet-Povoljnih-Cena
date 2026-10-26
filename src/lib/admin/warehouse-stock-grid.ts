@@ -2,12 +2,7 @@ import type { ErpRow } from "@/lib/admin/erp";
 import { resolveChannelAvailability } from "@/lib/channel-availability";
 import { resolveStoredWarehouseBalance } from "@/lib/reservation-stock";
 import { resolvePickingPositions, type PickingPosition } from "./picking-positions";
-
-export const WAREHOUSE_GRID_INCOMING_ORDER_STATUSES = [
-  "DRAFT",
-  "SENT",
-  "CONFIRMED",
-] as const;
+import { incomingWarehouseKey, summarizePurchaseOrderIncoming } from "./purchase-order-incoming";
 
 export type WarehouseStockGridWarehouse = {
   id: string;
@@ -54,24 +49,18 @@ export type StoredWarehouseStockGridInput = {
 export type IncomingPurchaseOrderGridInput = {
   qty: number;
   receivedQty: number;
+  deliveryDate?: Date | null;
+  status?: string;
   warehouse: WarehouseStockGridWarehouse | null;
   product: WarehouseStockGridProduct;
 };
-
-type IncomingGridBalance = {
-  incoming: number;
-  warehouse: WarehouseStockGridWarehouse;
-  product: WarehouseStockGridProduct;
-};
-
-function productWarehouseKey(productId: string, warehouseId: string) {
-  return `${productId}:${warehouseId}`;
-}
 
 function createWarehouseStockGridRow(input: {
   id: string;
   storedQty: number;
   incoming: number;
+  firstIncomingDate: string | null;
+  firstIncomingQty: number | null;
   warehouse: WarehouseStockGridWarehouse;
   product: WarehouseStockGridProduct;
   pickingPositions: PickingPosition[];
@@ -131,6 +120,8 @@ function createWarehouseStockGridRow(input: {
       reserved,
       available,
       incoming: input.incoming,
+      firstIncomingDate: input.firstIncomingDate,
+      firstIncomingQty: input.firstIncomingQty,
       cogs: unitCogs,
       cogsValue:
         unitCogs === null
@@ -155,73 +146,57 @@ export function buildWarehouseStockGridRows(input: {
   defaultWarehouse: WarehouseStockGridWarehouse | null;
   pickingPositions?: PickingPosition[];
 }) {
-  const incomingByProductWarehouse = new Map<string, IncomingGridBalance>();
-  const derivedIncomingByProduct = new Map<string, number>();
-
-  for (const line of input.incomingOrderLines) {
-    const incoming = Math.max(line.qty - line.receivedQty, 0);
-    if (incoming === 0) continue;
-    const warehouse = line.warehouse?.active
-      ? line.warehouse
-      : input.defaultWarehouse;
-    if (!warehouse) continue;
-    const key = productWarehouseKey(line.product.id, warehouse.id);
-    const current = incomingByProductWarehouse.get(key);
-    incomingByProductWarehouse.set(key, {
-      incoming: (current?.incoming ?? 0) + incoming,
-      warehouse,
-      product: line.product,
-    });
-    derivedIncomingByProduct.set(
-      line.product.id,
-      (derivedIncomingByProduct.get(line.product.id) ?? 0) + incoming,
-    );
-  }
-
-  // Preserve any separately stored incoming quantity without double-counting
-  // the part already derived from purchase-order lines.
-  if (input.defaultWarehouse) {
-    for (const product of input.productsWithStoredIncoming) {
-      const extraIncoming = Math.max(
-        product.incomingStock -
-          (derivedIncomingByProduct.get(product.id) ?? 0),
-        0,
-      );
-      if (extraIncoming === 0) continue;
-      const key = productWarehouseKey(product.id, input.defaultWarehouse.id);
-      const current = incomingByProductWarehouse.get(key);
-      incomingByProductWarehouse.set(key, {
-        incoming: (current?.incoming ?? 0) + extraIncoming,
-        warehouse: input.defaultWarehouse,
-        product,
-      });
-    }
-  }
+  const summaries = summarizePurchaseOrderIncoming({
+    lines: input.incomingOrderLines.map(line => ({
+      productId: line.product.id, warehouseId: line.warehouse?.id ?? null,
+      warehouseActive: line.warehouse?.active,
+      qty: line.qty, receivedQty: line.receivedQty, deliveryDate: line.deliveryDate, status: line.status,
+    })),
+    storedIncoming: input.productsWithStoredIncoming.map(product => ({ productId: product.id, incomingStock: product.incomingStock })),
+    defaultWarehouseId: input.defaultWarehouse?.id ?? null,
+  });
+  const products = new Map([
+    ...input.stocks.map(stock => [stock.product.id, stock.product] as const),
+    ...input.incomingOrderLines.map(line => [line.product.id, line.product] as const),
+    ...input.productsWithStoredIncoming.map(product => [product.id, product] as const),
+  ]);
+  const warehouses = new Map([
+    ...input.stocks.map(stock => [stock.warehouse.id, stock.warehouse] as const),
+    ...input.incomingOrderLines.flatMap(line => line.warehouse ? [[line.warehouse.id, line.warehouse] as const] : []),
+    ...(input.defaultWarehouse ? [[input.defaultWarehouse.id, input.defaultWarehouse] as const] : []),
+  ]);
 
   const consumedIncomingKeys = new Set<string>();
   const rows = input.stocks.map((stock) => {
-    const key = productWarehouseKey(stock.product.id, stock.warehouse.id);
-    const incoming = incomingByProductWarehouse.get(key)?.incoming ?? 0;
+    const key = incomingWarehouseKey(stock.product.id, stock.warehouse.id);
+    const summary = summaries.get(key);
     consumedIncomingKeys.add(key);
     return createWarehouseStockGridRow({
       id: stock.id,
       storedQty: stock.qty,
-      incoming,
+      incoming: summary?.incoming ?? 0,
+      firstIncomingDate: summary?.firstIncomingDate ?? null,
+      firstIncomingQty: summary?.firstIncomingQty ?? null,
       warehouse: stock.warehouse,
       product: stock.product,
       pickingPositions: input.pickingPositions ?? [],
     });
   });
 
-  for (const [key, balance] of incomingByProductWarehouse) {
+  for (const [key, summary] of summaries) {
     if (consumedIncomingKeys.has(key)) continue;
+    const warehouse = warehouses.get(summary.warehouseId);
+    const product = products.get(summary.productId);
+    if (!warehouse || !product) continue;
     rows.push(
       createWarehouseStockGridRow({
-        id: `incoming:${balance.warehouse.id}:${balance.product.id}`,
-        storedQty: balance.warehouse.isDefault ? balance.product.stock : 0,
-        incoming: balance.incoming,
-        warehouse: balance.warehouse,
-        product: balance.product,
+        id: `incoming:${warehouse.id}:${product.id}`,
+        storedQty: warehouse.isDefault ? product.stock : 0,
+        incoming: summary.incoming,
+        firstIncomingDate: summary.firstIncomingDate,
+        firstIncomingQty: summary.firstIncomingQty,
+        warehouse,
+        product,
         pickingPositions: input.pickingPositions ?? [],
       }),
     );

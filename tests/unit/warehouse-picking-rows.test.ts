@@ -31,3 +31,31 @@ it("loads existing position assignments for the stock API and export rows", asyn
   expect(mocks.purchaseOrderItem.findMany.mock.calls[0][0].select.product.select.barcode).toBe(true);
   expect(mocks.product.findMany.mock.calls[0][0].select.barcode).toBe(true);
 });
+
+it("aggregates every PO line before API/export pagination and exposes dated columns", async () => {
+  vi.clearAllMocks();
+  const warehouse = { id: "dc", name: "DC", isDefault: true, active: true };
+  const product = {
+    id: "scheduled", sku: "002", barcode: null, name: "Dolazeći artikal", supplier: null,
+    cogs: null, stock: 0, incomingStock: 0, partnerReservations: [], orderItems: [],
+    availableWebManual: false, availableWholesaleManual: false, availableExportManual: false,
+  };
+  mocks.warehouseStock.findMany.mockResolvedValue([]);
+  mocks.product.findMany.mockResolvedValue([]);
+  mocks.warehouse.findFirst.mockResolvedValue(warehouse);
+  mocks.warehousePickingPosition.findMany.mockResolvedValue([]);
+  mocks.purchaseOrderItem.findMany.mockResolvedValue([
+    { qty: 10, receivedQty: 2, product, purchaseOrder: { status: "RECEIVED", receivingWarehouse: warehouse, deliveryDate: new Date("2026-11-05") } },
+    { qty: 5, receivedQty: 0, product, purchaseOrder: { status: "DRAFT", receivingWarehouse: warehouse, deliveryDate: new Date("2026-11-20") } },
+  ]);
+  const erpModule = await getErpModule("stanje-po-magacinima", { take: 1, includeLookupOptions: false });
+  expect(erpModule?.columns.find(column => column.key === "firstIncomingDate")).toMatchObject({ type: "date", defaultVisible: true });
+  expect(erpModule?.columns.find(column => column.key === "firstIncomingQty")).toMatchObject({ type: "number", defaultVisible: true });
+  expect(erpModule?.rows[0].values).toMatchObject({ incoming: 13, firstIncomingDate: "2026-11-05", firstIncomingQty: 8 });
+  expect(mocks.purchaseOrderItem.findMany).toHaveBeenCalledOnce();
+  const query = mocks.purchaseOrderItem.findMany.mock.calls[0][0];
+  expect(query.take).toBeUndefined();
+  expect(query.skip).toBeUndefined();
+  expect(query.where.purchaseOrder).toEqual({ status: { not: "CANCELLED" } });
+  expect(query.select.purchaseOrder.select).toMatchObject({ status: true, deliveryDate: true });
+});
