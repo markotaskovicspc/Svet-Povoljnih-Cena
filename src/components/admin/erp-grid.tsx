@@ -53,6 +53,7 @@ import type {
   ErpValue,
 } from "@/lib/admin/erp";
 import { readGridNavigation } from "@/lib/admin/grid-navigation";
+import { gridViewFingerprint, withGridReturnTo } from "@/lib/admin/grid-return";
 import { migrateWarehouseGridColumns } from "@/lib/admin/warehouse-grid-columns";
 import { nextGridSorting } from "@/lib/admin/grid-query";
 import { createInitialGridRowsReuse } from "@/lib/admin/grid-initial-rows";
@@ -369,11 +370,16 @@ export function ErpGrid(props: ErpGridProps) {
   const [openCount, setOpenCount] = useState(0);
   useEffect(() => {
     const reopen = (event: Event) => {
-      if ((event as CustomEvent<string>).detail === selectedViewId) setOpenCount(count => count + 1);
+      if ((event as CustomEvent<string>).detail === selectedViewId) {
+        try {
+          sessionStorage.removeItem(`spc:grid-navigation:${props.module.slug}:${pathname}${search.size ? `?${search}` : ""}`);
+        } catch { /* Reopening still works when storage is unavailable. */ }
+        setOpenCount(count => count + 1);
+      }
     };
     window.addEventListener("spc:open-saved-view", reopen);
     return () => window.removeEventListener("spc:open-saved-view", reopen);
-  }, [selectedViewId]);
+  }, [selectedViewId, props.module.slug, pathname, search]);
   return <ErpGridContent key={`${props.module.slug}:${pathname}?${search}:${openCount}`} {...props}
     selectedViewId={selectedViewId} pagePath={pathname} routeSearch={search.toString()} />;
 }
@@ -387,6 +393,12 @@ function ErpGridContent({
   const [navigationReady, setNavigationReady] = useState(false);
   const restoredSnapshot = useRef(false);
   const navigationKey = useRef("");
+  const viewFingerprint = useRef<string | undefined>(undefined);
+  const listHref = pagePath + (routeSearch ? `?${routeSearch}` : "");
+  const detailHref = (href: string) =>
+    module.slug === "prodajni-nalozi" && module.detailHrefBase && href.split(/[?#]/, 1)[0].startsWith(`${module.detailHrefBase}/`)
+      ? withGridReturnTo(href, listHref)
+      : href;
   const clientReady = useClientReady();
   const defaultColumns = useMemo(
     () => {
@@ -558,18 +570,22 @@ function ErpGridContent({
     setTableSettingsOpen(false);
   };
 
+  function restoreNavigation(saved: NonNullable<ReturnType<typeof readGridNavigation>>) {
+    restoredSnapshot.current = true;
+    setQuery(saved.query); setSearchColumn(saved.searchColumn);
+    setFilters(saved.filters); setSorting(saved.sorting);
+    setVisibleColumns(saved.visibleColumns); setColumnOrder(saved.columnOrder);
+    setColumnWidths(saved.columnWidths); setContext(saved.context); setPage(saved.page);
+  }
+
   useEffect(() => {
-    if (selectedViewId) return; // An explicit saved view always wins over browser history.
     navigationKey.current = `spc:grid-navigation:${module.slug}:${window.location.pathname}${window.location.search}`;
+    if (selectedViewId) return; // Verify ownership and the saved definition before restoring it.
     try {
       const raw = sessionStorage.getItem(navigationKey.current);
       const saved = readGridNavigation(raw, module.columns.map(c => c.key), module.slug);
       if (saved) {
-        restoredSnapshot.current = true;
-        setQuery(saved.query); setSearchColumn(saved.searchColumn);
-        setFilters(saved.filters); setSorting(saved.sorting);
-        setVisibleColumns(saved.visibleColumns); setColumnOrder(saved.columnOrder);
-        setColumnWidths(saved.columnWidths); setContext(saved.context); setPage(saved.page);
+        restoreNavigation(saved);
       }
     } catch { /* Storage can be unavailable in private browsing. */ }
     setNavigationReady(true);
@@ -578,7 +594,7 @@ function ErpGridContent({
   useEffect(() => {
     if (!navigationReady || !navigationKey.current) return;
     try {
-      const snapshot = JSON.stringify({ version: 1, query, searchColumn, filters, sorting, visibleColumns, columnOrder, columnWidths, context, page });
+      const snapshot = JSON.stringify({ version: 1, query, searchColumn, filters, sorting, visibleColumns, columnOrder, columnWidths, context, page, ...(viewFingerprint.current ? { viewFingerprint: viewFingerprint.current } : {}) });
       sessionStorage.setItem(navigationKey.current, snapshot);
     } catch { /* Navigation still works without storage. */ }
   }, [navigationReady, query, searchColumn, filters, sorting, visibleColumns, columnOrder, columnWidths, context, page]);
@@ -662,6 +678,12 @@ function ErpGridContent({
           const selected = payload.views.find(view => view.id === selectedViewId);
           if (!selected) { setViewLoadError("Pogled je obrisan ili nije dostupan vašem nalogu."); return; }
           restoreView(selected);
+          viewFingerprint.current = gridViewFingerprint(selected);
+          try {
+            const saved = readGridNavigation(sessionStorage.getItem(navigationKey.current),
+              module.columns.map(column => column.key), module.slug, viewFingerprint.current);
+            if (saved) restoreNavigation(saved);
+          } catch { /* The saved definition still works without browser storage. */ }
           setNavigationReady(true);
         }
       })
@@ -857,7 +879,7 @@ function ErpGridContent({
     input?: Record<string, string>,
   ) => {
     if (command.href) {
-      router.push(command.href);
+      router.push(detailHref(command.href));
       return;
     }
     if (command.clientAction === "edit") {
@@ -882,7 +904,7 @@ function ErpGridContent({
         });
         return;
       }
-      const href = `${module.detailHrefBase}/${Array.from(detailIds)[0]}?mode=edit`;
+      const href = detailHref(`${module.detailHrefBase}/${Array.from(detailIds)[0]}?mode=edit`);
       if (module.slug === "prodajni-nalozi") {
         window.location.assign(href);
       } else {
@@ -967,7 +989,7 @@ function ErpGridContent({
       }
       setSelectedIds(payload.createdId ? new Set([payload.createdId]) : new Set());
       if (payload.redirect) {
-        router.push(payload.redirect);
+        router.push(detailHref(payload.redirect));
         return;
       }
       if (
@@ -1109,7 +1131,11 @@ function ErpGridContent({
 
   const applyView = (view: SavedView) => {
     if (view.id === selectedViewId) window.dispatchEvent(new CustomEvent("spc:open-saved-view", { detail: view.id }));
-    else if (view.id) router.push(savedGridViewHref(module.slug, { ...view, id: view.id }));
+    else if (view.id) {
+      const href = savedGridViewHref(module.slug, { ...view, id: view.id });
+      try { sessionStorage.removeItem(`spc:grid-navigation:${module.slug}:${href}`); } catch { /* Optional tab state. */ }
+      router.push(href);
+    }
   };
 
   async function changeView(view: SavedView, changes: { name?: string; showInSidebar?: boolean; move?: "up" | "down" }) {
@@ -1983,7 +2009,7 @@ function ErpGridContent({
                     onDoubleClickCapture={(event) => {
                       if (!module.detailHrefBase) return;
                       if (isActionableGridControl(event.target)) return;
-                      const href = `${module.detailHrefBase}/${row.detailId ?? row.id}`;
+                      const href = detailHref(`${module.detailHrefBase}/${row.detailId ?? row.id}`);
                       if (module.slug === "prodajni-nalozi") {
                         window.location.assign(href);
                       } else {
@@ -2006,7 +2032,7 @@ function ErpGridContent({
                     {module.detailHrefBase ? (
                       <td className="px-3 py-2">
                         <Link
-                          href={`${module.detailHrefBase}/${row.detailId ?? row.id}`}
+                          href={detailHref(`${module.detailHrefBase}/${row.detailId ?? row.id}`)}
                           prefetch={false}
                           onClick={
                             module.slug === "prodajni-nalozi"
@@ -2208,7 +2234,7 @@ function ErpGridContent({
                             </Link>
                           ) : row.cellHrefs?.[column.key] ? (
                             <Link
-                              href={row.cellHrefs[column.key]}
+                              href={detailHref(row.cellHrefs[column.key])}
                               prefetch={false}
                               onClick={
                                 module.slug === "prodajni-nalozi"

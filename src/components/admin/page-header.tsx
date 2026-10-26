@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { GridReturnLink } from "./grid-return-link";
 
 type Crumb = { href?: string; label: string };
 
@@ -22,9 +22,9 @@ export function PageHeader({
               {crumbs.map((c, i) => (
                 <span key={`${c.label}-${i}`}>
                   {c.href ? (
-                    <Link href={c.href} className="hover:text-walnut">
+                    <GridReturnLink href={c.href} className="hover:text-walnut">
                       {c.label}
-                    </Link>
+                    </GridReturnLink>
                   ) : (
                     <span>{c.label}</span>
                   )}

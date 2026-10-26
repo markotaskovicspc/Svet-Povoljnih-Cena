@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { GridReturnLink } from "./grid-return-link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { formatRsd } from "@/lib/format";
@@ -13,7 +13,7 @@ export async function AnanasOrderDetail({ id }: { id: string }) {
   const items = order.items as AnanasOrderItem[], shipments = order.shipments as AnanasOrderShipment[];
   const address = order.billingAddress as Record<string, string | null>;
   return <>
-    <PageHeader title={`Ananas porudžbina ${id}`} description={`${order.status} · ${date(order.createdAt)}`} actions={<Link className="underline" href="/admin/erp/prodajni-nalozi">Nazad na prodajne naloge</Link>} />
+    <PageHeader title={`Ananas porudžbina ${id}`} description={`${order.status} · ${date(order.createdAt)}`} actions={<GridReturnLink className="underline" href="/admin/erp/prodajni-nalozi">Nazad na prodajne naloge</GridReturnLink>} />
     <div className="space-y-5 px-4 py-6 md:px-8">
       <Card><CardTitle>Podaci sa Ananasa</CardTitle><p className="text-sm">Porudžbinu, isporuku i fiskalizaciju obrađuje Ananas. Ovaj pregled se automatski ažurira i ne menja SPC lager.</p>
         {address.source === "SHIPMENTS" && <p className="mt-3 text-sm text-ink-500">Podaci su preuzeti iz Ananas pošiljki, uključujući FBA. Ukupan iznos obuhvata sve preuzete pošiljke i može uključivati dostavu. Ovaj API ne dostavlja način plaćanja, lične podatke kupca, neto iznose i proviziju; fiskalni podaci su u povezanim računima.</p>}

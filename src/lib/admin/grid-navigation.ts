@@ -7,15 +7,17 @@ const schema = z.object({
   visibleColumns: z.array(z.string()), columnOrder: z.array(z.string()),
   columnWidths: z.record(z.string(), z.number().finite().min(40).max(2000)),
   context: z.record(z.string(), z.string()), page: z.number().int().min(1),
+  viewFingerprint: z.string().optional(),
 });
 /** Session-only list state, kept separately for each module and URL view. */
-export function readGridNavigation(raw: string | null, columns: string[], moduleSlug = "") {
+export function readGridNavigation(raw: string | null, columns: string[], moduleSlug = "", viewFingerprint?: string) {
   if (!raw) return null;
   try {
     const parsed = schema.safeParse(JSON.parse(raw));
     if (!parsed.success) return null;
     const known = new Set(columns);
     const state = parsed.data;
+    if (viewFingerprint !== undefined && state.viewFingerprint !== viewFingerprint) return null;
     const visibleColumns = state.visibleColumns.filter(key => known.has(key));
     if (!visibleColumns.length) return null;
     const migrated = migrateWarehouseGridColumns(moduleSlug, visibleColumns, state.columnOrder);

@@ -7,6 +7,7 @@ import {
   type FormEvent,
 } from "react";
 import Link from "next/link";
+import { gridReturnHref, withGridReturnTo } from "@/lib/admin/grid-return";
 import { Combobox } from "@base-ui/react/combobox";
 import { Check, ChevronsUpDown, Plus, Trash2 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -209,12 +210,15 @@ export function SalesOrderForm({
   detail = null,
   readOnly = false,
   initialChannel = "VP",
+  backHref = "/admin/erp/prodajni-nalozi",
 }: {
   options: SalesOrderFormOptions;
   detail?: SalesOrderDetail | null;
   readOnly?: boolean;
   initialChannel?: "MP" | "VP" | "INO";
+  backHref?: string;
 }) {
+  const listHref = gridReturnHref(backHref, "/admin/erp/prodajni-nalozi");
   const clientReady = useClientReady();
   const [channel, setChannel] = useState<
     "WEB" | "ANANAS" | "MP" | "VP" | "INO"
@@ -431,7 +435,7 @@ export function SalesOrderForm({
         text: `Porudžbina ${payload.order.number} je sačuvana.`,
       });
       window.location.assign(
-        `/admin/erp/prodajni-nalozi/${encodeURIComponent(payload.order.id)}`,
+        withGridReturnTo(`/admin/erp/prodajni-nalozi/${encodeURIComponent(payload.order.id)}`, listHref),
       );
     } catch (error) {
       setMessage({
@@ -468,7 +472,7 @@ export function SalesOrderForm({
       if (!response.ok || !payload?.ok) {
         throw new Error(payload?.error ?? "Porudžbina nije obrisana.");
       }
-      window.location.assign("/admin/erp/prodajni-nalozi");
+      window.location.assign(listHref);
     } catch (error) {
       setMessage({
         ok: false,
@@ -899,7 +903,7 @@ export function SalesOrderForm({
           </div>
           <div className="flex flex-wrap gap-2">
             <Link
-              href="/admin/erp/prodajni-nalozi"
+              href={listHref}
               onClick={(event) => {
                 event.preventDefault();
                 window.location.assign(event.currentTarget.href);
@@ -910,7 +914,7 @@ export function SalesOrderForm({
             </Link>
             {readOnly && detail?.canEdit ? (
               <Link
-                href={`/admin/erp/prodajni-nalozi/${encodeURIComponent(detail.id)}?mode=edit`}
+                href={withGridReturnTo(`/admin/erp/prodajni-nalozi/${encodeURIComponent(detail.id)}?mode=edit`, listHref)}
                 onClick={(event) => {
                   event.preventDefault();
                   window.location.assign(event.currentTarget.href);

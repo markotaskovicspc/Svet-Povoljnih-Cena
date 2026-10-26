@@ -1,4 +1,5 @@
-import Link from "next/link";
+import { GridReturnLink } from "@/components/admin/grid-return-link";
+import { gridReturnHref } from "@/lib/admin/grid-return";
 import { PageHeader } from "@/components/admin/page-header";
 import { SalesOrderForm } from "@/components/admin/sales-order-form";
 import { requireAdminAction } from "@/lib/admin";
@@ -13,7 +14,7 @@ export const metadata = {
 export default async function NewSalesOrderPage({
   searchParams,
 }: {
-  searchParams: Promise<{ channel?: string }>;
+  searchParams: Promise<{ channel?: string; returnTo?: string }>;
 }) {
   await requireAdminAction(["OPS"]);
   const search = await searchParams;
@@ -33,17 +34,18 @@ export default async function NewSalesOrderPage({
           { label: "Nova" },
         ]}
         actions={
-          <Link
+          <GridReturnLink
             href="/admin/erp/prodajni-nalozi"
             className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
           >
             Nazad na pregled
-          </Link>
+          </GridReturnLink>
         }
       />
       <div className="px-4 py-6 md:px-8">
         <SalesOrderForm
           options={options}
+          backHref={gridReturnHref(search.returnTo, "/admin/erp/prodajni-nalozi")}
           initialChannel={
             search.channel === "INO"
               ? "INO"

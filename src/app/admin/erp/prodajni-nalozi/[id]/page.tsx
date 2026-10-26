@@ -5,6 +5,8 @@ import { PageHeader } from "@/components/admin/page-header";
 import { SalesOrderForm } from "@/components/admin/sales-order-form";
 import { WebOrderDetail } from "@/components/admin/web-order-detail";
 import { AnanasOrderDetail } from "@/components/admin/ananas-order-detail";
+import { GridReturnLink } from "@/components/admin/grid-return-link";
+import { gridReturnHref } from "@/lib/admin/grid-return";
 import { requireAdminAction } from "@/lib/admin";
 import {
   getSalesOrderDetail,
@@ -22,12 +24,13 @@ export default async function SalesOrderDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ mode?: string }>;
+  searchParams: Promise<{ mode?: string; returnTo?: string }>;
 }) {
   await requireAdminAction(["OPS"]);
   const { id } = await params;
   if (id.startsWith("ananas-")) return <AnanasOrderDetail id={id.slice(7)} />;
   const search = await searchParams;
+  const backHref = gridReturnHref(search.returnTo, "/admin/erp/prodajni-nalozi");
   const detail = await getSalesOrderDetail(id);
   if (!detail) notFound();
   if (detail.channel === "WEB") {
@@ -64,12 +67,12 @@ export default async function SalesOrderDetailPage({
                 Štampaj predračun
               </Link>
             ) : null}
-            <Link
+            <GridReturnLink
               href="/admin/erp/prodajni-nalozi"
               className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
             >
               Nazad na pregled
-            </Link>
+            </GridReturnLink>
           </div>
         }
       />
@@ -79,6 +82,7 @@ export default async function SalesOrderDetailPage({
           options={options}
           detail={detail}
           readOnly={readOnly}
+          backHref={backHref}
         />
       </div>
     </>
