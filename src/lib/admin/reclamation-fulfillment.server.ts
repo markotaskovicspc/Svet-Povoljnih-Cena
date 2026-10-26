@@ -13,6 +13,7 @@ import type {
 import { Prisma, StockMovementKind } from "@prisma/client";
 import { db } from "@/lib/db";
 import { adjustInventory, ensureDefaultWarehouse } from "@/lib/inventory";
+import { resolveStoredWarehouseBalance } from "@/lib/reservation-stock";
 import { lockOrderReturn } from "@/lib/fiscal/return-lock";
 import { returnedStockBalance } from "@/lib/fiscal/return-stock";
 import {
@@ -66,7 +67,8 @@ export async function saveReclamationWarehouse(args: {
       throw new Error("Zamena je već u picking nalogu ili kod kurira. Uklonite je iz otključanog picking naloga pre izmene pripreme.");
     }
     const warehouse = await tx.warehouse.findFirst({
-      where: { id: args.warehouseId, active: true }, select: { id: true },
+      where: { id: args.warehouseId, active: true },
+      select: { id: true, code: true, name: true, isDefault: true },
     });
     if (!warehouse) throw new Error("Izabrani magacin nije aktivan.");
     const isReplacement = ["ZAMENA_ARTIKLA", "ZAMENA_DELA"].includes(reclamation.resolution ?? "");
@@ -81,6 +83,58 @@ export async function saveReclamationWarehouse(args: {
     const packages = isReplacement && (ready || args.packages != null)
       ? parseReclamationPackages(args.packages ?? reclamation.replacementPackages)
       : undefined;
+    if (ready && reclamation.resolution === "ZAMENA_ARTIKLA") {
+      const quantity = reclamation.replacementQty ?? reclamation.quantity;
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > reclamation.quantity) {
+        throw new Error("Količina celih zamenskih artikala nije ispravna.");
+      }
+      if (!reclamation.productId) {
+        throw new Error("Zamenski artikal nema vezan proizvod.");
+      }
+      // Read the selected warehouse and its reservations in the same serializable
+      // transaction as readiness. Stock in another warehouse cannot cover it.
+      await tx.$queryRaw`SELECT "id" FROM "Product" WHERE "id" = ${reclamation.productId} FOR UPDATE`;
+      const belongsToWarehouse = warehouse.isDefault
+        ? { OR: [{ warehouseId: warehouse.id }, { warehouseId: null }] }
+        : { warehouseId: warehouse.id };
+      const product = await tx.product.findUniqueOrThrow({
+        where: { id: reclamation.productId },
+        select: {
+          stock: true,
+          warehouseStocks: { select: { warehouseId: true, qty: true } },
+          orderItems: {
+            where: {
+              ...belongsToWarehouse,
+              warehouseReservedQty: { gt: 0 },
+              order: { status: { notIn: ["ISPORUCENO", "OTKAZANO", "VRACENO"] } },
+            },
+            select: { warehouseReservedQty: true, stockMovements: { select: { qty: true } } },
+          },
+          partnerReservations: {
+            where: {
+              ...belongsToWarehouse,
+              status: "ACTIVE",
+              AND: [{ OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }],
+            },
+            select: { qty: true },
+          },
+        },
+      });
+      const balance = resolveStoredWarehouseBalance({
+        // The legacy aggregate belongs only to DC, and only until per-warehouse
+        // stock exists. Never treat it as opening stock in the damaged-goods warehouse.
+        storedQty: product.warehouseStocks.find(stock => stock.warehouseId === warehouse.id)?.qty
+          ?? (warehouse.isDefault && !product.warehouseStocks.length ? product.stock : 0),
+        orderReservations: product.orderItems.map(item => ({
+          qty: item.warehouseReservedQty,
+          debited: item.stockMovements.reduce((sum, movement) => sum + movement.qty, 0) < 0,
+        })),
+        partnerReserved: product.partnerReservations.reduce((sum, reservation) => sum + reservation.qty, 0),
+      });
+      if (balance.available < quantity) {
+        throw new Error(`Nema dovoljno raspoložive robe za ${reclamation.sku} u magacinu ${warehouse.code} · ${warehouse.name} (potrebno ${quantity}, raspoloživo ${balance.available}).`);
+      }
+    }
     return tx.reclamation.update({
       where: { id: args.reclamationId },
       data: {

@@ -28,6 +28,7 @@ test("warehouse readiness and measured parcels wait for explicit picking collect
     warehouseId = warehouse.id;
     const product = await db.product.create({ data: {
       sku: tag, slug: tag.toLowerCase(), name: tag, description: tag, fullPrice: 1000, isActive: false,
+      stock: 1, warehouseStocks: { create: { warehouseId, qty: 1 } },
       unitPackWidthCm: 90, unitPackDepthCm: 20, unitPackHeightCm: 10, grossWeightKg: 2,
     } });
     productId = product.id;

@@ -47,6 +47,8 @@ beforeAll(async () => {
       description: "Izolovani artikal za reklamacioni integration test.",
       fullPrice: 1_000,
       isActive: false,
+      stock: 3,
+      warehouseStocks: { create: { warehouseId, qty: 3 } },
     },
   });
   productId = product.id;
@@ -97,6 +99,48 @@ afterAll(async () => {
 });
 
 describe("quantity-aware reclamation fulfillment", () => {
+  it("rejects warehouse readiness without enough local stock even when DC has stock", async () => {
+    const damaged = await db.warehouse.create({
+      data: { code: `${tag}-DAMAGED`.slice(0, 40), name: "Magacin oštećene robe", active: true },
+    });
+    const claim = await db.reclamation.create({
+      data: {
+        number: `${tag}-NO-STOCK`, orderId, orderItemId, productId,
+        sku: `${tag}-SKU`, quantity: 2, replacementQty: 2,
+        customerFirst: "QA", customerLast: "Lager", description: "Selected warehouse stock regression",
+        notifyVia: "EMAIL", decision: "PRIHVACENA", resolution: "ZAMENA_ARTIKLA",
+        warehouseId, warehouseStatus: "PREPARING",
+      },
+    });
+    const input = { reclamationId: claim.id, warehouseId: damaged.id, actorId: userId,
+      packages: [{ weightKg: 2, widthCm: 30, depthCm: 20, heightCm: 10 }] };
+    try {
+      await expect(saveReclamationWarehouse(input)).rejects.toThrow("potrebno 2, raspoloživo 0");
+      await db.warehouseStock.create({ data: { productId, warehouseId: damaged.id, qty: 1 } });
+      await db.product.update({ where: { id: productId }, data: { stock: 4 } });
+      await expect(saveReclamationWarehouse(input)).rejects.toThrow("potrebno 2, raspoloživo 1");
+      expect(await db.reclamation.findUniqueOrThrow({ where: { id: claim.id } })).toMatchObject({
+        warehouseId, warehouseStatus: "PREPARING", replacementReadyAt: null,
+        replacementReadyById: null, replacementPackages: null,
+      });
+      expect(await db.pickupBatchLine.count({ where: { reclamationId: claim.id } })).toBe(0);
+      await db.warehouseStock.update({ where: { warehouseId_productId: { productId, warehouseId: damaged.id } }, data: { qty: 2 } });
+      await db.product.update({ where: { id: productId }, data: { stock: 5 } });
+      await expect(saveReclamationWarehouse(input)).resolves.toMatchObject({
+        warehouseId: damaged.id, warehouseStatus: "READY", replacementReadyAt: expect.any(Date),
+      });
+      // Readiness checks inventory without issuing it or contacting a courier.
+      expect(await db.stockMovement.count({ where: { productId } })).toBe(0);
+      expect(await db.shipment.count({ where: { reclamationId: claim.id } })).toBe(0);
+      expect(await db.warehouseStock.findUniqueOrThrow({ where: { warehouseId_productId: { productId, warehouseId: damaged.id } } })).toMatchObject({ qty: 2 });
+    } finally {
+      await db.reclamation.delete({ where: { id: claim.id } });
+      await db.warehouseStock.deleteMany({ where: { warehouseId: damaged.id } });
+      await db.warehouse.delete({ where: { id: damaged.id } });
+      await db.product.update({ where: { id: productId }, data: { stock: 3 } });
+    }
+  });
+
   it("removes only the selected replacement, allows requeue, and protects courier work", async () => {
     await db.product.update({
       where: { id: productId },
