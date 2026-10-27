@@ -18,6 +18,7 @@ export const RESOURCES = {
   promotions: 'Stored campaigns, article prices and periods',
   'purchase-orders': 'Purchase orders; optionally status=DRAFT (U obradi)',
   'inbound-invoices': 'Posted goods receipts; import VAT not separately classified',
+  'goods-receipts': 'Posted goods receipts; same records and fields as inbound-invoices',
   shipments: 'SPC shipments, parcel dimensions, order/invoice/receipt references',
   'courier-statements': 'Imported courier charges and remittances',
   'sef-invoices': 'Incoming SEF invoices, attachment metadata; optional supplierPib',

@@ -84,6 +84,7 @@ Svi putevi su relativni na `/api/partners/v1/spcapp/`.
 | `promotions` | Akcije, tip, hero oznaka, period, šifre/cene u `actionPrices`, hero meseci | Akcije koje presecaju zadati period |
 | `purchase-orders` | ID/broj/status, datumi, dobavljač, očekivana isporuka, valuta/kurs/vrednost, artikli, količine, nabavne cene, zapremine/carinske stope | `createdAt`; opciono `status=DRAFT` za **U obradi**; ostalo SENT/CONFIRMED/RECEIVED/CANCELLED |
 | `inbound-invoices` | Proknjižene prijemnice, dobavljač, povezana PO, valuta/kurs, iznosi i troškovi | `invoiceDate`, ili `createdAt` ako datum nije unet; samo POSTED |
+| `goods-receipts` | Iste proknjižene prijemnice i polja kao `inbound-invoices`; naziv za SEF → Prijemnice u SPCApp-u | `invoiceDate`, ili `createdAt` ako datum nije unet; samo POSTED |
 | `shipments` | Pošiljka/kurir/status, tracking, datumi, COD iznos, paketi i dimenzije, veza porudžbine/predračuna/fiskalnog dokumenta i fiskalizovana dostava | `createdAt`; SPC pošiljke, Ananas kuriri su u `ananas-orders` |
 | `courier-statements` | Uvezeni kurirski obračuni: dokument, stavke, tracking, knjiženje, neto/bruto trošak/doznaka, težina i shipment ID | Datum uvoza obračuna `createdAt`; pojedinačne stavke imaju poslovni `bookedOn` |
 | `sef-invoices` | Ulazne SEF fakture: dobavljač/PIB, broj, datum/dospeće, neto/PDV/bruto, obračunski period kada postoji u XML-u, metapodaci priloga | `issueDate`; opciono `supplierPib=123456789`, ne pretpostavljati PIB X Express-a |
@@ -128,6 +129,7 @@ Posete su zabeleženi događaji uz saglasnost. `uniqueVisitors` = različiti ano
 - `products.ananasCurrentPrice=null`: kompletan aktuelni Ananas cenovnik nije sinhronizovan. Sačuvani ANANAS cenovnici su u `prices`, ostvarene prodajne cene u Ananas dokumentima.
 - Akcije/loyalty istorija obuhvataju sačuvane zapise; obrisane ili prepisane istorijske vrednosti nije moguće rekonstruisati ovim API-jem.
 - Prijemnica ima `recordedInvoiceVat`; `importVat=null` i `importVatStatus=NOT_SEPARATELY_RECORDED`, jer uvozni PDV nije posebno klasifikovan u modelu.
+- Za SEF → Prijemnice koristiti `GET /api/partners/v1/spcapp/goods-receipts` sa postojećim `spcapp:read` Bearer ključem i standardnim `from`, `to`, `limit`, `cursor` parametrima. `goods-receipts` i `inbound-invoices` predstavljaju iste zapise sa istim ID-ovima: uvoziti jedan od njih kako se prijemnice ne bi duplirale. Kursor važi samo za resurs za koji je izdat.
 - `shipments.fiscalDocuments[].orderShippingGross/Net` je iznos za **celu porudžbinu**. Ako ima više pošiljaka, deduplikovati po fiskalnom document ID-u; to nije raspodeljeni prihod po paketu.
 - SEF `specificationLines=null` i `courierStatementId=null`: automatsko parsiranje kurirskih specifikacija i formalno povezivanje sa uvezenim obračunom još nisu uvedeni. `courier-statements.lines` su već strukturisani podaci iz zasebnih uvoza.
 

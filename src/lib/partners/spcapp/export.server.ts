@@ -22,7 +22,8 @@ export function exportResource(q: ExportQuery): Promise<{ id: string }[]> {
     case 'loyalty-rules': return exportLoyaltyRules(q);
     case 'promotions': return exportPromotions(q);
     case 'purchase-orders': return exportPurchaseOrders(q);
-    case 'inbound-invoices': return exportInboundInvoices(q);
+    case 'inbound-invoices':
+    case 'goods-receipts': return exportInboundInvoices(q);
     case 'shipments': return exportShipments(q);
     case 'courier-statements': return exportCourierStatements(q);
     case 'sef-invoices': return exportSef(q);

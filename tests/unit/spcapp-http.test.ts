@@ -21,7 +21,18 @@ it('returns a manifest and enforces the new scope', async () => {
   const r = await spcappGet(req()); const data = await r.json();
   expect(mocks.auth).toHaveBeenCalledWith(expect.any(Request), 'spcapp:read');
   expect(data.resources).toContainEqual(expect.objectContaining({ name: 'ananas-fiscal-documents' }));
+  expect(data.resources).toContainEqual(expect.objectContaining({ name: 'goods-receipts', path: '/api/partners/v1/spcapp/goods-receipts' }));
   expect(data.sync).toMatchObject({ updatedSinceSupported: false, mode: 'FULL_RESCAN_UPSERT' });
+});
+it('serves goods receipts through the existing private, scoped and audited export', async () => {
+  mocks.export.mockResolvedValue([{ id: 'receipt', number: 'PR-1' }]);
+  const response = await spcappGet(new Request('https://erp.test/api/partners/v1/spcapp/goods-receipts?from=2026-10-01&to=2026-10-27'), 'goods-receipts');
+  expect(response.status).toBe(200);
+  expect(response.headers.get('cache-control')).toContain('private, no-store');
+  expect(mocks.auth).toHaveBeenCalledWith(expect.any(Request), 'spcapp:read');
+  expect(mocks.export.mock.lastCall![0].resource).toBe('goods-receipts');
+  expect(await response.json()).toMatchObject({ resource: 'goods-receipts', count: 1, items: [{ id: 'receipt', number: 'PR-1' }] });
+  expect(mocks.audit.mock.lastCall![0].data.diff).toEqual({ resource: 'goods-receipts', rows: 1, from: '2026-10-01', to: '2026-10-27' });
 });
 it('pages without dropping rows, signs cursors and never includes lookahead rows', async () => {
   mocks.export.mockResolvedValue([{ id: 'a', amount: '12.34' }, { id: 'b' }, { id: 'c' }]);
