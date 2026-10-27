@@ -344,12 +344,15 @@ function positiveInteger(value: unknown) {
 
 // POMPEA MIMI in src/data/svet-akcija-products.json. The legacy import lost
 // collectionId and omitted the brand from names. Current SKUs were verified
-// against that catalogue by EAN; keep the SKU fallback scoped to Modital.
+// against that catalogue by EAN. Unbranded MIMI PLUS/PANTY and older NANOTECH
+// variants were verified in the Modital catalogue; keep the SKU fallback scoped to Modital.
 const LEGACY_POMPEA_SKUS = new Set([
+  "100062", "100063", "100064", "100065",
   "1120", "1121", "1122", "1123", "1124", "1125", "1126", "1127", "1128", "1129", "1130",
   "110120", "110121", "110122", "110123", "110124", "110125", "110126", "110127", "110128", "110129", "110130",
 ]);
 const POMPEA_BARCODES = new Set([
+  "8032844920307", "8056777115586",
   "8032844707502", "8032844707564", "8034112993242", "8034112993303", "8056777156923",
   "8056777584825", "8056777584856", "8056777584887", "8056777584917", "8056777584948", "8056777584979",
 ]);

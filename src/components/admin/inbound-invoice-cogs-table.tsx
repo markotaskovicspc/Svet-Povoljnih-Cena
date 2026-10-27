@@ -13,7 +13,8 @@ export type InboundCogsRow = {
   incomingUnitCogsRsd: number;
   existingQty: number;
   existingCogs: number;
-  finalCogs: number;
+  finalCogs: number | null;
+  finalCogsError?: string;
 };
 const fmt = (value: number) => value.toLocaleString("sr-Latn-RS", {
   minimumFractionDigits: 2, maximumFractionDigits: 2,
@@ -31,10 +32,15 @@ export function InboundInvoiceCogsTable({ rows, purchaseCurrency }: {
   rows: InboundCogsRow[];
   purchaseCurrency: string;
 }) {
+  const invalidCogs = rows.filter(row => row.finalCogsError);
   const missing = rows.filter(row => !row.customsRates.length || row.customsRates.includes(null));
   const hasCustomsWithoutPositiveRate = rows.some(row => row.customsRsd > 0) &&
     !rows.some(row => row.customsRates.some(rate => rate != null && rate > 0));
   return <>
+    {invalidCogs.length ? <div role="alert" className="mb-3 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm">
+      <p className="font-semibold">Finalni COGS nije obračunat za sledeće stavke. Proverite stanje zaliha i porudžbenicu pre knjiženja.</p>
+      <ul className="mt-1 list-disc pl-5">{invalidCogs.map(row => <li key={row.sku}>{row.sku}: {row.finalCogsError}</li>)}</ul>
+    </div> : null}
     {hasCustomsWithoutPositiveRate ? <p role="alert" className="mb-3 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm">
       Unet je iznos carine, ali nijedna stavka nema pozitivnu carinsku stopu. Proverite stope; prikazana carina je raspoređena prema vrednosti robe.
     </p> : null}
@@ -58,7 +64,7 @@ export function InboundInvoiceCogsTable({ rows, purchaseCurrency }: {
             <td className="px-3 py-3 text-right tabular-nums"><InboundCustomsRates rates={row.customsRates} /></td>
             {[row.invoiceValueRsd, row.customsRsd, row.transportRsd, row.otherRelatedCostsRsd, row.incomingUnitCogsRsd].map((value, index) => <td key={index} className="px-3 py-3 text-right tabular-nums">{fmt(value)} RSD</td>)}
             <td className="px-3 py-3 text-right tabular-nums">{row.existingQty} × {fmt(row.existingCogs)} RSD</td>
-            <td className="px-3 py-3 text-right font-semibold tabular-nums">{fmt(row.finalCogs)} RSD</td>
+            <td className="px-3 py-3 text-right font-semibold tabular-nums">{row.finalCogs == null ? "—" : `${fmt(row.finalCogs)} RSD`}</td>
           </tr>)}
         </tbody>
         <tfoot className="border-t border-border font-semibold">

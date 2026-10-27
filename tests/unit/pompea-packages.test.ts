@@ -47,6 +47,40 @@ describe("one Pompea parcel per order", () => {
     expect(isPompeaItem({ ...legacy, sku: "OTHER", supplierName: "Modital doo" })).toBe(false);
     expect(isPompeaItem({ ...legacy, product: { barcode: "unknown" } })).toBe(false);
   });
+  it("consolidates the unbranded MIMI variants with the rest of the buyer's Pompea goods", () => {
+    const legacy = (sku: string, barcode: string, qty: number): PackageSourceItem => ({
+      id: sku, sku, name: sku === "100062" ? "Ženske čarape MIMI PLUS 40 REPOSE, GLACE, XL" : "Ženske čarape MIMI PANTY 50, teget, XL",
+      qty, unitPriceSale: 99, product: { supplier: { name: "Modital doo" }, barcode, grossWeightKg: 0.16 },
+    });
+    const plus = legacy("100062", "8032844920307", 10);
+    const panty = legacy("100063", "8056777115586", 3);
+    const order = [
+      { ...item("100061", 50), product: { ...item("100061", 50).product, grossWeightKg: 0.16 } },
+      plus,
+      { ...item("110126", 20), product: { ...item("110126", 20).product, grossWeightKg: 0.16 } },
+      { ...item("110129", 20), product: { ...item("110129", 20).product, grossWeightKg: 0.16 } },
+    ];
+    expect(derivePhysicalPackages(order)).toMatchObject([{ packedQuantity: 100, weightKg: 16 }]);
+    expect(derivePhysicalPackages(order)).toHaveLength(1);
+    expect(parcelOrderItemIds(derivePhysicalPackages(order)[0])).toEqual(["100061", "100062", "110126", "110129"]);
+    for (const variant of [plus, panty]) {
+      expect(isPompeaItem(variant)).toBe(true);
+      expect(isPompeaItem({ ...variant, supplierName: "Modital doo", product: null })).toBe(true);
+      expect(isPompeaItem({ ...variant, supplierName: "Drugi dobavljač", product: null })).toBe(false);
+      expect(isPompeaItem({ ...variant, sku: "renumbered", product: { barcode: variant.product!.barcode } })).toBe(true);
+    }
+    expect(derivePhysicalPackages([plus, panty])).toMatchObject([{ packedQuantity: 13 }]);
+    expect(derivePhysicalPackages([plus, panty])).toHaveLength(1);
+  });
+  it("recognizes older NANOTECH stock codes only for Modital", () => {
+    for (const sku of ["100064", "100065"]) {
+      const legacy = { id: sku, sku, name: "Ženske čarape NANOTECH, crna, L", qty: 3, supplierName: "Modital doo", product: null };
+      expect(isPompeaItem(legacy)).toBe(true);
+      expect(isPompeaItem({ ...legacy, supplierName: "Drugi dobavljač" })).toBe(false);
+      expect(derivePhysicalPackages([legacy])).toMatchObject([{ packedQuantity: 3 }]);
+      expect(derivePhysicalPackages([legacy])).toHaveLength(1);
+    }
+  });
   it("uses fixed outer dimensions and the sum of unit weights for picking, routing and booking", () => {
     const packages = derivePhysicalPackages([item("A", 2), item("B", 3)]);
     expect(resolveCourierProvider({ shippingMethod: "KURIR", items: packages.map(physicalPackageRouteItem) })).toEqual({ kind: "single", provider: "X_EXPRESS" });

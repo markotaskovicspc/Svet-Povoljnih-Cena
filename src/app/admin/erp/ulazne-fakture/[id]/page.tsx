@@ -1059,19 +1059,34 @@ export default async function InboundInvoicePage({
                   const existingCogs = !reopening && snapshot
                     ? snapshot.cogs ?? row.incomingUnitCogsRsd
                     : product?.cogs == null ? row.incomingUnitCogsRsd : Number(product.cogs);
-                  let finalCogs = (locked || invoice.purchaseOrder?.status === PurchaseOrderStatus.RECEIVED) && product?.cogs != null
-                    ? Number(product.cogs)
-                    : weightedAverageCogs({ existingQty, existingUnitCogs: existingCogs, incomingQty: row.qty, incomingUnitCogs: row.incomingUnitCogsRsd });
-                  if (reopening && product) {
-                    const previous = reopening.products.find(p => p.productId === product.id);
-                    try { finalCogs = purchasingCorrectionBalance({ sku: row.sku, stock: product.stock, cogs: product.cogs == null ? null : Number(product.cogs), previousQty: previous?.qty ?? 0, previousCostRsd: previous?.costRsd ?? 0, qty: row.qty, costRsd: row.totalActualCostRsd }).cogs ?? existingCogs; } catch { /* Posting returns the precise stock/cost validation error. */ }
+                  let finalCogs: number | null = null;
+                  let finalCogsError: string | undefined;
+                  try {
+                    if (reopening && product) {
+                      const previous = reopening.products.find(p => p.productId === product.id);
+                      finalCogs = purchasingCorrectionBalance({
+                        sku: row.sku, stock: product.stock,
+                        cogs: product.cogs == null ? null : Number(product.cogs),
+                        previousQty: previous?.qty ?? 0, previousCostRsd: previous?.costRsd ?? 0,
+                        qty: row.qty, costRsd: row.totalActualCostRsd,
+                      }).cogs;
+                    } else {
+                      finalCogs = (locked || invoice.purchaseOrder?.status === PurchaseOrderStatus.RECEIVED) && product?.cogs != null
+                        ? Number(product.cogs)
+                        : weightedAverageCogs({ existingQty, existingUnitCogs: existingCogs, incomingQty: row.qty, incomingUnitCogs: row.incomingUnitCogsRsd });
+                    }
+                  } catch (error) {
+                    // An invalid stock balance blocks posting, but must leave the receipt editable.
+                    finalCogsError = !reopening && existingQty < 0
+                      ? `Postojeće stanje zaliha je negativno (${existingQty}). Proverite lager pre knjiženja.`
+                      : error instanceof Error ? error.message : "COGS nije moguće obračunati.";
                   }
                   const sourceItems = invoice.purchaseOrder!.items.filter(item => item.sku === row.sku);
                   return {
                     ...row, productId: product?.id, name: product?.name ?? sourceItems[0]?.name ?? "—",
                     purchasePrices: sourceItems.map(item => Number(item.purchasePrice)),
                     customsRates: sourceItems.map(item => effectiveCustomsRate(item, invoice.purchaseOrder?.lockedAt ?? (reopening ? invoice.purchaseOrder?.createdAt ?? null : null))),
-                    existingQty, existingCogs, finalCogs,
+                    existingQty, existingCogs, finalCogs, finalCogsError,
                   };
                 })}
               />}
