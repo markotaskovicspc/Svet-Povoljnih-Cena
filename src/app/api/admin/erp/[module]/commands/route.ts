@@ -402,7 +402,7 @@ async function deleteRows(module: string, ids: string[]): Promise<CommandResult>
       count = (await db.purchasePrice.deleteMany({ where })).count;
       break;
     case "ulazne-fakture":
-      count = (await db.inboundInvoice.deleteMany({ where })).count;
+      count = (await db.inboundInvoice.deleteMany({ where: { ...where, lockedAt: null, status: { notIn: ["POSTED", "CANCELLED"] }, OR: [{ purchaseOrderId: null }, { purchaseOrder: { status: { not: "RECEIVED" } } }] } })).count;
       break;
     case "landing-strane":
       count = (await db.landingPage.deleteMany({ where })).count;

@@ -1,7 +1,10 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
+import { PurchasingReopenForm } from "@/components/admin/purchasing-reopen-form";
+import { readPurchasingReopening } from "@/lib/admin/purchasing-reopening";
+import { assertPurchasingOrderEditable } from "@/lib/admin/purchasing-reopening.server";
 import { ErpCurrency, PurchaseOrderStatus } from "@prisma/client";
 import { z } from "zod";
 import { AdminActionForm } from "@/components/admin/action-form";
@@ -192,7 +195,11 @@ async function saveHeader(_state: AdminActionState, formData: FormData) {
       }
       const freightExchangeRate =
         data.freightCurrency === ErpCurrency.RSD ? 1 : data.freightExchangeRate;
-      await db.purchaseOrder.update({
+      await db.$transaction(async tx => {
+        const latest = await assertPurchasingOrderEditable(tx, data.poId);
+        const correction = readPurchasingReopening(latest.cogsBookingSnapshot);
+        if (correction && supplier.id !== correction.supplierId) throw new Error("Dobavljač već primljene robe ne može da se promeni kroz ispravku.");
+        await tx.purchaseOrder.update({
         where: { id: data.poId },
         data: {
           supplierId: supplier.id,
@@ -211,6 +218,7 @@ async function saveHeader(_state: AdminActionState, formData: FormData) {
           freightExchangeRate,
           notes: data.notes || null,
         },
+      });
       });
       await recomputePurchaseOrderTotals(data.poId);
       revalidatePath(`/admin/erp/porudzbenice/${data.poId}`);
@@ -297,7 +305,10 @@ async function deleteLine(formData: FormData) {
           error: "Stavka proknjižene porudžbenice ne može da se obriše.",
         };
       }
-      await db.purchaseOrderItem.delete({ where: { id } });
+      await db.$transaction(async tx => {
+        await assertPurchasingOrderEditable(tx, item.purchaseOrderId);
+        await tx.purchaseOrderItem.delete({ where: { id } });
+      });
       await recomputePurchaseOrderTotals(item.purchaseOrderId);
       await recomputeIncomingStockForPurchaseOrders(db, [item.purchaseOrderId]);
       revalidatePath(`/admin/erp/porudzbenice/${item.purchaseOrderId}`);
@@ -346,12 +357,28 @@ async function sendAction(_state: AdminActionState, formData: FormData) {
   )(formData);
 }
 
+async function postCorrectionAction(_state: AdminActionState, formData: FormData) {
+  "use server";
+  return withAdminState({ module: "/admin/erp/porudzbenice", allowed: ["OPS"], action: "po.correction.post", entity: "PurchaseOrder" }, async (actorId, data: FormData) => {
+    const id = String(data.get("poId") ?? "");
+    const { postPurchaseOrder } = await import("@/lib/admin/po");
+    await postPurchaseOrder(id, actorId);
+    revalidatePath(`/admin/erp/porudzbenice/${id}`);
+    revalidatePath("/admin/erp/porudzbenice");
+    revalidatePath("/admin/erp/porudzbenice-po-artiklima");
+    revalidatePath("/admin/erp/stanje-po-magacinima");
+    revalidatePath("/admin/erp/artikli");
+    updateTag("catalog-products");
+    return { ok: true as const, entityId: id, message: "Ispravke su proknjižene; lager i COGS su usklađeni." };
+  })(formData);
+}
+
 export default async function PurchaseOrderEditorPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireAdminAction(["OPS"], "/admin/erp/porudzbenice");
+  const admin = await requireAdminAction(["OPS"], "/admin/erp/porudzbenice");
   const { id } = await params;
   const [order, suppliers, transports, products, pricingRules] = await Promise.all([
     db.purchaseOrder.findUnique({
@@ -402,6 +429,7 @@ export default async function PurchaseOrderEditorPage({
   if (!order) notFound();
 
   const locked = Boolean(order.lockedAt);
+  const reopening = readPurchasingReopening(order.cogsBookingSnapshot);
   const goodsTotal = purchaseOrderGoodsTotal(order.items.map((item) => ({
     qty: item.qty, purchasePrice: Number(item.purchasePrice),
   })));
@@ -487,6 +515,11 @@ export default async function PurchaseOrderEditorPage({
         ]}
         actions={
           <div className="flex flex-wrap gap-2">
+            {admin.role === "SUPER" && order.lockedAt && order.status !== "CANCELLED" && !order.archivedAt ? <PurchasingReopenForm kind="purchase-order" id={order.id} lockedAt={order.lockedAt} /> : null}
+            {reopening && !reopening.invoiceId ? <AdminActionForm action={postCorrectionAction} refreshOnSuccess>
+              <input type="hidden" name="poId" value={order.id} />
+              <SubmitButton confirm="Proknjižiti ispravke i uskladiti razliku lagera i COGS-a?" pendingLabel="Knjiženje…">Proknjiži izmene</SubmitButton>
+            </AdminActionForm> : null}
             <a
               href={`/api/admin/purchase-orders/${order.id}/pdf`}
               target="_blank"
@@ -535,6 +568,10 @@ export default async function PurchaseOrderEditorPage({
       </div>
 
       <div className="space-y-6 px-4 py-6 md:px-8">
+        {reopening ? <div role="status" className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm">
+          Dokumenti su ponovo otvoreni za izmenu. Ranije primljena roba ostaje na lageru; pri knjiženju se upisuje samo razlika količine i COGS-a. Dobavljač i magacin prijema ostaju isti.
+          {reopening.invoiceId ? <Link href={`/admin/erp/ulazne-fakture/${reopening.invoiceId}?mode=edit`} className="ml-2 font-semibold underline">Završi i proknjiži izmene preko prijemnice →</Link> : null}
+        </div> : null}
         {capacityWarnings.length ? (
           <div role="status" className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
             <p className="font-semibold">Informativno upozorenje — kapacitet transporta je prekoračen:</p>
