@@ -13,7 +13,6 @@ type ScanRequest = Parameters<typeof recordPicking>[0];
 export function DigitalPicking({ initial, warehouseMode = false }: { initial: Session; warehouseMode?: boolean }) {
   const [session, setSession] = useState(initial);
   const [code, setCode] = useState("");
-  const [packagesConfirmed, setPackagesConfirmed] = useState(false);
   const [labelUrl, setLabelUrl] = useState<string | null>(initial.labelsReady ? `/api/admin/erp/preuzimanja/${encodeURIComponent(initial.id)}/labels` : null);
   const [shortageReported, setShortageReported] = useState(false);
   const [message, setMessage] = useState("");
@@ -103,7 +102,8 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
     if (lock.current) return;
     lock.current = true; setBusy(true);
     try {
-      const response = await finishPicking({ batchId: session.id, planHash: session.planHash, mode, packagesConfirmed: packagesConfirmed || Boolean(labelUrl) });
+      // This single final action confirms packing and sends to the courier.
+      const response = await finishPicking({ batchId: session.id, planHash: session.planHash, mode, packagesConfirmed: mode === "labels" });
       setMessage(response.message);
       setFinishError(!response.ok);
       if (response.ok) {
@@ -117,7 +117,7 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
         }
         else setShortageReported(true);
       }
-    } catch { setFinishError(true); setMessage("Potvrda nije stigla. Osvežite nalog pre ponovnog pokušaja."); }
+    } catch { setFinishError(true); setMessage("Potvrda slanja nije stigla. Pokušajte ponovo istim dugmetom. Već poslate pošiljke neće biti duplirane."); }
     finally { lock.current = false; setBusy(false); }
   }
   const articles = (<div className="space-y-3">
@@ -137,7 +137,7 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
         {session.editable && !warehouseMode && <div className="mt-3 flex flex-wrap gap-2 print:hidden">{!warehouseMode && <><button disabled={!editable} onClick={() => setSelected(row.key)} className="rounded border px-3 py-2">{selected === row.key ? "Izabran red" : "Izaberi za sken"}</button><button disabled={!editable || count >= row.quantity} onClick={() => record(row.key, 1, "Ručna potvrda odvajanja")} className="rounded border px-4 py-2">+1</button><button disabled={!editable || count === 0} onClick={() => record(row.key, -1, "Ispravka količine")} className="rounded border px-4 py-2">−1</button></>}<button disabled={!editable} onClick={() => { setSelected(row.key); setNoteKey(row.key); setNote(`Nedostaje ${row.quantity - count} kom. za ${row.sku}. `); }} className="rounded border px-3 py-2">Nedostaje / napomena</button></div>}
       </article>;
     })}</div>);
-  return <div data-warehouse-scan-error={warehouseMode ? scanError : undefined} data-warehouse-finish-error={warehouseMode ? finishError : undefined} className={`space-y-5 p-4 md:p-8 ${warehouseError ? "rounded-xl border-2 border-danger bg-danger/10 text-danger [&_section]:border-danger [&_input]:border-danger [&_button]:border-danger" : ""}`}>
+  return <div data-warehouse-update-safe={warehouseMode ? !busy && !retry && !code.trim() && !note.trim() && quantity === String(remainingQuantity) : undefined} data-warehouse-scan-error={warehouseMode ? scanError : undefined} data-warehouse-finish-error={warehouseMode ? finishError : undefined} className={`space-y-5 p-4 md:p-8 ${warehouseError ? "rounded-xl border-2 border-danger bg-danger/10 text-danger [&_section]:border-danger [&_input]:border-danger [&_button]:border-danger" : ""}`}>
     {warehouseMode ? <div className="flex min-w-0 flex-wrap items-center justify-between gap-2" data-warehouse-picking-heading>
       <h1 className="min-w-0 flex-1 break-words text-lg font-semibold">{session.number}</h1>
       <strong className="shrink-0 whitespace-nowrap text-base tabular-nums" aria-label={`Odvojeno ${done} od ${total} komada`}>{done} / {total} kom.</strong>
@@ -154,8 +154,7 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
     {warehouseMode && total > 0 && done === total && <p className={`text-sm font-semibold ${warehouseError ? "text-danger" : "text-success"}`}>Odvajanje je završeno.</p>}
     {warehouseMode && (review.complete || review.reviewed || labelUrl) && <section className={`space-y-3 rounded-xl border p-4 print:hidden ${warehouseError ? "bg-danger/10" : "bg-muted/20"}`}>
       {review.complete && !labelUrl && <>
-        <label className="flex items-center gap-3"><input type="checkbox" checked={packagesConfirmed} disabled={busy || !!retry || !session.labelsPreparationAllowed} onChange={event => setPackagesConfirmed(event.target.checked)} className="size-5" />Potvrđujem da su svi paketi spakovani i da su mere na nalogu tačne.</label>
-        <button type="button" disabled={busy || !!retry || !session.labelsPreparationAllowed || !packagesConfirmed} onClick={() => void finish("labels")} className={`rounded-lg px-4 py-3 ${warehouseError ? "bg-danger text-canvas" : "bg-foreground text-background"}`}>{busy ? "Slanje kuriru…" : "Pošalji kuriru i otvori adresnice"}</button>
+        <button type="button" disabled={busy || !!retry || !session.labelsPreparationAllowed} onClick={() => void finish("labels")} className={`min-h-16 w-full rounded-lg px-4 py-4 text-lg font-bold ${warehouseError ? "bg-danger text-canvas" : "bg-foreground text-background"}`}>{busy ? "Slanje kuriru — sačekajte…" : "Sve je spakovano — pošalji kuriru"}</button>
         <p className={`text-sm ${warehouseError ? "text-danger" : "text-muted-foreground"}`}>Pošiljke se odmah šalju kurirskoj službi, a PDF adresnica na magacin@svetpovoljnihcena.rs.</p>
       </>}
       {labelUrl && <LabelPdfActions href={labelUrl} filename={`${session.number}-adresnice.pdf`} singleAction />}

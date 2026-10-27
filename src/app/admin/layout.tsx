@@ -20,6 +20,8 @@ import { Button } from "@/components/ui/button";
 import { AdminRefreshButton } from "@/components/admin/refresh-button";
 import { OrderNotifications } from "@/components/admin/order-notifications";
 import { WarehouseShell } from "@/components/admin/warehouse-shell";
+import { WarehouseUpdate } from "@/components/admin/warehouse-update";
+import { warehouseRelease } from "@/lib/admin/warehouse-release.server";
 import { adminAccessHome, adminModuleForPage, canAccessAdminModule, usesModuleAccess } from "@/lib/admin/access-policy";
 import "./theme.css";
 
@@ -66,7 +68,7 @@ export default async function AdminLayout({
   if (user.role === "WAREHOUSE" && !warehousePath && pathname !== "/admin/pristup-odbijen") redirect("/admin/magacin");
   if (warehousePath) {
     if (!canAccessAdminModule(user, "/admin/magacin", ["OPS", "WAREHOUSE"])) redirect("/admin/pristup-odbijen");
-    return <AdminThemeProvider initialTheme={initialTheme}><WarehouseShell name={user.name} adminHref={user.role !== "WAREHOUSE" ? "/admin/erp" : undefined}>{children}</WarehouseShell></AdminThemeProvider>;
+    return <AdminThemeProvider initialTheme={initialTheme}><WarehouseShell name={user.name} adminHref={user.role !== "WAREHOUSE" ? "/admin/erp" : undefined}><WarehouseUpdate release={warehouseRelease} />{children}</WarehouseShell></AdminThemeProvider>;
   }
 
   const availableNav = allowedNavFor(user);
