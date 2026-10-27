@@ -11,7 +11,9 @@ export default async function WarehousePicking({ searchParams }: { searchParams:
   const { forbidden } = await searchParams;
   const q = "";
   const batches = await db.pickupBatch.findMany({
-    where: { status: "DRAFT", labelsCreationStartedAt: null, labelsCreatedAt: null, ...(q ? { number: { contains: q, mode: "insensitive" } } : {}) },
+    // Prepared labels are not proof of courier acceptance. Keep failed/unposted
+    // batches available to the warehouse so the same action can safely retry.
+    where: { status: "DRAFT", ...(q ? { number: { contains: q, mode: "insensitive" } } : {}) },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }], take: 100,
     select: { id: true, number: true, createdAt: true, _count: { select: { lines: true } }, lines: pickingLinesQuery },
   });

@@ -56,7 +56,7 @@ export async function getPickingSession(batchId: string, client: Reader = db) {
   for (const event of events) if (event.planHash === planHash) progress[event.rowKey] = (progress[event.rowKey] ?? 0) + event.delta;
   return {
     id: batch.id, number: batch.number, planHash, rows, progress,
-    labelsReady: Boolean(batch.labelsCreatedAt),
+    labelsReady: Boolean(batch.labelsCreatedAt) && (batch.status === "BOOKED" || batch.status === "PICKED_UP"),
     cancelledOrders,
     labelsPreparationAllowed: batch.status === "DRAFT" && !cancelledOrders.length,
     reviewedRows: [...new Set(events.filter(e => e.planHash === planHash && (e.delta > 0 || e.note.startsWith("Potvrđena količina:"))).map(e => e.rowKey))],

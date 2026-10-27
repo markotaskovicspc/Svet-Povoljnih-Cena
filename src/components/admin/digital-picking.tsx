@@ -155,8 +155,8 @@ export function DigitalPicking({ initial, warehouseMode = false }: { initial: Se
     {warehouseMode && (review.complete || review.reviewed || labelUrl) && <section className={`space-y-3 rounded-xl border p-4 print:hidden ${warehouseError ? "bg-danger/10" : "bg-muted/20"}`}>
       {review.complete && !labelUrl && <>
         <label className="flex items-center gap-3"><input type="checkbox" checked={packagesConfirmed} disabled={busy || !!retry || !session.labelsPreparationAllowed} onChange={event => setPackagesConfirmed(event.target.checked)} className="size-5" />Potvrđujem da su svi paketi spakovani i da su mere na nalogu tačne.</label>
-        <button type="button" disabled={busy || !!retry || !session.labelsPreparationAllowed || !packagesConfirmed} onClick={() => void finish("labels")} className={`rounded-lg px-4 py-3 ${warehouseError ? "bg-danger text-canvas" : "bg-foreground text-background"}`}>{busy ? "Priprema adresnica…" : "Kreiraj i otvori adresnice za štampu"}</button>
-        <p className={`text-sm ${warehouseError ? "text-danger" : "text-muted-foreground"}`}>Kreiraju se kurirske adresnice; PDF se šalje na magacin@svetpovoljnihcena.rs.</p>
+        <button type="button" disabled={busy || !!retry || !session.labelsPreparationAllowed || !packagesConfirmed} onClick={() => void finish("labels")} className={`rounded-lg px-4 py-3 ${warehouseError ? "bg-danger text-canvas" : "bg-foreground text-background"}`}>{busy ? "Slanje kuriru…" : "Pošalji kuriru i otvori adresnice"}</button>
+        <p className={`text-sm ${warehouseError ? "text-danger" : "text-muted-foreground"}`}>Pošiljke se odmah šalju kurirskoj službi, a PDF adresnica na magacin@svetpovoljnihcena.rs.</p>
       </>}
       {labelUrl && <LabelPdfActions href={labelUrl} filename={`${session.number}-adresnice.pdf`} singleAction />}
       {review.reviewed && review.shortages.length > 0 && <>

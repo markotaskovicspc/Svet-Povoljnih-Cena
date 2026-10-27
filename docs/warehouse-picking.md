@@ -23,6 +23,8 @@ Sve promene imaju vreme i korisnika. Ponovljen mrežni zahtev ne povećava koli�
 
 Odvajanje ne knjiži lager niti pokreće kurira. Kada je sva roba odvojena, otvoriti Nalog i pakovanje i završiti postojeću proveru paketa i dimenzija. Kada je kreiranje adresnica započeto ili nalog zaključen, skeniranje je samo za pregled.
 
+U prostoru za magacin, posle potpunog odvajanja robe i potvrde spakovanih paketa, dugme **Pošalji kuriru i otvori adresnice** odmah priprema adresnice i šalje pošiljke X Express-u ili MyGLS-u. Dodatna potvrda administratora nije potrebna. PDF se otvara posle uspešnog slanja i stavlja u red za email magacinu. Ako kurir odbije slanje, prikazuje se greška i neproknjižen nalog ostaje u magacinskom spisku za ponovni pokušaj; već prihvaćene pošiljke se ne kreiraju ponovo.
+
 ## Kontrolna tabla i loyalty
 
 Porudžbine danas i Porudžbine u periodu sabiraju lokalne i uvezene Ananas porudžbine, uz isključivanje otkazanih i uklanjanje duplikata po Ananas broju. Dan koristi postojeći Europe/Belgrade kalendar. Ovo je vrednost porudžbina, ne fiskalni promet. Ananas API porudžbine ulaze u kontekst „Svi magacini“, jer nemaju potvrđenu vezu sa lokalnim magacinom.

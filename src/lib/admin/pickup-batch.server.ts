@@ -248,16 +248,21 @@ export async function confirmAllPickupPackagesReady(
   }, TRANSACTION_OPTIONS);
 }
 
-/** Warehouse printing prepares labels; it does not announce an X Express pickup. */
+/** Finishing warehouse packing prepares labels and sends the pickup to the courier. */
 export async function prepareWarehousePickupLabels(batchId: string, actorId: string, planHash: string) {
-  const summary = await db.pickupBatch.findUnique({ where: { id: batchId }, select: { provider: true, labelsCreatedAt: true, labelsCreationStartedAt: true } });
+  const summary = await db.pickupBatch.findUnique({ where: { id: batchId }, select: { provider: true, status: true, labelsCreatedAt: true, labelsCreationStartedAt: true } });
   if (!summary) throw new Error("Picking nalog nije pronađen.");
   if (!summary.labelsCreatedAt && !summary.labelsCreationStartedAt) await confirmAllPickupPackagesReady(batchId, actorId, planHash);
   await assertActivePickupPackagesReady(batchId);
   const availability = await getPickupPostingAvailability(summary.provider);
   if (!availability.available) throw new Error(availability.reason);
   if (availability.provider === "MYGLS") return createMyGlsLabelsForPickupBatch(batchId, actorId, { channel: "MYGLS_API", reference: "PrintLabels" }, planHash);
-  return createXExpressLabelsForPickupBatch(batchId, actorId, planHash);
+  const prepared = await createXExpressLabelsForPickupBatch(batchId, actorId, planHash);
+  // A response may have been lost after successful posting. Reuse its labels.
+  if (summary.status === "BOOKED" || summary.status === "PICKED_UP") return prepared;
+  // Use the same guarded/idempotent announcement as the ERP posting action.
+  // Do not report success or open the PDF while parcels are only prepared locally.
+  return postPickupBatches([batchId], actorId);
 }
 
 async function claimLabelPreparation(batchId: string, data: Prisma.PickupBatchUpdateManyMutationInput, planHash?: string) {

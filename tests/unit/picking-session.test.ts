@@ -7,6 +7,14 @@ const packedItem = { orderItemId: "i1", quantity: 3, sku: "001", name: "Chair", 
 const line = { id: "l1", orderId: "o1", orderItemId: "i1", lineGroupKey: "o1", quantity: 10, packedQuantity: 3, packedItems: [packedItem], purpose: "ORDER_DELIVERY", deferredAt: null, reclamation: null, order: { id: "o1", number: "P1", status: "U_PRIPREMI", items: [item] } };
 const batch = { id: "b1", number: "PRE1", status: "DRAFT", labelsCreationStartedAt: null, labelsCreatedAt: null, lines: [line] };
 beforeEach(() => { vi.clearAllMocks(); mock.pickupBatch.findUnique.mockResolvedValue(structuredClone(batch)); mock.warehousePickingPosition.findMany.mockResolvedValue([]); mock.pickingScanEvent.findMany.mockResolvedValue([]); mock.adminUser.findMany.mockResolvedValue([]); });
+it("does not present locally prepared labels as a completed courier send, and keeps retry available", async () => {
+ mock.pickupBatch.findUnique.mockResolvedValue({ ...batch, labelsCreatedAt: new Date(), labelsCreationStartedAt: new Date() });
+ const pending = await getPickingSession("b1");
+ expect(pending.labelsReady).toBe(false); expect(pending.labelsPreparationAllowed).toBe(true); expect(pending.editable).toBe(false);
+ mock.pickupBatch.findUnique.mockResolvedValue({ ...batch, status: "BOOKED", labelsCreatedAt: new Date() });
+ const sent = await getPickingSession("b1");
+ expect(sent.labelsReady).toBe(true); expect(sent.labelsPreparationAllowed).toBe(false);
+});
 it("collects only active parcel contents, not the entire original order quantity", async () => {
  const session = await getPickingSession("b1");
  expect(session.rows[0].quantity).toBe(3);

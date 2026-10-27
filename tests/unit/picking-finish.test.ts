@@ -45,3 +45,9 @@ it("blocks label preparation while cancelled orders remain loaded", async () => 
   expect(mocks.labels).not.toHaveBeenCalled();
   expect(mocks.queue).not.toHaveBeenCalled();
 });
+it("does not offer the PDF or enqueue a success email when courier sending fails", async () => {
+  mocks.session.mockResolvedValue({ ...session, progress: { a: 3 } });
+  mocks.labels.mockRejectedValueOnce(new Error("Courier unavailable"));
+  await expect(finishPicking({ ...request, mode: "labels", packagesConfirmed: true })).rejects.toThrow("Courier unavailable");
+  expect(mocks.queue).not.toHaveBeenCalled();
+});
