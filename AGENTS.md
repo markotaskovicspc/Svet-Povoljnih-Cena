@@ -56,3 +56,6 @@ The read-only products partner export's supplier object now also selects existin
 
 ## Analytics active loyalty discount (2026-10-25)
 User explicitly approved. The read-only products partner export adds activeLoyaltyDiscountPct: the catalog-wide active LoyaltyRule discountPct chosen like storefront pricing rules (active, live window, priority desc, updatedAt desc); null without an active rule. SPC Analytics Porudžbine uses MPC = sale price × (1 − pct). No schema change, business writes or PII; same spcapp:read authorization, signed pagination and metadata audit.
+
+## Analytics supplier product name (2026-10-29)
+User explicitly approved this ERP change and publication. The read-only products partner export now also selects existing Product.supplierProductName (naziv kod dobavljača; null when not entered). SPC Analytics Porudžbine shows it in the order PDF and Excel export. No schema change, business writes or PII. Same spcapp:read authorization, signed pagination and metadata audit.
