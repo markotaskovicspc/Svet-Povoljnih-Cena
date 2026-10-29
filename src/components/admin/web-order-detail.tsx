@@ -436,7 +436,7 @@ async function updateStatus(_state: AdminActionState, formData: FormData) {
         await db.$transaction(async (tx) => {
           if (status === "OTKAZANO") {
             await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Order" WHERE "id" = ${id} FOR UPDATE`);
-            await assertOrderCancellationBeforeCourier(tx, id);
+            await assertOrderCancellationBeforeCourier(tx, id, { allowConfirmedDeleted: true });
           }
           const existing = await tx.order.findUnique({
             where: { id },
@@ -1632,7 +1632,7 @@ export async function WebOrderDetail({ id }: { id: string }) {
                 size="sm"
                 variant="destructive"
                 pendingLabel="Otkazivanje…"
-                confirm={`Otkazati celu porudžbinu ${order.number}? Rezervacije će biti oslobođene i kupac će dobiti obaveštenje. Otkazivanje je moguće samo pre početka izrade kurirske adresnice. Porudžbina ostaje u učitanom pickingu do ručnog uklanjanja.`}
+                confirm={`Otkazati celu porudžbinu ${order.number}? Rezervacije će biti oslobođene i kupac će dobiti obaveštenje. Otkazivanje je moguće pre izrade adresnice ili nakon potvrđenog brisanja X Express pošiljke, bez evidencije preuzimanja robe. Picking istorija ostaje sačuvana; izdvojenu robu proverite u magacinu.`}
               >
                 Otkaži porudžbinu
               </SubmitButton>

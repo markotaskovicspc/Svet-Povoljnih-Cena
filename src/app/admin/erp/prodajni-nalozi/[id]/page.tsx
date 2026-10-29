@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/admin/page-header";
 import { SalesOrderForm } from "@/components/admin/sales-order-form";
+import { ManualOrderCancellation } from "@/components/admin/manual-order-cancellation";
 import { WebOrderDetail } from "@/components/admin/web-order-detail";
 import { AnanasOrderDetail } from "@/components/admin/ananas-order-detail";
 import { GridReturnLink } from "@/components/admin/grid-return-link";
@@ -58,6 +59,10 @@ export default async function SalesOrderDetailPage({
         ]}
         actions={
           <div className="flex flex-wrap gap-2">
+            {["MP", "VP", "INO"].includes(detail.channel) &&
+            ["KREIRANO", "POTVRDJENO", "U_PRIPREMI", "SPREMNO_ZA_ISPORUKU"].includes(detail.status) ? (
+              <ManualOrderCancellation id={detail.id} number={detail.number} />
+            ) : null}
             {detail.channel !== "ANANAS" ? (
               <Link
                 href={`/admin/erp/prodajni-nalozi/${detail.id}/stampa`}

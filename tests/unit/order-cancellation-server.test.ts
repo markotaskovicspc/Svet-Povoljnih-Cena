@@ -5,8 +5,8 @@ const mocks = vi.hoisted(() => ({
   tx: {
     $queryRaw: vi.fn(),
     order: { findUnique: vi.fn(), update: vi.fn() },
-    pickupBatchLine: { findFirst: vi.fn(), deleteMany: vi.fn() },
-    shipment: { findFirst: vi.fn() },
+    pickupBatchLine: { findMany: vi.fn(), deleteMany: vi.fn() },
+    shipment: { findMany: vi.fn() },
     backgroundJob: { findMany: vi.fn(), updateMany: vi.fn() },
     orderStatusEvent: { create: vi.fn() },
     warehouse: { findFirst: vi.fn() },
@@ -28,8 +28,8 @@ const order = {
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.tx.order.findUnique.mockResolvedValue(structuredClone(order));
-  mocks.tx.pickupBatchLine.findFirst.mockResolvedValue(null);
-  mocks.tx.shipment.findFirst.mockResolvedValue(null);
+  mocks.tx.pickupBatchLine.findMany.mockResolvedValue([]);
+  mocks.tx.shipment.findMany.mockResolvedValue([]);
   mocks.tx.backgroundJob.findMany.mockResolvedValue([]);
   mocks.restore.mockResolvedValue({ warehouseLines: 1, supplierCancellationIds: [] });
 });
@@ -42,11 +42,11 @@ describe("cancellation preserves the loaded picking", () => {
     expect(mocks.restore).toHaveBeenCalledOnce();
     expect(mocks.tx.order.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "OTKAZANO" }) }));
     expect(mocks.queue).toHaveBeenCalledWith(expect.objectContaining({ kind: "ORDER_CANCELLATION_WAREHOUSE_EMAIL", payload: expect.objectContaining({ removedPickupLines: 0 }) }), mocks.tx);
-    expect(mocks.tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(mocks.tx.pickupBatchLine.findFirst.mock.invocationCallOrder[0]);
+    expect(mocks.tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(mocks.tx.pickupBatchLine.findMany.mock.invocationCallOrder[0]);
   });
 
   it.each(["web", "email", "facebook"] as const)("rejects %s cancellation once label preparation owns the batch", async (channel) => {
-    mocks.tx.pickupBatchLine.findFirst.mockResolvedValue({ id: "line" });
+    mocks.tx.pickupBatchLine.findMany.mockResolvedValue([{ batch: { status: "POSTING" } }]);
     await expect(cancelWebOrderByCustomer({ orderId: "order", requestedViaSocial: channel })).rejects.toMatchObject({ code: "NOT_ALLOWED" });
     expect(mocks.restore).not.toHaveBeenCalled();
     expect(mocks.tx.order.update).not.toHaveBeenCalled();
@@ -56,14 +56,14 @@ describe("cancellation preserves the loaded picking", () => {
 
   it("protects an existing courier shipment outside a picking batch", async () => {
     mocks.tx.order.findUnique.mockResolvedValue({ ...order, pickupBatchLines: [] });
-    mocks.tx.shipment.findFirst.mockResolvedValue({ id: "shipment" });
+    mocks.tx.shipment.findMany.mockResolvedValue([{ id: "shipment", status: "CREATED" }]);
     await expect(cancelWebOrderByCustomer({ orderId: "order" })).rejects.toThrow("Porudžbina nije otkazana");
     expect(mocks.restore).not.toHaveBeenCalled();
     expect(mocks.tx.order.update).not.toHaveBeenCalled();
   });
 
   it("uses the same courier guard for administrator cancellation", async () => {
-    mocks.tx.shipment.findFirst.mockResolvedValue({ id: "shipment" });
+    mocks.tx.shipment.findMany.mockResolvedValue([{ id: "shipment", status: "CREATED" }]);
     await expect(assertOrderCancellationBeforeCourier(mocks.tx as never, "order")).rejects.toMatchObject({ code: "NOT_ALLOWED" });
   });
 
