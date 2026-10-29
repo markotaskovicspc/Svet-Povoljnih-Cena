@@ -6,8 +6,6 @@ import {
   StockMovementKind,
 } from "@prisma/client";
 import { db } from "@/lib/db";
-import { readPurchasingReopening } from "@/lib/admin/purchasing-reopening";
-import { assertPurchasingOrderEditable, lockPurchasingOrder, postPurchasingCorrection } from "@/lib/admin/purchasing-reopening.server";
 import {
   goodsReceiptCountryOriginFallbacks,
   goodsReceiptMasterWarnings,
@@ -228,7 +226,6 @@ export async function addPurchaseOrderItem(input: {
       .join(", ") || null;
 
   const item = await db.$transaction(async (tx) => {
-    await assertPurchasingOrderEditable(tx, order.id);
     const created = await tx.purchaseOrderItem.create({
       data: {
         purchaseOrderId: order.id,
@@ -345,31 +342,22 @@ export async function updatePurchaseOrderItem(input: {
     packHeightCm: Number(item.product?.packHeightCm ?? 0),
     packGrossWeightKg: Number(item.product?.packGrossWeightKg ?? 0),
   });
-  await db.$transaction(async tx => {
-    await assertPurchasingOrderEditable(tx, item.purchaseOrder.id);
-    await tx.purchaseOrderItem.update({
-      where: { id: item.id },
-      data: {
-        qty: input.qty,
-        purchasePrice: input.purchasePrice,
-        customsRate: input.customsRate,
-        calcRetailPrice: input.calcRetailPrice,
-        totalVolume: roundLogisticsVolume(logistics.volumeM3 * input.qty),
-        totalWeight: Number((logistics.weightKg * input.qty).toFixed(3)),
-      },
-    });
+  await db.purchaseOrderItem.update({
+    where: { id: item.id },
+    data: {
+      qty: input.qty,
+      purchasePrice: input.purchasePrice,
+      customsRate: input.customsRate,
+      calcRetailPrice: input.calcRetailPrice,
+      totalVolume: roundLogisticsVolume(logistics.volumeM3 * input.qty),
+      totalWeight: Number((logistics.weightKg * input.qty).toFixed(3)),
+    },
   });
   await recomputePurchaseOrderTotals(item.purchaseOrder.id);
   await recomputeIncomingStockForPurchaseOrders(db, [item.purchaseOrder.id]);
 }
 
 export async function postPurchaseOrder(id: string, actorId: string) {
-  const current = await db.purchaseOrder.findUnique({ where: { id }, select: { cogsBookingSnapshot: true } });
-  const reopening = readPurchasingReopening(current?.cogsBookingSnapshot);
-  if (reopening) {
-    if (reopening.invoiceId) throw new Error("Ispravke proknjižite preko povezane prijemnice.");
-    return (await postPurchasingCorrection(id, actorId, reopening.token)).order;
-  }
   await recomputePurchaseOrderTotals(id);
   const order = await db.purchaseOrder.findUnique({
     where: { id },
@@ -403,10 +391,6 @@ export async function postPurchaseOrder(id: string, actorId: string) {
   }
   const now = new Date();
   return db.$transaction(async (tx) => {
-    await lockPurchasingOrder(tx, id);
-    const latest = await tx.purchaseOrder.findUniqueOrThrow({ where: { id } });
-    if (readPurchasingReopening(latest.cogsBookingSnapshot)) throw new Error("Dokument je ponovo otvoren. Proknjižite ispravke preko prijemnice.");
-    if (latest.lockedAt) return latest;
     const updated = await tx.purchaseOrder.update({
       where: { id },
       data: { lockedAt: now, postedAt: now },
@@ -979,13 +963,8 @@ export async function receivePurchaseOrder(
  * legacy volume snapshot is repaired from the current article master so the
  * inbound receipt can continue after the master data is completed.
  */
-export async function recomputePurchaseOrderTotals(id: string, transaction?: Prisma.TransactionClient, preparedRules?: Awaited<ReturnType<typeof getActivePricingRules>>) {
-  const rules = preparedRules ?? await getActivePricingRules();
-  if (!transaction) return db.$transaction(async tx => {
-    await lockPurchasingOrder(tx, id);
-    await recomputePurchaseOrderTotals(id, tx, rules);
-  });
-  const client = transaction;
+export async function recomputePurchaseOrderTotals(id: string, transaction?: Prisma.TransactionClient) {
+  const client = transaction ?? db;
   const [order, pricingRules] = await Promise.all([
     client.purchaseOrder.findUnique({
       where: { id },
@@ -1013,13 +992,12 @@ export async function recomputePurchaseOrderTotals(id: string, transaction?: Pri
         },
       },
     }),
-    Promise.resolve(rules),
+    getActivePricingRules(),
   ]);
   if (!order) throw new Error("Porudžbenica ne postoji.");
-  const preserveSnapshots = Boolean(order.lockedAt) || Boolean(readPurchasingReopening(order.cogsBookingSnapshot));
   const items = order.items.map((item) => {
     const logistics = resolvePurchaseOrderLineLogistics({
-      locked: preserveSnapshots,
+      locked: Boolean(order.lockedAt),
       qty: item.qty,
       snapshottedPackQty: item.packQty,
       snapshottedTotalVolumeM3: Number(item.totalVolume ?? 0),
@@ -1046,7 +1024,7 @@ export async function recomputePurchaseOrderTotals(id: string, transaction?: Pri
     return {
       item,
       packQty: logistics.packQty,
-      customsRate: preserveSnapshots
+      customsRate: order.lockedAt
         ? item.customsRate == null
           ? null
           : Number(item.customsRate)

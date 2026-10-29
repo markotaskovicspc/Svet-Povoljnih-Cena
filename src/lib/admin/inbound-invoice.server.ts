@@ -10,8 +10,6 @@ import {
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import { capturePaymentSnapshot } from "@/lib/admin/purchase-payments.server";
-import { readPurchasingReopening } from "@/lib/admin/purchasing-reopening";
-import { lockPurchasingOrder, postPurchasingCorrection } from "@/lib/admin/purchasing-reopening.server";
 import {
   assertInboundCostVolumeReady,
   assertInboundInvoicePurchaseOrderLocked,
@@ -170,18 +168,13 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
 
   const current = await db.inboundInvoice.findUnique({
     where: { id: input.id },
-    select: { lockedAt: true, purchaseOrderId: true, warehouseId: true, purchaseOrder: { select: { cogsBookingSnapshot: true } } },
+    select: { lockedAt: true, purchaseOrderId: true },
   });
   if (!current) throw new Error("Prijemnica ne postoji.");
   if (current.lockedAt) throw new Error("Proknjižena prijemnica se ne može menjati.");
   const paymentSnapshot = input.paymentVersion
     ? await capturePaymentSnapshot(input.purchaseOrderId, input.paymentVersion)
     : current.purchaseOrderId !== input.purchaseOrderId ? Prisma.DbNull : undefined;
-
-  const reopening = readPurchasingReopening(current.purchaseOrder?.cogsBookingSnapshot);
-  if (reopening && (input.purchaseOrderId !== current.purchaseOrderId || input.warehouseId !== reopening.warehouseId)) {
-    throw new Error("Veza sa porudžbenicom i magacin već primljene robe ne mogu da se promene kroz ispravku.");
-  }
 
   const [purchaseOrder, warehouse, linkedInvoice] = await Promise.all([
     db.purchaseOrder.findUnique({
@@ -221,38 +214,33 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
   }
 
   try {
-    const updated = await db.$transaction(async tx => {
-      for (const orderId of [...new Set([current.purchaseOrderId, input.purchaseOrderId].filter((id): id is string => Boolean(id)))].sort()) await lockPurchasingOrder(tx, orderId);
-      const latest = await tx.inboundInvoice.findUniqueOrThrow({ where: { id: input.id } });
-      if (latest.lockedAt || latest.status === "CANCELLED" || latest.purchaseOrderId !== current.purchaseOrderId) throw new Error("Prijemnica je u međuvremenu promenjena. Osvežite stranicu.");
-      return tx.inboundInvoice.updateMany({
-        where: { id: input.id, lockedAt: null },
-        data: {
-          number,
-          invoiceDate: utcDateOnly(input.receiptDate),
-          supplierId: purchaseOrder.supplierId,
-          purchaseOrderId: input.purchaseOrderId,
-          warehouseId: warehouse.id,
-          type: InboundInvoiceType.COGS,
-          // Normalize only an explicitly saved, unlocked receipt. Existing posted
-          // documents and foreign purchase-order prices remain untouched.
-          currency: ErpCurrency.RSD,
-          exchangeRate: 1,
-          value: amounts.invoiceValueRsd,
-          invoiceValueRsd: amounts.invoiceValueRsd,
-          customsValueRsd: amounts.customsValueRsd,
-          transportValueRsd: amounts.transportValueRsd,
-          otherRelatedCostsRsd: amounts.otherRelatedCostsRsd,
-          netValue: amounts.netValue,
-          vatValue: amounts.vatValue,
-          grossValue: amounts.grossValue,
-          allocationBasis: "VOLUME",
-          status: InboundInvoiceStatus.RECEIVED,
-          cogsStatus: CogsStatus.CALCULATED,
-          notes: input.notes,
-          paymentSnapshot,
-        },
-      });
+    const updated = await db.inboundInvoice.updateMany({
+      where: { id: input.id, lockedAt: null },
+      data: {
+        number,
+        invoiceDate: utcDateOnly(input.receiptDate),
+        supplierId: purchaseOrder.supplierId,
+        purchaseOrderId: input.purchaseOrderId,
+        warehouseId: warehouse.id,
+        type: InboundInvoiceType.COGS,
+        // Normalize only an explicitly saved, unlocked receipt. Existing posted
+        // documents and foreign purchase-order prices remain untouched.
+        currency: ErpCurrency.RSD,
+        exchangeRate: 1,
+        value: amounts.invoiceValueRsd,
+        invoiceValueRsd: amounts.invoiceValueRsd,
+        customsValueRsd: amounts.customsValueRsd,
+        transportValueRsd: amounts.transportValueRsd,
+        otherRelatedCostsRsd: amounts.otherRelatedCostsRsd,
+        netValue: amounts.netValue,
+        vatValue: amounts.vatValue,
+        grossValue: amounts.grossValue,
+        allocationBasis: "VOLUME",
+        status: InboundInvoiceStatus.RECEIVED,
+        cogsStatus: CogsStatus.CALCULATED,
+        notes: input.notes,
+        paymentSnapshot,
+      },
     });
     if (updated.count !== 1) {
       throw new Error("Prijemnica je u međuvremenu proknjižena i nije izmenjena.");
@@ -315,7 +303,6 @@ export async function lockInboundInvoice(id: string) {
     if (!invoice.purchaseOrder) {
       throw new Error("Veza sa porudžbenicom je obavezna za COGS obračun.");
     }
-    if (readPurchasingReopening(invoice.purchaseOrder.cogsBookingSnapshot)) throw new Error("Ponovo otvorenu prijemnicu proknjižite zajedno sa ispravkom robnog prijema.");
     assertInboundInvoicePurchaseOrderLocked(invoice.purchaseOrder);
     if (!invoice.purchaseOrder.items.length) {
       throw new Error("Povezana porudžbenica nema artikle za COGS obračun.");
@@ -384,7 +371,6 @@ export async function postInboundInvoice(id: string, actorId: string) {
       purchaseOrder: {
         select: {
           currency: true,
-          cogsBookingSnapshot: true,
           items: { select: { qty: true, purchasePrice: true } },
           supplier: { select: { integrationKey: true } },
           receivingWarehouse: {
@@ -405,11 +391,6 @@ export async function postInboundInvoice(id: string, actorId: string) {
     throw new Error(
       "Rabalux roba ide direktno kupcu i ne sme da se knjiži kroz magacinsku prijemnicu. Poseban računovodstveni tok još nije potvrđen.",
     );
-  }
-  const reopening = readPurchasingReopening(invoice.purchaseOrder?.cogsBookingSnapshot);
-  if (reopening) {
-    const result = await postPurchasingCorrection(invoice.purchaseOrderId, actorId, reopening.token);
-    return { invoiceId: id, purchaseOrderId: invoice.purchaseOrderId, warehouseId: reopening.warehouseId, warehouseName: result.order.receivingWarehouse?.name ?? "", received: false, postedLines: result.postedLines, masterWarnings: [], countryOriginFallbacks: [], correction: true };
   }
   // Check before changing warehouse, locking the PO or receiving any stock.
   // Already posted receipts retain their historical accounting on retries.
@@ -452,7 +433,6 @@ export async function postInboundInvoice(id: string, actorId: string) {
   await lockInboundInvoice(id);
   const receipt = await receivePurchaseOrder(invoice.purchaseOrderId, actorId);
   return {
-    correction: false,
     invoiceId: id,
     purchaseOrderId: invoice.purchaseOrderId,
     warehouseId: warehouse.id,
@@ -468,10 +448,9 @@ export async function cancelInboundInvoice(id: string) {
   return db.$transaction(async (tx) => {
     const invoice = await tx.inboundInvoice.findUnique({
       where: { id },
-      select: { id: true, status: true, lockedAt: true, purchaseOrderId: true, purchaseOrder: { select: { cogsBookingSnapshot: true } } },
+      select: { id: true, status: true, lockedAt: true, purchaseOrderId: true },
     });
     if (!invoice) throw new Error("Prijemnica ne postoji.");
-    if (readPurchasingReopening(invoice.purchaseOrder?.cogsBookingSnapshot)) throw new Error("Prijemnica sa već primljenom robom ne može da se stornira tokom ispravke. Proknjižite izmene.");
     if (invoice.status === InboundInvoiceStatus.CANCELLED) return invoice;
     if (invoice.lockedAt || invoice.status === InboundInvoiceStatus.POSTED) {
       throw new Error(
@@ -521,7 +500,6 @@ export async function rebuildInboundInvoiceAllocations(
     },
   });
   if (!order) return;
-  if (readPurchasingReopening(order.cogsBookingSnapshot)) return;
   const postedInvoice = order.inboundInvoices[0] ?? null;
   const hasPostedInvoice = Boolean(
     postedInvoice?.lockedAt &&

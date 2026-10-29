@@ -13,14 +13,13 @@ vi.mock("@/lib/admin/inbound-invoice.server", () => ({
   postInboundInvoice: vi.fn(), saveInboundInvoice: vi.fn(),
 }));
 vi.mock("@/lib/admin/purchase-payments.server", () => ({ summarizePurchasePayments: vi.fn(() => ({ count: 0, totalAmount: "0.00", totalRsd: "0.00", version: "empty" })) }));
-vi.mock("@/components/admin/purchasing-reopen-form", () => ({ PurchasingReopenForm: () => null }));
 vi.mock("@/lib/admin/goods-receipt-readiness", () => ({ goodsReceiptMasterWarnings: () => [] }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn(), updateTag: vi.fn() }));
 
 import InboundInvoicePage from "@/app/admin/erp/ulazne-fakture/[id]/page";
 import { InboundInvoiceCogsTable, type InboundCogsRow } from "@/components/admin/inbound-invoice-cogs-table";
 
-function fixture({ stock = -477, cogs = null as number | null, qty = 189, price = 53.1, previousQty = 0, previousCostRsd = 0, reopened = true } = {}) {
+function fixture({ stock = -477, cogs = null as number | null, qty = 189, price = 53.1, previousQty = 0, previousCostRsd = 0, reopened = false } = {}) {
   const value = Math.round(qty * price * 100) / 100;
   return {
     id: "receipt", number: "UF-2026-0030", status: "RECEIVED", lockedAt: null,
@@ -64,32 +63,21 @@ beforeEach(() => {
   mocks.warehouses.mockResolvedValue([]);
 });
 
-describe("receipt COGS preview after changing a received purchase order", () => {
-  it("keeps the receipt open and reports the exact stock validation instead of crashing", async () => {
-    const rows = await preview();
-    expect(rows[0]).toMatchObject({ sku: "110125", existingQty: -477, finalCogs: null,
-      finalCogsError: "Nema dovoljno raspoloživih zaliha za ispravku 110125." });
-    const html = renderToStaticMarkup(<InboundInvoiceCogsTable rows={rows} purchaseCurrency="RSD" />);
-    expect(html).toContain("Nema dovoljno raspoloživih zaliha za ispravku 110125.");
-    expect(html).toContain("Finalni COGS nije obračunat");
-    expect(html).not.toContain("NaN");
-  });
-  it("uses the correction delta directly even when the current stock is negative", async () => {
-    mocks.invoice.mockResolvedValue(fixture({ stock: -2, qty: 5, price: 100 }));
-    const rows = await preview();
-    expect(rows[0].finalCogs).toBe(166.67);
-    expect(rows[0].finalCogsError).toBeUndefined();
-  });
-  it("corrects only the difference after earlier sales", async () => {
-    mocks.invoice.mockResolvedValue(fixture({ stock: 40, cogs: 100, qty: 12, price: 120, previousQty: 10, previousCostRsd: 1000 }));
-    expect((await preview())[0].finalCogs).toBe(105.71);
-  });
+describe("receipt COGS preview", () => {
   it("preserves the weighted average for a regular new receipt", async () => {
     mocks.invoice.mockResolvedValue(fixture({ stock: 40, cogs: 100, qty: 12, price: 120, reopened: false }));
     expect((await preview())[0].finalCogs).toBe(104.62);
   });
   it("also keeps a regular receipt editable when existing stock is invalid", async () => {
     mocks.invoice.mockResolvedValue(fixture({ reopened: false }));
-    expect((await preview())[0]).toMatchObject({ finalCogs: null, finalCogsError: "Postojeće stanje zaliha je negativno (-477). Proverite lager pre knjiženja." });
+    const rows = await preview();
+    expect(rows[0]).toMatchObject({ finalCogs: null, finalCogsError: "Postojeće stanje zaliha je negativno (-477). Proverite lager pre knjiženja." });
+    expect(renderToStaticMarkup(<InboundInvoiceCogsTable rows={rows} purchaseCurrency="RSD" />)).toContain("Finalni COGS nije obračunat");
+  });
+  it("shows the stored COGS of a posted receipt without offering correction calculations", async () => {
+    const invoice = fixture({ stock: 40, cogs: 100 });
+    Object.assign(invoice, { lockedAt: new Date("2026-10-19"), status: "POSTED" });
+    mocks.invoice.mockResolvedValue(invoice);
+    expect((await preview())[0].finalCogs).toBe(100);
   });
 });

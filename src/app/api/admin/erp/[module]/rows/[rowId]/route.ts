@@ -730,10 +730,9 @@ async function persistPurchasePriceCell(rowId: string, columnKey: string, value:
 async function persistInboundInvoiceCell(rowId: string, columnKey: string, value: CellValue) {
   const current = await db.inboundInvoice.findUnique({
     where: { id: rowId },
-    select: { lockedAt: true, purchaseOrder: { select: { status: true } } },
+    select: { lockedAt: true },
   });
   if (current?.lockedAt) throw new Error("Proknjižena prijemnica se ne može menjati.");
-  if (current?.purchaseOrder?.status === "RECEIVED") throw new Error("Ispravke prijemnice sa već primljenom robom sačuvajte preko detalja prijemnice.");
   const data: Prisma.InboundInvoiceUncheckedUpdateInput = {};
   switch (columnKey) {
     case "number":
@@ -788,8 +787,7 @@ async function persistInboundInvoiceCell(rowId: string, columnKey: string, value
     default:
       return null;
   }
-  const updated = await db.inboundInvoice.updateMany({ where: { id: rowId, lockedAt: null, status: { notIn: ["POSTED", "CANCELLED"] } }, data });
-  if (updated.count !== 1) throw new Error("Prijemnica je u međuvremenu zaključana ili stornirana.");
+  await db.inboundInvoice.update({ where: { id: rowId }, data });
   return { value };
 }
 

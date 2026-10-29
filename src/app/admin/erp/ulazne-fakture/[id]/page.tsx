@@ -1,6 +1,4 @@
 import Link from "next/link";
-import { PurchasingReopenForm } from "@/components/admin/purchasing-reopen-form";
-import { readPurchasingReopening, purchasingCorrectionBalance } from "@/lib/admin/purchasing-reopening";
 import { notFound, redirect } from "next/navigation";
 import { revalidatePath, updateTag } from "next/cache";
 import {
@@ -222,7 +220,7 @@ async function saveAction(_state: AdminActionState, formData: FormData) {
               masterWarnings: result.masterWarnings,
               countryOriginFallbacks: result.countryOriginFallbacks,
             },
-            message: result.correction ? "Ispravke prijemnice i porudžbenice su proknjižene; lager i COGS su usklađeni." : `Prijemnica i porudžbenica su proknjižene, a roba je primljena u magacin ${result.warehouseName}.`,
+            message: `Prijemnica i porudžbenica su proknjižene, a roba je primljena u magacin ${result.warehouseName}.`,
           };
         } catch (error) {
           const message =
@@ -270,7 +268,7 @@ async function postAction(_state: AdminActionState, formData: FormData) {
               masterWarnings: result?.masterWarnings ?? [],
               countryOriginFallbacks: result?.countryOriginFallbacks ?? [],
             },
-        message: result && "correction" in result && result.correction ? "Ispravke prijemnice i porudžbenice su proknjižene; lager i COGS su usklađeni." : backfillOnly
+        message: backfillOnly
           ? "COGS ranije proknjižene prijemnice je usklađen."
           : `Prijemnica i porudžbenica su proknjižene, a roba je primljena u magacin ${result?.warehouseName ?? ""}.`,
       };
@@ -309,7 +307,7 @@ export default async function InboundInvoicePage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ mode?: string }>;
 }) {
-  const admin = await requireAdminAction(["OPS"], "/admin/erp/ulazne-fakture");
+  await requireAdminAction(["OPS"], "/admin/erp/ulazne-fakture");
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const [invoice, purchaseOrders, warehouses] = await Promise.all([
     db.inboundInvoice.findUnique({
@@ -433,7 +431,6 @@ export default async function InboundInvoicePage({
   if (!invoice) notFound();
 
   const locked = Boolean(invoice.lockedAt);
-  const reopening = readPurchasingReopening(invoice.purchaseOrder?.cogsBookingSnapshot);
   const cancelled = invoice.status === InboundInvoiceStatus.CANCELLED;
   const immutable = locked || cancelled;
   const cogsNeedsBackfill = Boolean(
@@ -452,7 +449,7 @@ export default async function InboundInvoicePage({
   );
   const receiptWarehouse =
     invoice.warehouse ?? invoice.purchaseOrder?.receivingWarehouse ?? null;
-  const editing = (query.mode === "edit" || (Boolean(reopening) && query.mode !== "view")) && !immutable;
+  const editing = query.mode === "edit" && !immutable;
   const capacityWarnings = invoice.purchaseOrder
     ? purchaseOrderCapacityWarnings({
         totalVolumeM3: Number(invoice.purchaseOrder.totalVolume ?? 0),
@@ -487,7 +484,7 @@ export default async function InboundInvoicePage({
         lines: order.items.map((item) => ({
           qty: item.qty,
           purchasePrice: Number(item.purchasePrice),
-          customsRatePct: effectiveCustomsRate(item, order.lockedAt ?? (reopening && order.id === invoice.purchaseOrderId ? invoice.purchaseOrder?.createdAt ?? null : null)),
+          customsRatePct: effectiveCustomsRate(item, order.lockedAt),
         })),
       });
       return {
@@ -517,7 +514,7 @@ export default async function InboundInvoicePage({
           purchasePrice: Number(item.purchasePrice),
           customsRatePct: effectiveCustomsRate(
             item,
-            invoice.purchaseOrder?.lockedAt ?? (reopening ? invoice.purchaseOrder?.createdAt ?? null : null),
+            invoice.purchaseOrder?.lockedAt ?? null,
           ),
         })),
       })
@@ -584,7 +581,7 @@ export default async function InboundInvoicePage({
                 item.qty,
               customsRatePct: effectiveCustomsRate(
                 item,
-                invoice.purchaseOrder?.lockedAt ?? (reopening ? invoice.purchaseOrder?.createdAt ?? null : null),
+                invoice.purchaseOrder?.lockedAt ?? null,
               ),
               transportBaselineRsd: Number(item.freightAllocated ?? 0),
               totalVolumeM3: Number(item.totalVolume ?? 0),
@@ -604,7 +601,7 @@ export default async function InboundInvoicePage({
           purchasePrice: Number(item.purchasePrice),
           customsRatePct: effectiveCustomsRate(
             item,
-            invoice.purchaseOrder?.lockedAt ?? (reopening ? invoice.purchaseOrder?.createdAt ?? null : null),
+            invoice.purchaseOrder?.lockedAt ?? null,
           ),
           otherAllocatedRsd: Number(item.freightAllocated ?? 0),
         })),
@@ -665,7 +662,6 @@ export default async function InboundInvoicePage({
         ]}
         actions={
           <div className="flex flex-wrap gap-2">
-            {admin.role === "SUPER" && invoice.lockedAt && !cancelled ? <PurchasingReopenForm kind="invoice" id={invoice.id} lockedAt={invoice.lockedAt} /> : null}
             <form action={createAction}>
               <SubmitButton variant="outline" pendingLabel="Kreiranje…">
                 Nova
@@ -674,7 +670,7 @@ export default async function InboundInvoicePage({
             {!immutable ? (
               editing ? (
                 <Link
-                  href={`/admin/erp/ulazne-fakture/${invoice.id}${reopening ? "?mode=view" : ""}`}
+                  href={`/admin/erp/ulazne-fakture/${invoice.id}`}
                   className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
                 >
                   Završi uređivanje
@@ -707,9 +703,7 @@ export default async function InboundInvoicePage({
                   (locked && !cogsNeedsBackfill && !receiptNeedsCompletion)
                 }
                 confirm={
-                  reopening
-                    ? "Proknjižiti ispravke prijemnice i porudžbenice? Lager i COGS biće usklađeni samo za razliku u odnosu na prethodno knjiženje."
-                    : cogsNeedsBackfill
+                  cogsNeedsBackfill
                     ? "Uskladiti COGS ove ranije proknjižene prijemnice?"
                     : receiptNeedsCompletion
                       ? `${masterWarningConfirmation}Knjiženje prijemnice i porudžbenice je već započeto. Dovršiti prijem robe u izabrani magacin?`
@@ -723,7 +717,7 @@ export default async function InboundInvoicePage({
                       : "Knjiženje…"
                 }
               >
-                {reopening ? "Proknjiži izmene" : cogsNeedsBackfill
+                {cogsNeedsBackfill
                   ? "Uskladi COGS"
                   : receiptNeedsCompletion
                     ? "Dovrši prijem"
@@ -744,9 +738,7 @@ export default async function InboundInvoicePage({
                     (locked && !cogsNeedsBackfill && !receiptNeedsCompletion)
                   }
                   confirm={
-                    reopening
-                      ? "Proknjižiti ispravke prijemnice i porudžbenice? Lager i COGS biće usklađeni samo za razliku u odnosu na prethodno knjiženje."
-                      : cogsNeedsBackfill
+                    cogsNeedsBackfill
                       ? "Uskladiti COGS ove ranije proknjižene prijemnice?"
                       : receiptNeedsCompletion
                         ? `${masterWarningConfirmation}Knjiženje prijemnice i porudžbenice je već započeto. Dovršiti prijem robe u izabrani magacin?`
@@ -760,7 +752,7 @@ export default async function InboundInvoicePage({
                         : "Knjiženje…"
                   }
                 >
-                  {reopening ? "Proknjiži izmene" : cogsNeedsBackfill
+                  {cogsNeedsBackfill
                     ? "Uskladi COGS"
                     : receiptNeedsCompletion
                       ? "Dovrši prijem"
@@ -772,7 +764,7 @@ export default async function InboundInvoicePage({
               <input type="hidden" name="invoiceId" value={invoice.id} />
               <SubmitButton
                 variant="destructive"
-                disabled={cancelled || locked || Boolean(reopening)}
+                disabled={cancelled || locked}
                 confirm="Stornirati prijemnicu? COGS i količina u dolasku biće ponovo izračunati."
                 pendingLabel="Storniranje…"
               >
@@ -785,9 +777,6 @@ export default async function InboundInvoicePage({
 
       <div className="space-y-6 px-4 py-6 md:px-8">
         <PaymentSnapshotCard value={invoice.paymentSnapshot} />
-        {reopening ? <div role="status" className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm">
-          Prijemnica i porudžbenica su ponovo otvorene za izmenu. Postojeći lager je sačuvan. Po završetku izaberite „Proknjiži”; upisuje se samo razlika količine i troškova. Ispravka COGS-a odnosi se na preostali lager. Veza sa porudžbenicom i magacin prijema ostaju isti.
-        </div> : null}
         {postingBlockedByVolume &&
         (!locked || cogsNeedsBackfill || receiptNeedsCompletion) ? (
           <div
@@ -939,7 +928,7 @@ export default async function InboundInvoicePage({
                   className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
                 >
                   <option value="">— izaberite —</option>
-                  {warehouses.filter(warehouse => !reopening || warehouse.id === reopening.warehouseId).map((warehouse) => (
+                  {warehouses.map((warehouse) => (
                     <option key={warehouse.id} value={warehouse.id}>
                       {warehouse.name} ({warehouse.code})
                       {warehouse.isDefault ? " · podrazumevani" : ""}
@@ -948,7 +937,7 @@ export default async function InboundInvoicePage({
                 </select>
               </Field>
               <InboundInvoiceFields
-                purchaseOrders={purchaseOrderOptions.filter(order => !reopening || order.id === invoice.purchaseOrderId)}
+                purchaseOrders={purchaseOrderOptions}
                 editing={editing}
                 initial={{
                   purchaseOrderId: invoice.purchaseOrderId,
@@ -1047,7 +1036,7 @@ export default async function InboundInvoicePage({
                   items={invoice.purchaseOrder.items.map((item) => ({
                     id: item.id, sku: item.sku, name: item.name, productId: item.product?.id,
                     qty: item.qty, purchasePrice: Number(item.purchasePrice),
-                    customsRatePct: effectiveCustomsRate(item, invoice.purchaseOrder?.lockedAt ?? (reopening ? invoice.purchaseOrder?.createdAt ?? null : null)),
+                    customsRatePct: effectiveCustomsRate(item, invoice.purchaseOrder?.lockedAt ?? null),
                   }))}
                 />
               ) : <InboundInvoiceCogsTable
@@ -1055,29 +1044,18 @@ export default async function InboundInvoicePage({
                 rows={cogsRows.map((row) => {
                   const product = productBySku.get(row.sku);
                   const snapshot = cogsSnapshot.get(row.sku);
-                  const existingQty = reopening ? product?.stock ?? 0 : snapshot?.stock ?? product?.stock ?? 0;
-                  const existingCogs = !reopening && snapshot
+                  const existingQty = snapshot?.stock ?? product?.stock ?? 0;
+                  const existingCogs = snapshot
                     ? snapshot.cogs ?? row.incomingUnitCogsRsd
                     : product?.cogs == null ? row.incomingUnitCogsRsd : Number(product.cogs);
                   let finalCogs: number | null = null;
                   let finalCogsError: string | undefined;
                   try {
-                    if (reopening && product) {
-                      const previous = reopening.products.find(p => p.productId === product.id);
-                      finalCogs = purchasingCorrectionBalance({
-                        sku: row.sku, stock: product.stock,
-                        cogs: product.cogs == null ? null : Number(product.cogs),
-                        previousQty: previous?.qty ?? 0, previousCostRsd: previous?.costRsd ?? 0,
-                        qty: row.qty, costRsd: row.totalActualCostRsd,
-                      }).cogs;
-                    } else {
-                      finalCogs = (locked || invoice.purchaseOrder?.status === PurchaseOrderStatus.RECEIVED) && product?.cogs != null
-                        ? Number(product.cogs)
-                        : weightedAverageCogs({ existingQty, existingUnitCogs: existingCogs, incomingQty: row.qty, incomingUnitCogs: row.incomingUnitCogsRsd });
-                    }
+                    finalCogs = (locked || invoice.purchaseOrder?.status === PurchaseOrderStatus.RECEIVED) && product?.cogs != null
+                      ? Number(product.cogs)
+                      : weightedAverageCogs({ existingQty, existingUnitCogs: existingCogs, incomingQty: row.qty, incomingUnitCogs: row.incomingUnitCogsRsd });
                   } catch (error) {
-                    // An invalid stock balance blocks posting, but must leave the receipt editable.
-                    finalCogsError = !reopening && existingQty < 0
+                    finalCogsError = existingQty < 0
                       ? `Postojeće stanje zaliha je negativno (${existingQty}). Proverite lager pre knjiženja.`
                       : error instanceof Error ? error.message : "COGS nije moguće obračunati.";
                   }
@@ -1085,7 +1063,7 @@ export default async function InboundInvoicePage({
                   return {
                     ...row, productId: product?.id, name: product?.name ?? sourceItems[0]?.name ?? "—",
                     purchasePrices: sourceItems.map(item => Number(item.purchasePrice)),
-                    customsRates: sourceItems.map(item => effectiveCustomsRate(item, invoice.purchaseOrder?.lockedAt ?? (reopening ? invoice.purchaseOrder?.createdAt ?? null : null))),
+                    customsRates: sourceItems.map(item => effectiveCustomsRate(item, invoice.purchaseOrder?.lockedAt ?? null)),
                     existingQty, existingCogs, finalCogs, finalCogsError,
                   };
                 })}
@@ -1094,7 +1072,7 @@ export default async function InboundInvoicePage({
                 Otvori porudžbenicu i proveri nabavne cene i carinske stope →
               </Link>
               <p className="mt-4 text-xs text-ink-500">
-                {reopening ? "Finalni COGS = (vrednost preostalog lagera + razlika ukupnog troška nabavke) / (postojeća količina + razlika primljene količine). Raniji prijem se ne knjiži ponovo." : "Finalni COGS = (postojeća količina × postojeći COGS + količina sa fakture × COGS te nabavke) / ukupna količina. Komanda „Proknjiži” obračunava COGS i knjiži količinu u izabrani magacin bez duplog obračuna."}
+                Finalni COGS = (postojeća količina × postojeći COGS + količina sa fakture × COGS te nabavke) / ukupna količina. Komanda „Proknjiži” obračunava COGS i knjiži količinu u izabrani magacin bez duplog obračuna.
               </p>
             </>
           ) : (

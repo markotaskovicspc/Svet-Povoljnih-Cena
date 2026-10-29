@@ -42,8 +42,7 @@ describe("receipt goods reconciliation before accounting mutations", () => {
     vi.clearAllMocks();
     mocks.read.mockResolvedValue(receipt());
     mocks.transaction.mockImplementation(async (fn) => fn({
-      $queryRaw: vi.fn(),
-      inboundInvoice: { findUnique: mocks.read, findUniqueOrThrow: mocks.read, updateMany: mocks.write },
+      inboundInvoice: { findUnique: mocks.read, updateMany: mocks.write },
     }));
   });
 
