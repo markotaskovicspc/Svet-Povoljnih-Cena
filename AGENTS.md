@@ -4,6 +4,11 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
+## WhatsApp — izričito odobrenje (2026-10-30)
+
+- Ne pristupaj WhatsAppu bez Lukinog izričitog odobrenja koje navodi WhatsApp i konkretan zadatak. Ovo obuhvata aplikaciju, WhatsApp Web, konektore i lokalne podatke: ne otvaraj ih, ne čitaj i ne pretražuj razgovore ili kontakte, ne šalji poruke i ne proveravaj odgovore bez tog odobrenja.
+- Zahtevi poput „pitaj Marka“ ili „kontaktiraj ga“ sami po sebi NISU odobrenje za WhatsApp. Prvo razjasni kanal i pribavi izričito odobrenje za WhatsApp, pre bilo kakvog pristupa. Odobrenje za raniji zadatak ne važi za novi zadatak.
+
 ## OS
 
 - dialect: standard (backlog format: `~/.claude/os/BACKLOG-SPEC.md`)
