@@ -15,6 +15,7 @@ import {
   type InboundInvoicePurchaseOrderOption,
 } from "@/components/admin/inbound-invoice-fields";
 import { PageHeader } from "@/components/admin/page-header";
+import { InboundInvoicePrint } from "@/components/admin/inbound-invoice-print";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { Input } from "@/components/ui/input";
 import { InboundInvoiceCogsTable } from "@/components/admin/inbound-invoice-cogs-table";
@@ -305,7 +306,7 @@ export default async function InboundInvoicePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ mode?: string }>;
+  searchParams: Promise<{ mode?: string; autoprint?: string }>;
 }) {
   await requireAdminAction(["OPS"], "/admin/erp/ulazne-fakture");
   const [{ id }, query] = await Promise.all([params, searchParams]);
@@ -382,7 +383,7 @@ export default async function InboundInvoicePage({
         },
       },
     }),
-    db.purchaseOrder.findMany({
+    query.mode === "print" ? [] : db.purchaseOrder.findMany({
       where: {
         status: { not: PurchaseOrderStatus.CANCELLED },
         OR: [
@@ -417,7 +418,7 @@ export default async function InboundInvoicePage({
         },
       },
     }),
-    db.warehouse.findMany({
+    query.mode === "print" ? [] : db.warehouse.findMany({
       where: { active: true },
       orderBy: [{ isDefault: "desc" }, { name: "asc" }],
       select: {
@@ -649,6 +650,39 @@ export default async function InboundInvoicePage({
     ) ?? [];
   const postingBlockedByVolume = missingVolumeLines.length > 0;
 
+  if (query.mode === "print") {
+    return (
+      <InboundInvoicePrint
+        id={invoice.id}
+        number={invoice.number}
+        date={invoice.invoiceDate ?? invoice.createdAt}
+        status={statusLabel[invoice.status]}
+        preliminary={!locked && !cancelled}
+        supplier={invoice.supplier?.name ?? null}
+        warehouse={receiptWarehouse ? `${receiptWarehouse.name} (${receiptWarehouse.code})` : null}
+        purchaseOrderNumber={invoice.purchaseOrder?.number ?? null}
+        purchaseCurrency={invoice.purchaseOrder?.currency ?? invoice.currency}
+        currency={invoice.invoiceValueRsd == null ? invoice.currency : "RSD"}
+        netValue={Number(invoice.netValue)}
+        vatValue={Number(invoice.vatValue)}
+        grossValue={Number(invoice.grossValue)}
+        notes={invoice.notes}
+        warning={goodsReconciliation?.error ?? (receiptNeedsCompletion
+          ? "Prijem robe u magacin nije završen."
+          : cogsNeedsBackfill ? "COGS ove ranije proknjižene prijemnice još nije usklađen." : null)}
+        rows={cogsRows.map((row) => ({
+          ...row,
+          name: invoice.purchaseOrder?.items.find((item) => item.sku === row.sku)?.name ?? row.sku,
+        }))}
+        pendingItems={invoice.purchaseOrder?.items.map((item) => ({
+          id: item.id, sku: item.sku, name: item.name, qty: item.qty,
+          purchasePrice: Number(item.purchasePrice),
+        })) ?? []}
+        autoPrint={query.autoprint === "1"}
+      />
+    );
+  }
+
   return (
     <>
       <PageHeader
@@ -662,6 +696,14 @@ export default async function InboundInvoicePage({
         ]}
         actions={
           <div className="flex flex-wrap gap-2">
+            <Link
+              href={`/admin/erp/ulazne-fakture/${invoice.id}?mode=print&autoprint=1`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition hover:bg-muted"
+            >
+              Štampaj
+            </Link>
             <form action={createAction}>
               <SubmitButton variant="outline" pendingLabel="Kreiranje…">
                 Nova
