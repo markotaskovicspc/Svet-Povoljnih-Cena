@@ -2,7 +2,8 @@ import { Children, isValidElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ invoice: vi.fn(), orders: vi.fn(), warehouses: vi.fn() }));
+const mocks = vi.hoisted(() => ({ invoice: vi.fn(), orders: vi.fn(), warehouses: vi.fn(), baselines: vi.fn() }));
+vi.mock("@/lib/admin/inbound-inventory-history.server", () => ({ loadReceiptStockBaselines: mocks.baselines }));
 vi.mock("@/lib/db", () => ({ db: {
   inboundInvoice: { findUnique: mocks.invoice },
   purchaseOrder: { findMany: mocks.orders }, warehouse: { findMany: mocks.warehouses },
@@ -61,6 +62,15 @@ beforeEach(() => {
   mocks.invoice.mockResolvedValue(fixture());
   mocks.orders.mockResolvedValue([]);
   mocks.warehouses.mockResolvedValue([]);
+  mocks.baselines.mockImplementation(async () => {
+    const invoice = await mocks.invoice();
+    const product = invoice.purchaseOrder.items[0].product;
+    return new Map([[product.id, {
+      productId: product.id, sku: product.sku, stock: product.stock,
+      cogs: product.cogs, currentCogs: product.cogs,
+      error: product.stock < 0 ? `${product.sku}: Postojeće stanje zaliha je negativno (${product.stock}). Proverite lager pre knjiženja.` : null,
+    }]]);
+  });
 });
 
 describe("receipt COGS preview", () => {

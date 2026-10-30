@@ -40,4 +40,16 @@ describe("RSD receipts with foreign purchase prices", () => {
     expect(reconcileInboundGoods({ ...input, invoiceValue: 0, invoiceValueRsd: 0, lines: [{ qty: 1, purchasePrice: 5 }] }).lineValuesRsd).toBeNull();
     expect(reconcileInboundGoods({ ...input, invoiceValue: 50 }).error).toContain("moraju biti iste");
   });
+
+  it("renders a historical stock error without crashing or showing a fabricated COGS", () => {
+    const html = renderToStaticMarkup(createElement(InboundInvoiceCogsTable, { purchaseCurrency: "RSD", rows: [{
+      sku: "110120", name: "Artikal", qty: 240, purchasePrices: [52.7], customsRates: [0],
+      invoiceValueRsd: 12648, customsRsd: 0, transportRsd: 0, otherRelatedCostsRsd: 0,
+      incomingUnitCogsRsd: 52.7, existingQty: -1, existingCogs: 52.7, finalCogs: null,
+      finalCogsError: "Stanje pre prijema je negativno (-1).",
+    }] }));
+    expect(html).toContain("Stanje pre prijema je negativno (-1)");
+    expect(html).toContain("—</td>");
+    expect(html).not.toContain("NaN");
+  });
 });

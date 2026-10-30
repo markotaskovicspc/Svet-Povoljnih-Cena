@@ -87,12 +87,13 @@ describe("receipt goods reconciliation before accounting mutations", () => {
     mocks.write.mockResolvedValue({ count: 1 });
     mocks.savedRead.mockResolvedValue({ id: "receipt" });
     await saveInboundInvoice({
-      id: "receipt", number: "UF-2026-0025", receiptDate: new Date(), purchaseOrderId: "po", warehouseId: "dc",
+      id: "receipt", number: "UF-2026-0025", receiptDate: new Date("2025-10-20T22:00:00Z"), purchaseOrderId: "po", warehouseId: "dc",
       currency: "USD", invoiceValue: 16_992, invoiceValueRsd: 1_717_177, exchangeRate: 999, exchangeRateSource: "RSD_VALUE",
       customsValueRsd: 42_439, transportValueRsd: 393_345, otherRelatedCostsRsd: 29_555, notes: null,
     });
     expect(mocks.write).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
       currency: "RSD", value: 1_717_177, exchangeRate: 1, invoiceValueRsd: 1_717_177, netValue: 2_182_516,
+      invoiceDate: new Date("2025-10-21T00:00:00Z"),
     }) }));
   });
 });

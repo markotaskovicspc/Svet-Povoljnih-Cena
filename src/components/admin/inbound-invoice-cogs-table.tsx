@@ -12,7 +12,7 @@ export type InboundCogsRow = {
   otherRelatedCostsRsd: number;
   incomingUnitCogsRsd: number;
   existingQty: number;
-  existingCogs: number;
+  existingCogs: number | null;
   finalCogs: number | null;
   finalCogsError?: string;
 };
@@ -63,7 +63,7 @@ export function InboundInvoiceCogsTable({ rows, purchaseCurrency }: {
             <td className="px-3 py-3 text-right tabular-nums">{row.qty}</td>
             <td className="px-3 py-3 text-right tabular-nums"><InboundCustomsRates rates={row.customsRates} /></td>
             {[row.invoiceValueRsd, row.customsRsd, row.transportRsd, row.otherRelatedCostsRsd, row.incomingUnitCogsRsd].map((value, index) => <td key={index} className="px-3 py-3 text-right tabular-nums">{fmt(value)} RSD</td>)}
-            <td className="px-3 py-3 text-right tabular-nums">{row.existingQty} × {fmt(row.existingCogs)} RSD</td>
+            <td className="px-3 py-3 text-right tabular-nums">{row.existingQty} × {row.existingCogs == null ? "—" : `${fmt(row.existingCogs)} RSD`}</td>
             <td className="px-3 py-3 text-right font-semibold tabular-nums">{row.finalCogs == null ? "—" : `${fmt(row.finalCogs)} RSD`}</td>
           </tr>)}
         </tbody>

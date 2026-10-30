@@ -3,10 +3,11 @@ import type { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { weightedAverageCogs } from './inbound-invoice';
 import { resolveFiscalCogs, type FiscalCostHistory } from './fiscal-cogs';
+import { dateInputInTimeZone } from './report-period';
 
 type CostDatabase = Pick<Prisma.TransactionClient, 'product' | 'purchasePrice' | 'inboundInvoice' | 'ananasDocument'>;
 
-export async function loadFiscalCogs(skus: readonly string[], tx: CostDatabase = db) {
+export async function loadFiscalCogs(skus: readonly string[], tx: CostDatabase = db, options?: { excludePurchaseOrderId: string; receiptBaseline: true }) {
   const unique = [...new Set(skus.filter(Boolean))];
   const history = new Map<string, FiscalCostHistory>();
   if (!unique.length) return (sku: string, at: Date, snapshot?: number | null) => resolveFiscalCogs(history.get(sku), at, snapshot);
@@ -16,7 +17,7 @@ export async function loadFiscalCogs(skus: readonly string[], tx: CostDatabase =
     tx.inboundInvoice.findMany({
       where: { status: 'POSTED', lockedAt: { not: null }, purchaseOrder: { is: { items: { some: { sku: { in: unique } } } } } },
       orderBy: [{ invoiceDate: 'asc' }, { lockedAt: 'asc' }, { id: 'asc' }],
-      select: { invoiceDate: true, lockedAt: true, purchaseOrder: { select: {
+      select: { invoiceDate: true, lockedAt: true, purchaseOrderId: true, purchaseOrder: { select: {
         exchangeRate: true, cogsBookingSnapshot: true,
         items: { select: { sku: true, productId: true, qty: true, purchasePrice: true, customsRate: true, freightAllocated: true, additionalCostAllocated: true } },
       } } },
@@ -25,10 +26,11 @@ export async function loadFiscalCogs(skus: readonly string[], tx: CostDatabase =
   for (const sku of unique) history.set(sku, { receipts: [], prices: [], current: null });
   for (const product of products) history.get(product.sku)!.current = product.cogs == null ? null : Number(product.cogs);
   for (const price of prices) history.get(price.sku)!.prices.push({
-    day: price.validFrom.toISOString().slice(0, 10), through: price.validTo?.toISOString().slice(0, 10),
+    day: dateInputInTimeZone(price.validFrom), through: price.validTo ? dateInputInTimeZone(price.validTo) : undefined,
     unitCogs: Number(price.price), estimated: true,
   });
   for (const invoice of invoices) {
+    if (options && invoice.purchaseOrderId === options.excludePurchaseOrderId) continue;
     const order = invoice.purchaseOrder;
     if (!order) continue;
     const snapshot = order.cogsBookingSnapshot as { version?: number; products?: { productId: string; sku: string; stock: number; cogs: number | null }[] } | null;
@@ -51,11 +53,11 @@ export async function loadFiscalCogs(skus: readonly string[], tx: CostDatabase =
         existingQty: prior.stock, existingUnitCogs: prior.cogs ?? row.cost / row.qty,
         incomingQty: row.qty, incomingUnitCogs: row.cost / row.qty,
       }) : Math.round(row.cost / row.qty * 100) / 100;
-      history.get(sku)!.receipts.push({ day: (invoice.invoiceDate ?? invoice.lockedAt!).toISOString().slice(0, 10), unitCogs, estimated: !knownPrior });
+      history.get(sku)!.receipts.push({ day: dateInputInTimeZone(invoice.invoiceDate ?? invoice.lockedAt!), unitCogs, estimated: !knownPrior });
     }
   }
   for (const value of history.values()) value.receipts.sort((a, b) => a.day.localeCompare(b.day));
-  return (sku: string, at: Date, snapshot?: number | null) => resolveFiscalCogs(history.get(sku), at, snapshot);
+  return (sku: string, at: Date, snapshot?: number | null) => resolveFiscalCogs(history.get(sku), at, snapshot, options ? 'opening-only' : 'any');
 }
 
 /** Original sales may lie outside the selected refund period or page limit. */

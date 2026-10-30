@@ -49,6 +49,8 @@ import {
   withAdminState,
 } from "@/lib/admin";
 import { db } from "@/lib/db";
+import { loadReceiptStockBaselines, type ReceiptStockBaseline } from "@/lib/admin/inbound-inventory-history.server";
+import { dateInputInTimeZone } from "@/lib/admin/report-period";
 import { summarizePurchasePayments } from "@/lib/admin/purchase-payments.server";
 import { PaymentSnapshotCard } from "@/components/admin/payment-snapshot";
 
@@ -92,7 +94,7 @@ const statusLabel: Record<InboundInvoiceStatus, string> = {
 };
 
 function dateOnly(value?: Date | null) {
-  return value?.toISOString().slice(0, 10) ?? "";
+  return value ? dateInputInTimeZone(value) : "";
 }
 
 function fmt(value: number, digits = 2) {
@@ -629,6 +631,12 @@ export default async function InboundInvoicePage({
   const cogsSnapshot = cogsSnapshotBySku(
     invoice.purchaseOrder?.cogsBookingSnapshot,
   );
+  const receiptBaselines = query.mode !== "print" && !locked && invoice.invoiceDate && invoice.purchaseOrder
+    ? await loadReceiptStockBaselines(
+        invoice.purchaseOrder.items.flatMap(item => item.product ? [item.product.id] : []),
+        invoice.invoiceDate, invoice.purchaseOrder.id,
+      )
+    : new Map<string, ReceiptStockBaseline>();
   const missingVolumeLines =
     invoice.purchaseOrder?.items.filter(
       (item) => {
@@ -1086,18 +1094,21 @@ export default async function InboundInvoicePage({
                 rows={cogsRows.map((row) => {
                   const product = productBySku.get(row.sku);
                   const snapshot = cogsSnapshot.get(row.sku);
-                  const existingQty = snapshot?.stock ?? product?.stock ?? 0;
+                  const baseline = product ? receiptBaselines.get(product.id) : undefined;
+                  const existingQty = snapshot?.stock ?? baseline?.stock ?? product?.stock ?? 0;
                   const existingCogs = snapshot
                     ? snapshot.cogs ?? row.incomingUnitCogsRsd
+                    : baseline ? baseline.cogs ?? (baseline.stock <= 0 ? row.incomingUnitCogsRsd : null)
                     : product?.cogs == null ? row.incomingUnitCogsRsd : Number(product.cogs);
                   let finalCogs: number | null = null;
                   let finalCogsError: string | undefined;
                   try {
-                    finalCogs = (locked || invoice.purchaseOrder?.status === PurchaseOrderStatus.RECEIVED) && product?.cogs != null
+                    if (baseline?.error) throw new Error(baseline.error);
+                    finalCogs = !snapshot && (locked || invoice.purchaseOrder?.status === PurchaseOrderStatus.RECEIVED) && product?.cogs != null
                       ? Number(product.cogs)
-                      : weightedAverageCogs({ existingQty, existingUnitCogs: existingCogs, incomingQty: row.qty, incomingUnitCogs: row.incomingUnitCogsRsd });
+                      : weightedAverageCogs({ existingQty, existingUnitCogs: existingCogs ?? row.incomingUnitCogsRsd, incomingQty: row.qty, incomingUnitCogs: row.incomingUnitCogsRsd });
                   } catch (error) {
-                    finalCogsError = existingQty < 0
+                    finalCogsError = baseline?.error ? baseline.error.replace(`${row.sku}: `, "") : existingQty < 0
                       ? `Postojeće stanje zaliha je negativno (${existingQty}). Proverite lager pre knjiženja.`
                       : error instanceof Error ? error.message : "COGS nije moguće obračunati.";
                   }
@@ -1114,7 +1125,9 @@ export default async function InboundInvoicePage({
                 Otvori porudžbenicu i proveri nabavne cene i carinske stope →
               </Link>
               <p className="mt-4 text-xs text-ink-500">
-                Finalni COGS = (postojeća količina × postojeći COGS + količina sa fakture × COGS te nabavke) / ukupna količina. Komanda „Proknjiži” obračunava COGS i knjiži količinu u izabrani magacin bez duplog obračuna.
+                {locked ? "Postojeće stanje i COGS preuzeti su iz sačuvanog snimka knjiženja. "
+                  : `Postojeće stanje je ukupna zaliha svih magacina pre prijema na sačuvani datum ${dateOnly(invoice.invoiceDate)}, pre ostalih promena tog dana. Posle izmene datuma sačuvajte prijemnicu da osvežite obračun. `}
+                Finalni COGS = (postojeća količina × postojeći COGS + količina sa fakture × COGS te nabavke) / ukupna količina. Komanda „Proknjiži” dodaje količinu današnjem stanju izabranog magacina samo jednom.
               </p>
             </>
           ) : (

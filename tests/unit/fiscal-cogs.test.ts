@@ -26,3 +26,9 @@ it('distinguishes missing costs from zero and rejects invalid current costs', ()
   expect(resolveFiscalCogs({ receipts: [], prices: [], current: 0 }, new Date())).toEqual({ unitCogs: 0, estimated: true });
   expect(resolveFiscalCogs({ receipts: [], prices: [], current: -5 }, new Date()).unitCogs).toBeNull();
 });
+it('never uses future or expired observations to book an earlier receipt', () => {
+  expect(resolveFiscalCogs(history, new Date('2026-09-01'), undefined, 'opening-only')).toEqual({ unitCogs: null, estimated: false });
+  expect(resolveFiscalCogs({ receipts: [], prices: [{ day: '2026-09-01', through: '2026-09-30', unitCogs: 10, estimated: true }], current: 999 },
+    new Date('2026-10-01'), undefined, 'opening-only')).toEqual({ unitCogs: null, estimated: false });
+  expect(resolveFiscalCogs({ receipts: [], prices: [], current: 0 }, new Date(), undefined, 'opening-only')).toEqual({ unitCogs: 0, estimated: true });
+});

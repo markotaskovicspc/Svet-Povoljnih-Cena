@@ -8,7 +8,7 @@ import {
   Prisma,
   PurchaseOrderStatus,
 } from "@prisma/client";
-import { db } from "@/lib/db";
+import { databaseIdentifier, db } from "@/lib/db";
 import { capturePaymentSnapshot } from "@/lib/admin/purchase-payments.server";
 import {
   assertInboundCostVolumeReady,
@@ -25,6 +25,8 @@ import {
   weightedAverageCogs,
 } from "@/lib/admin/inbound-invoice";
 import { recomputeIncomingStockForPurchaseOrders } from "@/lib/admin/incoming-stock.server";
+import { loadReceiptStockBaselines } from "@/lib/admin/inbound-inventory-history.server";
+import { dateInputInTimeZone } from "@/lib/admin/report-period";
 
 export type SaveInboundInvoiceInput = {
   paymentVersion?: string;
@@ -49,9 +51,7 @@ function isPrismaUniqueError(error: unknown) {
 }
 
 function utcDateOnly(value: Date) {
-  return new Date(
-    Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()),
-  );
+  return new Date(`${dateInputInTimeZone(value)}T00:00:00.000Z`);
 }
 
 function assertReceiptGoodsMatch(invoice: {
@@ -78,11 +78,13 @@ function assertReceiptGoodsMatch(invoice: {
 
 type CogsBookingSnapshot = {
   version: 1;
+  receiptDay?: string;
   products: Array<{
     productId: string;
     sku: string;
     stock: number;
     cogs: number | null;
+    previousCogs?: number | null;
   }>;
 };
 
@@ -107,6 +109,10 @@ function readCogsBookingSnapshot(
         (typeof product.cogs === "number" &&
           Number.isFinite(product.cogs) &&
           product.cogs >= 0)
+      ) ||
+      !(
+        product.previousCogs === undefined || product.previousCogs === null ||
+        (typeof product.previousCogs === "number" && Number.isFinite(product.previousCogs) && product.previousCogs >= 0)
       )
     ) {
       return null;
@@ -116,9 +122,12 @@ function readCogsBookingSnapshot(
       sku: product.sku,
       stock: product.stock,
       cogs: product.cogs,
+      ...(product.previousCogs === null ||
+        (typeof product.previousCogs === "number" && Number.isFinite(product.previousCogs) && product.previousCogs >= 0)
+        ? { previousCogs: product.previousCogs } : {}),
     });
   }
-  return { version: 1, products };
+  return { version: 1, products, ...(typeof candidate.receiptDay === "string" ? { receiptDay: candidate.receiptDay } : {}) };
 }
 
 export async function createInboundInvoice(now = new Date()) {
@@ -487,6 +496,8 @@ export async function rebuildInboundInvoiceAllocations(
         take: 1,
         select: {
           lockedAt: true,
+          invoiceDate: true,
+          warehouseId: true,
           status: true,
           netValue: true,
           exchangeRate: true,
@@ -620,21 +631,33 @@ export async function rebuildInboundInvoiceAllocations(
   }
   if (hasPostedInvoice) {
     if (!order.cogsBookedAt) {
+      if (!postedInvoice?.invoiceDate) throw new Error("Datum prijema je obavezan za COGS obračun.");
+      const productIds = [...new Set(order.items.flatMap(item => item.product ? [item.product.id] : []))].sort();
+      if (productIds.length) {
+        // Inventory adjustments use the same lock. Keep the historical baseline
+        // and its cost snapshot stable while other sales/receipts are posting.
+        await tx.$queryRaw(Prisma.sql`SELECT id FROM ${databaseIdentifier("Product")}
+          WHERE id IN (${Prisma.join(productIds)}) ORDER BY id FOR UPDATE`);
+      }
+      const baselines = await loadReceiptStockBaselines(productIds, postedInvoice.invoiceDate, order.id, tx);
       const products = new Map<
         string,
         CogsBookingSnapshot["products"][number]
       >();
       for (const item of order.items) {
         if (!item.product) continue;
+        const baseline = baselines.get(item.product.id);
+        if (!baseline) throw new Error(`Nedostaje istorija lagera za ${item.sku}.`);
+        if (baseline.error) throw new Error(baseline.error);
         products.set(item.product.id, {
           productId: item.product.id,
           sku: item.sku,
-          stock: item.product.stock,
-          cogs:
-            item.product.cogs == null ? null : Number(item.product.cogs),
+          stock: baseline.stock,
+          cogs: baseline.cogs,
+          previousCogs: baseline.currentCogs,
         });
       }
-      snapshot = { version: 1, products: Array.from(products.values()) };
+      snapshot = { version: 1, receiptDay: dateInputInTimeZone(postedInvoice.invoiceDate), products: Array.from(products.values()) };
       await tx.purchaseOrder.update({
         where: { id: order.id },
         data: {
@@ -702,7 +725,7 @@ export async function rebuildInboundInvoiceAllocations(
     for (const product of snapshot.products) {
       await tx.product.updateMany({
         where: { id: product.productId },
-        data: { cogs: product.cogs },
+        data: { cogs: product.previousCogs !== undefined ? product.previousCogs : product.cogs },
       });
     }
     await tx.purchaseOrder.update({
