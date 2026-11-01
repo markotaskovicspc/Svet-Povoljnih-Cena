@@ -7,7 +7,7 @@ export const RESOURCES = {
   'delivered-articles': 'Physical SPC delivered order items, quantities and recorded delivery dates; no Ananas, services, money or customer data',
   reclamations: 'Registered claims by registration date, article code and quantity; customer name only with history=all',
   orders: 'SPC orders, deliveryCity from the order shipping snapshot, item amounts, discounts, courier and actual parcels',
-  'ananas-orders': 'Imported Ananas orders; unavailable fields are null',
+  'ananas-orders': 'Imported Ananas orders; deliveryCity is null because the delivery address is not stored; other unavailable fields are null',
   'fiscal-documents': 'Issued SPC sales/refunds with merchandise, services and COGS',
   'legacy-fiscal-receipts': 'Legacy SPC receipt headers without issued FiscalDocument; incomplete item history',
   'ananas-fiscal-documents': 'Imported Ananas sales/refunds with recalculated COGS',

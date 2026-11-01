@@ -41,11 +41,12 @@ export async function exportAnanasOrders(q: ExportQuery) {
     const items = safeArray(row.items, storedItem), shipments = safeArray(row.shipments, storedShipment);
     const fiscalDocuments = docs.filter(d => d.orderNumber === row.id);
     return { ...row, channel: 'ANANAS', number: row.id, customerKey: null, customerIdentityComplete: false,
+      deliveryCity: null,
       items: items.map(item => ({ ...item, gross: money(item.gross), net: money(item.net), unitPrice: money(item.unitPrice), shipping: money(item.shipping), shippingNet: money(item.shippingNet), commission: money(item.commission) })),
       shippingGross: money(items.reduce((sum, item) => sum + item.shipping, 0)),
       shippingNet: items.some(item => item.shippingNet == null) ? null : money(items.reduce((sum, item) => sum + (item.shippingNet ?? 0), 0)),
       firstPurchaseDiscount: null, parcels: null, shipments, fiscalDocuments, hasFiscalRefund: fiscalDocuments.some(d => d.kind === 'REFUND'),
-      dataQuality: { skippedItems: Array.isArray(row.items) ? row.items.length - items.length : null, customerIdentity: 'NOT_AVAILABLE', parcelDimensions: 'NOT_CAPTURED' },
+      dataQuality: { skippedItems: Array.isArray(row.items) ? row.items.length - items.length : null, customerIdentity: 'NOT_AVAILABLE', parcelDimensions: 'NOT_CAPTURED', deliveryCity: 'NOT_CAPTURED' },
     };
   });
 }

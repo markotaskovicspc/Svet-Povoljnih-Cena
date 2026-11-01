@@ -32,4 +32,9 @@ it('never leaks unrecognized Ananas JSON properties or pretends missing net/iden
  mocks.ananas.mockResolvedValue([]);
  const [row]=await exportAnanasOrders(q('ananas-orders'));
  expect(JSON.stringify(row)).not.toContain('private');expect(row.customerKey).toBeNull();expect(row.items[0].net).toBeNull();expect(row.shippingNet).toBeNull();
+ expect(row).toHaveProperty('deliveryCity',null);
+ expect(row.dataQuality.deliveryCity).toBe('NOT_CAPTURED');
+ const select=mocks.orders.mock.calls[0][0].select;
+ expect(select).not.toHaveProperty('billingAddress');
+ expect(select).not.toHaveProperty('customerName');
 });
