@@ -6,7 +6,7 @@ export const RESOURCES = {
   'spc-reclamations': 'Registered SPC claims only: excludes ANANAS orders; no customer data',
   'delivered-articles': 'Physical SPC delivered order items, quantities and recorded delivery dates; no Ananas, services, money or customer data',
   reclamations: 'Registered claims by registration date, article code and quantity; customer name only with history=all',
-  orders: 'SPC orders, item amounts, discounts, courier and actual parcels',
+  orders: 'SPC orders, deliveryCity from the order shipping snapshot, item amounts, discounts, courier and actual parcels',
   'ananas-orders': 'Imported Ananas orders; unavailable fields are null',
   'fiscal-documents': 'Issued SPC sales/refunds with merchandise, services and COGS',
   'legacy-fiscal-receipts': 'Legacy SPC receipt headers without issued FiscalDocument; incomplete item history',

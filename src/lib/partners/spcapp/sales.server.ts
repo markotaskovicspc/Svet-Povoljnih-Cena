@@ -8,7 +8,7 @@ import { type ExportQuery, customerKey, money, n } from './contract';
 
 export async function exportOrders(q: ExportQuery) {
   const rows = await db.order.findMany({ where: { id: { gt: q.after }, createdAt: { gte: q.period.start, lt: q.period.endExclusive } }, take: q.limit + 1, orderBy: { id: 'asc' }, select: {
-    id: true, number: true, channel: true, status: true, customerId: true, userId: true, createdAt: true, updatedAt: true,
+    id: true, number: true, channel: true, status: true, customerId: true, userId: true, shipCity: true, createdAt: true, updatedAt: true,
     subtotal: true, savings: true, shipping: true, assemblyTotal: true, firstPurchaseDiscount: true, savedCardDiscount: true, voucherDiscount: true, total: true, paymentMethod: true, courierPaidAt: true,
     items: { select: { id: true, sku: true, qty: true, unitPriceFull: true, unitPriceSale: true, withAssembly: true, assemblyPrice: true } },
     fiscalDocuments: { where: { status: 'ISSUED' }, select: { id: true, receiptNumber: true, kind: true, issuedAt: true } },
@@ -17,7 +17,8 @@ export async function exportOrders(q: ExportQuery) {
     invoices: { select: { id: true, number: true, kind: true, status: true, issuedAt: true, total: true } },
     payments: { select: { id: true, status: true, amount: true, createdAt: true, updatedAt: true } },
   } });
-  return rows.map(({ customerId, userId, ...row }) => ({ ...row, channel: 'SPC', erpChannel: row.channel,
+  return rows.map(({ customerId, userId, shipCity, ...row }) => ({ ...row, channel: 'SPC', erpChannel: row.channel,
+    deliveryCity: shipCity,
     shipments: row.shipments.map(s => ({...s,...shipmentExportReferences(s)})),
     customerKey: customerKey({ customerId, userId }), customerIdentityComplete: Boolean(customerId || userId),
     hasFiscalRefund: row.fiscalDocuments.some(d => d.kind === 'REFUND'),

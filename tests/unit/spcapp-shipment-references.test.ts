@@ -30,3 +30,15 @@ it('keeps identifiers exact, excludes malformed JSON and never treats GLS provid
  expect(shipmentExportReferences({...shipment,provider:'MYGLS'}).providerOrderId).toBeNull();
  expect(shipmentExportReferences({...shipment,provider:null}).providerOrderId).toBeNull();
 });
+it('exports the saved order delivery city without selecting other address or contact fields',async()=>{
+ mocks.orders.mockResolvedValue([{id:'o1',number:'TEST-1',channel:'WEB',customerId:null,userId:null,shipCity:'Kragujevac',shipments:[],fiscalDocuments:[],items:[]}]);
+ const query=q('orders');
+ const [row]=await exportOrders(query);
+ expect(row).toMatchObject({id:'o1',number:'TEST-1',deliveryCity:'Kragujevac',channel:'SPC'});
+ expect(row).not.toHaveProperty('shipCity');
+ const args=mocks.orders.mock.calls[0][0];
+ expect(args.where).toEqual({id:{gt:query.after},createdAt:{gte:query.period.start,lt:query.period.endExclusive}});
+ expect(args.take).toBe(query.limit+1);
+ expect(args.select.shipCity).toBe(true);
+ for(const key of ['shipStreet','shipHouseNumber','shipPhone','shipFirstName','shipLastName','shipPostalCode','billCity','customer','user'])expect(args.select).not.toHaveProperty(key);
+});
