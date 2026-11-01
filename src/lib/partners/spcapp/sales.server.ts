@@ -30,18 +30,29 @@ export async function exportOrders(q: ExportQuery) {
 }
 const storedItem = z.object({ id: z.string(), sku: z.string(), name: z.string(), quantity: z.number(), unitPrice: z.number(), gross: z.number(), net: z.number().nullable(), shipping: z.number(), shippingNet: z.number().nullable(), commission: z.number().nullable() });
 const storedShipment = z.object({ suborderId: z.string(), status: z.string(), carrierName: z.string().nullable() });
+const billingText = z.string().max(1000).nullish();
+const storedBillingAddress = z.object({
+  firstName: billingText, lastName: billingText, buyerName: billingText,
+  buyerId: billingText, buyerType: billingText, city: billingText, postcode: billingText,
+  streetName: billingText, streetNumber: billingText,
+});
 function safeArray<T>(value: unknown, schema: z.ZodType<T>): T[] {
   return Array.isArray(value) ? value.flatMap(item => { const result = schema.safeParse(item); return result.success ? [result.data] : []; }) : [];
 }
 export async function exportAnanasOrders(q: ExportQuery) {
   const rows = await db.ananasOrder.findMany({ where: { id: { gt: q.after }, createdAt: { gte: q.period.start, lt: q.period.endExclusive } }, take: q.limit + 1, orderBy: { id: 'asc' },
-    select: { id: true, createdAt: true, updatedAt: true, total: true, currency: true, paymentMethods: true, status: true, items: true, shipments: true, importedAt: true, lastCheckedAt: true } });
+    select: { id: true, createdAt: true, updatedAt: true, total: true, currency: true, paymentMethods: true, status: true, items: true, shipments: true, billingAddress: true, importedAt: true, lastCheckedAt: true } });
   const docs = rows.length ? await db.ananasDocument.findMany({ where: { orderNumber: { in: rows.map(row => row.id) } }, select: { id: true, orderNumber: true, kind: true, fiscalNumber: true, issuedAt: true } }) : [];
-  return rows.map(row => {
+  return rows.map(({ billingAddress: rawBillingAddress, ...row }) => {
     const items = safeArray(row.items, storedItem), shipments = safeArray(row.shipments, storedShipment);
+    const parsedAddress = storedBillingAddress.safeParse(rawBillingAddress);
+    const billingAddress = parsedAddress.success && Object.values(parsedAddress.data).some(value => value?.trim())
+      ? parsedAddress.data : null;
     const fiscalDocuments = docs.filter(d => d.orderNumber === row.id);
     return { ...row, channel: 'ANANAS', number: row.id, customerKey: null, customerIdentityComplete: false,
       deliveryCity: null,
+      billingAddress,
+      billingCity: billingAddress?.city?.trim() || null,
       items: items.map(item => ({ ...item, gross: money(item.gross), net: money(item.net), unitPrice: money(item.unitPrice), shipping: money(item.shipping), shippingNet: money(item.shippingNet), commission: money(item.commission) })),
       shippingGross: money(items.reduce((sum, item) => sum + item.shipping, 0)),
       shippingNet: items.some(item => item.shippingNet == null) ? null : money(items.reduce((sum, item) => sum + (item.shippingNet ?? 0), 0)),

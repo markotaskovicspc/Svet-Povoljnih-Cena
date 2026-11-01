@@ -16,3 +16,23 @@ ali sa vrednošću `null` i `dataQuality.deliveryCity: "NOT_CAPTURED"`.
 Ananas uvoz trenutno čuva samo adresu za fakturisanje; njen grad se ne predstavlja
 kao mesto isporuke. Za stvarnu vrednost potrebno je proširiti uvoz podacima
 o adresi isporuke iz Ananasa.
+
+## Ananas adresa za fakturisanje
+
+`ananas-orders` vraća i `billingAddress` (sačuvanu adresu za fakturisanje) i
+`billingCity` (njen grad), na primer:
+
+```json
+{
+  "billingAddress": { "city": "Kragujevac", "postcode": "34000", "streetName": "Test ulica", "streetNumber": "12" },
+  "billingCity": "Kragujevac",
+  "deliveryCity": null
+}
+```
+
+Adresa sadrži samo postojeća polja `firstName`, `lastName`, `buyerName`, `buyerId`,
+`buyerType`, `city`, `postcode`, `streetName` i `streetNumber`, kada su sačuvana.
+Nepoznata JSON polja se izostavljaju. Bez adrese (uključujući FBA zapise uvezene
+samo iz pošiljki) `billingAddress` i `billingCity` su `null`.
+Ovo su podaci za fakturisanje, a ne potvrđena adresa isporuke. Dostupni su i za
+stare porudžbine pri sledećem kompletnom čitanju odgovarajućeg perioda.

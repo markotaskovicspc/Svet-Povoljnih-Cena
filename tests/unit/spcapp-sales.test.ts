@@ -35,6 +35,25 @@ it('never leaks unrecognized Ananas JSON properties or pretends missing net/iden
  expect(row).toHaveProperty('deliveryCity',null);
  expect(row.dataQuality.deliveryCity).toBe('NOT_CAPTURED');
  const select=mocks.orders.mock.calls[0][0].select;
- expect(select).not.toHaveProperty('billingAddress');
+ expect(select.billingAddress).toBe(true);
  expect(select).not.toHaveProperty('customerName');
+});
+it('exports the stored Ananas billing address and city without relabeling them as delivery data',async()=>{
+ const billingAddress={firstName:'Test',lastName:'Kupac',buyerName:'Test firma',buyerId:'123456789',buyerType:'TIN',city:'Kragujevac',postcode:'34000',streetName:'Test ulica',streetNumber:'12'};
+ mocks.orders.mockResolvedValue([{id:'ana-order',billingAddress:{...billingAddress,email:'private@example.test',phone:'private-phone',unknown:{secret:true}},items:[],shipments:[]}]);
+ mocks.ananas.mockResolvedValue([]);
+ const [row]=await exportAnanasOrders(q('ananas-orders'));
+ expect(row.billingAddress).toEqual(billingAddress);
+ expect(row.billingCity).toBe('Kragujevac');
+ expect(row.deliveryCity).toBeNull();
+ expect(JSON.stringify(row)).not.toContain('private');
+ expect(row.billingAddress).not.toHaveProperty('unknown');
+});
+it.each([null,undefined,{}, {source:'SHIPMENTS'}, {city:123}, {city:'',streetName:null}])('keeps unavailable or malformed Ananas billing data unknown (%j)',async(billingAddress)=>{
+ mocks.orders.mockResolvedValue([{id:'ana-order',billingAddress,items:[],shipments:[]}]);
+ mocks.ananas.mockResolvedValue([]);
+ const [row]=await exportAnanasOrders(q('ananas-orders'));
+ expect(row.billingAddress).toBeNull();
+ expect(row.billingCity).toBeNull();
+ expect(row.deliveryCity).toBeNull();
 });
