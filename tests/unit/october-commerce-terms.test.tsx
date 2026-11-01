@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { commerceTermsAt, OCTOBER_TERMS_AT_MS, scheduledDeliveryPromoText, scheduledDeliveryTermsMarkdown } from "@/lib/commerce-terms";
+import { commerceTermsAt, FIRST_PURCHASE_FIVE_PERCENT_AT_MS, OCTOBER_TERMS_AT_MS, scheduledDeliveryPromoText, scheduledDeliveryTermsMarkdown } from "@/lib/commerce-terms";
 import { calculatePublishedDeliveryTariff, freeCategoryOneThresholdRsd } from "@/lib/delivery-tariff";
 import { computeOrderPricing } from "@/lib/pricing/engine";
 import { calculateEditedWebOrderTotals } from "@/lib/admin/web-order-edit";
@@ -16,6 +16,29 @@ const lines = [{ sku: "TEST", qty: 1, product: { fullPrice: 10_000, loyaltyDisco
 afterEach(() => vi.useRealTimers());
 
 describe("October terms at midnight in Serbia", () => {
+  it("reduces new purchases to 5% while retaining earlier orders and the account requirement", () => {
+    vi.useFakeTimers();
+    const at = FIRST_PURCHASE_FIVE_PERCENT_AT_MS;
+    expect(commerceTermsAt(at - 1).firstPurchasePct).toBe(10);
+    expect(commerceTermsAt(at)).toMatchObject({ firstPurchasePct: 5, guestFirstPurchaseAllowed: false, freeCategoryOneThresholdRsd: 20_000 });
+    vi.setSystemTime(at);
+    expect(computeOrderPricing({ lines, eligibility: { firstPurchase: true } }).firstPurchaseDiscount).toBe(350);
+    const totals = computeTotals({ itemsFull: 10_000, itemsSale: 7_000, shippingMethod: "kurir",
+      assemblyTotal: 0, voucherDiscountRsd: 0, firstPurchaseEligible: true, shippingPrices: { kurir: 500, kamion: null } });
+    expect(totals.firstPurchaseDiscount).toBe(350);
+    expect(totals.total).toBe(7150);
+    const edit = { lines: [{ qty: 2, unitPriceFull: 5_000, unitPriceSale: 3_500 }], shipping: 500, keepFirstPurchaseDiscount: true };
+    expect(calculateEditedWebOrderTotals({ ...edit, orderCreatedAt: new Date(at - 1) }).firstPurchaseDiscount).toBe(700);
+    expect(calculateEditedWebOrderTotals({ ...edit, orderCreatedAt: new Date(at) }).firstPurchaseDiscount).toBe(350);
+    function Label() { return <span>{useCommerceTerms().firstPurchasePct}%</span>; }
+    expect(renderToStaticMarkup(<CommerceTermsProvider initialAt={at}><Label /></CommerceTermsProvider>)).toBe("<span>5%</span>");
+    const banner = { id: "old-first-purchase", title: " ", imageDesktop: { url: "/1787933740542-7b9a9155566c9637-desktop.webp" }, order: 1 };
+    const hero = renderToStaticMarkup(<CommerceTermsProvider initialAt={at}><HeroCarousel banners={[banner]} /></CommerceTermsProvider>);
+    expect(hero).not.toContain(banner.imageDesktop.url.slice(1));
+    expect(hero).toContain("5");
+    expect(hero).toContain("Popusta za nove kupce");
+  });
+
   it("switches at midnight local time, not UTC midnight or deployment time", () => {
     expect(OCTOBER_TERMS_AT_MS).toBe(after.getTime());
     expect(commerceTermsAt(before)).toMatchObject({ firstPurchasePct: 15, guestFirstPurchaseAllowed: true, freeCategoryOneThresholdRsd: 4_000 });

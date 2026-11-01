@@ -1,11 +1,15 @@
 /** 1 October 2026, 00:00 Europe/Belgrade (CEST). Evaluated per calculation. */
 export const OCTOBER_TERMS_AT_MS = Date.parse("2026-10-01T00:00:00+02:00");
+/** Rate reduction requested on 1 November; retain earlier rates for existing orders. */
+export const FIRST_PURCHASE_FIVE_PERCENT_AT_MS = Date.parse("2026-11-01T11:47:30+01:00");
 
 const SEPTEMBER_TERMS = { id: "2026-09", firstPurchasePct: 15, guestFirstPurchaseAllowed: true, freeCategoryOneThresholdRsd: 4_000 } as const;
 const OCTOBER_TERMS = { id: "2026-10", firstPurchasePct: 10, guestFirstPurchaseAllowed: false, freeCategoryOneThresholdRsd: 20_000 } as const;
+const CURRENT_TERMS = { ...OCTOBER_TERMS, firstPurchasePct: 5 } as const;
 
 export function commerceTermsAt(at: Date | number = Date.now()) {
   const ms = typeof at === "number" ? at : at.getTime();
+  if (ms >= FIRST_PURCHASE_FIVE_PERCENT_AT_MS) return CURRENT_TERMS;
   return ms >= OCTOBER_TERMS_AT_MS ? OCTOBER_TERMS : SEPTEMBER_TERMS;
 }
 
