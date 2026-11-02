@@ -67,3 +67,4 @@ User explicitly approved this ERP change and publication. The read-only products
 
 ## Analytics box-label fields (2026-11-02)
 User explicitly approved this ERP change and publication. The read-only products partner export adds barcode (trimmed, null when empty), countryOfOrigin and importer derived exactly like the ERP's own product labels (buildProductDeclaration / declarationImporterForSku), and productPath (`/p/<slug>`). The raw `declaration` text is not exported. SPC Analytics tab Nalepnice prints one package label per package with these fields. No schema change, business writes or PII. Same spcapp:read authorization, signed pagination and metadata audit.
+Country fallback (2026-11-02, user-approved scope): when Product.countryOfOrigin is empty, the label country uses Supplier.country (same fallback as goods-receipt readiness), localized by buildProductDeclaration. The supplier object in the products export now also carries country.
