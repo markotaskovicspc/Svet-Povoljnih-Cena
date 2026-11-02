@@ -9,6 +9,10 @@ describe('analyticsLabelFields', () => {
     expect(r.countryOfOrigin).toBeTruthy();
     expect(r.productPath).toBe('/p/ugaona-garnitura-luna');
   });
+  it('uses the supplier country when the article has none', () => {
+    const r = analyticsLabelFields({ sku: '100192', name: 'X', slug: 'x', barcode: null, countryOfOrigin: null, declaration: null, supplier: { country: 'CN' } });
+    expect(r.countryOfOrigin).toBeTruthy();
+  });
   it('keeps missing values empty', () => {
     const r = analyticsLabelFields({ sku: '100.1', name: 'X', slug: null, barcode: '  ', countryOfOrigin: null, declaration: null });
     expect(r).toMatchObject({ barcode: null, countryOfOrigin: null, productPath: null });
