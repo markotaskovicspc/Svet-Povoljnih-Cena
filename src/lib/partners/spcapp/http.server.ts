@@ -18,7 +18,7 @@ export async function spcappGet(request: Request, resource?: string) {
     if (!resource) return NextResponse.json({ ok: true, apiVersion: API_VERSION, scope: 'spcapp:read', timezone: 'Europe/Belgrade', currency: 'RSD',
       resources: Object.entries(RESOURCES).map(([name, description]) => ({ name, path: `/api/partners/v1/spcapp/${name}`, description })),
       attachmentPath: '/api/partners/v1/spcapp/sef-attachment?documentId=ID&index=0',
-      sync: { mode: 'FULL_RESCAN_UPSERT', defaultFrom: '2025-05-01', defaultLimit: 100, maxLimit: 200, sefMaxLimit: 10,
+      sync: { mode: 'FULL_RESCAN_UPSERT', defaultFrom: '2025-05-01', defaultLimit: 100, maxLimit: 200, sefMaxLimit: 10, trafficPagesMaxLimit: 1000,
         isolation: 'LIVE_PAGES_NOT_TRANSACTIONAL_SNAPSHOT', updatedSinceSupported: false,
         instructions: 'Keep from/to fixed across pages. Upsert by (resource,id). Only complete successful full scans can reconcile missing IDs. Re-read historical fiscal data after invoice changes; no reliable incremental feed exists yet.' },
       limitations: ['No guarantee of complete history since 2025-05-01.', 'Ananas customer identity and parcel dimensions not captured.', 'SEF specification lines and import VAT require further classification.', 'No phone numbers, customer email or raw provider payloads in JSON exports; stored billing addresses only in ananas-orders, customer names only in those billing addresses and reclamations history=all.'],

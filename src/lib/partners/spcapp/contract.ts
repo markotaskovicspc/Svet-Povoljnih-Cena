@@ -23,6 +23,7 @@ export const RESOURCES = {
   'courier-statements': 'Imported courier charges and remittances',
   'sef-invoices': 'Incoming SEF invoices, attachment metadata; optional supplierPib',
   traffic: 'Consented page views, unique visitors and sessions per bucket',
+  'traffic-pages': 'Consented page views, visits and unique visitors per normalized page path and day/month bucket; no visitor identifiers',
   customers: 'SPC unique/new/returning buyers per bucket; Ananas identity incomplete',
   'product-performance': 'Existing WEB product-performance calculation for a period',
 } as const;
@@ -40,12 +41,14 @@ export function parseExportQuery(resource: string, url: URL, secret: string, now
   const period = resolveReportPeriod({ range: 'custom', from, to }, now);
   if (resource === 'product-performance' && period.endExclusive.getTime() - period.start.getTime() > 366 * 86400000) throw new ExportInputError('Performance period is limited to 366 days.');
   const rawLimit = url.searchParams.get('limit') ?? '100';
-  if (!/^\d+$/.test(rawLimit)) throw new ExportInputError('limit must be an integer from 1 to 200.');
+  const maxLimit = resource === 'traffic-pages' ? 1000 : 200;
+  if (!/^\d+$/.test(rawLimit)) throw new ExportInputError(`limit must be an integer from 1 to ${maxLimit}.`);
   const limit = Number(rawLimit);
-  if (limit < 1 || limit > 200) throw new ExportInputError('limit must be an integer from 1 to 200.');
+  if (limit < 1 || limit > maxLimit) throw new ExportInputError(`limit must be an integer from 1 to ${maxLimit}.`);
   const granularity = url.searchParams.get('granularity') ?? 'day';
   if (!['5minute', 'hour', 'day', 'month', 'year'].includes(granularity)) throw new ExportInputError('Invalid granularity.');
   if (granularity === '5minute' && (resource !== 'traffic' || from !== to)) throw new ExportInputError('5minute traffic requires a single day.');
+  if (resource === 'traffic-pages' && !['day', 'month'].includes(granularity)) throw new ExportInputError('traffic-pages supports granularity=day or month.');
   const basis = url.searchParams.get('basis') ?? 'orders';
   if (!['orders', 'fiscal'].includes(basis)) throw new ExportInputError('Invalid customer basis.');
   const status = url.searchParams.get('status');
