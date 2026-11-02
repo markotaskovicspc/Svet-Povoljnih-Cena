@@ -57,7 +57,7 @@ curl --fail-with-body --get \
 
 Primer je ilustracija omotača; `items` u stvarnom odgovoru sadrži tačno `count` zapisa.
 
-- `limit`: 1–200, podrazumevano 100; za `sef-invoices` 1–10, podrazumevano 10.
+- `limit`: 1–200, podrazumevano 100; za `sef-invoices` 1–10, podrazumevano 10; za `traffic-pages` 1–1000, podrazumevano 100.
 - `cursor`: vratiti `nextCursor` u sledećem zahtevu. Kraj je `hasMore=false` i `nextCursor=null`.
 - `from`, `to`: uključivi kalendarski datumi `YYYY-MM-DD`, zona Europe/Belgrade. Podrazumevano od 01.05.2025. do dana poziva, osim performansi gde je početni period poslednjih 30 dana. Za redovno povezivanje **uvek zadati oba datuma** i zadržati ih kroz sve stranice.
 - Kursor je potpisan, vezan za resurs, period, filtere i ključ partnera. Ne menjati te parametre tokom prolaska. `limit` se može smanjiti.
@@ -89,6 +89,7 @@ Svi putevi su relativni na `/api/partners/v1/spcapp/`.
 | `courier-statements` | Uvezeni kurirski obračuni: dokument, stavke, tracking, knjiženje, neto/bruto trošak/doznaka, težina i shipment ID | Datum uvoza obračuna `createdAt`; pojedinačne stavke imaju poslovni `bookedOn` |
 | `sef-invoices` | Ulazne SEF fakture: dobavljač/PIB, broj, datum/dospeće, neto/PDV/bruto, obračunski period kada postoji u XML-u, metapodaci priloga | `issueDate`; opciono `supplierPib=123456789`, ne pretpostavljati PIB X Express-a |
 | `traffic` | `pageViews, uniqueVisitors, visits, eventsWithoutSession` | Događaji PAGE_VIEW; `granularity=hour/day/month/year`, početno day |
+| `traffic-pages` | Po stranici i bucketu: `id` (`bucketLocal|path`), `bucketLocal, timezone, path, pageType, pageViews, visits, uniqueVisitors, productId, sku` | Događaji PAGE_VIEW; `granularity=day/month`, početno day; `limit` do 1000 |
 | `customers` | SPC `uniqueCustomers, newCustomers, returningCustomers, eventsWithoutIdentity` | `granularity=hour/day/month/year`; `basis=orders` ili `basis=fiscal` |
 | `product-performance` | KOZ (`koz/estimatedKoz`), prosek cene, dnevna prodaja, raspoloživi dani, prosečna vrednost lagera, oznake potpunosti istorije | Period do 366 dana; koristi postojeći WEB obračun, ne uključuje Ananas prodaju |
 
@@ -120,6 +121,8 @@ Ananas ne čuva posebnu oznaku popusta za prvu kupovinu: vrednost je `null`, ne 
 Ananas nema pouzdan zajednički identitet kupca: `ananasCustomerCoverage=ANANAS_IDENTITY_NOT_AVAILABLE`. Broj Ananas porudžbina nije broj jedinstvenih kupaca.
 
 Posete su zabeleženi događaji uz saglasnost. `uniqueVisitors` = različiti anonymousId; `visits` = različite sesije (anonymousId kao fallback kad sessionId nedostaje). Ne sabirati dnevne jedinstvene posetioce/kupce za mesečni rezultat — zatražiti month/year. Lokalni ponovljeni sat pri promeni vremena pripada jednom lokalnom satnom bucketu. Sirovi analytics događaji imaju rok važenja 13 meseci; endpoint ne garantuje stariju istoriju.
+
+`traffic-pages`: putanja je bez query stringa, `#` dela i završne kose crte (osim `/`); događaji bez putanje se preskaču. `pageType`: `/` = home, `/p/<slug>` = product, `/k/...` = category, `/korpa` = cart, `/checkout` i `/checkout/...` = checkout, `/pretraga` = search, ostalo = other. `productId` je najčešći productId događaja te stranice u bucketu, a za `/p/<slug>` bez njega artikal po slug-u; `sku` je šifra artikla (`Product.sku`, ista kao u `products`). Ne vraćaju se anonymousId/sessionId. Dnevne `visits`/`uniqueVisitors` ne sabirati u mesečne — tražiti `granularity=month`.
 
 ### Lager, cene, nabavke i SEF
 

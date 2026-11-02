@@ -5,7 +5,7 @@ import { type ExportQuery } from './contract';
 import { exportProducts, exportInventory, exportPrices, exportLoyaltyRules, exportPromotions, exportPurchaseOrders, exportInboundInvoices } from './catalog.server';
 import { exportOrders, exportAnanasOrders, exportFiscal, exportAnanasFiscal, exportLegacyFiscal } from './sales.server';
 import { exportShipments, exportCourierStatements, exportSef } from './logistics.server';
-import { exportTraffic, exportCustomers, exportPerformance } from './metrics.server';
+import { exportTraffic, exportTrafficPages, exportCustomers, exportPerformance } from './metrics.server';
 export function exportResource(q: ExportQuery): Promise<{ id: string }[]> {
   switch (q.resource) {
     case 'delivered-articles': return exportDeliveredArticles(q);
@@ -28,6 +28,7 @@ export function exportResource(q: ExportQuery): Promise<{ id: string }[]> {
     case 'courier-statements': return exportCourierStatements(q);
     case 'sef-invoices': return exportSef(q);
     case 'traffic': return exportTraffic(q);
+    case 'traffic-pages': return exportTrafficPages(q);
     case 'customers': return exportCustomers(q);
     case 'product-performance': return exportPerformance(q);
   }
