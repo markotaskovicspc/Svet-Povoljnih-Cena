@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { resolveStoredWarehouseBalance } from '@/lib/reservation-stock';
 import { type ExportQuery, money } from './contract';
 import { primaryRootCategory } from './category-root';
+import { analyticsLabelFields } from './label-fields';
 
 export async function exportProducts(q: ExportQuery) {
   const categoryTree=await db.category.findMany({select:{id:true,name:true,parentId:true,path:true}});
@@ -17,11 +18,12 @@ export async function exportProducts(q: ExportQuery) {
     media: { where: { kind: 'IMAGE' }, orderBy: { order: 'asc' }, take: 1, select: { url: true } },
     colorPrimary: true, colorSecondary: true, cogs: true, grossWeightKg: true, packGrossWeightKg: true,
     unitPackWidthCm: true, unitPackDepthCm: true, unitPackHeightCm: true, packWidthCm: true, packDepthCm: true, packHeightCm: true, packQty: true, containerQty: true, supplierProductName: true,
+    slug: true, barcode: true, countryOfOrigin: true, declaration: true,
     fullPrice: true, salePrice: true, loyaltyPrice: true, loyaltyDiscountPct: true, isHero: true,
     priceListEntries: { where: { priceList: { code: { contains: 'ANANAS', mode: 'insensitive' } } }, select: { price: true, validFrom: true, validTo: true, priceList: { select: { code: true, active: true } } } },
     createdAt: true, updatedAt: true,
   } });
-  return rows.map(p => ({ ...p, analyticsCategory:primaryRootCategory(p.categories.map(x=>x.category.id),categoryTree), catalogEligible: !p.deletedAt && (p.stock > 0 || p.articleStatus === 'SP'),
+  return rows.map(({ declaration, ...p }) => ({ ...p, ...analyticsLabelFields({ ...p, declaration }), analyticsCategory:primaryRootCategory(p.categories.map(x=>x.category.id),categoryTree), catalogEligible: !p.deletedAt && (p.stock > 0 || p.articleStatus === 'SP'),
     cogsNet: money(p.cogs), fullPriceGross: money(p.fullPrice), salePriceGross: money(p.salePrice), loyaltyPriceGross: money(p.loyaltyPrice),
     ananasPriceHistory: p.priceListEntries, ananasCurrentPrice: null, activeLoyaltyDiscountPct,
     notes: ['Ananas current remote catalog price is not synchronized by this endpoint; price-list entries and actual order prices are separate sources.'],

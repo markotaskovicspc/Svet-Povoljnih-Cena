@@ -64,3 +64,6 @@ User explicitly approved. The read-only products partner export adds activeLoyal
 
 ## Analytics supplier product name (2026-10-29)
 User explicitly approved this ERP change and publication. The read-only products partner export now also selects existing Product.supplierProductName (naziv kod dobavljača; null when not entered). SPC Analytics Porudžbine shows it in the order PDF and Excel export. No schema change, business writes or PII. Same spcapp:read authorization, signed pagination and metadata audit.
+
+## Analytics box-label fields (2026-11-02)
+User explicitly approved this ERP change and publication. The read-only products partner export adds barcode (trimmed, null when empty), countryOfOrigin and importer derived exactly like the ERP's own product labels (buildProductDeclaration / declarationImporterForSku), and productPath (`/p/<slug>`). The raw `declaration` text is not exported. SPC Analytics tab Nalepnice prints one package label per package with these fields. No schema change, business writes or PII. Same spcapp:read authorization, signed pagination and metadata audit.
