@@ -45,6 +45,7 @@ it('exports the stored Ananas billing address and city without relabeling them a
  const [row]=await exportAnanasOrders(q('ananas-orders'));
  expect(row.billingAddress).toEqual(billingAddress);
  expect(row.billingCity).toBe('Kragujevac');
+ expect(row.pib).toBe('123456789');
  expect(row.deliveryCity).toBeNull();
  expect(JSON.stringify(row)).not.toContain('private');
  expect(row.billingAddress).not.toHaveProperty('unknown');
@@ -55,5 +56,18 @@ it.each([null,undefined,{}, {source:'SHIPMENTS'}, {city:123}, {city:'',streetNam
  const [row]=await exportAnanasOrders(q('ananas-orders'));
  expect(row.billingAddress).toBeNull();
  expect(row.billingCity).toBeNull();
+ expect(row.pib).toBeNull();
  expect(row.deliveryCity).toBeNull();
+});
+it.each([
+ [{buyerType:'TIN',buyerId:' 012345678 '},'012345678'],
+ [{buyerType:'TIN',buyerId:''},null],
+ [{buyerType:'TIN'},null],
+ [{buyerType:'JMBG',buyerId:'1234567890123'},null],
+ [{buyerId:'123456789'},null],
+])('exports Ananas PIB only for a recorded TIN buyer (%j)',async(billingAddress,pib)=>{
+ mocks.orders.mockResolvedValue([{id:'ana-order',billingAddress,items:[],shipments:[]}]);
+ mocks.ananas.mockResolvedValue([]);
+ const [row]=await exportAnanasOrders(q('ananas-orders'));
+ expect(row.pib).toBe(pib);
 });

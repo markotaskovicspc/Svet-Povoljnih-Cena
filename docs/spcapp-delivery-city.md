@@ -36,3 +36,18 @@ Nepoznata JSON polja se izostavljaju. Bez adrese (uključujući FBA zapise uveze
 samo iz pošiljki) `billingAddress` i `billingCity` su `null`.
 Ovo su podaci za fakturisanje, a ne potvrđena adresa isporuke. Dostupni su i za
 stare porudžbine pri sledećem kompletnom čitanju odgovarajućeg perioda.
+
+## PIB kupca sa porudžbine
+
+`orders` i `ananas-orders` vraćaju i `pib` kao string, na primer
+`"pib": "123456789"`. Bez evidentiranog PIB-a vraća se `null`.
+
+SPC koristi sačuvani poslovni identitet porudžbine (`shipPib`/`billPib`), isti
+izbor poslovne adrese kao dokumenti: zasebna poslovna adresa za fakturisanje
+ima prednost kada je potpuna; u suprotnom koristi se postojeći poslovni
+identitet prema pravilima ERP-a. Ne čita se trenutni profil kupca.
+
+Ananas koristi `billingAddress.buyerId` samo kada je `buyerType` jednak `TIN`.
+Drugi tipovi identifikatora se ne predstavljaju kao PIB. Vrednost ostaje string
+da bi se sačuvale vodeće nule. Postojeće porudžbine dobijaju polje pri ponovnom
+čitanju API-ja, bez migracije baze.

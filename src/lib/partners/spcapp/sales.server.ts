@@ -2,6 +2,7 @@ import {shipmentExportReferences} from './shipment-references';
 import 'server-only';
 import { z } from 'zod';
 import { db } from '@/lib/db';
+import { resolveDocumentBuyerAddress } from '@/lib/document-buyer';
 import { loadFiscalCogs, loadAnanasCostDates } from '@/lib/admin/fiscal-cogs.server';
 import { ananasFiscalItems, fiscalMerchandiseAmounts, isFiscalService } from '@/lib/admin/fiscal-merchandise';
 import { type ExportQuery, customerKey, money, n } from './contract';
@@ -9,6 +10,7 @@ import { type ExportQuery, customerKey, money, n } from './contract';
 export async function exportOrders(q: ExportQuery) {
   const rows = await db.order.findMany({ where: { id: { gt: q.after }, createdAt: { gte: q.period.start, lt: q.period.endExclusive } }, take: q.limit + 1, orderBy: { id: 'asc' }, select: {
     id: true, number: true, channel: true, status: true, customerId: true, userId: true, shipCity: true, createdAt: true, updatedAt: true,
+    shipPib: true, billPib: true, shipCompanyName: true, billCompanyName: true, billingSameAsShipping: true,
     subtotal: true, savings: true, shipping: true, assemblyTotal: true, firstPurchaseDiscount: true, savedCardDiscount: true, voucherDiscount: true, total: true, paymentMethod: true, courierPaidAt: true,
     items: { select: { id: true, sku: true, qty: true, unitPriceFull: true, unitPriceSale: true, withAssembly: true, assemblyPrice: true } },
     fiscalDocuments: { where: { status: 'ISSUED' }, select: { id: true, receiptNumber: true, kind: true, issuedAt: true } },
@@ -17,8 +19,12 @@ export async function exportOrders(q: ExportQuery) {
     invoices: { select: { id: true, number: true, kind: true, status: true, issuedAt: true, total: true } },
     payments: { select: { id: true, status: true, amount: true, createdAt: true, updatedAt: true } },
   } });
-  return rows.map(({ customerId, userId, shipCity, ...row }) => ({ ...row, channel: 'SPC', erpChannel: row.channel,
+  return rows.map(({ customerId, userId, shipCity, shipPib, billPib, shipCompanyName, billCompanyName, billingSameAsShipping, ...row }) => ({ ...row, channel: 'SPC', erpChannel: row.channel,
     deliveryCity: shipCity,
+    pib: resolveDocumentBuyerAddress(
+      { companyName: shipCompanyName, pib: shipPib },
+      billingSameAsShipping ? null : { companyName: billCompanyName, pib: billPib },
+    ).pib?.trim() || null,
     shipments: row.shipments.map(s => ({...s,...shipmentExportReferences(s)})),
     customerKey: customerKey({ customerId, userId }), customerIdentityComplete: Boolean(customerId || userId),
     hasFiscalRefund: row.fiscalDocuments.some(d => d.kind === 'REFUND'),
@@ -53,6 +59,7 @@ export async function exportAnanasOrders(q: ExportQuery) {
       deliveryCity: null,
       billingAddress,
       billingCity: billingAddress?.city?.trim() || null,
+      pib: billingAddress?.buyerType === 'TIN' ? billingAddress.buyerId?.trim() || null : null,
       items: items.map(item => ({ ...item, gross: money(item.gross), net: money(item.net), unitPrice: money(item.unitPrice), shipping: money(item.shipping), shippingNet: money(item.shippingNet), commission: money(item.commission) })),
       shippingGross: money(items.reduce((sum, item) => sum + item.shipping, 0)),
       shippingNet: items.some(item => item.shippingNet == null) ? null : money(items.reduce((sum, item) => sum + (item.shippingNet ?? 0), 0)),

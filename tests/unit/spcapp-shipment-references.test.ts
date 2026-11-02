@@ -42,3 +42,16 @@ it('exports the saved order delivery city without selecting other address or con
  expect(args.select.shipCity).toBe(true);
  for(const key of ['shipStreet','shipHouseNumber','shipPhone','shipFirstName','shipLastName','shipPostalCode','billCity','customer','user'])expect(args.select).not.toHaveProperty(key);
 });
+it.each([
+ [{billingSameAsShipping:true,shipCompanyName:'Firma',shipPib:' 012345678 ',billCompanyName:'Druga firma',billPib:'987654321'},'012345678'],
+ [{billingSameAsShipping:false,shipCompanyName:'Firma',shipPib:'123456789',billCompanyName:'Kupac',billPib:'987654321'},'987654321'],
+ [{billingSameAsShipping:false,shipCompanyName:'Firma',shipPib:'123456789',billCompanyName:null,billPib:null},'123456789'],
+ [{billingSameAsShipping:true,shipPib:null},null],
+ [{billingSameAsShipping:true,shipPib:'   '},null],
+])('exports the saved business buyer PIB without customer profile data (%j)',async(identity,pib)=>{
+ mocks.orders.mockResolvedValue([{id:'o1',number:'TEST-1',channel:'WEB',customerId:null,userId:null,shipments:[],fiscalDocuments:[],items:[],...identity}]);
+ const [row]=await exportOrders(q('orders'));
+ expect(row.pib).toBe(pib);
+ for(const key of ['shipPib','billPib','shipCompanyName','billCompanyName','billingSameAsShipping'])expect(row).not.toHaveProperty(key);
+ expect(mocks.orders.mock.calls[0][0].select).not.toHaveProperty('customer');
+});
