@@ -11,32 +11,16 @@ import { FirstPartyAnalytics } from "@/components/analytics/first-party-analytic
 import { getGa4MeasurementId } from "@/lib/analytics/config";
 import { getMetaPixelId } from "@/lib/analytics/meta-ecommerce";
 import { getActivePromoBar, getActiveTabs } from "@/lib/storefront/content";
-import { getCategoryTree, type CategoryNode } from "@/lib/api/catalog";
+import { getCategoryTree } from "@/lib/api/catalog";
 import { getCmsFooterState } from "@/lib/cms/pages";
 import { hasDatabaseConnection } from "@/lib/db";
-import { primaryNav, type NavNode } from "@/data/site";
+import { primaryNav } from "@/data/site";
+import { categoryNav } from "@/lib/storefront/category-navigation";
 import { getMobileSearchContent } from "@/lib/mobile-search/server";
 import { StorefrontStickyHeader } from "@/components/layout/storefront-sticky-header";
 
 const gaId = getGa4MeasurementId();
 const metaPixelId = getMetaPixelId();
-
-function categoryNav(
-  nodes: CategoryNode[],
-  parentSegments: string[] = [],
-): NavNode[] {
-  return nodes.map((node) => {
-    const segments = [...parentSegments, node.slug];
-    return {
-      label: node.name,
-      href: `/k/${segments.join("/")}`,
-      imageUrl: node.imageUrl,
-      children: node.children.length
-        ? categoryNav(node.children, segments)
-        : undefined,
-    };
-  });
-}
 
 /**
  * Shared public storefront shell.

@@ -978,6 +978,7 @@ function allowStaticCatalogFallback() {
 // ── Categories ────────────────────────────────────────────────────────
 
 export interface CategoryNode extends CategoryDTO {
+  path: string;
   children: CategoryNode[];
 }
 
@@ -992,6 +993,7 @@ async function loadCategoryTree(): Promise<CategoryNode[]> {
       byId.set(c.id, {
         id: c.id,
         slug: c.slug,
+        path: c.path,
         name: c.name,
         parentId: c.parentId,
         order: c.order,
@@ -1018,7 +1020,7 @@ async function loadCategoryTree(): Promise<CategoryNode[]> {
 
 const getCategoryTreeAcrossRequests = unstable_cache(
   loadCategoryTree,
-  ["storefront-category-tree-v1"],
+  ["storefront-category-tree-v2"],
   { revalidate: 60, tags: ["storefront-categories"] },
 );
 

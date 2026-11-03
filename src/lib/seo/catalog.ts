@@ -39,6 +39,21 @@ export function productSeoDescription(product: Pick<Product,
 
 export type SeoCategory = { path: string; name: string; slug: string };
 
+/** Recognize only full URLs emitted by the earlier slug-based category menu. */
+export function legacyCategoryNavigationPath(path: string, categories: SeoCategory[]) {
+  const byPath = new Map(categories.map(category => [category.path, category]));
+  const leafSlug = path.split("/").at(-1);
+  const matches = categories.filter(category => {
+    if (category.slug !== leafSlug) return false;
+    const segments = category.path.split("/").filter(Boolean);
+    const ancestors = segments.map((_, index) =>
+      byPath.get(`/${segments.slice(0, index + 1).join("/")}`));
+    if (ancestors.some(ancestor => !ancestor)) return false;
+    return `/${ancestors.map(ancestor => ancestor!.slug).join("/")}` === path;
+  });
+  return matches.length === 1 ? matches[0].path : null;
+}
+
 /** Earlier PDP links slugified display labels rather than using stored paths. */
 export function legacyCategoryPath(labelSlug: string, categories: SeoCategory[]) {
   const matches = categories.filter(category => {

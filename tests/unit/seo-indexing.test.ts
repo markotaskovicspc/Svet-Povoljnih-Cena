@@ -17,10 +17,42 @@ vi.mock("@/lib/storefront/content", () => ({ getTabTitleIcon: vi.fn() }));
 import CategoryPage, { generateMetadata } from "@/app/(shop)/k/[...slug]/page";
 
 beforeEach(() => {
+  vi.clearAllMocks();
   mocks.path.mockResolvedValue(null);
   mocks.slug.mockResolvedValue({ name: "Radna soba", slug: "radna-soba", path: "/namestaj/radna-soba" });
   mocks.catalog.mockResolvedValue({ categories: [], products: [] });
   mocks.redirect.mockImplementation((url) => { throw new Error(`REDIRECT:${url}`); });
+});
+
+it("redirects the old prefixed menu URL before querying products", async () => {
+  const root = { name: "Mali kućni aparati", slug: "mali-kucni-aparati", path: "/mali-kucni-aparati" };
+  const category = { name: "Pegle i parne stanice", slug: "mali-kucni-aparati-pegle-i-parne-stanice", path: `${root.path}/pegle-i-parne-stanice` };
+  mocks.path.mockImplementation(async path => path === category.path ? category : null);
+  mocks.catalog.mockResolvedValue({ categories: [root, category], products: [] });
+  const params = Promise.resolve({ slug: [root.slug, category.slug] });
+  await expect(CategoryPage({ params })).rejects.toThrow(`REDIRECT:/k${category.path}`);
+  expect(mocks.list).not.toHaveBeenCalled();
+  expect((await generateMetadata({ params })).alternates?.canonical).toBe(`/k${category.path}`);
+});
+
+it("serves the canonical category and queries products with its stored path", async () => {
+  const category = { name: "Pegle i parne stanice", path: "/mali-kucni-aparati/pegle-i-parne-stanice" };
+  mocks.path.mockResolvedValue(category);
+  mocks.list.mockResolvedValue({ items: [], total: 3, nextCursor: null });
+  const page = await CategoryPage({ params: Promise.resolve({ slug: ["mali-kucni-aparati", "pegle-i-parne-stanice"] }) });
+  expect(mocks.redirect).not.toHaveBeenCalled();
+  expect(mocks.list).toHaveBeenCalledWith(expect.objectContaining({ categoryPath: category.path }));
+  expect(page.props.title).toBe(category.name);
+  expect(page.props.total).toBe(3);
+});
+
+it("keeps an unknown parent path as a 404 instead of matching only the leaf slug", async () => {
+  const root = { name: "Mali kućni aparati", slug: "mali-kucni-aparati", path: "/mali-kucni-aparati" };
+  const category = { name: "Pegle i parne stanice", slug: "mali-kucni-aparati-pegle-i-parne-stanice", path: `${root.path}/pegle-i-parne-stanice` };
+  mocks.catalog.mockResolvedValue({ categories: [root, category], products: [] });
+  await expect(CategoryPage({ params: Promise.resolve({ slug: ["pogresno", category.slug] }) })).rejects.toThrow("NOT_FOUND");
+  expect(mocks.redirect).not.toHaveBeenCalled();
+  expect(mocks.list).not.toHaveBeenCalled();
 });
 
 it("redirects old short category URLs to the real path before loading products", async () => {

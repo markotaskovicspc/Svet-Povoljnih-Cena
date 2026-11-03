@@ -6,16 +6,12 @@ import { LISTING_PAGE_SIZE } from "@/lib/listing/filters";
 import type { Crumb } from "@/components/layout/breadcrumbs";
 import { getTabTitleIcon } from "@/lib/storefront/content";
 import { getSeoCatalog } from "@/lib/seo/catalog.server";
-import { legacyCategoryPath, populatedCategoryPaths, productCategoryTrail, seoPlainText } from "@/lib/seo/catalog";
+import { legacyCategoryNavigationPath, legacyCategoryPath, populatedCategoryPaths, productCategoryTrail, seoPlainText } from "@/lib/seo/catalog";
 
 /**
  * Catch-all category listing.
  *
- * URL → categoryPath:
- *   /k/namestaj/police/otvorene
- *   matches a product whose categoryPath, slugified, starts with the URL segments.
- *
- * Resolves against the imported category table.
+ * Resolves stored category paths and redirects earlier menu/display-name URLs.
  */
 
 async function resolveTrailAndTitle(slugSegments: string[]): Promise<{
@@ -31,6 +27,10 @@ async function resolveTrailAndTitle(slugSegments: string[]): Promise<{
   let category = await getCategoryByPath(path)
     ?? (slugSegments.length === 1 ? await getCategoryBySlug(path.slice(1)) : null);
   const catalog = await getSeoCatalog();
+  if (!category && slugSegments.length > 1) {
+    const legacyPath = legacyCategoryNavigationPath(path, catalog?.categories ?? []);
+    if (legacyPath) category = await getCategoryByPath(legacyPath);
+  }
   if (!category && slugSegments.length === 1) {
     const legacyPath = legacyCategoryPath(path.slice(1), catalog?.categories ?? []);
     if (legacyPath) category = await getCategoryByPath(legacyPath);
