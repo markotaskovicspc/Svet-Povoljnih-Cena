@@ -18,14 +18,18 @@ export const metadata = {
 const schema = z
   .object({
     id: z.string().optional().nullable(),
-    scope: z.enum(["GROUP", "PRODUCT"]),
+    scope: z.enum(["GROUP", "PRODUCT", "CATEGORY"]),
     groupId: z.string().trim().default(""),
+    categoryId: z.string().trim().default(""),
     sourceProductSku: z.string().trim().default(""),
     productSkus: z.string().trim().min(1, "Unesite bar jedan preporučeni SKU."),
     order: z.coerce.number().int().min(0).default(0),
     enabled: z.coerce.boolean().default(true),
   })
   .superRefine((value, context) => {
+    if (value.scope === "CATEGORY" && !value.categoryId) {
+      context.addIssue({ code: "custom", path: ["categoryId"], message: "Izaberite kategoriju." });
+    }
     if (value.scope === "GROUP" && !value.groupId) {
       context.addIssue({
         code: "custom",
@@ -65,7 +69,7 @@ async function upsert(formData: FormData) {
         });
         if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Greška." };
         const skus = parseSkus(parsed.data.productSkus);
-        const [products, sourceProduct] = await Promise.all([
+        const [products, sourceProduct, category] = await Promise.all([
           db.product.findMany({
             where: { sku: { in: skus }, deletedAt: null },
             select: { id: true, sku: true },
@@ -79,7 +83,13 @@ async function upsert(formData: FormData) {
                 select: { id: true, sku: true },
               })
             : null,
+          parsed.data.scope === "CATEGORY"
+            ? db.category.findUnique({ where: { id: parsed.data.categoryId }, select: { id: true } })
+            : null,
         ]);
+        if (parsed.data.scope === "CATEGORY" && !category) {
+          return { ok: false as const, error: "Izabrana kategorija ne postoji." };
+        }
         const foundSkus = new Set(products.map((product) => product.sku));
         const missingSkus = skus.filter((sku) => !foundSkus.has(sku));
         if (missingSkus.length) {
@@ -103,6 +113,7 @@ async function upsert(formData: FormData) {
 
         const data = {
           groupId: parsed.data.scope === "GROUP" ? parsed.data.groupId : null,
+          categoryId: parsed.data.scope === "CATEGORY" ? category!.id : null,
           sourceProductId:
             parsed.data.scope === "PRODUCT" ? sourceProduct!.id : null,
           order: parsed.data.order,
@@ -115,6 +126,7 @@ async function upsert(formData: FormData) {
           : await db.recommendationRule.create({
               data: {
                 groupId: data.groupId,
+                categoryId: data.categoryId,
                 sourceProductId: data.sourceProductId,
                 order: parsed.data.order,
                 enabled: parsed.data.enabled,
@@ -128,6 +140,7 @@ async function upsert(formData: FormData) {
           diff: {
             scope: parsed.data.scope,
             groupId: data.groupId,
+            categoryId: data.categoryId,
             sourceProductId: data.sourceProductId,
             count: products.length,
           },
@@ -153,23 +166,25 @@ async function remove(formData: FormData) {
 
 export default async function RecsPage() {
   await requireAdminAction(["CONTENT"], "/admin/preporuke");
-  const [rules, groups] = await Promise.all([
+  const [rules, groups, categories] = await Promise.all([
     db.recommendationRule.findMany({
       orderBy: [{ order: "asc" }],
       include: {
         group: { select: { name: true, slug: true } },
+        category: { select: { name: true } },
         sourceProduct: { select: { sku: true, name: true } },
         products: { select: { sku: true, name: true } },
       },
     }),
     db.group.findMany({ orderBy: { name: "asc" } }),
+    db.category.findMany({ orderBy: { path: "asc" }, select: { id: true, name: true, path: true } }),
   ]);
 
   return (
     <>
       <PageHeader
         title="Preporuke kupovine"
-        description={'Cross-sell modal („predlog kupovine") koji se prikazuje odmah nakon dodavanja artikla u korpu. Pravilo može važiti za celu grupu ili samo za jedan konkretan artikal.'}
+        description={'Preporuke posle dodavanja artikla i u korpi. Pravilo može važiti za kategoriju sa svim potkategorijama, internu grupu ili konkretan artikal.'}
         crumbs={[{ href: "/admin", label: "Admin" }, { label: "Preporuke" }]}
       />
       <div className="grid grid-cols-1 gap-6 px-8 py-6 lg:grid-cols-[1fr_400px]">
@@ -185,7 +200,9 @@ export default async function RecsPage() {
                   description={`${
                     r.sourceProduct
                       ? `Artikal: ${r.sourceProduct.sku} · ${r.sourceProduct.name}`
-                      : `Grupa: ${r.group?.name ?? "—"}`
+                      : r.category
+                        ? `Kategorija: ${r.category.name} i potkategorije`
+                        : `Grupa: ${r.group?.name ?? "—"}`
                   } · ${r.enabled ? "Aktivno" : "Neaktivno"}`}
                 >
                   Pravilo #{r.order}
@@ -200,10 +217,12 @@ export default async function RecsPage() {
                 <RuleForm
                   action={upsert}
                   groups={groups}
+                  categories={categories}
                   values={{
                     id: r.id,
-                    scope: r.sourceProductId ? "PRODUCT" : "GROUP",
+                    scope: r.sourceProductId ? "PRODUCT" : r.categoryId ? "CATEGORY" : "GROUP",
                     groupId: r.groupId ?? "",
+                    categoryId: r.categoryId ?? "",
                     sourceProductSku: r.sourceProduct?.sku ?? "",
                     order: r.order,
                     enabled: r.enabled,
@@ -222,7 +241,7 @@ export default async function RecsPage() {
         </div>
         <Card>
           <CardTitle>Novo pravilo</CardTitle>
-          <RuleForm action={upsert} groups={groups} />
+          <RuleForm action={upsert} groups={groups} categories={categories} />
         </Card>
       </div>
     </>
@@ -232,14 +251,17 @@ export default async function RecsPage() {
 function RuleForm({
   action,
   groups,
+  categories,
   values,
 }: {
   action: (fd: FormData) => Promise<void>;
   groups: { id: string; name: string }[];
+  categories: { id: string; name: string; path: string }[];
   values?: {
     id?: string;
-    scope?: "GROUP" | "PRODUCT";
+    scope?: "GROUP" | "PRODUCT" | "CATEGORY";
     groupId?: string;
+    categoryId?: string;
     sourceProductSku?: string;
     order?: number;
     enabled?: boolean;
@@ -251,8 +273,10 @@ function RuleForm({
       {values?.id ? <input type="hidden" name="id" value={values.id} /> : null}
       <RecommendationScopeFields
         groups={groups}
+        categories={categories}
         initialScope={values?.scope}
         initialGroupId={values?.groupId}
+        initialCategoryId={values?.categoryId}
         initialSourceProductSku={values?.sourceProductSku}
       />
       <Field

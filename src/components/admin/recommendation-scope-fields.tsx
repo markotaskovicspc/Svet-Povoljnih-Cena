@@ -4,17 +4,21 @@ import { useState } from "react";
 import { Field } from "@/components/admin/field";
 import { Input } from "@/components/ui/input";
 
-type RecommendationScope = "GROUP" | "PRODUCT";
+type RecommendationScope = "GROUP" | "PRODUCT" | "CATEGORY";
 
 export function RecommendationScopeFields({
   groups,
-  initialScope = "GROUP",
+  categories = [],
+  initialScope = "CATEGORY",
   initialGroupId = "",
+  initialCategoryId = "",
   initialSourceProductSku = "",
 }: {
   groups: { id: string; name: string }[];
+  categories?: { id: string; name: string; path: string }[];
   initialScope?: RecommendationScope;
   initialGroupId?: string;
+  initialCategoryId?: string;
   initialSourceProductSku?: string;
 }) {
   const [scope, setScope] = useState<RecommendationScope>(initialScope);
@@ -23,24 +27,42 @@ export function RecommendationScopeFields({
     <>
       <Field
         label="Nivo pravila"
-        hint="Pravilo za artikal ima prednost nad pravilom njegove grupe."
+        hint="Prednost imaju pravilo za artikal, zatim za grupu, pa za najužu kategoriju."
       >
         <select
           name="scope"
           value={scope}
           onChange={(event) =>
-            setScope(event.target.value === "PRODUCT" ? "PRODUCT" : "GROUP")
+            setScope(event.target.value as RecommendationScope)
           }
           className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
           aria-label="Nivo pravila preporuke"
         >
-          <option value="GROUP">Cela grupa artikala</option>
+          <option value="CATEGORY">Cela kategorija i potkategorije</option>
+          <option value="GROUP">Cela interna grupa artikala</option>
           <option value="PRODUCT">Jedan konkretan artikal</option>
         </select>
       </Field>
 
-      {scope === "GROUP" ? (
-        <Field label="Grupa">
+      {scope === "CATEGORY" ? (
+        <Field label="Kategorija" hint="Preporuka važi uz sve artikle iz ove kategorije i svih njenih potkategorija.">
+          <select
+            name="categoryId"
+            defaultValue={initialCategoryId}
+            required
+            className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
+            aria-label="Kategorija koja pokreće preporuku"
+          >
+            <option value="" disabled>— Izaberite kategoriju —</option>
+            {categories.map(category => (
+              <option key={category.id} value={category.id}>
+                {`${"— ".repeat(Math.max(0, category.path.split("/").filter(Boolean).length - 1))}${category.name}`}
+              </option>
+            ))}
+          </select>
+        </Field>
+      ) : scope === "GROUP" ? (
+        <Field label="Interna grupa" hint="Važi samo za artikle iz tačno ove interne grupe.">
           <select
             name="groupId"
             defaultValue={initialGroupId}

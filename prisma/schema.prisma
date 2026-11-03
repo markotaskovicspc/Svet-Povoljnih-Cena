@@ -294,6 +294,7 @@ model Category {
   deliveryRules    DeliveryPriceRule[]
   linearPromotions LinearPromotionCategory[]
   supplierMappings SupplierCategoryMapping[]
+  recommendationRules RecommendationRule[]
 
   @@index([parentId, order])
 }
@@ -954,11 +955,13 @@ model AdFlag {
   @@unique([channel])
 }
 
-/// Cross-sell rules scoped to one product or a whole group.
+/// Cross-sell rules scoped to one product, group, or category subtree.
 model RecommendationRule {
   id              String    @id @default(cuid())
   groupId         String?
   group           Group?    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  categoryId      String?
+  category        Category? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   sourceProductId String?
   sourceProduct   Product?  @relation("RecommendationRuleSourceProduct", fields: [sourceProductId], references: [id], onDelete: Cascade)
   /// Ordered SKUs to surface; products linked via M:N join
@@ -968,6 +971,7 @@ model RecommendationRule {
 
   @@index([groupId])
   @@index([sourceProductId])
+  @@index([categoryId])
 }
 
 // ──────────────────────────────────────────────────────────────────────

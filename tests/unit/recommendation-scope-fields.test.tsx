@@ -5,6 +5,21 @@ import { RecommendationScopeFields } from "@/components/admin/recommendation-sco
 const groups = [{ id: "chairs", name: "Stolice" }];
 
 describe("nivo pravila preporuke u adminu", () => {
+  it("za kategoriju prikazuje izbor sa svim potkategorijama bez interne grupe", () => {
+    const html = renderToStaticMarkup(
+      <RecommendationScopeFields
+        groups={groups}
+        categories={[{ id: "appliances", name: "Mali kućni aparati", path: "/mali-kucni-aparati" }]}
+        initialScope="CATEGORY"
+        initialCategoryId="appliances"
+      />,
+    );
+    expect(html).toContain('name="categoryId"');
+    expect(html).toContain('value="appliances" selected=""');
+    expect(html).toContain("svih njenih potkategorija");
+    expect(html).not.toContain('name="groupId"');
+    expect(html).not.toContain('name="sourceProductSku"');
+  });
   it("za grupno pravilo prikazuje obavezan izbor grupe", () => {
     const html = renderToStaticMarkup(
       <RecommendationScopeFields

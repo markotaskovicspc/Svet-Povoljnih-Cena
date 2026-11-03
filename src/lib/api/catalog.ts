@@ -2169,7 +2169,10 @@ export async function getCartOrderBumpOffersForSkus(
 
   const cartProducts = await db.product.findMany({
     where: { sku: { in: uniqueSkus }, ...webStorefrontVisibleProductWhere() },
-    select: { id: true, sku: true, name: true, groupId: true },
+    select: {
+      id: true, sku: true, name: true, groupId: true,
+      categories: { select: { category: { select: { path: true } } } },
+    },
   });
   const cartProductBySku = new Map(
     cartProducts.map((product) => [product.sku, product]),
@@ -2178,7 +2181,8 @@ export async function getCartOrderBumpOffersForSkus(
     .map((sku) => cartProductBySku.get(sku))
     .filter(
       (product): product is (typeof cartProducts)[number] => Boolean(product),
-    );
+    )
+    .map(product => ({ ...product, categoryPaths: product.categories.map(item => item.category.path) }));
   const sourceProductIds = orderedCartProducts.map((product) => product.id);
   const groupIds = Array.from(
     new Set(
@@ -2188,6 +2192,13 @@ export async function getCartOrderBumpOffersForSkus(
     ),
   );
   if (!sourceProductIds.length) return [];
+
+  const categoryPaths = [...new Set(orderedCartProducts.flatMap(product =>
+    product.categoryPaths.flatMap(path => {
+      const segments = path.split("/").filter(Boolean);
+      return segments.map((_, index) => `/${segments.slice(0, index + 1).join("/")}`);
+    }),
+  ))];
 
   const now = new Date();
   const [rules, pricingRules, deliveryWindows, monthlyHeroSkus] = await Promise.all([
@@ -2199,9 +2210,12 @@ export async function getCartOrderBumpOffersForSkus(
           ...(groupIds.length
             ? [{ sourceProductId: null, groupId: { in: groupIds } }]
             : []),
+          ...(categoryPaths.length
+            ? [{ sourceProductId: null, groupId: null, category: { path: { in: categoryPaths } } }]
+            : []),
         ],
       },
-      include: { products: { include: productInclude } },
+      include: { products: { include: productInclude }, category: { select: { path: true } } },
       orderBy: [{ order: "asc" }],
     }),
     getActivePricingRules(),
@@ -2213,15 +2227,15 @@ export async function getCartOrderBumpOffersForSkus(
     orderedCartProducts,
     rules,
   );
+  const rulesByProduct = new Map(orderedCartProducts.map(product => [
+    product.id, selectCartRecommendationRules([product], rules),
+  ]));
 
   const seenSkus = new Set(uniqueSkus);
   const out: CartOrderBumpOffer[] = [];
   for (const rule of selectedRules) {
     if (!rule.enabled) continue;
-    const source = orderedCartProducts.find(product =>
-      rule.sourceProductId === product.id ||
-      (rule.sourceProductId === null && rule.groupId === product.groupId),
-    );
+    const source = orderedCartProducts.find(product => rulesByProduct.get(product.id)?.some(selected => selected.id === rule.id));
     if (!source) continue;
     for (const product of rule.products) {
       if (
@@ -2243,10 +2257,7 @@ export async function getCartOrderBumpOffersForSkus(
   }
   if (includeDefaults) {
     const defaults = orderedCartProducts.filter(source =>
-      defaultOrderBumpSku(source.name) && !selectedRules.some(rule =>
-        rule.sourceProductId === source.id ||
-        (rule.sourceProductId === null && source.groupId !== null && rule.groupId === source.groupId),
-      ),
+      defaultOrderBumpSku(source.name) && !rulesByProduct.get(source.id)?.length,
     );
     const defaultSkus = [...new Set(defaults.map(source => defaultOrderBumpSku(source.name)!))].filter(sku => !seenSkus.has(sku));
     if (defaultSkus.length) {
