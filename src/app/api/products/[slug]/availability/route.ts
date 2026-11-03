@@ -28,7 +28,6 @@ export async function POST(
   const product = await db.product.findUnique({
     where: { slug },
     select: {
-      stock: true,
       dcAvailableQty: true,
       deletedAt: true,
       isActive: true,
@@ -60,7 +59,7 @@ export async function POST(
           supplierOperational: isRabaluxSupplierOperational(product.supplier),
           supplierApproved: product.supplierApprovalStatus === "APPROVED",
         }).sellableStock
-      : product.stock;
+      : Math.max(Math.trunc(product.dcAvailableQty), 0);
 
   const available = sellable >= parsed.data.quantity;
   return NextResponse.json({
