@@ -162,7 +162,7 @@ export async function savePickupPackage(
   }
   if (provider === "X_EXPRESS" && packageRoute.provider !== "X_EXPRESS") {
     throw new Error(
-      "Paket preko 30 kg ili sa stranicom preko 60 cm pripada MyGLS nalogu. Ispravite mere artikla i ponovo učitajte porudžbinu.",
+      "Paket preko 30 kg ili sa stranicom preko 80 cm pripada MyGLS nalogu. Ispravite mere artikla i ponovo učitajte porudžbinu.",
     );
   }
   return db.pickupBatchLine.update({

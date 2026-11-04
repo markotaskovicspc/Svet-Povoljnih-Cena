@@ -258,7 +258,7 @@ export function pickupPostingBlockReason({
         : invalidPackageCount > 0
           ? provider === "MYGLS"
             ? "Jedan ili više MyGLS paketa prelazi dozvoljenu težinu od 40 kg ili najdužu stranicu od 200 cm. Unesite stvarne transportne mere u dozvoljenim granicama."
-            : "Jedan ili više X Express paketa prelazi dozvoljenu težinu od 30 kg ili najdužu stranicu od 60 cm. Prebacite porudžbinu u MyGLS nalog."
+            : "Jedan ili više X Express paketa prelazi dozvoljenu težinu od 30 kg ili najdužu stranicu od 80 cm. Prebacite porudžbinu u MyGLS nalog."
           : null)
   );
 }

@@ -125,7 +125,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         attribute4: "Z-A4",
         colorPrimary: "Zelena",
         colorSecondary: "Crna",
-        unitPackWidthCm: 65,
+        unitPackWidthCm: 85,
         unitPackDepthCm: 22,
         unitPackHeightCm: 18,
       }),
@@ -287,10 +287,10 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         .getByRole("heading", { name: "Automatski izbor kurira" })
         .locator("..").locator("..");
       await expect(
-        routingCard.getByText("Paket je do 30 kg i svaka strana je do 60 cm."),
+        routingCard.getByText("Paket je do 30 kg i svaka strana je do 80 cm."),
       ).toBeVisible();
       await expect(
-        routingCard.getByText(/bar jedna strana preko 60 cm/),
+        routingCard.getByText(/bar jedna strana preko 80 cm/),
       ).toBeVisible();
       await expect(page.getByLabel("Kurirska služba")).toHaveCount(0);
       await page.goto("/admin/erp/preuzimanja", {
@@ -303,7 +303,7 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
       const createDialog = page.getByRole("dialog");
       await expect(
         createDialog.getByRole("option", {
-          name: "X Express — svi paketi do 30 kg i 60 cm",
+          name: "X Express — svi paketi do 30 kg i 80 cm",
           exact: true,
         }),
       ).toBeAttached();
@@ -394,8 +394,8 @@ test.describe("Modul 13 — nalozi za preuzimanje", () => {
         [70, 20, 20],
         [70, 20, 20],
         [70, 20, 20],
-        [65, 22, 18],
-        [65, 22, 18],
+        [85, 22, 18],
+        [85, 22, 18],
       ]);
       expect(new Set(batch.lines.map((line) => line.orderId))).toEqual(
         new Set([eligibleOrderId]),

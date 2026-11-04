@@ -44,7 +44,7 @@ describe("measured replacement parcels", () => {
   it("routes a small part to X Express and mixed parcel sizes wholly to MyGLS", () => {
     const route = (values: unknown) => resolveCourierProvider({ shippingMethod: "KURIR", items: parseReclamationPackages(values).map((pkg, i) => physicalPackageRouteItem({ ...pkg, packageNo: i + 1 })) });
     expect(route([parcel])).toMatchObject({ kind: "single", provider: "X_EXPRESS" });
-    expect(route([parcel, { ...parcel, widthCm: 61 }])).toMatchObject({ kind: "single", provider: "MYGLS" });
+    expect(route([parcel, { ...parcel, widthCm: 81 }])).toMatchObject({ kind: "single", provider: "MYGLS" });
   });
   it("rejects hard courier limits before a replacement becomes ready", () => {
     expect(() => parseReclamationPackages([{ ...parcel, weightKg: 41 }])).toThrow("40 kg");

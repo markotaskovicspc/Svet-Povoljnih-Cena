@@ -3,7 +3,7 @@ import { packageVolumetricDimension } from "@/lib/delivery-tariff";
 
 export const MAX_COURIER_PACKAGES = 99;
 export const MAX_X_EXPRESS_PACKAGE_WEIGHT_KG = 30;
-export const MAX_X_EXPRESS_PACKAGE_SIDE_CM = 60;
+export const MAX_X_EXPRESS_PACKAGE_SIDE_CM = 80;
 export const MAX_MYGLS_PACKAGE_WEIGHT_KG = 40;
 export const MAX_MYGLS_PACKAGE_SIDE_CM = 200;
 export const MAX_MYGLS_PACKAGE_GIRTH_CM = 300;

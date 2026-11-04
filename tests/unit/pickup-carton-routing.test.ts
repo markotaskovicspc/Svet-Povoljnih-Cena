@@ -35,17 +35,17 @@ describe("picking of grouped packages", () => {
   });
 
   it.each([
-    { unitPackHeightCm: 80 }, { grossWeightKg: 16 },
+    { unitPackHeightCm: 81 }, { grossWeightKg: 16 },
   ])("keeps known bulky or heavy cartons on MyGLS: %j", dimensions => {
     expect(route([{ ...chair, product: { ...chair.product, ...dimensions } }])).toEqual({ kind: "single", provider: "MYGLS" });
   });
 
   it("uses measured carton values before preliminary hints", () => {
     const [pkg] = derivePhysicalPackages([chair]);
-    const measured = { ...pkg, weightKg: 7, widthCm: 65, depthCm: 50, heightCm: 55 };
+    const measured = { ...pkg, weightKg: 7, widthCm: 85, depthCm: 50, heightCm: 55 };
     expect(resolveCourierProvider({ shippingMethod: "KURIR", items: [physicalPackageRouteItem(measured)] })).toEqual({ kind: "single", provider: "MYGLS" });
-    expect(() => requireCompleteXExpressPackages([measured])).toThrow("60 cm");
-    expect(requireCompleteMyGlsPackages([measured])[0]).toMatchObject({ weightKg: 7, widthCm: 65, packedQuantity: 2 });
+    expect(() => requireCompleteXExpressPackages([measured])).toThrow("80 cm");
+    expect(requireCompleteMyGlsPackages([measured])[0]).toMatchObject({ weightKg: 7, widthCm: 85, packedQuantity: 2 });
   });
 
   it("does not change the missing-dimension policy for ordinary individual parcels", () => {

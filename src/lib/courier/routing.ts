@@ -1,5 +1,9 @@
 import type { ShipmentService } from "@prisma/client";
-import { courierPackageCount, type PhysicalPackage } from "@/lib/courier/packages";
+import {
+  courierPackageCount,
+  MAX_X_EXPRESS_PACKAGE_SIDE_CM,
+  type PhysicalPackage,
+} from "@/lib/courier/packages";
 
 export interface PackageRouteInput {
   shippingMethod: "KURIR" | "KAMION";
@@ -29,7 +33,7 @@ export type CourierRoutingResolution =
   | { kind: "invalid_dimensions" };
 
 export const X_EXPRESS_MAX_PACKAGE_WEIGHT_KG = 30;
-export const X_EXPRESS_MAX_PACKAGE_SIDE_CM = 60;
+export const X_EXPRESS_MAX_PACKAGE_SIDE_CM = MAX_X_EXPRESS_PACKAGE_SIDE_CM;
 
 function expandedPackages(order: PackageRouteInput) {
   return order.items.flatMap((item) => {
@@ -89,8 +93,8 @@ export function resolveCourierProvider(
 
 /**
  * Document routing:
- * - packages at or below 30 kg and 60 cm on every side go through X Express;
- * - if any package is over 30 kg or has a side over 60 cm, every package in
+ * - packages at or below 30 kg and 80 cm on every side go through X Express;
+ * - if any package is over 30 kg or has a side over 80 cm, every package in
  *   the order goes through MyGLS;
  * The legacy shipping-method value does not override the package dimensions.
  * Labels are numbered once for the selected courier (1/N, 2/N, ...).

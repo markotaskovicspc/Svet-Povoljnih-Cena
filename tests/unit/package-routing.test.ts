@@ -13,7 +13,7 @@ describe("package routing", () => {
         items: [
           {
             withAssembly: false,
-            packWidthCm: 60,
+            packWidthCm: 80,
             packDepthCm: 40,
             packHeightCm: 30,
             packGrossWeightKg: 12,
@@ -23,7 +23,7 @@ describe("package routing", () => {
     ).toBe("COURIER_SMALL");
   });
 
-  it("routes packages over 30 kg or 60 cm through MyGLS", () => {
+  it("routes packages over 30 kg or 80 cm through MyGLS", () => {
     expect(
       routeService({
         shippingMethod: "KURIR",
@@ -42,7 +42,7 @@ describe("package routing", () => {
         items: [
           {
             withAssembly: false,
-            packWidthCm: 60.01,
+            packWidthCm: 80.01,
             packDepthCm: 20,
             packHeightCm: 10,
             packGrossWeightKg: 12,
@@ -56,7 +56,7 @@ describe("package routing", () => {
     const plan = routePackages({
       shippingMethod: "KURIR",
       items: [
-        { withAssembly: false, packWidthCm: 70, packDepthCm: 20, packHeightCm: 10, packGrossWeightKg: 12 },
+        { withAssembly: false, packWidthCm: 90, packDepthCm: 20, packHeightCm: 10, packGrossWeightKg: 12 },
         { withAssembly: false, packWidthCm: 30, packDepthCm: 20, packHeightCm: 10, packGrossWeightKg: 12 },
       ],
     });
@@ -73,7 +73,7 @@ describe("package routing", () => {
         items: [
           {
             withAssembly: false,
-            packWidthCm: 60,
+            packWidthCm: 80,
             packDepthCm: 40,
             packHeightCm: 30,
             packGrossWeightKg: 30,
@@ -87,7 +87,7 @@ describe("package routing", () => {
         items: [
           {
             withAssembly: false,
-            packWidthCm: 60.01,
+            packWidthCm: 80.01,
             packDepthCm: 40,
             packHeightCm: 30,
             packGrossWeightKg: 12,
@@ -135,7 +135,7 @@ describe("package routing", () => {
   it("keeps mixed orders together on MyGLS even when a small package has no weight", () => {
     const small = { withAssembly: false, packWidthCm: 17, packDepthCm: 17, packHeightCm: 25, packGrossWeightKg: 0 };
     for (const large of [
-      { ...small, packHeightCm: 61 },
+      { ...small, packHeightCm: 81 },
       { ...small, packGrossWeightKg: 31 },
     ]) {
       for (const items of [[small, large], [large, small]]) {
@@ -158,7 +158,7 @@ describe("package routing", () => {
       resolveCourierProvider({
         shippingMethod: "KURIR",
         items: [
-          { withAssembly: false, packWidthCm: 70, packDepthCm: 20, packHeightCm: 20, packGrossWeightKg: 12 },
+          { withAssembly: false, packWidthCm: 90, packDepthCm: 20, packHeightCm: 20, packGrossWeightKg: 12 },
           { withAssembly: false, packWidthCm: 30, packDepthCm: 20, packHeightCm: 20, packGrossWeightKg: 12 },
         ],
       }),
@@ -169,7 +169,7 @@ describe("package routing", () => {
     const plan = routePackages({
       shippingMethod: "KURIR",
       items: [
-        { withAssembly: false, packWidthCm: 70, packDepthCm: 20, packHeightCm: 10, packGrossWeightKg: 12 },
+        { withAssembly: false, packWidthCm: 90, packDepthCm: 20, packHeightCm: 10, packGrossWeightKg: 12 },
         { withAssembly: false, qty: 2, packQty: 1, packWidthCm: 30, packDepthCm: 20, packHeightCm: 10, packGrossWeightKg: 12 },
       ],
     });

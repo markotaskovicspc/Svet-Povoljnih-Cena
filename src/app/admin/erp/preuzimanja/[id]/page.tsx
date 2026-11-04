@@ -855,7 +855,7 @@ export default async function PickupBatchPage({
 
         <Card>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <CardTitle description={`Učitavaju se sve neučitane, nefiskalizovane DC porudžbine koje po stvarnoj težini i dimenzijama pripadaju kuriru ${myGls ? "MyGLS (preko 30 kg ili bar jedna stranica preko 60 cm)" : "X Express (paketi do 60 cm po svakoj strani, sa težinom do 30 kg ili bez upisane težine)"}. Težina 0 ili prazno polje ne blokira ulazak u picking; stvarnu težinu unesite pre potvrde spremnosti i kreiranja adresnice. Poznato prekoračenje granice šalje celu porudžbinu u MyGLS. Cela porudžbina ostaje u jednom nalogu. Ponovna slanja i zamene sa potvrđenom spremnošću i unetim merama ulaze samo na klik „Učitaj porudžbine“. MyGLS volumetrijska dimenzija preko 300 cm može imati doplatu, ali ne blokira adresnicu.`}>
+            <CardTitle description={`Učitavaju se sve neučitane, nefiskalizovane DC porudžbine koje po stvarnoj težini i dimenzijama pripadaju kuriru ${myGls ? "MyGLS (preko 30 kg ili bar jedna stranica preko 80 cm)" : "X Express (paketi do 80 cm po svakoj strani, sa težinom do 30 kg ili bez upisane težine)"}. Težina 0 ili prazno polje ne blokira ulazak u picking; stvarnu težinu unesite pre potvrde spremnosti i kreiranja adresnice. Poznato prekoračenje granice šalje celu porudžbinu u MyGLS. Cela porudžbina ostaje u jednom nalogu. Ponovna slanja i zamene sa potvrđenom spremnošću i unetim merama ulaze samo na klik „Učitaj porudžbine“. MyGLS volumetrijska dimenzija preko 300 cm može imati doplatu, ali ne blokira adresnicu.`}>
               Zajednička picking lista
             </CardTitle>
             {editable ? (
@@ -1070,7 +1070,7 @@ export default async function PickupBatchPage({
                                   </p>
                                 ) : !myGls && hasKnownXExpressHardLimitViolation(row) ? (
                                   <p className="mt-1 text-xs text-warning">
-                                    Stvarne mere prelaze X Express granicu od 30 kg ili 60 cm. Prebacite porudžbinu u MyGLS nalog.
+                                    Stvarne mere prelaze X Express granicu od 30 kg ili 80 cm. Prebacite porudžbinu u MyGLS nalog.
                                   </p>
                                 ) : null}
                               </div>

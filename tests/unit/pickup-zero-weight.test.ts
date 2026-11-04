@@ -122,7 +122,7 @@ it("loads legacy Pompea into one parcel per buyer in a mixed GLS picking", async
   mocks.query.mockReset().mockResolvedValueOnce([]).mockResolvedValueOnce(["first", "second"].map(id => ({ id, number: id, paymentMethod: "POUZECE_GOTOVINA" })));
   mocks.items.mockResolvedValue(["first", "second"].flatMap(orderId => [
     { id: `${orderId}-ordinary`, orderId, sku: "ORDINARY", name: "Kofer", qty: 1, warehouseReservedQty: 1, withAssembly: false,
-      product: { grossWeightKg: 2, unitPackWidthCm: 70, unitPackDepthCm: 30, unitPackHeightCm: 20 } },
+      product: { grossWeightKg: 2, unitPackWidthCm: 90, unitPackDepthCm: 30, unitPackHeightCm: 20 } },
     ...["110122", "110126", "110129"].map(sku => ({
       id: `${orderId}-${sku}`, orderId, sku, name: "Ženske čarape", qty: 2, warehouseReservedQty: 2,
       supplierName: "Modital doo", collectionName: null, product: null, unitPriceSale: 100, withAssembly: false,

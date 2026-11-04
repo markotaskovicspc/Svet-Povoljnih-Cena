@@ -285,7 +285,7 @@ describe("ERP module 13 pickup batches", () => {
     ).toContain("stvarnu težinu");
     expect(
       pickupPostingBlockReason({ ...readyXExpress, invalidPackageCount: 1 }),
-    ).toContain("30 kg ili najdužu stranicu od 60 cm");
+    ).toContain("30 kg ili najdužu stranicu od 80 cm");
     expect(pickupPostingBlockReason(readyXExpress)).toBeNull();
 
     const readyMyGls = {

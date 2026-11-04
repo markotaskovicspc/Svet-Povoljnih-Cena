@@ -233,7 +233,7 @@ describe("physical courier packages", () => {
     ).toBe(false);
   });
 
-  it("enforces the published X Express 30 kg and 60 cm package limits", () => {
+  it("enforces the configured X Express 30 kg and 80 cm package limits", () => {
     const base = {
       packageNo: 1,
       weightKg: 10,
@@ -245,11 +245,11 @@ describe("physical courier packages", () => {
     expect(() => requireCompleteXExpressPackages([{ ...base, weightKg: 30.1 }])).toThrow(
       "30 kg",
     );
-    expect(() => requireCompleteXExpressPackages([{ ...base, heightCm: 60.1 }])).toThrow(
-      "60 cm",
+    expect(() => requireCompleteXExpressPackages([{ ...base, heightCm: 80.1 }])).toThrow(
+      "80 cm",
     );
-    expect(() => requireCompleteXExpressPackages([{ ...base, weightKg: 30, heightCm: 60 }])).not.toThrow();
-    expect(hasKnownXExpressHardLimitViolation({ ...base, depthCm: 61 })).toBe(true);
+    expect(() => requireCompleteXExpressPackages([{ ...base, weightKg: 30, heightCm: 80 }])).not.toThrow();
+    expect(hasKnownXExpressHardLimitViolation({ ...base, depthCm: 81 })).toBe(true);
   });
 
   it.each([0, null])("still requires actual weight before creating an X Express label (weight %s)", (weightKg) => {

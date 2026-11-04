@@ -487,11 +487,11 @@ export default async function DeliveryPage() {
           <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
             <div className="rounded-lg border border-border p-3">
               <p className="font-semibold">X Express</p>
-              <p className="mt-1 text-ink-600">Paket je do 30 kg i svaka strana je do 60 cm.</p>
+              <p className="mt-1 text-ink-600">Paket je do 30 kg i svaka strana je do 80 cm.</p>
             </div>
             <div className="rounded-lg border border-border p-3">
               <p className="font-semibold">MyGLS</p>
-              <p className="mt-1 text-ink-600">Paket je preko 30 kg ili je bar jedna strana preko 60 cm, uz MyGLS ograničenja.</p>
+              <p className="mt-1 text-ink-600">Paket je preko 30 kg ili je bar jedna strana preko 80 cm, uz MyGLS ograničenja.</p>
             </div>
           </div>
           <p className="mt-3 text-xs text-ink-500">
@@ -617,7 +617,7 @@ export default async function DeliveryPage() {
             >
               X Express šifarnici
             </CardTitle>
-            <ProviderStatus label="Koristi se za pakete do 60 cm" />
+            <ProviderStatus label="Koristi se za pakete do 80 cm" />
             <ProviderReadiness
               ready={xExpressReadiness.available}
               reason={xExpressReadiness.reason}
@@ -643,7 +643,7 @@ export default async function DeliveryPage() {
             >
               MyGLS šifarnici
             </CardTitle>
-            <ProviderStatus label="Koristi se za pakete preko 30 kg ili 60 cm" />
+            <ProviderStatus label="Koristi se za pakete preko 30 kg ili 80 cm" />
             <ProviderReadiness
               ready={myGlsReadiness.available}
               reason={myGlsReadiness.reason}
