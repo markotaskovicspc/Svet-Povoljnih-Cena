@@ -420,7 +420,7 @@ export default async function PickupBatchPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ mode?: string }>;
+  searchParams: Promise<{ mode?: string; handover?: string }>;
 }) {
   await requireAdminAction(["OPS"], "/admin/erp/preuzimanja");
   const [{ id }, query] = await Promise.all([params, searchParams]);
@@ -558,6 +558,25 @@ export default async function PickupBatchPage({
         pickedUpPackages: handoverProgress.totalPackages,
       }
     : handoverProgress;
+  const handoverFilter = query.handover === "pending" ? "pending" : "all";
+  const pendingPickupGroupKeys = new Set(
+    legacyCompleteHandover
+      ? []
+      : activeRows
+          .filter((row) => !row.courierPickedUpAt)
+          .map((row) => row.lineGroupKey),
+  );
+  const pendingPickingGroups = aggregatePickupGroups(
+    activeRows.filter((row) => pendingPickupGroupKeys.has(row.lineGroupKey)),
+  );
+  const visiblePickingGroups =
+    handoverFilter === "pending" ? pendingPickingGroups : pickingGroups;
+  const pendingPickupGroupCount =
+    displayedHandoverProgress.totalGroups -
+    displayedHandoverProgress.pickedUpGroups;
+  const pendingPickupPackageCount =
+    displayedHandoverProgress.totalPackages -
+    displayedHandoverProgress.pickedUpPackages;
   const completePackageCount = activeRows.filter((row) => row.measurementsComplete).length;
   const invalidPackageCount = activeRows.filter((row) =>
     myGls
@@ -588,6 +607,8 @@ export default async function PickupBatchPage({
         invalidPackageCount,
       });
   const postingReasonId = "pickup-posting-block-reason";
+  const allPickingGroupsHref = `/admin/erp/preuzimanja/${batch.id}${editing ? "?mode=edit" : ""}`;
+  const pendingPickingGroupsHref = `/admin/erp/preuzimanja/${batch.id}?handover=pending${editing ? "&mode=edit" : ""}`;
 
   return (
     <>
@@ -881,7 +902,44 @@ export default async function PickupBatchPage({
             ) : null}
           </div>
 
-          {pickingGroups.length ? (
+          {showCourierHandoverStatus ? (
+            <div className="mb-4 space-y-2" role="group" aria-label="Filter po statusu preuzimanja">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="mr-1 text-sm text-ink-500">Prikaz:</span>
+                <Link
+                  href={allPickingGroupsHref}
+                  aria-current={handoverFilter === "all" ? "page" : undefined}
+                  className={`inline-flex min-h-9 items-center rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
+                    handoverFilter === "all"
+                      ? "border-foreground bg-foreground text-background"
+                      : "border-border bg-background hover:bg-muted"
+                  }`}
+                >
+                  Sve pošiljke ({pickingGroups.length})
+                </Link>
+                <Link
+                  href={pendingPickingGroupsHref}
+                  aria-current={handoverFilter === "pending" ? "page" : undefined}
+                  className={`inline-flex min-h-9 items-center rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
+                    handoverFilter === "pending"
+                      ? "border-warning/40 bg-warning/10 text-warning"
+                      : "border-border bg-background hover:bg-muted"
+                  }`}
+                >
+                  Nije kompletno preuzeto ({pendingPickupGroupCount}/{displayedHandoverProgress.totalGroups} pošiljki · {pendingPickupPackageCount}/{displayedHandoverProgress.totalPackages} paketa)
+                </Link>
+              </div>
+              {handoverFilter === "pending" && pendingPickingGroups.some((group) =>
+                group.rows.some((row) => row.handoverReport),
+              ) ? (
+                <p className="text-xs leading-5 text-ink-500">
+                  Kurir je za delimično preuzete pošiljke prijavio zbirni broj paketa. Ako nema statusa po pojedinačnom paketu, prikaz ne može da utvrdi koji tačno paket nedostaje.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {visiblePickingGroups.length ? (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[760px] text-sm">
                 <thead className="bg-muted-bg/70 text-left text-xs uppercase tracking-[0.08em] text-ink-500">
@@ -897,7 +955,7 @@ export default async function PickupBatchPage({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
-                  {pickingGroups.map((group) => (
+                  {visiblePickingGroups.map((group) => (
                     <tr key={group.lineGroupKey} className="align-top">
                       <td className="px-3 py-3">
                         <Link
@@ -991,11 +1049,13 @@ export default async function PickupBatchPage({
                                         ? row.rescheduledAt
                                           ? "Odložen · ponovo zakazan"
                                           : "Odložen · rezervacija sačuvana"
-                                        : row.courierPickedUpAt
-                                          ? "Preuzeo kurir"
-                                          : row.providerParcelNumber
-                                            ? "Čeka preuzimanje"
-                                            : "Čeka kurirsku adresnicu"}
+                                        : row.handoverReport
+                                          ? "Status nije zabeležen po pojedinačnom paketu"
+                                          : row.courierPickedUpAt
+                                            ? "Preuzeo kurir"
+                                            : row.providerParcelNumber
+                                              ? "Čeka preuzimanje"
+                                              : "Čeka kurirsku adresnicu"}
                                     </p>
                                     {row.cancellationError ? (
                                       <p className="mt-1 text-xs text-danger">{row.cancellationError}</p>
@@ -1147,6 +1207,10 @@ export default async function PickupBatchPage({
                   ))}
                 </tbody>
               </table>
+            </div>
+          ) : handoverFilter === "pending" ? (
+            <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-ink-500">
+              Nema aktivnih pošiljki koje čekaju preuzimanje.
             </div>
           ) : (
             <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-ink-500">
