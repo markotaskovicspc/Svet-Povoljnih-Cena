@@ -55,7 +55,7 @@ export async function exportPromotions(q: ExportQuery) {
 export async function exportPurchaseOrders(q: ExportQuery) {
   const rows = await db.purchaseOrder.findMany({ where: { id: { gt: q.after }, createdAt: { gte: q.period.start, lt: q.period.endExclusive },
     ...(q.status ? { status: q.status as 'DRAFT' | 'SENT' | 'CONFIRMED' | 'RECEIVED' | 'CANCELLED' } : {}) }, orderBy: { id: 'asc' }, take: q.limit + 1,
-    select: { id: true, number: true, status: true, orderDate: true, deliveryDate: true, currency: true, exchangeRate: true, totalPrice: true, totalVolume: true,
+    select: { id: true, number: true, status: true, orderDate: true, loadingDate: true, portDeliveryDate: true, deliveryDate: true, currency: true, exchangeRate: true, totalPrice: true, totalVolume: true,
       freightCost: true, freightCurrency: true, freightExchangeRate: true,
       supplier: { select: { id: true, name: true } }, createdAt: true, updatedAt: true, archivedAt: true,
       items: { select: { id: true, sku: true, name: true, qty: true, receivedQty: true, purchasePrice: true, currency: true, totalVolume: true, customsRate: true } } } });
