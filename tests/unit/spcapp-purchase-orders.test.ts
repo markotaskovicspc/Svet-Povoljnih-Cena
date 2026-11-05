@@ -24,7 +24,7 @@ it('exports numeric transport cost and string rate while preserving existing fie
   expect(mocks.findMany).toHaveBeenCalledWith(expect.objectContaining({
     where: { id: { gt: '' }, createdAt: { gte: q.period.start, lt: q.period.endExclusive }, status: 'DRAFT' },
     orderBy: { id: 'asc' }, take: 2,
-    select: expect.objectContaining({ freightCost: true, freightCurrency: true, freightExchangeRate: true }),
+    select: expect.objectContaining({ freightCost: true, freightCurrency: true, freightExchangeRate: true, archivedAt: true }),
   }));
   expect(row).not.toHaveProperty('payments');
   expect(row).not.toHaveProperty('freightCost');

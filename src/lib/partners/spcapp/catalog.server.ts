@@ -57,7 +57,7 @@ export async function exportPurchaseOrders(q: ExportQuery) {
     ...(q.status ? { status: q.status as 'DRAFT' | 'SENT' | 'CONFIRMED' | 'RECEIVED' | 'CANCELLED' } : {}) }, orderBy: { id: 'asc' }, take: q.limit + 1,
     select: { id: true, number: true, status: true, orderDate: true, deliveryDate: true, currency: true, exchangeRate: true, totalPrice: true, totalVolume: true,
       freightCost: true, freightCurrency: true, freightExchangeRate: true,
-      supplier: { select: { id: true, name: true } }, createdAt: true, updatedAt: true,
+      supplier: { select: { id: true, name: true } }, createdAt: true, updatedAt: true, archivedAt: true,
       items: { select: { id: true, sku: true, name: true, qty: true, receivedQty: true, purchasePrice: true, currency: true, totalVolume: true, customsRate: true } } } });
   return rows.map(({ freightCost, freightCurrency, freightExchangeRate, ...row }) => ({
     ...row,
