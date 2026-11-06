@@ -858,6 +858,17 @@ export default async function InboundInvoicePage({
       />
 
       <div className="space-y-6 px-4 py-6 md:px-8">
+        <Card id="dokumenti-prijemnice">
+          <CardTitle description="Dokumenti sa prijemnice i povezane nabavne porudžbenice prikazuju se zajedno.">
+            Vezani dokumenti
+          </CardTitle>
+          <ProcurementDocumentsPanel
+            ownerType="inboundInvoice"
+            ownerId={invoice.id}
+            initialDocuments={procurementDocuments}
+          />
+        </Card>
+
         <PaymentSnapshotCard value={invoice.paymentSnapshot} />
         {postingBlockedByVolume &&
         (!locked || cogsNeedsBackfill || receiptNeedsCompletion) ? (
@@ -1072,17 +1083,6 @@ export default async function InboundInvoicePage({
               ) : null}
             </fieldset>
           </AdminActionForm>
-        </Card>
-
-        <Card>
-          <CardTitle description="Dokumenti dodati ovde vidljivi su i na povezanoj porudžbenici.">
-            Dokumenti prijemnice
-          </CardTitle>
-          <ProcurementDocumentsPanel
-            ownerType="inboundInvoice"
-            ownerId={invoice.id}
-            initialDocuments={procurementDocuments}
-          />
         </Card>
 
         <Card>
