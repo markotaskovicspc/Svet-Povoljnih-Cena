@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { ErpCurrency, PurchaseOrderStatus } from "@prisma/client";
+import { ErpCurrency, ImporterCompany, PurchaseOrderStatus } from "@prisma/client";
 import { z } from "zod";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { Card, CardTitle } from "@/components/admin/card";
@@ -14,6 +14,7 @@ import { PurchaseOrderImport } from "@/components/admin/purchase-order-import";
 import { PurchaseOrderSendDialog } from "@/components/admin/purchase-order-send-dialog";
 import { PurchaseOrderSupplierFields } from "@/components/admin/purchase-order-supplier-fields";
 import { PurchaseOrderDeliveryFields } from "@/components/admin/purchase-order-delivery-fields";
+import { ProcurementDocumentsPanel } from "@/components/admin/procurement-documents-panel";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -96,6 +97,7 @@ const headerSchema = z.object({
   freightCost: z.coerce.number().nonnegative().max(100_000_000),
   freightCurrency: z.nativeEnum(ErpCurrency),
   freightExchangeRate: z.coerce.number().positive().max(1_000_000),
+  importerCompany: z.nativeEnum(ImporterCompany).or(z.literal("")),
   notes: z.string().max(2000),
 });
 
@@ -209,6 +211,7 @@ async function saveHeader(_state: AdminActionState, formData: FormData) {
           freightCost: data.freightCost,
           freightCurrency: data.freightCurrency,
           freightExchangeRate,
+          importerCompany: data.importerCompany || null,
           notes: data.notes || null,
         },
       });
@@ -380,6 +383,15 @@ export default async function PurchaseOrderEditorPage({
           orderBy: { createdAt: "desc" },
           select: { id: true, number: true, type: true, status: true },
         },
+        procurementDocuments: {
+          where: {
+            OR: [
+              { purchaseOrderId: id },
+              { inboundInvoice: { is: { purchaseOrderId: id } } },
+            ],
+          },
+          orderBy: { createdAt: "desc" },
+        },
       },
     }),
     db.supplier.findMany({
@@ -401,6 +413,14 @@ export default async function PurchaseOrderEditorPage({
   ]);
   if (!order) notFound();
 
+  const procurementDocuments = order.procurementDocuments.map((document) => ({
+    id: document.id,
+    originalFilename: document.originalFilename,
+    mimeType: document.mimeType,
+    sizeBytes: document.sizeBytes,
+    createdAt: document.createdAt.toISOString(),
+    ownerType: document.purchaseOrderId ? "purchaseOrder" as const : "inboundInvoice" as const,
+  }));
   const locked = Boolean(order.lockedAt);
   const goodsTotal = purchaseOrderGoodsTotal(order.items.map((item) => ({
     qty: item.qty, purchasePrice: Number(item.purchasePrice),
@@ -580,6 +600,17 @@ export default async function PurchaseOrderEditorPage({
                   initialSupplierId={order.supplierId ?? ""}
                   initialLoadingLocationId={order.loadingLocationId ?? ""}
                 />
+                <Field label="Firma uvoznik">
+                  <select
+                    name="importerCompany"
+                    defaultValue={order.importerCompany ?? ""}
+                    className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+                  >
+                    <option value="">— izaberite firmu —</option>
+                    <option value={ImporterCompany.SPC}>Svet povoljnih cena doo</option>
+                    <option value={ImporterCompany.EVONEK}>Evonek doo</option>
+                  </select>
+                </Field>
                 <Field label="Datum porudžbenice" hint="Ponovno slanje dobavljaču postavlja datum na današnji.">
                   <Input
                     name="orderDate"
@@ -869,22 +900,31 @@ export default async function PurchaseOrderEditorPage({
         <PurchasePayments purchaseOrderId={order.id} />
         <div className="grid gap-6 lg:grid-cols-2">
           <Card id="vezani-dokumenti">
-            <CardTitle description="Prijemnica povezana sa ovom porudžbenicom.">Vezani dokumenti</CardTitle>
-            {order.inboundInvoices.length ? (
-              <ul className="space-y-2 text-sm">
-                {order.inboundInvoices.map((invoice) => (
-                  <li key={invoice.id} className="flex items-center justify-between gap-3">
-                    <span>{invoice.number} · {invoice.type} · {invoice.status}</span>
-                    <Link
-                      href={`/admin/erp/ulazne-fakture/${invoice.id}`}
-                      className="text-walnut hover:underline"
-                    >
-                      Otvori fakturu
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            ) : <p className="text-sm text-ink-500">Nema vezanih dokumenata.</p>}
+            <CardTitle description="Prijemnica povezana sa ovom porudžbenicom i dokumenti koji su joj priloženi.">Vezani dokumenti</CardTitle>
+            <div className="space-y-5">
+              {order.inboundInvoices.length ? (
+                <ul className="space-y-2 text-sm">
+                  {order.inboundInvoices.map((invoice) => (
+                    <li key={invoice.id} className="flex items-center justify-between gap-3">
+                      <span>{invoice.number} · {invoice.type} · {invoice.status}</span>
+                      <Link
+                        href={`/admin/erp/ulazne-fakture/${invoice.id}`}
+                        className="text-walnut hover:underline"
+                      >
+                        Otvori prijemnicu
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className="text-sm text-ink-500">Još nema povezane prijemnice.</p>}
+              <div className="border-t border-border/60 pt-4">
+                <ProcurementDocumentsPanel
+                  ownerType="purchaseOrder"
+                  ownerId={order.id}
+                  initialDocuments={procurementDocuments}
+                />
+              </div>
+            </div>
           </Card>
           <Card>
             <CardTitle>Istorija statusa</CardTitle>

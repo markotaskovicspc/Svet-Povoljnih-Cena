@@ -3,6 +3,7 @@ import "server-only";
 import {
   CogsStatus,
   ErpCurrency,
+  ImporterCompany,
   InboundInvoiceStatus,
   InboundInvoiceType,
   Prisma,
@@ -43,6 +44,7 @@ export type SaveInboundInvoiceInput = {
   customsValueRsd: number;
   transportValueRsd: number;
   otherRelatedCostsRsd: number;
+  importerCompany: ImporterCompany | null;
   notes: string | null;
 };
 
@@ -190,6 +192,8 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
       where: { id: input.purchaseOrderId },
       select: {
         status: true,
+        lockedAt: true,
+        importerCompany: true,
         supplierId: true,
         supplier: { select: { enabled: true } },
       },
@@ -223,44 +227,61 @@ export async function saveInboundInvoice(input: SaveInboundInvoiceInput) {
   }
 
   try {
-    const updated = await db.inboundInvoice.updateMany({
-      where: { id: input.id, lockedAt: null },
-      data: {
-        number,
-        invoiceDate: utcDateOnly(input.receiptDate),
-        supplierId: purchaseOrder.supplierId,
-        purchaseOrderId: input.purchaseOrderId,
-        warehouseId: warehouse.id,
-        type: InboundInvoiceType.COGS,
-        // Normalize only an explicitly saved, unlocked receipt. Existing posted
-        // documents and foreign purchase-order prices remain untouched.
-        currency: ErpCurrency.RSD,
-        exchangeRate: 1,
-        value: amounts.invoiceValueRsd,
-        invoiceValueRsd: amounts.invoiceValueRsd,
-        customsValueRsd: amounts.customsValueRsd,
-        transportValueRsd: amounts.transportValueRsd,
-        otherRelatedCostsRsd: amounts.otherRelatedCostsRsd,
-        netValue: amounts.netValue,
-        vatValue: amounts.vatValue,
-        grossValue: amounts.grossValue,
-        allocationBasis: "VOLUME",
-        status: InboundInvoiceStatus.RECEIVED,
-        cogsStatus: CogsStatus.CALCULATED,
-        notes: input.notes,
-        paymentSnapshot,
-      },
+    const savedInvoice = await db.$transaction(async (tx) => {
+      if (purchaseOrder.lockedAt) {
+        if (purchaseOrder.importerCompany !== input.importerCompany) {
+          throw new Error("Firma uvoznik se ne može menjati na proknjiženoj porudžbenici.");
+        }
+      } else if (purchaseOrder.importerCompany !== input.importerCompany) {
+        const importerUpdate = await tx.purchaseOrder.updateMany({
+          where: { id: input.purchaseOrderId, lockedAt: null },
+          data: { importerCompany: input.importerCompany },
+        });
+        if (importerUpdate.count !== 1) {
+          throw new Error("Porudžbenica je u međuvremenu proknjižena; firma uvoznik nije promenjena.");
+        }
+      }
+
+      const updated = await tx.inboundInvoice.updateMany({
+        where: { id: input.id, lockedAt: null },
+        data: {
+          number,
+          invoiceDate: utcDateOnly(input.receiptDate),
+          supplierId: purchaseOrder.supplierId,
+          purchaseOrderId: input.purchaseOrderId,
+          warehouseId: warehouse.id,
+          type: InboundInvoiceType.COGS,
+          // Normalize only an explicitly saved, unlocked receipt. Existing posted
+          // documents and foreign purchase-order prices remain untouched.
+          currency: ErpCurrency.RSD,
+          exchangeRate: 1,
+          value: amounts.invoiceValueRsd,
+          invoiceValueRsd: amounts.invoiceValueRsd,
+          customsValueRsd: amounts.customsValueRsd,
+          transportValueRsd: amounts.transportValueRsd,
+          otherRelatedCostsRsd: amounts.otherRelatedCostsRsd,
+          netValue: amounts.netValue,
+          vatValue: amounts.vatValue,
+          grossValue: amounts.grossValue,
+          allocationBasis: "VOLUME",
+          status: InboundInvoiceStatus.RECEIVED,
+          cogsStatus: CogsStatus.CALCULATED,
+          notes: input.notes,
+          paymentSnapshot,
+        },
+      });
+      if (updated.count !== 1) {
+        throw new Error("Prijemnica je u međuvremenu proknjižena i nije izmenjena.");
+      }
+      return tx.inboundInvoice.findUniqueOrThrow({ where: { id: input.id } });
     });
-    if (updated.count !== 1) {
-      throw new Error("Prijemnica je u međuvremenu proknjižena i nije izmenjena.");
-    }
     await recomputeIncomingStockForPurchaseOrders(
       db,
       [current.purchaseOrderId, input.purchaseOrderId].filter(
         (value): value is string => Boolean(value),
       ),
     );
-    return db.inboundInvoice.findUniqueOrThrow({ where: { id: input.id } });
+    return savedInvoice;
   } catch (error) {
     if (isPrismaUniqueError(error)) {
       const linkedInvoice = await db.inboundInvoice.findFirst({

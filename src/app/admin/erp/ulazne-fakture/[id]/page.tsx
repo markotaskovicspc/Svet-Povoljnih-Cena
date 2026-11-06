@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { revalidatePath, updateTag } from "next/cache";
 import {
   ErpCurrency,
+  ImporterCompany,
   InboundInvoiceStatus,
   PurchaseOrderStatus,
 } from "@prisma/client";
@@ -16,6 +17,7 @@ import {
 } from "@/components/admin/inbound-invoice-fields";
 import { PageHeader } from "@/components/admin/page-header";
 import { InboundInvoicePrint } from "@/components/admin/inbound-invoice-print";
+import { ProcurementDocumentsPanel } from "@/components/admin/procurement-documents-panel";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { Input } from "@/components/ui/input";
 import { InboundInvoiceCogsTable } from "@/components/admin/inbound-invoice-cogs-table";
@@ -80,6 +82,7 @@ const invoiceSchema = z.object({
     .nonnegative()
     .max(1_000_000_000),
   otherCostsAllocationBasis: z.literal("VOLUME"),
+  importerCompany: z.nativeEnum(ImporterCompany).or(z.literal("")),
   netValue: z.coerce.number().nonnegative().max(1_000_000_000),
   vatValue: z.coerce.number().nonnegative().max(1_000_000_000),
   grossValue: z.coerce.number().nonnegative().max(1_000_000_000),
@@ -204,6 +207,7 @@ async function saveAction(_state: AdminActionState, formData: FormData) {
         customsValueRsd: data.customsValueRsd,
         transportValueRsd: data.transportValueRsd,
         otherRelatedCostsRsd: data.otherRelatedCostsRsd,
+        importerCompany: data.importerCompany || null,
         notes: data.notes.trim() || null,
       });
       revalidatePath(`/admin/erp/ulazne-fakture/${data.invoiceId}`);
@@ -320,6 +324,9 @@ export default async function InboundInvoicePage({
         warehouse: true,
         purchaseOrder: {
           include: {
+            procurementDocuments: {
+              orderBy: { createdAt: "desc" },
+            },
             supplier: { select: { id: true, name: true } },
             receivingWarehouse: true,
             payments: true,
@@ -383,6 +390,9 @@ export default async function InboundInvoicePage({
             },
           },
         },
+        procurementDocuments: {
+          orderBy: { createdAt: "desc" },
+        },
       },
     }),
     query.mode === "print" ? [] : db.purchaseOrder.findMany({
@@ -432,6 +442,28 @@ export default async function InboundInvoicePage({
     }),
   ]);
   if (!invoice) notFound();
+
+  const procurementDocuments = [
+    ...(invoice.purchaseOrder?.procurementDocuments.map((document) => ({
+      id: document.id,
+      originalFilename: document.originalFilename,
+      mimeType: document.mimeType,
+      sizeBytes: document.sizeBytes,
+      createdAt: document.createdAt.toISOString(),
+      ownerType: "purchaseOrder" as const,
+    })) ?? []),
+    ...invoice.procurementDocuments.map((document) => ({
+      id: document.id,
+      originalFilename: document.originalFilename,
+      mimeType: document.mimeType,
+      sizeBytes: document.sizeBytes,
+      createdAt: document.createdAt.toISOString(),
+      ownerType: "inboundInvoice" as const,
+    })),
+  ].sort(
+    (left, right) =>
+      new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
+  );
 
   const locked = Boolean(invoice.lockedAt);
   const cancelled = invoice.status === InboundInvoiceStatus.CANCELLED;
@@ -986,6 +1018,17 @@ export default async function InboundInvoicePage({
                   ))}
                 </select>
               </Field>
+              <Field label="Firma uvoznik">
+                <select
+                  name="importerCompany"
+                  defaultValue={invoice.purchaseOrder?.importerCompany ?? ""}
+                  className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+                >
+                  <option value="">— izaberite firmu —</option>
+                  <option value={ImporterCompany.SPC}>Svet povoljnih cena doo</option>
+                  <option value={ImporterCompany.EVONEK}>Evonek doo</option>
+                </select>
+              </Field>
               <InboundInvoiceFields
                 purchaseOrders={purchaseOrderOptions}
                 editing={editing}
@@ -1029,6 +1072,17 @@ export default async function InboundInvoicePage({
               ) : null}
             </fieldset>
           </AdminActionForm>
+        </Card>
+
+        <Card>
+          <CardTitle description="Dokumenti dodati ovde vidljivi su i na povezanoj porudžbenici.">
+            Dokumenti prijemnice
+          </CardTitle>
+          <ProcurementDocumentsPanel
+            ownerType="inboundInvoice"
+            ownerId={invoice.id}
+            initialDocuments={procurementDocuments}
+          />
         </Card>
 
         <Card>

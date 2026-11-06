@@ -2248,6 +2248,11 @@ enum PurchaseOrderStatus {
   CANCELLED
 }
 
+enum ImporterCompany {
+  SPC
+  EVONEK
+}
+
 enum InboundInvoiceType {
   DOM
   INO
@@ -2312,6 +2317,7 @@ model PurchaseOrder {
   freightCurrency      ErpCurrency         @default(RSD)
   freightExchangeRate  Decimal             @default(1) @db.Decimal(14, 6)
   allocationBasis      AllocationBasis     @default(VOLUME)
+  importerCompany      ImporterCompany?
   transportType        String?
   parity               String?
   bmPct                Decimal?            @db.Decimal(8, 2)
@@ -2332,6 +2338,7 @@ model PurchaseOrder {
   items               PurchaseOrderItem[]
   events              PurchaseOrderStatusEvent[]
   inboundInvoices     InboundInvoice[]
+  procurementDocuments ProcurementDocument[]
   payments            PurchaseOrderPayment[]
 
   @@index([supplierId, createdAt])
@@ -2436,11 +2443,29 @@ model InboundInvoice {
   supplier      Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   purchaseOrder PurchaseOrder?       @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
   warehouse     Warehouse?           @relation("InboundInvoiceReceivingWarehouse", fields: [warehouseId], references: [id], onDelete: SetNull)
-  items         InboundInvoiceItem[]
+  items                 InboundInvoiceItem[]
+  procurementDocuments ProcurementDocument[]
 
   @@index([supplierId, invoiceDate])
   @@index([status, invoiceDate])
   @@index([warehouseId])
+}
+
+model ProcurementDocument {
+  id                String   @id @default(cuid())
+  purchaseOrderId   String?
+  inboundInvoiceId  String?
+  originalFilename  String
+  storageKey        String   @unique
+  mimeType          String
+  sizeBytes         Int
+  createdAt         DateTime @default(now())
+
+  purchaseOrder  PurchaseOrder?  @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  inboundInvoice InboundInvoice? @relation(fields: [inboundInvoiceId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseOrderId, createdAt])
+  @@index([inboundInvoiceId, createdAt])
 }
 
 model InboundInvoiceItem {

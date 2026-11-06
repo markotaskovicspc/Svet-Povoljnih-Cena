@@ -1,4 +1,5 @@
 const DEFAULT_PRODUCT_MEDIA_BUCKET = "product-media";
+const ERP_DOCUMENTS_BUCKET = "erp-documents";
 
 function publicSupabaseUrl() {
   return process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL ?? "";
@@ -10,6 +11,10 @@ export function getProductMediaBucket() {
     process.env.SUPABASE_STORAGE_BUCKET ??
     DEFAULT_PRODUCT_MEDIA_BUCKET
   );
+}
+
+export function getErpDocumentsBucket() {
+  return ERP_DOCUMENTS_BUCKET;
 }
 
 export function resolveSupabaseStorageUrl(value: string | null | undefined) {

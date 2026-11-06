@@ -139,7 +139,8 @@ try {
          'fiscal-receipts',
          'order-receipts',
          'reclamation-uploads',
-         'shipment-labels'
+         'shipment-labels',
+         'erp-documents'
        )
        ORDER BY id
     `);
@@ -280,6 +281,7 @@ try {
       "order-receipts",
       "reclamation-uploads",
       "shipment-labels",
+      "erp-documents",
     ]) {
       if (!bucketById.has(id)) errors.push(`Private storage bucket is missing: ${id}.`);
       else if (bucketById.get(id) !== false) errors.push(`Sensitive storage bucket is public: ${id}.`);
