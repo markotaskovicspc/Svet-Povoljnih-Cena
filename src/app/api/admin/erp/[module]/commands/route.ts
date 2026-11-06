@@ -319,7 +319,7 @@ async function runCommand(
         throw new Error("Komanda nije dostupna u ovom ERP modulu.");
       }
       const archived = action === "po.archive";
-      const count = await setPurchaseOrdersArchived(ids, archived);
+      const count = await setPurchaseOrdersArchived(ids, archived, actorId);
       revalidatePath("/admin/erp/porudzbenice");
       revalidatePath("/admin/erp/porudzbenice-po-artiklima");
       return { message: archived ? `Arhivirano porudžbenica: ${count}.` : `Vraćeno iz arhive: ${count}.` };

@@ -672,7 +672,8 @@ const coreErpModules: ErpModule[] = [
         tone: "neutral",
         action: "po.archive",
         needsSelection: true,
-        confirm: "Arhivirati izabrane porudžbenice? Dokumenti i njihov status ostaju sačuvani.",
+        confirm:
+          "Arhivirati izabrane porudžbenice? Status porudžbenica biće promenjen u Otkazana.",
       },
       {
         label: "Vrati iz arhive",
