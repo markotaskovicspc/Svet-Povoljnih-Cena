@@ -23,6 +23,7 @@ import {
   isInternalDispatch,
   type DispatchNoteInput,
 } from "@/lib/admin/dispatch-note";
+import { dispatchAccountingDate, isAnanasName } from "@/lib/admin/kep-ledger";
 
 const IMPORT_CHANNELS: SalesChannel[] = [
   SalesChannel.VP,
@@ -1054,11 +1055,19 @@ export async function postDispatchNotes(ids: string[], actorId: string) {
 
         const postedAt = new Date();
         const carriesAnanasStock =
-          dispatch.type === DispatchNoteType.CUSTOMER &&
-          /\bananas\b/i.test(dispatch.receiverName.normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+          (dispatch.type === DispatchNoteType.INTERNAL &&
+            (isAnanasName(dispatch.destinationName) ||
+              isAnanasName(dispatch.destinationWarehouse?.name))) ||
+          (dispatch.type === DispatchNoteType.CUSTOMER &&
+            isAnanasName(dispatch.receiverName));
         const retailValueSnapshot = carriesAnanasStock
           ? await createRetailValueSnapshot(tx, {
-              bookedAt: postedAt,
+              bookedAt: dispatchAccountingDate({
+                actualDispatchAt: dispatch.actualDispatchAt,
+                issueDate: dispatch.issueDate,
+                snapshotBookedAt: null,
+                postedAt,
+              })!,
               items: dispatch.items.map((item) => ({
                 id: item.id,
                 productId: item.productId,

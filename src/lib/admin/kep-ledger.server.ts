@@ -5,7 +5,13 @@ import type { ErpRow } from "@/lib/admin/erp";
 import { dateInputInTimeZone, resolveReportPeriod } from "@/lib/admin/report-period";
 import { fiscalMerchandiseAmounts, ananasMerchandiseItems } from "@/lib/admin/fiscal-merchandise";
 import { ananasInventorySku } from "@/lib/ananas/inventory-plan";
-import { fiscalLevelingDifference, priceChangeLevelingDifference, roundKepMoney } from "./kep-ledger";
+import {
+  dispatchAccountingDate,
+  fiscalLevelingDifference,
+  priceChangeLevelingDifference,
+  receiptAccountingDate,
+  roundKepMoney,
+} from "./kep-ledger";
 import { readRetailValueSnapshot, retailValueSnapshotTotal, type RetailValueSnapshot } from "./retail-value-snapshot";
 
 type Company = "SPC" | "ANANAS";
@@ -176,6 +182,11 @@ async function purchaseOrdersBefore(period: ReturnType<typeof periodForYearToDat
       number: true,
       postedAt: true,
       retailValueSnapshot: true,
+      inboundInvoices: {
+        where: { status: "POSTED" },
+        take: 1,
+        select: { invoiceDate: true },
+      },
       items: { orderBy: { id: "asc" }, select: { id: true, productId: true, sku: true, name: true, qty: true } },
     },
   });
@@ -184,18 +195,25 @@ async function purchaseOrdersBefore(period: ReturnType<typeof periodForYearToDat
 async function ananasDispatchNotesBefore(period: ReturnType<typeof periodForYearToDate>) {
   return db.dispatchNote.findMany({
     where: {
-      type: "CUSTOMER",
       status: "POSTED",
-      receiverName: { contains: "Ananas", mode: "insensitive" },
       postedAt: { not: null, lt: period.endExclusive },
+      OR: [
+        { type: "CUSTOMER", receiverName: { contains: "Ananas", mode: "insensitive" } },
+        { type: "INTERNAL", destinationName: { contains: "Ananas", mode: "insensitive" } },
+        { type: "INTERNAL", destinationWarehouse: { is: { name: { contains: "Ananas", mode: "insensitive" } } } },
+      ],
     },
-    orderBy: [{ postedAt: "asc" }, { id: "asc" }],
+    orderBy: [{ actualDispatchAt: "asc" }, { postedAt: "asc" }, { id: "asc" }],
     select: {
       id: true,
       number: true,
+      type: true,
       issueDate: true,
+      actualDispatchAt: true,
       postedAt: true,
       receiverName: true,
+      destinationName: true,
+      destinationWarehouse: { select: { name: true } },
       retailValueSnapshot: true,
       priceList: { select: { code: true, kind: true } },
       items: { orderBy: { id: "asc" }, select: { id: true, productId: true, sku: true, name: true, qty: true, unitPriceGross: true } },
@@ -211,10 +229,24 @@ async function getKepRows(company: Company, take: number, skip: number): Promise
   ]);
   const relevantOrders = purchaseOrders.filter((order) => {
     const snapshot = readRetailValueSnapshot(order.retailValueSnapshot);
-    const effectiveDate = snapshot ? new Date(snapshot.bookedAt) : order.postedAt;
+    const effectiveDate = receiptAccountingDate({
+      receiptDate: order.inboundInvoices[0]?.invoiceDate ?? null,
+      snapshotBookedAt: snapshot ? new Date(snapshot.bookedAt) : null,
+      postedAt: order.postedAt,
+    });
     return isInPeriod(effectiveDate, period);
   });
-  const relevantNotes = dispatchNotes.filter((note) => isInPeriod(note.postedAt, period));
+  const relevantNotes = dispatchNotes.filter((note) => {
+    const date = dispatchAccountingDate({
+      actualDispatchAt: note.actualDispatchAt,
+      issueDate: note.issueDate,
+      snapshotBookedAt: readRetailValueSnapshot(note.retailValueSnapshot)
+        ? new Date(readRetailValueSnapshot(note.retailValueSnapshot)!.bookedAt)
+        : null,
+      postedAt: note.postedAt,
+    });
+    return isInPeriod(date, period);
+  });
   const productIds = [...new Set([
     ...relevantOrders.flatMap((order) => order.items.flatMap((item) => item.productId ? [item.productId] : [])),
     ...relevantNotes.flatMap((note) => note.items.flatMap((item) => item.productId ? [item.productId] : [])),
@@ -228,7 +260,11 @@ async function getKepRows(company: Company, take: number, skip: number): Promise
   if (company === "SPC") {
     for (const order of relevantOrders) {
       const snapshot = readRetailValueSnapshot(order.retailValueSnapshot);
-      const date = snapshot ? new Date(snapshot.bookedAt) : order.postedAt!;
+      const date = receiptAccountingDate({
+        receiptDate: order.inboundInvoices[0]?.invoiceDate ?? null,
+        snapshotBookedAt: snapshot ? new Date(snapshot.bookedAt) : null,
+        postedAt: order.postedAt,
+      })!;
       appendReceiptRow(rows, {
         id: `purchase:${order.id}`,
         date,
@@ -245,7 +281,12 @@ async function getKepRows(company: Company, take: number, skip: number): Promise
 
   for (const note of relevantNotes) {
     const snapshot = readRetailValueSnapshot(note.retailValueSnapshot);
-    const date = snapshot ? new Date(snapshot.bookedAt) : note.postedAt ?? note.issueDate;
+    const date = dispatchAccountingDate({
+      actualDispatchAt: note.actualDispatchAt,
+      issueDate: note.issueDate,
+      snapshotBookedAt: snapshot ? new Date(snapshot.bookedAt) : null,
+      postedAt: note.postedAt,
+    })!;
     const noteItems = note.items.map((item) => ({
       id: item.id,
       productId: item.productId,
@@ -432,7 +473,11 @@ async function getPriceLevelingRows(take: number, skip: number): Promise<ErpRow[
   ]);
   for (const order of purchaseOrders) {
     const snapshot = readRetailValueSnapshot(order.retailValueSnapshot);
-    const date = snapshot ? new Date(snapshot.bookedAt) : order.postedAt;
+    const date = receiptAccountingDate({
+      receiptDate: order.inboundInvoices[0]?.invoiceDate ?? null,
+      snapshotBookedAt: snapshot ? new Date(snapshot.bookedAt) : null,
+      postedAt: order.postedAt,
+    });
     if (!date) continue;
     for (const item of order.items) {
       if (!item.productId) continue;
@@ -443,7 +488,13 @@ async function getPriceLevelingRows(take: number, skip: number): Promise<ErpRow[
   }
   for (const note of dispatchNotes) {
     const snapshot = readRetailValueSnapshot(note.retailValueSnapshot);
-    const date = snapshot ? new Date(snapshot.bookedAt) : note.postedAt ?? note.issueDate;
+    const date = dispatchAccountingDate({
+      actualDispatchAt: note.actualDispatchAt,
+      issueDate: note.issueDate,
+      snapshotBookedAt: snapshot ? new Date(snapshot.bookedAt) : null,
+      postedAt: note.postedAt,
+    });
+    if (!date) continue;
     for (const item of note.items) {
       if (!item.productId) continue;
       const map = firstReceipt.get("ANANAS")!;

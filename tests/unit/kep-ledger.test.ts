@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { ERP_REQUIREMENTS } from "@/lib/admin/erp-requirements";
-import { fiscalLevelingDifference, priceChangeLevelingDifference } from "@/lib/admin/kep-ledger";
+import {
+  dispatchAccountingDate,
+  fiscalLevelingDifference,
+  isAnanasName,
+  priceChangeLevelingDifference,
+  receiptAccountingDate,
+} from "@/lib/admin/kep-ledger";
 import {
   buildRetailValueSnapshot,
   readRetailValueSnapshot,
@@ -31,6 +37,32 @@ describe("KEP and retail price levelings", () => {
       ],
       priceByProductId: new Map([["product-a", 100]]),
     })).toThrow(/110002/);
+  });
+
+  it("uses the date from the posted goods receipt instead of the later posting date", () => {
+    const receiptDate = new Date("2026-03-01T00:00:00.000Z");
+    const snapshotDate = new Date("2026-11-09T12:00:00.000Z");
+    const postedAt = new Date("2026-11-09T12:05:00.000Z");
+
+    expect(receiptAccountingDate({ receiptDate, snapshotBookedAt: snapshotDate, postedAt }))
+      .toBe(receiptDate);
+    expect(receiptAccountingDate({ receiptDate: null, snapshotBookedAt: snapshotDate, postedAt }))
+      .toBe(snapshotDate);
+  });
+
+  it("dates Ananas transfer entries by actual dispatch and recognizes internal Ananas destinations", () => {
+    const actualDispatchAt = new Date("2026-10-13T17:54:00.000Z");
+    const issueDate = new Date("2026-10-13T00:00:00.000Z");
+    const postedAt = new Date("2026-10-13T17:58:00.000Z");
+
+    expect(dispatchAccountingDate({
+      actualDispatchAt,
+      issueDate,
+      snapshotBookedAt: postedAt,
+      postedAt,
+    })).toBe(actualDispatchAt);
+    expect(isAnanasName("Magacin Ananas" )).toBe(true);
+    expect(isAnanasName("Distributivni centar")).toBe(false);
   });
 
   it("records markdowns as negative levelings and reverses them on refunds", () => {

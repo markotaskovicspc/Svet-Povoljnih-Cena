@@ -846,9 +846,18 @@ export async function receivePurchaseOrder(
     }
     const bookingState = await tx.purchaseOrder.findUniqueOrThrow({
       where: { id },
-      select: { cogsBookedAt: true, retailValueSnapshot: true },
+      select: {
+        cogsBookedAt: true,
+        retailValueSnapshot: true,
+        inboundInvoices: {
+          where: { status: "POSTED" },
+          take: 1,
+          select: { invoiceDate: true },
+        },
+      },
     });
-    const retailBookedAt = new Date();
+    const postedAt = new Date();
+    const retailBookedAt = bookingState.inboundInvoices[0]?.invoiceDate ?? postedAt;
     const retailValueSnapshot = bookingState.retailValueSnapshot ??
       await createRetailValueSnapshot(tx, {
         bookedAt: retailBookedAt,
@@ -953,8 +962,8 @@ export async function receivePurchaseOrder(
     await tx.purchaseOrder.update({
       where: { id },
       data: {
-        lockedAt: order.lockedAt ?? retailBookedAt,
-        postedAt: order.postedAt ?? retailBookedAt,
+        lockedAt: order.lockedAt ?? postedAt,
+        postedAt: order.postedAt ?? postedAt,
         retailValueSnapshot,
       },
     });
