@@ -1,6 +1,7 @@
 import 'server-only';
 import { exportDeliveredArticles } from './delivered-articles.server';
 import { exportReclamations } from './reclamations.server';
+import { kepEntries, kepOpening } from './kep.server';
 import { type ExportQuery } from './contract';
 import { exportProducts, exportInventory, exportPrices, exportLoyaltyRules, exportPromotions, exportPurchaseOrders, exportInboundInvoices } from './catalog.server';
 import { exportOrders, exportAnanasOrders, exportFiscal, exportAnanasFiscal, exportLegacyFiscal } from './sales.server';
@@ -31,5 +32,7 @@ export function exportResource(q: ExportQuery): Promise<{ id: string }[]> {
     case 'traffic-pages': return exportTrafficPages(q);
     case 'customers': return exportCustomers(q);
     case 'product-performance': return exportPerformance(q);
+    case 'kep-entries': return kepEntries(q);
+    case 'kep-opening': return kepOpening(q);
   }
 }

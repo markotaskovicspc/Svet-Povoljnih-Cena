@@ -26,6 +26,8 @@ export const RESOURCES = {
   'traffic-pages': 'Consented page views, visits and unique visitors per normalized page path and day/month bucket; no visitor identifiers',
   customers: 'SPC unique/new/returning buyers per bucket; Ananas identity incomplete',
   'product-performance': 'Existing WEB product-performance calculation for a period',
+  'kep-entries': 'KEP (knjiga evidencije prometa) changes per warehouse at retail price incl. VAT: receipts, transfers, daily fiscal sales and refunds, discount and price-change leveling, stock counts; period up to 31 days',
+  'kep-opening': 'KEP opening value per warehouse at the start of day from (from = to): reconstructed stock quantity times retail price',
 } as const;
 export type Resource = keyof typeof RESOURCES;
 export class ExportInputError extends Error {}
