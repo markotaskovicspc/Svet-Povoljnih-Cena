@@ -98,24 +98,42 @@ async function loadRetailHistory(productIds: string[]): Promise<Map<string, Reta
   return history;
 }
 
+async function loadProductFullPrices(productIds: string[]): Promise<Map<string, number>> {
+  if (!productIds.length) return new Map();
+  const products = await db.product.findMany({
+    where: { id: { in: productIds } },
+    select: { id: true, fullPrice: true },
+  });
+  return new Map(products.flatMap((product) => {
+    const fullPrice = Number(product.fullPrice);
+    return Number.isFinite(fullPrice) && fullPrice > 0 ? [[product.id, fullPrice]] : [];
+  }));
+}
+
 function receiptAmount(
   snapshotValue: unknown,
   items: Array<{ id: string; productId: string | null; sku: string; qty: number }>,
   bookedAt: Date,
   history: Map<string, RetailHistory[]>,
+  fullPrices: Map<string, number>,
 ) {
   const snapshot = readRetailValueSnapshot(snapshotValue);
   if (matchesSnapshot(snapshot, items)) {
-    return { amount: retailValueSnapshotTotal(snapshot!), missing: [] as string[] };
+    return { amount: retailValueSnapshotTotal(snapshot!), missing: [] as string[], fallback: [] as string[] };
   }
   let amount = 0;
   const missing: string[] = [];
+  const fallback: string[] = [];
   for (const item of items) {
-    const price = item.productId ? priceAt(history.get(item.productId) ?? [], bookedAt) : null;
+    const historicalPrice = item.productId ? priceAt(history.get(item.productId) ?? [], bookedAt) : null;
+    const price = historicalPrice ?? (item.productId ? fullPrices.get(item.productId) ?? null : null);
     if (price === null) missing.push(item.sku);
-    else amount += item.qty * price;
+    else {
+      amount += item.qty * price;
+      if (historicalPrice === null) fallback.push(item.sku);
+    }
   }
-  return { amount: missing.length ? null : roundKepMoney(amount), missing };
+  return { amount: missing.length ? null : roundKepMoney(amount), missing, fallback };
 }
 
 function appendReceiptRow(
@@ -127,18 +145,22 @@ function appendReceiptRow(
     items: Array<{ id: string; productId: string | null; sku: string; qty: number }>;
     snapshot: unknown;
     history: Map<string, RetailHistory[]>;
+    fullPrices: Map<string, number>;
     document: string;
     direction: "debit" | "credit";
   },
 ) {
-  const result = receiptAmount(args.snapshot, args.items, args.date, args.history);
+  const result = receiptAmount(args.snapshot, args.items, args.date, args.history, args.fullPrices);
   const missingSuffix = result.missing.length
     ? ` · nedostaje istorijska MP cena: ${[...new Set(result.missing)].join(", ")}`
+    : "";
+  const fallbackSuffix = result.fallback.length
+    ? ` · korišćena MP cena iz kartice artikla bez istorije: ${[...new Set(result.fallback)].join(", ")}`
     : "";
   rows.push(row(
     args.id,
     args.date,
-    `${args.description}${missingSuffix}`,
+    `${args.description}${missingSuffix}${fallbackSuffix}`,
     args.direction === "debit" ? result.amount : 0,
     args.direction === "credit" ? result.amount : 0,
     args.document,
@@ -197,7 +219,10 @@ async function getKepRows(company: Company, take: number, skip: number): Promise
     ...relevantOrders.flatMap((order) => order.items.flatMap((item) => item.productId ? [item.productId] : [])),
     ...relevantNotes.flatMap((note) => note.items.flatMap((item) => item.productId ? [item.productId] : [])),
   ])];
-  const history = await loadRetailHistory(productIds);
+  const [history, fullPrices] = await Promise.all([
+    loadRetailHistory(productIds),
+    loadProductFullPrices(productIds),
+  ]);
   const rows: ErpRow[] = [];
 
   if (company === "SPC") {
@@ -211,6 +236,7 @@ async function getKepRows(company: Company, take: number, skip: number): Promise
         items: order.items,
         snapshot: order.retailValueSnapshot,
         history,
+        fullPrices,
         document: order.number,
         direction: "debit",
       });
@@ -234,6 +260,7 @@ async function getKepRows(company: Company, take: number, skip: number): Promise
         items: noteItems,
         snapshot,
         history,
+        fullPrices,
         document: note.number,
         direction: company === "SPC" ? "credit" : "debit",
       });
@@ -241,20 +268,25 @@ async function getKepRows(company: Company, take: number, skip: number): Promise
     }
     let amount = 0;
     const missing: string[] = [];
+    const fallback: string[] = [];
     for (const item of note.items) {
       const historicalPrice = item.productId ? priceAt(history.get(item.productId) ?? [], date) : null;
       const savedMpPrice = note.priceList?.kind === "RETAIL" && note.priceList.code.toUpperCase() === "MP"
         ? Number(item.unitPriceGross)
         : null;
-      const price = historicalPrice ?? (savedMpPrice && savedMpPrice > 0 ? savedMpPrice : null);
+      const articleFullPrice = item.productId ? fullPrices.get(item.productId) : null;
+      const price = historicalPrice ?? (savedMpPrice && savedMpPrice > 0 ? savedMpPrice : articleFullPrice ?? null);
       if (price === null) missing.push(item.sku);
-      else amount += item.qty * price;
+      else {
+        amount += item.qty * price;
+        if (historicalPrice === null && !(savedMpPrice && savedMpPrice > 0)) fallback.push(item.sku);
+      }
     }
     const fullValue = missing.length ? null : roundKepMoney(amount);
     rows.push(row(
       `${company === "SPC" ? "transfer-out" : "transfer-in"}:${note.id}`,
       date,
-      `Otpremnica Ananasu ${note.number}${missing.length ? ` · nedostaje istorijska MP cena: ${[...new Set(missing)].join(", ")}` : ""}`,
+      `Otpremnica Ananasu ${note.number}${missing.length ? ` · nedostaje istorijska MP cena: ${[...new Set(missing)].join(", ")}` : ""}${fallback.length ? ` · korišćena MP cena iz kartice artikla bez istorije: ${[...new Set(fallback)].join(", ")}` : ""}`,
       company === "ANANAS" ? fullValue : 0,
       company === "SPC" ? fullValue : 0,
       note.number,
@@ -427,14 +459,14 @@ async function getPriceLevelingRows(take: number, skip: number): Promise<ErpRow[
   const ananasSkus = [...new Set(ananasDocuments.flatMap((document) => ananasMerchandiseItems(document.items).map((item) => ananasInventorySku(item.sku))))];
   const [history, products, stockForSpc, stockForAnanas] = await Promise.all([
     loadRetailHistory(productIds),
-    db.product.findMany({ where: { id: { in: productIds } }, select: { id: true, sku: true, name: true } }),
+    db.product.findMany({ where: { id: { in: productIds } }, select: { id: true, sku: true, name: true, fullPrice: true } }),
     stockAtPriceChange([...firstReceipt.get("SPC")!.keys()], "SPC", period.start),
     stockAtPriceChange([...firstReceipt.get("ANANAS")!.keys()], "ANANAS", period.start),
   ]);
   const productById = new Map(products.map((product) => [product.id, product]));
   const productBySku = new Map(products.map((product) => [product.sku, product]));
   if (ananasSkus.length) {
-    const ananasProducts = await db.product.findMany({ where: { sku: { in: ananasSkus } }, select: { id: true, sku: true, name: true } });
+    const ananasProducts = await db.product.findMany({ where: { sku: { in: ananasSkus } }, select: { id: true, sku: true, name: true, fullPrice: true } });
     for (const product of ananasProducts) {
       productById.set(product.id, product);
       productBySku.set(product.sku, product);
@@ -493,9 +525,14 @@ async function getPriceLevelingRows(take: number, skip: number): Promise<ErpRow[
       vatRate: Number(line.vatRate),
     });
     const actualMpc = amounts.unit;
+    const historyMpc = line.productId
+      ? priceAt(history.get(line.productId) ?? [], line.fiscalDocument.issuedAt)
+      : null;
+    const articleMpc = line.productId ? productById.get(line.productId)?.fullPrice : null;
+    const usedArticleFallback = line.orderItem?.unitPriceFull == null && historyMpc === null && articleMpc != null;
     const fullMpc = line.orderItem?.unitPriceFull != null
       ? Number(line.orderItem.unitPriceFull)
-      : line.productId ? priceAt(history.get(line.productId) ?? [], line.fiscalDocument.issuedAt) : null;
+      : historyMpc ?? (articleMpc == null ? null : Number(articleMpc));
     if (fullMpc !== null && Math.abs(fullMpc - actualMpc) < 0.005) continue;
     const isRefund = line.fiscalDocument.kind === "REFUND";
     rows.push({
@@ -505,7 +542,7 @@ async function getPriceLevelingRows(take: number, skip: number): Promise<ErpRow[
         company: "SPC",
         sku: line.sku,
         name: line.shortName,
-        type: fullMpc === null ? "Nedostaje istorijska MP cena" : isRefund ? "Povraćaj popusta" : "Popust pri fiskalizaciji",
+        type: fullMpc === null ? "Nedostaje istorijska MP cena" : usedArticleFallback ? isRefund ? "Povraćaj popusta · cena iz kartice artikla" : "Popust pri fiskalizaciji · cena iz kartice artikla" : isRefund ? "Povraćaj popusta" : "Popust pri fiskalizaciji",
         quantity: line.qty,
         fullMpc: fullMpc === null ? null : roundKepMoney(fullMpc),
         actualMpc: roundKepMoney(actualMpc),
@@ -519,7 +556,9 @@ async function getPriceLevelingRows(take: number, skip: number): Promise<ErpRow[
     for (const [index, item] of ananasMerchandiseItems(document.items).entries()) {
       const sku = ananasInventorySku(item.sku);
       const product = productBySku.get(sku);
-      const fullMpc = product ? priceAt(history.get(product.id) ?? [], document.issuedAt) : null;
+      const historyMpc = product ? priceAt(history.get(product.id) ?? [], document.issuedAt) : null;
+      const fullMpc = historyMpc ?? (product ? Number(product.fullPrice) : null);
+      const usedArticleFallback = historyMpc === null && fullMpc !== null;
       const actualMpc = item.quantity ? item.gross / item.quantity : 0;
       if (fullMpc !== null && Math.abs(fullMpc - actualMpc) < 0.005) continue;
       const isRefund = document.kind === "REFUND";
@@ -530,7 +569,7 @@ async function getPriceLevelingRows(take: number, skip: number): Promise<ErpRow[
           company: "ANANAS",
           sku,
           name: item.name,
-          type: fullMpc === null ? "Nedostaje istorijska MP cena" : isRefund ? "Povraćaj popusta" : "Popust pri fiskalizaciji",
+          type: fullMpc === null ? "Nedostaje istorijska MP cena" : usedArticleFallback ? isRefund ? "Povraćaj popusta · cena iz kartice artikla" : "Popust pri fiskalizaciji · cena iz kartice artikla" : isRefund ? "Povraćaj popusta" : "Popust pri fiskalizaciji",
           quantity: item.quantity,
           fullMpc: fullMpc === null ? null : roundKepMoney(fullMpc),
           actualMpc: roundKepMoney(actualMpc),
