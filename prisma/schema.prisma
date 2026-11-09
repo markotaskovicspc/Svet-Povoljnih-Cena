@@ -2326,6 +2326,7 @@ model PurchaseOrder {
   lockedAt             DateTime?
   postedAt             DateTime?
   cogsBookingSnapshot  Json?
+  retailValueSnapshot  Json?
   cogsBookedAt         DateTime?
   archivedAt           DateTime?
   createdAt            DateTime            @default(now())
@@ -2954,6 +2955,7 @@ model DispatchNote {
   sefError                   String?               @db.Text
   notes                      String?               @db.Text
   postedAt                   DateTime?
+  retailValueSnapshot        Json?
   /// Hides completed or abandoned documents from active operational lists without deleting history.
   archivedAt                 DateTime?
   actorId                    String?

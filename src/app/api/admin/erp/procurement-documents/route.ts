@@ -44,7 +44,7 @@ function documentView(document: {
 }
 
 export async function POST(request: Request) {
-  const admin = await requireAdminAction(["OPS"]);
+  const admin = await requireAdminAction(["OPS"], "/admin/erp/porudzbenice");
   let storageKey: string | null = null;
   try {
     const formData = await request.formData();

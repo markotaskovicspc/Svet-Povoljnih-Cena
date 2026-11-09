@@ -30,6 +30,7 @@ import {
   purchaseOrderSupplierEmailIssue,
 } from "@/lib/admin/purchase-order";
 import { assertInboundCostVolumeReady } from "@/lib/admin/inbound-invoice";
+import { createRetailValueSnapshot } from "@/lib/admin/retail-value-snapshot.server";
 
 export { canReceivePurchaseOrder } from "@/lib/admin/purchase-order";
 
@@ -845,8 +846,19 @@ export async function receivePurchaseOrder(
     }
     const bookingState = await tx.purchaseOrder.findUniqueOrThrow({
       where: { id },
-      select: { cogsBookedAt: true },
+      select: { cogsBookedAt: true, retailValueSnapshot: true },
     });
+    const retailBookedAt = new Date();
+    const retailValueSnapshot = bookingState.retailValueSnapshot ??
+      await createRetailValueSnapshot(tx, {
+        bookedAt: retailBookedAt,
+        items: order.items.map((item) => ({
+          id: item.id,
+          productId: item.productId,
+          sku: item.sku,
+          qty: item.qty,
+        })),
+      });
     const warehouse =
       order.receivingWarehouse?.active
         ? order.receivingWarehouse
@@ -940,7 +952,11 @@ export async function receivePurchaseOrder(
     });
     await tx.purchaseOrder.update({
       where: { id },
-      data: { lockedAt: order.lockedAt ?? new Date(), postedAt: new Date() },
+      data: {
+        lockedAt: order.lockedAt ?? retailBookedAt,
+        postedAt: order.postedAt ?? retailBookedAt,
+        retailValueSnapshot,
+      },
     });
     await recomputeIncomingStockForPurchaseOrders(tx, [order.id]);
     return true;

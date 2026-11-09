@@ -24,7 +24,7 @@ export async function GET(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  await requireAdminAction(["OPS"]);
+  await requireAdminAction(["OPS"], "/admin/erp/porudzbenice");
   const { id } = await context.params;
   const document = await db.procurementDocument.findUnique({
     where: { id },

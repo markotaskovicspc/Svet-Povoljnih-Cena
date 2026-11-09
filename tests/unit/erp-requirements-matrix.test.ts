@@ -44,8 +44,9 @@ describe("ERP document requirements matrix", () => {
     const deferred = ERP_REQUIREMENTS.filter((item) => item.status === "deferred_user");
     expect(deferred.length).toBeGreaterThan(0);
     expect(deferred.map((item) => item.section)).toEqual(
-      expect.arrayContaining(["Newsletter", "Viber kampanje", "Oglasi (GMS/Meta)", "KEP knjiga"]),
+      expect.arrayContaining(["Newsletter", "Viber kampanje", "Oglasi (GMS/Meta)"]),
     );
+    expect(deferred.map((item) => item.section)).not.toContain("KEP knjiga");
   });
 });
 

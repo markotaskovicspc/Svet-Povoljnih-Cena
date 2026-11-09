@@ -12,6 +12,7 @@ import { envValue } from "@/lib/env";
 import { resolveEotpremnicaGate } from "@/lib/eotpremnica/config";
 import { requestChanges, EotpremnicaUnknownOutcome } from "@/lib/eotpremnica/client";
 import { adjustInventory } from "@/lib/inventory";
+import { createRetailValueSnapshot } from "@/lib/admin/retail-value-snapshot.server";
 import { MERCHANT_LEGAL_INFO } from "@/lib/merchant";
 import {
   DISPATCH_NOTE_VAT_RATE,
@@ -1051,6 +1052,22 @@ export async function postDispatchNotes(ids: string[], actorId: string) {
           );
         }
 
+        const postedAt = new Date();
+        const carriesAnanasStock =
+          dispatch.type === DispatchNoteType.CUSTOMER &&
+          /\bananas\b/i.test(dispatch.receiverName.normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+        const retailValueSnapshot = carriesAnanasStock
+          ? await createRetailValueSnapshot(tx, {
+              bookedAt: postedAt,
+              items: dispatch.items.map((item) => ({
+                id: item.id,
+                productId: item.productId,
+                sku: item.sku,
+                qty: item.qty,
+              })),
+            })
+          : null;
+
         for (const item of dispatch.items) {
           if (!item.productId) {
             throw new Error(`Stavka ${item.sku} nema vezan artikal.`);
@@ -1160,8 +1177,9 @@ export async function postDispatchNotes(ids: string[], actorId: string) {
           where: { id: dispatch.id },
           data: {
             status: DocumentPostingStatus.POSTED,
-            postedAt: new Date(),
+            postedAt,
             actorId,
+            ...(retailValueSnapshot ? { retailValueSnapshot } : {}),
           },
         });
         if (process.env.EOTPREMNICA_AUTO_SEND === "true" && dispatch.type === DispatchNoteType.CUSTOMER && /^\d{9}$/.test(dispatch.receiverPib)) {

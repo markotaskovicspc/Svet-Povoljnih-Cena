@@ -44,7 +44,7 @@ export default async function AccountingReportsPage({
     <>
       <PageHeader
         title="15. Knjigovodstveni izveštaji"
-        description="Promet, storna i refundacije, kalkulacije, nivelacije i interni KEP pregled na jednom mestu."
+        description="Promet, kalkulacije, nivelacije i odvojene KEP knjige za SPC i Ananas."
         crumbs={[
           { href: "/admin", label: "Admin" },
           { href: "/admin/erp", label: "ERP" },
@@ -63,7 +63,7 @@ export default async function AccountingReportsPage({
       <div className="space-y-6 px-8 py-6">
         <nav
           aria-label="Knjigovodstveni izveštaji u sekciji 15"
-          className="grid gap-3 md:grid-cols-2 xl:grid-cols-5"
+          className="grid gap-3 md:grid-cols-2 xl:grid-cols-6"
         >
           {ACCOUNTING_SECTION_VIEWS.map((view) => {
             const active = view.key === selectedView.key;
@@ -99,7 +99,7 @@ export default async function AccountingReportsPage({
               id="accounting-view-title"
               className="mt-1 font-display text-xl text-ink-900"
             >
-              {selectedView.label}
+              {selectedView.label}{selectedView.key.startsWith("kep-") ? ` · ${new Date().getFullYear()}` : ""}
             </h2>
             <p className="mt-1 max-w-3xl text-sm text-ink-500">
               {selectedView.description}

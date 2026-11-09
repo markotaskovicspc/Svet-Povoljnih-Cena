@@ -7,13 +7,14 @@ import { allowedRolesForErpModule } from "@/lib/admin/erp-access";
 import { activeAdminNavHref, adminNav } from "@/lib/admin/nav";
 
 describe("ERP tačka 15", () => {
-  it("contains the five client-requested bookkeeping views in order", () => {
+  it("contains the client-requested bookkeeping views in order", () => {
     expect(ACCOUNTING_SECTION_VIEWS.map((view) => view.label)).toEqual([
       "Evidencija prometa",
       "Evidencija storniranja i refundacija",
       "Kalkulacije",
       "Nivelacije",
-      "KEP knjiga",
+      "KEP knjiga SPC",
+      "KEP knjiga Ananas",
     ]);
     expect(ACCOUNTING_SECTION_VIEWS.map((view) => view.number)).toEqual([
       "15.1",
@@ -21,6 +22,7 @@ describe("ERP tačka 15", () => {
       "15.3",
       "15.4",
       "15.5",
+      "15.6",
     ]);
   });
 
@@ -62,5 +64,7 @@ describe("ERP tačka 15", () => {
 
   it("allows operations and content admins to use the shared nivelation module", () => {
     expect(allowedRolesForErpModule("mp-cene")).toEqual(["CONTENT", "OPS"]);
+    expect(allowedRolesForErpModule("kep-spc")).toEqual(["OPS"]);
+    expect(allowedRolesForErpModule("kep-ananas")).toEqual(["OPS"]);
   });
 });

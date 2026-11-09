@@ -57,6 +57,7 @@ import { SHIPMENT_STATUS_LABEL } from "@/lib/courier/status";
 import { X_EXPRESS_EXCEPTION_LABELS } from "@/lib/x-express/status-display";
 import { resolveOrderDocumentBuyerAddress } from "@/lib/document-buyer";
 import { discountedSalesOrderLineTotals } from "@/lib/admin/sales-order-overview";
+import { accountingKepRows } from "@/lib/admin/kep-ledger.server";
 
 const text = (key: string, label: string, defaultVisible = true): ErpColumn => ({
   key,
@@ -857,6 +858,65 @@ export const operationalErpModules: ErpModule[] = [
     notes: ["Interni operativni registar — nije računovodstveno odobren zakonski obrazac."],
   },
   {
+    slug: "kep-spc",
+    number: "22a",
+    title: "KEP knjiga SPC",
+    description: "Interna KEP evidencija prometa za SPC od 1. januara tekuće godine.",
+    status: "ready",
+    redirectHref: "/admin/erp/racunovodstveni-registri?prikaz=kep-spc",
+    commands: [],
+    columns: [
+      date("date", "Datum evidencije"),
+      text("description", "Opis evidentirane promene"),
+      money("debit", "Zaduženje"),
+      money("credit", "Razduženje"),
+      text("document", "Dokument", false),
+    ],
+    rows: emptyRows,
+    notes: ["Dnevni fiskalni zbir sadrži fiskalizovane račune i povraćaje. Knjižene prijemnice koriste sačuvanu punu MP cenu."],
+  },
+  {
+    slug: "kep-ananas",
+    number: "22b",
+    title: "KEP knjiga Ananas",
+    description: "Odvojena interna KEP evidencija za Ananas od 1. januara tekuće godine.",
+    status: "ready",
+    redirectHref: "/admin/erp/racunovodstveni-registri?prikaz=kep-ananas",
+    commands: [],
+    columns: [
+      date("date", "Datum evidencije"),
+      text("description", "Opis evidentirane promene"),
+      money("debit", "Zaduženje"),
+      money("credit", "Razduženje"),
+      text("document", "Dokument", false),
+    ],
+    rows: emptyRows,
+    notes: ["Prijem u Ananas knjigu dolazi iz proknjiženih ERP otpremnica za Ananas; dnevno razduženje dolazi iz Ananas fiskalizacije."],
+  },
+  {
+    slug: "nivelacije",
+    number: "22c",
+    title: "Nivelacije MP cena",
+    description: "Promene pune MP cene i razlike na fiskalizovanoj prodaji od početka godine.",
+    status: "ready",
+    redirectHref: "/admin/erp/racunovodstveni-registri?prikaz=nivelacije",
+    commands: [],
+    columns: [
+      date("date", "Datum"),
+      status("company", "Knjiga", ["SPC", "ANANAS"]),
+      text("sku", "Šifra artikla"),
+      text("name", "Naziv artikla"),
+      status("type", "Vrsta nivelacije"),
+      number("quantity", "Količina"),
+      money("fullMpc", "Puna MP cena"),
+      money("actualMpc", "Fiskalizovana / nova MP cena"),
+      money("valueDifference", "Razlika"),
+      text("document", "Dokument", false),
+    ],
+    rows: emptyRows,
+    notes: ["Razlika pri prodaji ispod pune MP cene je negativna; povraćaj vraća tu razliku. Promena cene obuhvata količinu na lageru na datum važenja."],
+  },
+  {
     slug: "neobjavljeni-artikli",
     number: "23",
     title: "Neobjavljeni artikli",
@@ -1117,6 +1177,10 @@ export async function getOperationalErpRows(
       return integrationRows();
     case "racunovodstveni-registri":
       return accountingRows(take, skip);
+    case "kep-spc":
+    case "kep-ananas":
+    case "nivelacije":
+      return accountingKepRows(slug, take, skip);
     case "neobjavljeni-artikli":
       return unpublishedRows(take);
     case "landing-strane":

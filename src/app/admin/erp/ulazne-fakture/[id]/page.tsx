@@ -444,7 +444,7 @@ export default async function InboundInvoicePage({
   if (!invoice) notFound();
 
   const procurementDocuments = [
-    ...(invoice.purchaseOrder?.procurementDocuments.map((document) => ({
+    ...(invoice.purchaseOrder?.procurementDocuments?.map((document) => ({
       id: document.id,
       originalFilename: document.originalFilename,
       mimeType: document.mimeType,
@@ -452,7 +452,7 @@ export default async function InboundInvoicePage({
       createdAt: document.createdAt.toISOString(),
       ownerType: "purchaseOrder" as const,
     })) ?? []),
-    ...invoice.procurementDocuments.map((document) => ({
+    ...(invoice.procurementDocuments ?? []).map((document) => ({
       id: document.id,
       originalFilename: document.originalFilename,
       mimeType: document.mimeType,
