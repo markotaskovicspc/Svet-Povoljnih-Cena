@@ -8,7 +8,7 @@ export type KepKind =
   | 'SALES' | 'SALES_REFUND' | 'DISCOUNT' | 'PRICE_CHANGE' | 'STOCK_COUNT';
 
 export type KepWarehouse = { id: string; code: string; name: string };
-export type KepLine = { sku: string; name: string | null; qty: number; unitMpc: number | null; value: number | null };
+export type KepLine = { sku: string; name: string | null; qty: number; unitMpc: number | null; value: number | null; actualMpc?: number | null };
 export type KepEntry = {
   id: string;
   date: string;

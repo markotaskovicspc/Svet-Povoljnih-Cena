@@ -205,7 +205,7 @@ export async function kepEntries(q: ExportQuery): Promise<KepEntry[]> {
     b.docs.add(d.id);
     b.lines.push({ sku: l.sku, name: l.shortName, qty: l.qty, unitMpc: amounts.unit, value: amounts.gross });
     const full = l.orderItem?.unitPriceFull != null ? { price: Number(l.orderItem.unitPriceFull), fallback: false } : mpcFor(l.productId ? history.get(l.productId) : undefined, l.productId ? products.byId.get(l.productId)?.fullPrice : null, d.issuedAt);
-    if (full.price === null) b.discount.push({ sku: l.sku, name: l.shortName, qty: l.qty, unitMpc: null, value: null });
+    if (full.price === null) b.discount.push({ sku: l.sku, name: l.shortName, qty: l.qty, unitMpc: null, value: null, actualMpc: amounts.unit });
     else if (Math.abs(full.price - amounts.unit) >= 0.005) b.discount.push({ sku: l.sku, name: l.shortName, qty: l.qty, unitMpc: full.price, value: discountDifference(kind, l.qty, full.price, amounts.unit), fallback: full.fallback });
   }
   // Ananas: magacin Ananas (politika lagera ERP-a).
@@ -217,7 +217,7 @@ export async function kepEntries(q: ExportQuery): Promise<KepEntry[]> {
     b.lines.push({ sku: i.sku, name: i.name, qty: i.qty, unitMpc: unit, value: i.gross });
     const p = products.bySku.get(i.sku);
     const full = mpcFor(p ? history.get(p.id) : undefined, p?.fullPrice, i.doc.issuedAt);
-    if (full.price === null) b.discount.push({ sku: i.sku, name: i.name, qty: i.qty, unitMpc: null, value: null });
+    if (full.price === null) b.discount.push({ sku: i.sku, name: i.name, qty: i.qty, unitMpc: null, value: null, actualMpc: unit });
     else if (Math.abs(full.price - unit) >= 0.005) b.discount.push({ sku: i.sku, name: i.name, qty: i.qty, unitMpc: full.price, value: discountDifference(kind, i.qty, full.price, unit), fallback: full.fallback });
   }
   for (const [key, b] of buckets) {
@@ -322,7 +322,8 @@ export async function kepOpening(q: ExportQuery) {
   const date = q.period.fromInput;
   const rows = [...result].map(([warehouseId, r]) => {
     const e = entryFromLines(base(date, wh(byId, warehouseId), 'OPENING_BALANCE', 'state', { documentNumber: null, count: r.lines.length }), 'debit', 1, r.lines);
-    return { ...e, id: warehouseId, lines: [] as KepLine[], negativeQtySkus: r.lines.filter((l) => l.qty < 0).map((l) => l.sku).slice(0, 200) };
+    // Stavke samo za artikle bez MP cene, da SPC Analytics može da ih dopuni ručno.
+    return { ...e, id: warehouseId, knownValue: roundKep(r.lines.reduce((sum, l) => sum + (l.value ?? 0), 0)), lines: r.lines.filter((l) => l.value === null).slice(0, 2000).map(({ fallback: _f, ...l }) => l), negativeQtySkus: r.lines.filter((l) => l.qty < 0).map((l) => l.sku).slice(0, 200) };
   });
   return pageEntries(rows.sort((a, b) => (a.id < b.id ? -1 : 1)), q.after, q.limit);
 }
