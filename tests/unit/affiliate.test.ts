@@ -1,0 +1,22 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { affiliateOrderBucket, normalizeAffiliateCode } from "@/lib/affiliate/shared";
+const mocks = vi.hoisted(() => ({ partner: vi.fn(), click: vi.fn(), create: vi.fn(), limit: vi.fn() }));
+vi.mock("@/lib/db", () => ({ db: { affiliatePartner: { findUnique: mocks.partner }, affiliateClick: { findFirst: mocks.click, create: mocks.create } } }));
+vi.mock("@/lib/security/rate-limit", () => ({ checkRateLimitForRequest: mocks.limit, rateLimitJson: () => new Response(null, { status: 429 }), RATE_LIMITS: { checkoutOrder: {} } }));
+import { POST } from "@/app/api/affiliate/visit/route";
+import { affiliateClickFromRequest } from "@/lib/affiliate/server";
+const id = "42b56a91-4c01-4533-a961-49c56943f116";
+const request = (cookie = "spc_cookie_consent=analytics", origin = "https://example.com") => new Request("https://example.com/api/affiliate/visit", { method: "POST", headers: { origin, cookie, "Content-Type": "application/json" }, body: JSON.stringify({ code: "promo" }) });
+beforeEach(() => { vi.resetAllMocks(); mocks.limit.mockResolvedValue({ ok: true }); mocks.partner.mockResolvedValue({ id: "partner", enabled: true }); mocks.create.mockResolvedValue({}); mocks.click.mockResolvedValue(null); });
+describe("affiliate attribution", () => {
+  it("validates canonical referral codes", () => { expect(normalizeAffiliateCode(" Promo-1 ")).toBe("promo-1"); for (const value of ["x", "../admin", "foo&bar", null, "a".repeat(41)]) expect(normalizeAffiliateCode(value)).toBeNull(); });
+  it("separates delivered from pending, canceled and returned orders", () => { expect(affiliateOrderBucket("ISPORUCENO")).toBe("delivered"); expect(affiliateOrderBucket("KREIRANO")).toBe("pending"); expect(affiliateOrderBucket("OTKAZANO")).toBe("excluded"); expect(affiliateOrderBucket("VRACENO")).toBe("excluded"); });
+  it("rejects cross-site tracking", async () => { expect((await POST(request(undefined, "https://attacker.example"))).status).toBe(403); expect(mocks.create).not.toHaveBeenCalled(); });
+  it("does not record without consent and clears attribution cookie", async () => { const response = await POST(request("spc_cookie_consent=essential")); expect(response.status).toBe(204); expect(response.headers.get("set-cookie")).toContain("Max-Age=0"); expect(mocks.partner).not.toHaveBeenCalled(); });
+  it("does not record disabled partners", async () => { mocks.partner.mockResolvedValue({ id: "partner", enabled: false }); expect((await POST(request())).status).toBe(404); expect(mocks.create).not.toHaveBeenCalled(); });
+  it("creates opaque HttpOnly attribution for 30 days", async () => { const response = await POST(request()); expect(response.status).toBe(204); expect(response.headers.get("set-cookie")).toContain("HttpOnly"); expect(response.headers.get("set-cookie")).toContain("Max-Age=2592000"); const data = mocks.create.mock.calls[0][0].data; expect(data.partnerId).toBe("partner"); expect(data.expiresAt.getTime() - Date.now()).toBeCloseTo(2592000000, -3); });
+  it("does not inflate visits or extend the window on refresh", async () => { mocks.click.mockResolvedValue({ id }); const response = await POST(request(`spc_cookie_consent=analytics; spc_affiliate=${id}`)); expect(response.status).toBe(204); expect(response.headers.get("set-cookie")).toBeNull(); expect(mocks.create).not.toHaveBeenCalled(); });
+  it("checkout ignores cookies without consent", async () => { expect(await affiliateClickFromRequest(request(`spc_affiliate=${id}; spc_cookie_consent=essential`))).toBeUndefined(); expect(mocks.click).not.toHaveBeenCalled(); });
+  it("checkout only accepts existing, unexpired clicks from enabled partners", async () => { mocks.click.mockResolvedValue({ id }); expect(await affiliateClickFromRequest(request(`spc_cookie_consent=analytics; spc_affiliate=${id}`))).toBe(id); expect(mocks.click).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id, partner: { enabled: true }, expiresAt: { gt: expect.any(Date) } }) })); });
+  it("checkout ignores fabricated and expired cookie identifiers", async () => { expect(await affiliateClickFromRequest(request("spc_cookie_consent=analytics; spc_affiliate=promo"))).toBeUndefined(); expect(mocks.click).not.toHaveBeenCalled(); expect(await affiliateClickFromRequest(request(`spc_cookie_consent=analytics; spc_affiliate=${id}`))).toBeUndefined(); });
+});

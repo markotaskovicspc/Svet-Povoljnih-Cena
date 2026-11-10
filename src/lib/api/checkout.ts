@@ -321,7 +321,7 @@ export async function createOrder(
   input: CreateOrderInput,
   userId: string | null,
   guestLoyalty: { email: string | null; consentVersion: string; consentAt: Date } | null = null,
-  options: { staffLoyalty?: boolean; adminActorId?: string; preserveCustomerPostalCode?: boolean; previewOnly?: boolean; expectedTotal?: number; customerReplyDraftOnly?: boolean; allowGuestWithoutEmail?: boolean; staffLoyaltyPrices?: readonly StaffLoyaltyPrice[] } = {},
+  options: { affiliateClickId?: string; staffLoyalty?: boolean; adminActorId?: string; preserveCustomerPostalCode?: boolean; previewOnly?: boolean; expectedTotal?: number; customerReplyDraftOnly?: boolean; allowGuestWithoutEmail?: boolean; staffLoyaltyPrices?: readonly StaffLoyaltyPrice[] } = {},
 ): Promise<
   { ok: true; data: CreateOrderResult } | { ok: false; error: CreateOrderError }
 > {
@@ -859,6 +859,7 @@ export async function createOrder(
       const order = await tx.order.create({
         data: {
           number,
+          affiliateClickId: options.affiliateClickId,
           checkoutLinesSnapshot: setBasket.versions.length ? originalInput.lines : undefined,
           publicAccessTokenHash: hashOrderAccessToken(accessToken),
           publicAccessTokenCreatedAt: new Date(),

@@ -1,3 +1,4 @@
+import { affiliateClickFromRequest } from "@/lib/affiliate/server";
 import { after, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getGuestLoyaltyMember } from "@/lib/loyalty/session.server";
@@ -48,6 +49,7 @@ export async function POST(req: Request) {
     if (!userId && parsed.data.guestLoyalty && (!member || !parsed.data.guestEmail)) {
       return NextResponse.json({ ok: false, error: { code: "LOYALTY_CONSENT_REQUIRED" } }, { status: 422 });
     }
+    const affiliateClickId = await affiliateClickFromRequest(req).catch(() => undefined);
     const result = await createOrder(
       {
         ...parsed.data,
@@ -55,6 +57,7 @@ export async function POST(req: Request) {
       },
       userId,
       member ? { email: normalizeLoyaltyEmail(parsed.data.guestEmail!), consentVersion: member.consentVersion, consentAt: member.consentAt } : null,
+      { affiliateClickId },
     );
     if (result.ok) {
       // The durable job is already committed. Even an import failure or a

@@ -1325,6 +1325,8 @@ model Order {
   /// Human-friendly number e.g. "SPC-2026-001234"
   number                     String       @unique
   /// Hash of an opaque guest/public confirmation token.
+  affiliateClickId           String?
+  affiliateClick             AffiliateClick? @relation(fields: [affiliateClickId], references: [id], onDelete: SetNull)
   publicAccessTokenHash      String?      @unique
   publicAccessTokenCreatedAt DateTime?
   userId                     String?
@@ -1420,6 +1422,7 @@ model Order {
   @@index([status])
   @@index([expiresAt])
   @@index([createdAt])
+  @@index([affiliateClickId])
   @@index([channel, createdAt])
   @@index([customerId, createdAt])
 }
@@ -4259,4 +4262,27 @@ model SiteVisitorPresence {
   anonymousId String @id @db.VarChar(96)
   lastSeenAt DateTime @default(now())
   @@index([lastSeenAt])
+}
+
+
+/// Promo partners are separate from customers and administrative accounts.
+model AffiliatePartner {
+  id        String @id @default(cuid())
+  name      String
+  code      String @unique
+  enabled   Boolean @default(true)
+  createdAt DateTime @default(now())
+  clicks    AffiliateClick[]
+}
+
+/// Random opaque cookie identifier; no visitor IP, email or device fingerprint.
+model AffiliateClick {
+  id        String @id
+  partnerId String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  partner   AffiliatePartner @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  orders    Order[]
+  @@index([partnerId, createdAt])
+  @@index([expiresAt])
 }

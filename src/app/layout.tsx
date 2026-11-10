@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { AffiliateTracker } from "@/components/analytics/affiliate-tracker";
 import { Providers } from "@/components/providers";
 import { ClarityAnalytics } from "@/components/analytics/clarity-analytics";
 import { BRAND } from "@/lib/brand";
@@ -56,7 +57,7 @@ export default function RootLayout({
         className="bg-surface text-ink-900 min-h-full flex flex-col font-sans"
       >
         <CommerceTermsProvider initialAt={renderedAt}>
-          <Providers><ClarityAnalytics />{children}</Providers>
+          <Providers><AffiliateTracker /><ClarityAnalytics />{children}</Providers>
         </CommerceTermsProvider>
       </body>
     </html>

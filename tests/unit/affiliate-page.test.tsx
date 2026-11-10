@@ -1,0 +1,20 @@
+import { renderToStaticMarkup } from "react-dom/server";
+import type { ReactNode } from "react";
+import { expect, it, vi } from "vitest";
+const mocks = vi.hoisted(() => ({ partners: vi.fn(), orders: vi.fn(), totals: vi.fn(), guard: vi.fn() }));
+vi.mock("@/lib/db", () => ({ db: { affiliatePartner: { findMany: mocks.partners }, order: { findMany: mocks.orders, groupBy: mocks.totals } } }));
+vi.mock("@/lib/admin", () => ({ requireAdminAction: mocks.guard, withAdminState: vi.fn() }));
+vi.mock("@/components/admin/action-form", () => ({ AdminActionForm: ({ children }: { children: ReactNode }) => <form>{children}</form> }));
+vi.mock("@/components/admin/submit-button", () => ({ SubmitButton: ({ children }: { children: ReactNode }) => <button>{children}</button> }));
+import Page from "@/app/admin/affiliate/page";
+it("restricts order queries to selected partner, omits buyer PII and aggregates beyond the visible 100", async () => {
+  mocks.partners.mockResolvedValue([{ id: "p", name: "Test Partner", code: "promo", enabled: true, _count: { clicks: 200 } }]);
+  mocks.orders.mockResolvedValue([{ id: "o", number: "SPC-1", status: "ISPORUCENO", total: 5000, createdAt: new Date("2026-11-10T10:00:00Z") }]);
+  mocks.totals.mockResolvedValue([{ status: "ISPORUCENO", _count: { _all: 150 }, _sum: { total: 750000 } }, { status: "OTKAZANO", _count: { _all: 5 }, _sum: { total: 25000 } }]);
+  const html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({ partner: "p" }) }));
+  expect(mocks.guard).toHaveBeenCalledWith(["ADS", "OPS"], "/admin/affiliate");
+  expect(html).toContain("?ref=promo"); expect(html).toContain("750.000"); expect(html).toContain("SPC-1");
+  expect(mocks.orders.mock.calls[0][0]).toEqual(expect.objectContaining({ where: { affiliateClick: { partnerId: "p" }, channel: "WEB" }, take: 100 }));
+  expect(Object.keys(mocks.orders.mock.calls[0][0].select)).toEqual(["id", "number", "createdAt", "status", "total"]);
+  expect(mocks.totals.mock.calls[0][0]).not.toHaveProperty("take");
+});
