@@ -3,20 +3,36 @@ import type { Pictogram } from "@/types";
 const WARRANTY_PICTOGRAM_CODE = "3";
 const EXPRESS_DELIVERY_PICTOGRAM_CODE = "48h";
 
+/**
+ * Icons used only when the pictogram row is missing from the database.
+ * The storefront itself goes through /api/pictograms/<code>, which serves the
+ * icon currently saved in /admin/piktogrami.
+ */
+export const LEGACY_STOREFRONT_PICTOGRAM_ICON_URLS: Readonly<
+  Record<string, string>
+> = {
+  [WARRANTY_PICTOGRAM_CODE]:
+    "https://vyebjbcfhgujlvjnoxpl.supabase.co/storage/v1/object/public/product-media/pictograms/3-1787082602280-70e8672f24bb5f45.png",
+  [EXPRESS_DELIVERY_PICTOGRAM_CODE]:
+    "https://vyebjbcfhgujlvjnoxpl.supabase.co/storage/v1/object/public/product-media/pictograms/48h-1786805151454-9d1e149f7492dec5.jpeg",
+};
+
+function storefrontPictogramIconUrl(code: string) {
+  return `/api/pictograms/${encodeURIComponent(code)}`;
+}
+
 export const WARRANTY_2_PLUS_1_PICTOGRAM: Pictogram = {
   id: "storefront-warranty-2-plus-1",
   code: WARRANTY_PICTOGRAM_CODE,
   label: "2+1",
-  iconUrl:
-    "https://vyebjbcfhgujlvjnoxpl.supabase.co/storage/v1/object/public/product-media/pictograms/3-1787082602280-70e8672f24bb5f45.png",
+  iconUrl: storefrontPictogramIconUrl(WARRANTY_PICTOGRAM_CODE),
 };
 
 export const EXPRESS_DELIVERY_48H_PICTOGRAM: Pictogram = {
   id: "storefront-delivery-48h",
   code: EXPRESS_DELIVERY_PICTOGRAM_CODE,
   label: "48h",
-  iconUrl:
-    "https://vyebjbcfhgujlvjnoxpl.supabase.co/storage/v1/object/public/product-media/pictograms/48h-1786805151454-9d1e149f7492dec5.jpeg",
+  iconUrl: storefrontPictogramIconUrl(EXPRESS_DELIVERY_PICTOGRAM_CODE),
 };
 
 function findConfiguredPictogram(
