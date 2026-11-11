@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ReclamationHistory } from "@/components/reclamation-history";
+import { ReclamationRefundAccountNotice } from "@/components/reclamation-refund-account-notice";
 import { formatReclamationDate, type ReclamationItemOption } from "@/lib/reclamation-options";
 import { createReclamationPhotoFile } from "@/lib/reclamation-photo-file";
 
@@ -429,6 +430,7 @@ export function ReclamationForm({
           <select id="reclamation-request" value={request} onChange={event => setRequest(event.target.value)} className="h-11 w-full rounded-lg border border-input bg-white px-2.5 text-sm">
             <option value="">Izaberite</option><option value="POPRAVKA">Popravka</option><option value="ZAMENA">Zamena</option><option value="POVRACAJ_NOVCA">Povraćaj novca</option><option value="UMANJENJE_CENE">Umanjenje cene</option>
           </select>
+          <ReclamationRefundAccountNotice request={request} />
         </div>
       </div>
 
