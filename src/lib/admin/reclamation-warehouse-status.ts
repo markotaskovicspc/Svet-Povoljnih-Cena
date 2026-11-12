@@ -10,7 +10,23 @@ export const RECLAMATION_WAREHOUSE_STATUS_LABELS: Record<string, string> = {
   AWAITING_RETURN: "Čeka prijem u magacin",
   PARTIALLY_RECEIVED: "Delimično primljeno u magacin",
   DELIVERED: "Primljeno u magacin",
+  REPLACEMENT_RETURNED: "Zamena vraćena · kupac nije primio",
+  REPLACEMENT_RECEIVED: "Vraćena zamena primljena u magacin",
 };
+
+/** Stock/marker movement written when a returned replacement is received (shared with shipment cancellation). */
+export function reclamationReplacementRestoreKey(reclamationId: string) {
+  return `reclamation-replacement:${reclamationId}:restore`;
+}
+
+/**
+ * A replacement the courier brought back (customer refused or never collected
+ * it) is derived from the RETURNED shipment; the stored status stays HANDED_OVER.
+ */
+export function reclamationReplacementReturnStatus(returned: boolean, received: boolean) {
+  if (!returned) return null;
+  return received ? "REPLACEMENT_RECEIVED" : "REPLACEMENT_RETURNED";
+}
 
 export type ReclamationWarehouseClaim = Pick<
   Reclamation,

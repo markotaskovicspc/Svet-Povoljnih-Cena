@@ -1085,6 +1085,8 @@ export const operationalErpModules: ErpModule[] = [
           DELIVERED: "green",
           PARTIALLY_RECEIVED: "yellow",
           AWAITING_RETURN: "yellow",
+          REPLACEMENT_RETURNED: "red",
+          REPLACEMENT_RECEIVED: "neutral",
         }),
         optionLabels: RECLAMATION_WAREHOUSE_STATUS_LABELS,
       },

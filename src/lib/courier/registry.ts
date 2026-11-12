@@ -785,6 +785,27 @@ export async function applyShipmentEvent(
       }
     }
     if (
+      shipment.purpose === "RECLAMATION_REPLACEMENT" &&
+      shipment.reclamationId &&
+      event.status === "RETURNED"
+    ) {
+      // The customer refused or never collected the replacement. Keep the
+      // claim open and visible; stock is restored only on warehouse receipt.
+      const claim = await tx.reclamation.findUnique({
+        where: { id: shipment.reclamationId },
+        select: { status: true },
+      });
+      if (claim) {
+        await tx.reclamationStatusEvent.create({
+          data: {
+            reclamationId: shipment.reclamationId,
+            status: claim.status,
+            note: `Zamenska pošiljka ${shipment.trackingNo ?? shipment.id} vraćena je od kurira: kupac nije primio paket. Primite paket u Povratima.`,
+          },
+        });
+      }
+    }
+    if (
       !handoverReport &&
       appliedProvider &&
       PICKUP_PROOF_STATUSES.includes(event.status)

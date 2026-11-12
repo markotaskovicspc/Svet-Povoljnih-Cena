@@ -1,6 +1,7 @@
 import { reclamationParcelQuantity } from "./return-receipt-plan";
 import { normalizeReturnParcelNumber, returnParcelArrived, returnParcelNumbers } from "./return-parcels";
 import { assertReturnNotLost } from "./return-resolution.server";
+import { reclamationReplacementRestoreKey } from "./reclamation-warehouse-status";
 import { assertMyGlsReturnAccepted, canReceiveReclamationShipment } from "@/lib/mygls/return-booking";
 import "server-only";
 import type { XExpressPickupCoordinates } from "@/lib/x-express/return";
@@ -545,5 +546,94 @@ export async function receiveReclamationReturn(args: {
     const refundJobId = await queueReclamationFiscalRefund(tx, reclamation.id);
     const refundNoticeJobId = await queueReclamationRefundNotice(tx, reclamation.id);
     return { movement, warehouse, refundJobId, refundNoticeJobId };
+  }, { maxWait: 10_000, timeout: 30_000 });
+}
+
+/**
+ * Warehouse receipt of a replacement the courier brought back because the
+ * customer refused or never collected it. A whole replacement article goes
+ * back on stock exactly once (same key as shipment cancellation); a part has
+ * no stock line, so only a zero-quantity marker is recorded. The claim stays
+ * open for a new decision.
+ */
+export async function receiveReturnedReclamationReplacement(args: {
+  reclamationId: string;
+  warehouseId: string;
+  actorId: string;
+}) {
+  return db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`reclamation-replacement-receipt:${args.reclamationId}`}))::text AS "lock"`;
+    const reclamation = await tx.reclamation.findUnique({
+      where: { id: args.reclamationId },
+      select: {
+        id: true, number: true, orderId: true, orderItemId: true, productId: true,
+        sku: true, quantity: true, replacementQty: true, resolution: true, status: true,
+        shipments: {
+          where: { purpose: "RECLAMATION_REPLACEMENT" },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { id: true, status: true, trackingNo: true },
+        },
+      },
+    });
+    if (!reclamation) throw new Error("Reklamacija nije pronađena.");
+    const shipment = reclamation.shipments[0];
+    if (shipment?.status !== "RETURNED") {
+      throw new Error("Zamenska pošiljka nije vraćena od kurira.");
+    }
+    const warehouse = await tx.warehouse.findFirst({
+      where: { id: args.warehouseId, active: true },
+      select: { id: true, code: true, name: true },
+    });
+    if (!warehouse) throw new Error("Izaberite aktivan magacin prijema.");
+    const key = reclamationReplacementRestoreKey(reclamation.id);
+    const existing = await tx.stockMovement.findUnique({ where: { idempotencyKey: key } });
+    if (existing) return { movement: existing, warehouse, restoredQty: existing.qty };
+    const issued = await tx.stockMovement.findUnique({
+      where: { idempotencyKey: `reclamation-replacement:${reclamation.id}:out` },
+      select: { id: true, qty: true },
+    });
+    const label = `vraćene zamene po reklamaciji ${reclamation.number} (pošiljka ${shipment.trackingNo ?? shipment.id})`;
+    let movement;
+    if (issued && reclamation.productId) {
+      const qty = Math.abs(issued.qty) || (reclamation.replacementQty ?? reclamation.quantity);
+      movement = await adjustInventory(tx, {
+        idempotencyKey: key,
+        productId: reclamation.productId,
+        sku: reclamation.sku,
+        qtyDelta: qty,
+        warehouseId: warehouse.id,
+        kind: StockMovementKind.ADJUSTMENT,
+        note: `Prijem ${label} u ${warehouse.code} · ${warehouse.name}; kupac nije primio paket.`,
+        actorId: args.actorId,
+        orderId: reclamation.orderId,
+        orderItemId: reclamation.orderItemId,
+      });
+    } else {
+      // Replacement part: never on stock, so record the physical receipt only.
+      movement = await tx.stockMovement.create({
+        data: {
+          idempotencyKey: key,
+          productId: reclamation.productId,
+          sku: reclamation.sku,
+          qty: 0,
+          warehouseId: warehouse.id,
+          kind: StockMovementKind.ADJUSTMENT,
+          orderId: reclamation.orderId,
+          orderItemId: reclamation.orderItemId,
+          actorId: args.actorId,
+          note: `Prijem ${label}; deo se ne vodi na lageru, stanje nije promenjeno.`,
+        },
+      });
+    }
+    await tx.reclamationStatusEvent.create({
+      data: {
+        reclamationId: reclamation.id,
+        status: reclamation.status,
+        actorId: args.actorId,
+        note: `Vraćena zamena primljena u ${warehouse.code} · ${warehouse.name}${movement.qty ? `, ${movement.qty} kom vraćeno na stanje` : ", bez promene lagera"}. Reklamacija čeka novu odluku.`,
+      },
+    });
+    return { movement, warehouse, restoredQty: movement.qty };
   }, { maxWait: 10_000, timeout: 30_000 });
 }

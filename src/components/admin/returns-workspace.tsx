@@ -24,7 +24,8 @@ import {
   withAdminState,
   type AdminActionState,
 } from "@/lib/admin";
-import { receiveReclamationReturn } from "@/lib/admin/reclamation-fulfillment.server";
+import { receiveReclamationReturn, receiveReturnedReclamationReplacement } from "@/lib/admin/reclamation-fulfillment.server";
+import { reclamationReplacementRestoreKey } from "@/lib/admin/reclamation-warehouse-status";
 import {
   listReturnedOrders,
   receiveReturnedOrderUnit,
@@ -98,6 +99,42 @@ async function receiveReturnAction(
           movementId: result.movement.id,
           qty: result.movement.qty,
         },
+      };
+    },
+  )(formData);
+}
+
+async function receiveReplacementAction(
+  _state: AdminActionState,
+  formData: FormData,
+) {
+  "use server";
+  return withAdminState(
+    { module: ["/admin/erp/preuzimanja/povrati","/admin/magacin"],
+      allowed: ["OPS", "WAREHOUSE"],
+      action: "reclamation.replacement.return.receive",
+      entity: "Reclamation",
+    },
+    async (actorId, actionData: FormData) => {
+      const parsed = receiveSchema.safeParse(
+        Object.fromEntries(actionData.entries()),
+      );
+      if (!parsed.success) {
+        return { ok: false as const, error: "Izaberite povrat i magacin prijema." };
+      }
+      const result = await receiveReturnedReclamationReplacement({ ...parsed.data, actorId });
+      revalidatePath("/admin/erp/povrati");
+      revalidatePath("/admin/magacin/povrat");
+      revalidatePath("/admin/erp/preuzimanja/povrati");
+      revalidatePath(`/admin/erp/reklamacije-dnevnik/${parsed.data.reclamationId}`);
+      revalidatePath("/admin/erp/stanje-po-magacinima");
+      return {
+        ok: true as const,
+        entityId: parsed.data.reclamationId,
+        message: result.restoredQty
+          ? `Vraćena zamena primljena: ${result.restoredQty} kom vraćeno na stanje ${result.warehouse.code} · ${result.warehouse.name}.`
+          : `Vraćena zamena (deo) primljena u ${result.warehouse.code} · ${result.warehouse.name}, bez promene lagera.`,
+        diff: { warehouseId: result.warehouse.id, movementId: result.movement.id, qty: result.movement.qty },
       };
     },
   )(formData);
@@ -179,6 +216,7 @@ export async function ReturnsWorkspace({
     reshipments,
     returnedOrders,
     reclamations,
+    returnedReplacements,
     warehouses,
     movements,
     resolutions,
@@ -211,6 +249,21 @@ export async function ReturnsWorkspace({
         },
       },
     }) : [],
+    loadEvidence ? db.reclamation.findMany({
+      where: { shipments: { some: { purpose: "RECLAMATION_REPLACEMENT", status: "RETURNED" } } },
+      orderBy: { createdAt: "desc" },
+      take: 500,
+      include: {
+        order: { select: { number: true } },
+        orderItem: { select: { name: true } },
+        shipments: {
+          where: { purpose: "RECLAMATION_REPLACEMENT" },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { id: true, provider: true, trackingNo: true, status: true, lastStatusEventAt: true },
+        },
+      },
+    }) : [],
     db.warehouse.findMany({
       where: { active: true },
       orderBy: { code: "asc" },
@@ -221,6 +274,7 @@ export async function ReturnsWorkspace({
         OR: [
           { idempotencyKey: { startsWith: "reclamation-return:" } },
           { idempotencyKey: { startsWith: "order-return:" } },
+          { idempotencyKey: { startsWith: "reclamation-replacement:", endsWith: ":restore" } },
         ],
       },
       select: {
@@ -600,6 +654,60 @@ export async function ReturnsWorkspace({
       ),
     });
   }
+  for (const reclamation of returnedReplacements) {
+    const shipment = reclamation.shipments[0];
+    // Only the latest replacement shipment counts; an older returned one may have been superseded.
+    if (shipment?.status !== "RETURNED") continue;
+    const receipt = receiptByKey.get(reclamationReplacementRestoreKey(reclamation.id));
+    const received = Boolean(receipt);
+    rows.push({
+      key: `replacement:${reclamation.id}`,
+      kind: "replacement",
+      arrived: true,
+      codes: shipment.trackingNo ? [normalizeReturnParcelNumber(shipment.trackingNo)] : [],
+      id: reclamation.id,
+      orderId: reclamation.orderId,
+      number: reclamation.order.number,
+      type: "Vraćena zamena (kupac nije primio)",
+      received,
+      date: shipment.lastStatusEventAt?.getTime() ?? reclamation.createdAt?.getTime() ?? 0,
+      shipment: (
+        <>
+          <p className="font-mono">{shipment.trackingNo ?? "—"}</p>
+          <p>{shipment.provider ?? "Kurir"} · {SHIPMENT_STATUS_LABEL.RETURNED}</p>
+        </>
+      ),
+      details: (
+        <>
+          {warehouseMode ? <p>{reclamation.number}</p> : <Link className="text-sm underline" href={`/admin/erp/reklamacije-dnevnik/${reclamation.id}`}>{reclamation.number}</Link>}
+          <p className="text-sm">
+            {reclamation.sku} · {reclamation.orderItem?.name ?? "—"} ·{" "}
+            {reclamation.resolution === "ZAMENA_DELA" ? "zamenski deo" : `${reclamation.replacementQty ?? reclamation.quantity} kom`}
+          </p>
+          {receipt ? (
+            <p className="text-sm text-success">
+              Primljeno {formatDate(receipt.createdAt)} · {receipt.warehouse.code} · {receipt.warehouse.name}
+              {receipt.qty ? ` · ${receipt.qty} kom vraćeno na stanje` : " · bez promene lagera"}
+            </p>
+          ) : (
+            <AdminActionForm action={receiveReplacementAction} refreshOnSuccess className="flex flex-wrap items-end gap-2">
+              <input type="hidden" name="reclamationId" value={reclamation.id} />
+              {warehouseSelect}
+              <SubmitButton
+                size="sm"
+                disabled={!warehouses.length}
+                confirm={reclamation.resolution === "ZAMENA_DELA"
+                  ? "Magacioner je pregledao vraćeni zamenski deo. Evidentirati prijem? Lager se ne menja."
+                  : `Magacioner je pregledao vraćenu zamenu. Vratiti ${reclamation.replacementQty ?? reclamation.quantity} kom na stanje izabranog magacina?`}
+              >
+                Primi vraćenu zamenu
+              </SubmitButton>
+            </AdminActionForm>
+          )}
+        </>
+      ),
+    });
+  }
   const completed = (row: Row) => row.received || lostByKey.has(row.key);
   const activeCount = rows.filter((row) => !completed(row) && row.arrived).length;
   const verificationCount = rows.filter((row) => !completed(row) && !row.arrived).length;
@@ -762,7 +870,7 @@ export async function ReturnsWorkspace({
                       Izgubljeno {formatDate(lost.createdAt)} · {lost.reason}.
                       Neprimljena roba nije vraćena na lager.
                     </p>
-                  ) : !row.received ? (
+                  ) : !row.received && row.kind !== "replacement" ? (
                     <details className="border-t border-border pt-3">
                       <summary className="cursor-pointer text-sm text-warning">
                         Pošiljka izgubljena kod kurira

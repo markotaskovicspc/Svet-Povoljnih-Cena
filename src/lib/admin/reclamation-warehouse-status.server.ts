@@ -2,6 +2,8 @@ import "server-only";
 import { db } from "@/lib/db";
 import {
   isReclamationMoneyReturn,
+  reclamationReplacementRestoreKey,
+  reclamationReplacementReturnStatus,
   reclamationWarehouseStatus,
   type ReclamationWarehouseClaim,
 } from "./reclamation-warehouse-status";
@@ -31,7 +33,29 @@ export async function reclamationWarehouseStatuses(claims: ReclamationWarehouseC
       receiptQuantities.set(id, quantities);
     }
   }
-  return new Map(claims.map((claim) => {
+  // Only a handed-over replacement can come back from the courier.
+  const sentReplacements = claims.filter((claim) => !isReclamationMoneyReturn(claim) && claim.warehouseStatus === "HANDED_OVER");
+  const returnedReplacements = new Set<string>();
+  const receivedReplacements = new Set<string>();
+  if (sentReplacements.length) {
+    const ids = sentReplacements.map((claim) => claim.id);
+    const [shipments, restores] = await Promise.all([
+      db.shipment.findMany({
+        where: { reclamationId: { in: ids }, purpose: "RECLAMATION_REPLACEMENT", status: "RETURNED" },
+        select: { reclamationId: true },
+      }),
+      db.stockMovement.findMany({
+        where: { idempotencyKey: { in: ids.map(reclamationReplacementRestoreKey) } },
+        select: { idempotencyKey: true },
+      }),
+    ]);
+    for (const shipment of shipments) if (shipment.reclamationId) returnedReplacements.add(shipment.reclamationId);
+    const restoreKeys = new Set(restores.map((row) => row.idempotencyKey));
+    for (const id of ids) if (restoreKeys.has(reclamationReplacementRestoreKey(id))) receivedReplacements.add(id);
+  }
+  return new Map(claims.map((claim): [string, string] => {
+    const replacementStatus = reclamationReplacementReturnStatus(returnedReplacements.has(claim.id), receivedReplacements.has(claim.id));
+    if (replacementStatus) return [claim.id, replacementStatus];
     const receipts = receiptQuantities.get(claim.id);
     // A legacy whole-claim receipt supersedes parcel receipts; never count both.
     return [claim.id, reclamationWarehouseStatus(claim, receipts?.aggregate ?? receipts?.parcels ?? 0)];
