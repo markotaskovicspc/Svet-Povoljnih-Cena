@@ -17,7 +17,7 @@ export function ReclamationActionDialogs({ manualForm }: { manualForm: ReactNode
   return (
     <>
       <Dialog>
-        <DialogTrigger render={<Button className="h-9 px-3" />}>
+        <DialogTrigger render={<Button className="h-[30px] px-2.5 text-xs" />}>
           <MailIcon aria-hidden="true" />
           Pošalji kupcu obrazac
         </DialogTrigger>
@@ -33,9 +33,9 @@ export function ReclamationActionDialogs({ manualForm }: { manualForm: ReactNode
         </DialogContent>
       </Dialog>
       <Dialog>
-        <DialogTrigger render={<Button variant="outline" className="h-9 px-3" />}>
+        <DialogTrigger render={<Button variant="outline" className="h-[30px] px-2.5 text-xs" />}>
           <PlusIcon aria-hidden="true" />
-          Ručno evidentiraj reklamaciju
+          Ručno evidentiraj
         </DialogTrigger>
         <DialogContent className="sm:max-w-3xl p-6">
           <DialogHeader>
