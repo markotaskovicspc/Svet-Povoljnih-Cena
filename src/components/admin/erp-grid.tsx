@@ -401,8 +401,12 @@ function ErpGridContent({
     const update = () => {
       const box = tableBoxRef.current;
       if (!box) return;
-      const top = box.getBoundingClientRect().top + window.scrollY;
-      setTableBoxHeight(Math.max(320, Math.floor(window.innerHeight - top - 14)));
+      const rect = box.getBoundingClientRect();
+      const top = rect.top + window.scrollY;
+      // Ispod tabele je samo donja ivica kartice; stranica nema donji razmak.
+      const cardBottom = box.parentElement?.getBoundingClientRect().bottom ?? rect.bottom;
+      const below = Math.max(0, cardBottom - rect.bottom);
+      setTableBoxHeight(Math.max(320, Math.floor(window.innerHeight - top - below)));
     };
     update();
     window.addEventListener("resize", update);
@@ -1530,13 +1534,13 @@ function ErpGridContent({
 
   return (
     <div
-      className={compactToolbar ? "space-y-3" : "space-y-5"}
+      className={compactToolbar ? "space-y-2" : "space-y-5"}
       inert={!clientReady}
       aria-busy={!clientReady}
       data-client-ready={clientReady ? "true" : "false"}
     >
       <fieldset className="contents" disabled={!clientReady}>
-      <div className={cn("rounded-2xl border border-border/60 bg-surface shadow-sm", compactToolbar ? "p-3" : "p-4")}>
+      <div className={cn("rounded-2xl border border-border/60 bg-surface shadow-sm", compactToolbar ? "p-2" : "p-4")}>
         <div className={compactToolbar ? "flex flex-col gap-3 xl:flex-row xl:items-center" : "flex flex-col gap-4"}>
           <div className="min-w-0 flex-1 space-y-3">
             <div className={cn("relative flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center 2xl:flex-nowrap", compactToolbar && "xl:flex-nowrap")}>
