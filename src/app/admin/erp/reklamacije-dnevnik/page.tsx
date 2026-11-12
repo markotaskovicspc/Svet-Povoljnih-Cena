@@ -287,7 +287,6 @@ export default async function ReclamationsPage({
     <>
       <PageHeader
         title="Reklamacije"
-        description="Ručni unos, dnevnik i operativna obrada reklamacija"
         crumbs={[
           { href: "/admin", label: "Admin" },
           { href: "/admin/erp", label: "ERP" },
