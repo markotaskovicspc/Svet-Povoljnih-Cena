@@ -295,19 +295,7 @@ export default async function ReclamationsPage({
         actions={<div className="flex flex-wrap items-center gap-2"><ReclamationActionDialogs manualForm={manualForm} /><span aria-hidden="true" className="mx-1 hidden h-6 w-px bg-border sm:block" /><Link href="/admin/erp/preuzimanja/povrati" className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Povrati za prijem</Link><Link href="/admin/erp/reklamacije-izvestaji" className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Reklamacije – izveštaji</Link><a href="/api/admin/erp/reklamacije-dnevnik/export" download className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Preuzmi XLSX</a></div>}
       />
       <div className="space-y-10 px-8 py-6">
-        {erpModule ? (
-          <section aria-labelledby="reclamation-grid" className="space-y-3">
-            <div>
-              <h2 id="reclamation-grid" className="font-display text-2xl text-ink-900">
-                Dnevnik za filtere i izvoz
-              </h2>
-              <p className="text-sm text-ink-500">
-                Zajednički ERP grid sa sačuvanim pogledima, izborom kolona i XLSX izvozom.
-              </p>
-            </div>
-            <ErpGrid module={erpModule} />
-          </section>
-        ) : null}
+        {erpModule ? <ErpGrid module={erpModule} compactToolbar /> : null}
         <section aria-labelledby="reclamation-operations" className="space-y-4">
           <SectionHeading
             id="reclamation-operations"

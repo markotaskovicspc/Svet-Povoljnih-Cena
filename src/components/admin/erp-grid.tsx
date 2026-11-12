@@ -360,6 +360,8 @@ type ErpGridProps = {
   initialSearchColumn?: string;
   initialContext?: Record<string, string>;
   initialView?: ErpGridInitialView;
+  /** Pretraga, filteri i komande u jednom redu (od xl širine). */
+  compactToolbar?: boolean;
 };
 
 export function ErpGrid(props: ErpGridProps) {
@@ -387,7 +389,7 @@ export function ErpGrid(props: ErpGridProps) {
 function ErpGridContent({
   module, fixedFilters = EMPTY_FIXED_FILTERS, initialVisibleColumns,
   initialQuery = "", initialSearchColumn = "", initialContext = {}, initialView,
-  selectedViewId, pagePath, routeSearch,
+  compactToolbar = false, selectedViewId, pagePath, routeSearch,
 }: ErpGridProps & { selectedViewId: string; pagePath: string; routeSearch: string }) {
   const router = useRouter();
   const [navigationReady, setNavigationReady] = useState(false);
@@ -1310,9 +1312,9 @@ function ErpGridContent({
     >
       <fieldset className="contents" disabled={!clientReady}>
       <div className="rounded-2xl border border-border/60 bg-surface p-4 shadow-sm">
-        <div className="flex flex-col gap-4">
+        <div className={compactToolbar ? "flex flex-col gap-3 xl:flex-row xl:items-center" : "flex flex-col gap-4"}>
           <div className="min-w-0 flex-1 space-y-3">
-            <div className="relative flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center 2xl:flex-nowrap">
+            <div className={cn("relative flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center 2xl:flex-nowrap", compactToolbar && "xl:flex-nowrap")}>
               <select
                 value={searchColumn}
                 onChange={(event) => {
@@ -1518,7 +1520,7 @@ function ErpGridContent({
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2 2xl:justify-end">
+          <div className={compactToolbar ? "flex flex-wrap gap-2 xl:flex-nowrap xl:justify-end" : "flex flex-wrap gap-2 2xl:justify-end"}>
             {module.commands.map((command) => {
               const isEditCommand = command.clientAction === "edit";
               const disabled =
