@@ -976,11 +976,14 @@ async function dispatchJob(job: JobRow) {
     }
     case "RECLAMATION_STATUS_EMAIL": {
       const { loadReclamationForEmail, sendReclamationStatusChanged } = await import("@/lib/email");
-      const loaded = await loadReclamationForEmail((payload as z.infer<typeof schemas.RECLAMATION_STATUS_EMAIL>).reclamationId);
+      const statusClaimId = (payload as z.infer<typeof schemas.RECLAMATION_STATUS_EMAIL>).reclamationId;
+      const loaded = await loadReclamationForEmail(statusClaimId);
       if (!loaded?.recipient) return;
+      const decided = await db.reclamation.findUnique({ where: { id: statusClaimId }, select: { decision: true, resolution: true } });
       const result = await sendReclamationStatusChanged({
         reclamation: loaded.reclamation,
         status: loaded.reclamation.status,
+        resolution: decided?.decision === "PRIHVACENA" ? decided.resolution : null,
         to: loaded.recipient,
         guest: loaded.guest,
         idempotencyKey: `reclamation-status:${loaded.reclamation.id}:${(

@@ -386,6 +386,7 @@ export async function sendReclamationReceipt(args: {
 export async function sendReclamationStatusChanged(args: {
   reclamation: Reclamation;
   status: ReclamationStatus;
+  resolution?: ReclamationAcceptedResolution | null;
   to: string;
   guest?: boolean;
   idempotencyKey?: string;
@@ -396,6 +397,7 @@ export async function sendReclamationStatusChanged(args: {
     ReclamationStatusChanged({
       reclamation: args.reclamation,
       status: args.status,
+      resolution: args.resolution,
       baseUrl: cfg.baseUrl,
       guest: args.guest,
     }),
@@ -403,7 +405,9 @@ export async function sendReclamationStatusChanged(args: {
   return trackedDispatch({
     kind: "reclamation_status",
     to: args.to,
-    subject: `Reklamacija ${args.reclamation.id} — promena statusa`,
+    subject: args.status === "reseno"
+      ? `Reklamacija ${args.reclamation.id} je rešena`
+      : `Reklamacija ${args.reclamation.id} — promena statusa`,
     html,
     text,
     bcc: cfg.orderBcc,
