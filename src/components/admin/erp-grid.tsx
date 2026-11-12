@@ -393,6 +393,26 @@ function ErpGridContent({
   compactToolbar = false, selectedViewId, pagePath, routeSearch,
 }: ErpGridProps & { selectedViewId: string; pagePath: string; routeSearch: string }) {
   const router = useRouter();
+  // compactToolbar: tabela se pruža tačno do dna prozora (izmereno, ne procenjeno).
+  const tableBoxRef = useRef<HTMLDivElement>(null);
+  const [tableBoxHeight, setTableBoxHeight] = useState<number | null>(null);
+  useEffect(() => {
+    if (!compactToolbar) return;
+    const update = () => {
+      const box = tableBoxRef.current;
+      if (!box) return;
+      const top = box.getBoundingClientRect().top + window.scrollY;
+      setTableBoxHeight(Math.max(320, Math.floor(window.innerHeight - top - 14)));
+    };
+    update();
+    window.addEventListener("resize", update);
+    const observer = new ResizeObserver(update);
+    observer.observe(document.body);
+    return () => {
+      window.removeEventListener("resize", update);
+      observer.disconnect();
+    };
+  }, [compactToolbar]);
   const [navigationReady, setNavigationReady] = useState(false);
   const restoredSnapshot = useRef(false);
   const navigationKey = useRef("");
@@ -1304,6 +1324,36 @@ function ErpGridContent({
     </div>
   );
 
+  const pager = (
+    <>
+            <p className="text-sm text-ink-500">
+              Strana {page} od {pageCount}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={page <= 1 || loadingRows}
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                aria-label="Prethodna strana"
+              >
+                <ChevronLeft className="size-4" aria-hidden />
+                Prethodna
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={page >= pageCount || loadingRows}
+                onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
+                aria-label="Sledeća strana"
+              >
+                Sledeća
+                <ChevronRight className="size-4" aria-hidden />
+              </Button>
+            </div>
+    </>
+  );
+
   const viewActions = (
             <div className="flex flex-wrap items-center gap-2">
               <Button
@@ -1936,7 +1986,7 @@ function ErpGridContent({
                 </p>
               ) : null}
             </div>
-            {compactToolbar ? null : viewActions}
+            {compactToolbar ? <div className="flex items-center gap-3">{pager}</div> : viewActions}
           </div>
 
           <Dialog open={showSaveViewForm} onOpenChange={setShowSaveViewForm}>
@@ -1960,7 +2010,11 @@ function ErpGridContent({
             </DialogContent>
           </Dialog>
 
-          <div className={compactToolbar ? "h-[calc(100dvh-22rem)] min-h-80 overflow-auto" : "max-h-[calc(100vh-14rem)] overflow-auto"}>
+          <div
+            ref={tableBoxRef}
+            style={compactToolbar && tableBoxHeight ? { height: tableBoxHeight } : undefined}
+            className={compactToolbar ? "h-[calc(100dvh-18rem)] min-h-80 overflow-auto" : "max-h-[calc(100vh-14rem)] overflow-auto"}
+          >
             <table className="min-w-full text-sm">
               <thead className="sticky top-0 z-20 bg-muted-bg text-xs uppercase tracking-[0.12em] text-ink-500 shadow-[0_1px_0_0_var(--color-border)]">
                 <tr>
@@ -2357,33 +2411,11 @@ function ErpGridContent({
               </tbody>
             </table>
           </div>
-          <div className={cn("flex items-center justify-between border-t border-border/60 px-4", compactToolbar ? "py-2" : "py-3")}>
-            <p className="text-sm text-ink-500">
-              Strana {page} od {pageCount}
-            </p>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={page <= 1 || loadingRows}
-                onClick={() => setPage((current) => Math.max(1, current - 1))}
-                aria-label="Prethodna strana"
-              >
-                <ChevronLeft className="size-4" aria-hidden />
-                Prethodna
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={page >= pageCount || loadingRows}
-                onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
-                aria-label="Sledeća strana"
-              >
-                Sledeća
-                <ChevronRight className="size-4" aria-hidden />
-              </Button>
+          {compactToolbar ? null : (
+            <div className="flex items-center justify-between border-t border-border/60 px-4 py-3">
+              {pager}
             </div>
-          </div>
+          )}
         </div>
 
       </div>
