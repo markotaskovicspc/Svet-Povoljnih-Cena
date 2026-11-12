@@ -110,7 +110,8 @@ export async function issueReclamationRefund(input: { id: string; actorId: strin
   });
 }
 
-export async function confirmReclamationPayout(input: { id: string; paidAt: string; reference: string; actorId: string; confirmed: boolean }) {
+/** actorId je null kad isplatu evidentira SPC Analytics sa izvoda (partner API, bez korisnika ERP-a); `note` tada opisuje izvor. */
+export async function confirmReclamationPayout(input: { id: string; paidAt: string; reference: string; actorId: string | null; confirmed: boolean; note?: string }) {
   const initial = await claimForRefund(input.id);
   const paidAt = new Date(input.paidAt);
   const reference = input.reference.trim();
@@ -124,12 +125,12 @@ export async function confirmReclamationPayout(input: { id: string; paidAt: stri
     await db.$transaction(async tx => {
       await tx.paymentRefund.update({ where: { id: state.payout!.id }, data: {
         status: "COMPLETED", completedAt: paidAt, providerRef: reference, error: null,
-        rawResponse: { manuallyConfirmed: true, confirmedBy: input.actorId, confirmedAt: new Date().toISOString() },
+        rawResponse: { manuallyConfirmed: true, confirmedBy: input.actorId ?? "spcapp", confirmedAt: new Date().toISOString() },
       } });
       await tx.reclamation.update({ where: { id: input.id }, data: { status: "RESENO", resolvedAt: new Date() } });
       await tx.reclamationStatusEvent.create({ data: {
         reclamationId: input.id, status: "RESENO", actorId: input.actorId,
-        note: `Fiskalna refundacija završena; ručna isplata ${num(state.payout!.amount)} RSD na račun kupca potvrđena. Referenca: ${reference}`,
+        note: `Fiskalna refundacija završena; ručna isplata ${num(state.payout!.amount)} RSD na račun kupca potvrđena. Referenca: ${reference}${input.note ? `. ${input.note}` : ""}`,
       } });
     });
     return state.payout.id;

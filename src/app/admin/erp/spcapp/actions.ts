@@ -10,10 +10,10 @@ export async function createSpcappKey(_state: AdminActionState<NewSpcappKey>, fo
     const name = String(form.get('name') ?? 'SPCApp').trim();
     if (!name || name.length > 100) return { ok: false, error: 'Naziv mora imati 1–100 znakova.' };
     const token = `spcapp_${randomBytes(32).toString('hex')}`;
-    const client = await db.partnerApiClient.create({ data: { name, keyPrefix: token.slice(0, 18), keyHash: createHash('sha256').update(token).digest('hex'), scopes: ['spcapp:read'], rateLimit: 120 }, select: { id: true } });
+    const client = await db.partnerApiClient.create({ data: { name, keyPrefix: token.slice(0, 18), keyHash: createHash('sha256').update(token).digest('hex'), scopes: ['spcapp:read', 'spcapp:reclamation-payout'], rateLimit: 120 }, select: { id: true } });
     revalidatePath('/admin/erp/spcapp');
     // The token is returned once to this authenticated admin, never put in audit diff.
-    return { ok: true, entityId: client.id, diff: { name, scopes: ['spcapp:read'], rateLimit: 120 }, result: { clientId: client.id, token }, message: 'Ključ je napravljen. Kopirajte ga u serverske tajne SPCApp-a; posle napuštanja stranice neće biti dostupan.' };
+    return { ok: true, entityId: client.id, diff: { name, scopes: ['spcapp:read', 'spcapp:reclamation-payout'], rateLimit: 120 }, result: { clientId: client.id, token }, message: 'Ključ je napravljen. Kopirajte ga u serverske tajne SPCApp-a; posle napuštanja stranice neće biti dostupan.' };
   })();
 }
 export async function revokeSpcappKey(_state: AdminActionState, form: FormData) {
