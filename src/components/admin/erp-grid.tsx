@@ -393,6 +393,35 @@ function ErpGridContent({
   compactToolbar = false, selectedViewId, pagePath, routeSearch,
 }: ErpGridProps & { selectedViewId: string; pagePath: string; routeSearch: string }) {
   const router = useRouter();
+  // compactToolbar: tabela ide ispod ekrana (skroluje se stranica), a red sa nazivima
+  // kolona ostaje na vrhu prozora. Kutija tabele ima horizontalni skrol, pa CSS sticky
+  // ne vidi prozor; zaglavlje se zato pomera transformom dok je tabela na ekranu.
+  const tableBoxRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!compactToolbar) return;
+    let frame = 0;
+    const apply = () => {
+      frame = 0;
+      const box = tableBoxRef.current;
+      const head = box?.querySelector("thead");
+      if (!box || !head) return;
+      const rect = box.getBoundingClientRect();
+      const max = Math.max(0, rect.height - head.offsetHeight);
+      const offset = Math.min(max, Math.max(0, -rect.top));
+      head.style.transform = offset > 0 ? `translateY(${offset}px)` : "";
+    };
+    const schedule = () => {
+      if (!frame) frame = window.requestAnimationFrame(apply);
+    };
+    apply();
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+    };
+  }, [compactToolbar]);
   const [navigationReady, setNavigationReady] = useState(false);
   const restoredSnapshot = useRef(false);
   const navigationKey = useRef("");
@@ -1990,7 +2019,7 @@ function ErpGridContent({
             </DialogContent>
           </Dialog>
 
-          <div className={compactToolbar ? "overflow-x-auto" : "max-h-[calc(100vh-14rem)] overflow-auto"}>
+          <div ref={tableBoxRef} className={compactToolbar ? "overflow-x-auto" : "max-h-[calc(100vh-14rem)] overflow-auto"}>
             <table className="min-w-full text-sm">
               <thead className="sticky top-0 z-20 bg-muted-bg text-xs uppercase tracking-[0.12em] text-ink-500 shadow-[0_1px_0_0_var(--color-border)]">
                 <tr>
