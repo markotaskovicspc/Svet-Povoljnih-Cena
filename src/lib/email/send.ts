@@ -14,6 +14,7 @@ import { PartialDelivery } from "./templates/partial-delivery";
 import { FiscalReceiptEmail } from "./templates/fiscal-receipt";
 import { ReclamationReceipt } from "./templates/reclamation-receipt";
 import { ReclamationStatusChanged } from "./templates/reclamation-status-changed";
+import { ReclamationAccepted, type ReclamationAcceptedResolution } from "./templates/reclamation-accepted";
 import { GuestReclamationLink } from "./templates/guest-reclamation-link";
 import { PasswordReset } from "./templates/password-reset";
 import { OtpEmail } from "./templates/otp";
@@ -414,6 +415,39 @@ export async function sendReclamationStatusChanged(args: {
     idempotencyKey:
       args.idempotencyKey ??
       `reclamation-status:${args.reclamation.id}:${args.status}`,
+  });
+}
+
+export async function sendReclamationAccepted(args: {
+  reclamation: Reclamation;
+  resolution: ReclamationAcceptedResolution | null;
+  to: string;
+  guest?: boolean;
+  idempotencyKey: string;
+}): Promise<DispatchResult> {
+  if (!args.to) return NULL;
+  const cfg = getEmailConfig();
+  const { html, text } = await renderEmail(
+    ReclamationAccepted({
+      reclamation: args.reclamation,
+      resolution: args.resolution,
+      baseUrl: cfg.baseUrl,
+      guest: args.guest,
+    }),
+  );
+  return trackedDispatch({
+    kind: "reclamation_accepted",
+    to: args.to,
+    subject: `Reklamacija ${args.reclamation.id} je prihvaćena`,
+    html,
+    text,
+    bcc: cfg.orderBcc,
+    tags: {
+      kind: "reclamation_accepted",
+      reclamation: args.reclamation.id,
+      resolution: args.resolution ?? "none",
+    },
+    idempotencyKey: args.idempotencyKey,
   });
 }
 

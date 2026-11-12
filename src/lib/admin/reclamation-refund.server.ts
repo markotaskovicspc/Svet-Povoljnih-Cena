@@ -128,10 +128,17 @@ export async function confirmReclamationPayout(input: { id: string; paidAt: stri
         rawResponse: { manuallyConfirmed: true, confirmedBy: input.actorId ?? "spcapp", confirmedAt: new Date().toISOString() },
       } });
       await tx.reclamation.update({ where: { id: input.id }, data: { status: "RESENO", resolvedAt: new Date() } });
-      await tx.reclamationStatusEvent.create({ data: {
+      const event = await tx.reclamationStatusEvent.create({ data: {
         reclamationId: input.id, status: "RESENO", actorId: input.actorId,
         note: `Fiskalna refundacija završena; ručna isplata ${num(state.payout!.amount)} RSD na račun kupca potvrđena. Referenca: ${reference}${input.note ? `. ${input.note}` : ""}`,
-      } });
+      }, select: { id: true } });
+      // Kupac dobija isti mejl „Reklamacija je rešena“ kao kod ručne promene statusa.
+      const { enqueueBackgroundJob } = await import("@/lib/background-jobs");
+      await enqueueBackgroundJob({
+        kind: "RECLAMATION_STATUS_EMAIL",
+        payload: { reclamationId: input.id, eventId: event.id },
+        idempotencyKey: `reclamation-status-email:${event.id}`,
+      }, tx);
     });
     return state.payout.id;
   });

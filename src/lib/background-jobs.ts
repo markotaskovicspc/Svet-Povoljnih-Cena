@@ -123,6 +123,7 @@ const schemas = {
     reclamationId: z.string().min(1),
     eventId: z.string().min(1).optional(),
   }),
+  RECLAMATION_ACCEPTED_EMAIL: z.object({ reclamationId: z.string().min(1) }),
   RABALUX_MEDIA_PRODUCT: z.object({
     productId: z.string().min(1),
     assetId: z.string().min(1).optional(),
@@ -175,6 +176,7 @@ const HIGH_PRIORITY_BACKGROUND_JOB_KINDS: BackgroundJobKind[] = [
   "RETURN_REVIEW_OFFICE_EMAIL",
   "RECLAMATION_NOTIFICATION",
   "RECLAMATION_STATUS_EMAIL",
+  "RECLAMATION_ACCEPTED_EMAIL",
   "SUPPLIER_ORDER_EMAIL",
   "SUPPLIER_SHIPPING_DOCUMENTS_EMAIL",
   "SUPPLIER_CANCEL_EMAIL",
@@ -984,6 +986,24 @@ async function dispatchJob(job: JobRow) {
         idempotencyKey: `reclamation-status:${loaded.reclamation.id}:${(
           payload as z.infer<typeof schemas.RECLAMATION_STATUS_EMAIL>
         ).eventId ?? loaded.reclamation.status}`,
+      });
+      if (!result.ok) throw new Error(result.error);
+      return;
+    }
+    case "RECLAMATION_ACCEPTED_EMAIL": {
+      const { loadReclamationForEmail, sendReclamationAccepted } = await import("@/lib/email");
+      const { reclamationId } = payload as z.infer<typeof schemas.RECLAMATION_ACCEPTED_EMAIL>;
+      const claim = await db.reclamation.findUnique({ where: { id: reclamationId }, select: { decision: true, resolution: true, status: true } });
+      // Odluka je možda povučena pre slanja; tada kupcu ne javljamo ništa.
+      if (!claim || claim.decision !== "PRIHVACENA" || claim.status === "ODBIJENO") return;
+      const loaded = await loadReclamationForEmail(reclamationId);
+      if (!loaded?.recipient) return;
+      const result = await sendReclamationAccepted({
+        reclamation: loaded.reclamation,
+        resolution: claim.resolution,
+        to: loaded.recipient,
+        guest: loaded.guest,
+        idempotencyKey: `reclamation-accepted:${reclamationId}:${claim.resolution ?? "none"}`,
       });
       if (!result.ok) throw new Error(result.error);
       return;
