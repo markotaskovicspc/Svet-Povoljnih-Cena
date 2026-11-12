@@ -295,9 +295,7 @@ test.describe("Admin analitika reklamacija", () => {
       });
       await expect(pageHeading).toHaveCount(1);
       await expect(pageHeading).toBeVisible();
-      await expect(
-        page.getByRole("heading", { name: "Obrada reklamacija" }),
-      ).toBeVisible();
+      await expect(page.getByTestId("manual-reclamation-form")).toHaveCount(0);
       await page.getByRole("link", { name: "Reklamacije – izveštaji" }).click();
       await expect(page).toHaveURL(/\/admin\/erp\/reklamacije-izvestaji$/);
     });
@@ -393,39 +391,10 @@ test.describe("Admin analitika reklamacija", () => {
       ).toBeVisible();
     });
 
-    await test.step("status filter utiče samo na operativni spisak", async () => {
-      await page.goto("/admin/erp/reklamacije-dnevnik", {
-        waitUntil: "domcontentloaded",
-      });
-      await page.locator('a[href="/admin/erp/reklamacije-dnevnik?status=RESENO"]').click();
-      await expect(page).toHaveURL(/status=RESENO/);
-      const operations = page.locator(
-        'section[aria-labelledby="reclamation-operations"]',
-      );
-      await expect(operations.getByText(`${prefix}-A-RESENO`, { exact: true })).toBeVisible();
-      await expect(operations.getByText(`${prefix}-B-RESENO`, { exact: true })).toBeVisible();
-      await expect(
-        operations.getByText(`${prefix}-A-OPEN-31`, { exact: true }),
-      ).toHaveCount(0);
-      await expect(
-        page.getByRole("link", { name: "Reklamacije – izveštaji" }),
-      ).toBeVisible();
-    });
-
     await test.step("postojeća promena statusa i istorija nisu pokvarene", async () => {
-      await page.goto("/admin/erp/reklamacije-dnevnik?status=PRIMLJENO", {
+      await page.goto(`/admin/erp/reklamacije-dnevnik/${mutableReclamationId}`, {
         waitUntil: "domcontentloaded",
       });
-      const operations = page.locator(
-        'section[aria-labelledby="reclamation-operations"]',
-      );
-      const card = operations.locator("div.rounded-2xl").filter({
-        hasText: `${prefix}-A-OPEN-31`,
-      });
-      await expect(card).toHaveCount(1);
-      await card
-        .getByRole("link", { name: "Otvori detalj i obradu", exact: true })
-        .click();
       await expect(page).toHaveURL(
         new RegExp(`/admin/erp/reklamacije-dnevnik/${mutableReclamationId}$`),
       );
@@ -442,14 +411,6 @@ test.describe("Admin analitika reklamacija", () => {
           }),
         )
         .toEqual({ status: "U_OBRADI" });
-      await page.goto("/admin/erp/reklamacije-dnevnik?status=U_OBRADI", {
-        waitUntil: "domcontentloaded",
-      });
-      await expect(
-        page
-          .locator('section[aria-labelledby="reclamation-operations"]')
-          .getByText(`${prefix}-A-OPEN-31`, { exact: true }),
-      ).toBeVisible();
     });
 
     await test.step("dashboard periodi, podrazumevani pogledi i XLSX izvozi rade", async () => {

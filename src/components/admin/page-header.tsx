@@ -7,15 +7,18 @@ export function PageHeader({
   description,
   crumbs,
   actions,
+  compact = false,
 }: {
   title: string;
   description?: React.ReactNode;
   crumbs?: Crumb[];
   actions?: React.ReactNode;
+  /** Manje vertikalnog prostora (py-3 umesto py-6), naslov i akcije poravnati po sredini. */
+  compact?: boolean;
 }) {
   return (
     <header data-admin-page-header className="border-b border-border/60 bg-surface/80 backdrop-blur">
-      <div className="flex flex-col gap-2 px-8 py-6 lg:flex-row lg:items-end lg:justify-between">
+      <div className={`flex flex-col gap-2 px-8 lg:flex-row lg:justify-between ${compact ? "py-3 lg:items-center" : "py-6 lg:items-end"}`}>
         <div className="space-y-1">
           {crumbs && crumbs.length > 0 ? (
             <nav className="text-xs text-ink-500">

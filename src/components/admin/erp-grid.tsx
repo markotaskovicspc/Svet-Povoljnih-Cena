@@ -1480,13 +1480,13 @@ function ErpGridContent({
 
   return (
     <div
-      className="space-y-5"
+      className={compactToolbar ? "space-y-3" : "space-y-5"}
       inert={!clientReady}
       aria-busy={!clientReady}
       data-client-ready={clientReady ? "true" : "false"}
     >
       <fieldset className="contents" disabled={!clientReady}>
-      <div className="rounded-2xl border border-border/60 bg-surface p-4 shadow-sm">
+      <div className={cn("rounded-2xl border border-border/60 bg-surface shadow-sm", compactToolbar ? "p-3" : "p-4")}>
         <div className={compactToolbar ? "flex flex-col gap-3 xl:flex-row xl:items-center" : "flex flex-col gap-4"}>
           <div className="min-w-0 flex-1 space-y-3">
             <div className={cn("relative flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center 2xl:flex-nowrap", compactToolbar && "xl:flex-nowrap")}>
@@ -1960,7 +1960,7 @@ function ErpGridContent({
             </DialogContent>
           </Dialog>
 
-          <div className="max-h-[calc(100vh-14rem)] overflow-auto">
+          <div className={compactToolbar ? "h-[calc(100dvh-22rem)] min-h-80 overflow-auto" : "max-h-[calc(100vh-14rem)] overflow-auto"}>
             <table className="min-w-full text-sm">
               <thead className="sticky top-0 z-20 bg-muted-bg text-xs uppercase tracking-[0.12em] text-ink-500 shadow-[0_1px_0_0_var(--color-border)]">
                 <tr>
@@ -2357,7 +2357,7 @@ function ErpGridContent({
               </tbody>
             </table>
           </div>
-          <div className="flex items-center justify-between border-t border-border/60 px-4 py-3">
+          <div className={cn("flex items-center justify-between border-t border-border/60 px-4", compactToolbar ? "py-2" : "py-3")}>
             <p className="text-sm text-ink-500">
               Strana {page} od {pageCount}
             </p>
