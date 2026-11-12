@@ -16,6 +16,7 @@ import { ArticlePhotoPreview } from "@/components/admin/article-photo-preview";
 import {
   ArrowUp,
   ArrowDown,
+  BookmarkCheck,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -1303,6 +1304,180 @@ function ErpGridContent({
     </div>
   );
 
+  const viewActions = (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setSaveAsNew(true);
+                  setSaveViewName("");
+                  setShowInSidebar(true);
+                  setShowSaveViewForm(true);
+                  setCommandMessage(null);
+                }}
+                className={compactToolbar ? "size-9 px-0" : undefined}
+                aria-label={compactToolbar ? (activeView ? "Sačuvaj kao novi pogled" : "Sačuvaj pogled") : undefined}
+                title={compactToolbar ? (activeView ? "Sačuvaj kao novi pogled" : "Sačuvaj pogled") : undefined}
+              >
+                <Save className="size-4" aria-hidden />
+                {compactToolbar ? null : activeView ? "Sačuvaj kao novi" : "Sačuvaj pogled"}
+              </Button>
+              {activeView ? <Button type="button" variant="outline" onClick={() => {
+                setSaveAsNew(false); setSaveViewName(activeView.name);
+                setShowInSidebar(activeView.showInSidebar ?? false); setShowSaveViewForm(true);
+              }}
+                className={compactToolbar ? "size-9 px-0" : undefined}
+                aria-label={compactToolbar ? "Sačuvaj izmene pogleda" : undefined}
+                title={compactToolbar ? "Sačuvaj izmene pogleda" : undefined}
+              >{compactToolbar ? <BookmarkCheck className="size-4" aria-hidden /> : "Sačuvaj izmene"}</Button> : null}
+              <Button type="button" variant="outline" onClick={resetColumns}
+                className={compactToolbar ? "size-9 px-0" : undefined}
+                aria-label={compactToolbar ? "Reset kolona" : undefined}
+                title={compactToolbar ? "Reset kolona" : undefined}
+              >
+                {compactToolbar ? <RotateCcw className="size-4" aria-hidden /> : "Reset kolona"}
+              </Button>
+              <details
+                ref={tableSettingsRef}
+                open={tableSettingsOpen}
+                onToggle={(event) =>
+                  setTableSettingsOpen(event.currentTarget.open)
+                }
+                className="group relative"
+              >
+                <summary
+                  className={cn("inline-flex h-9 cursor-pointer list-none items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm font-medium transition hover:bg-muted [&::-webkit-details-marker]:hidden", compactToolbar && "w-9 justify-center px-0")}
+                  aria-label={compactToolbar ? "Prikaz tabele" : undefined}
+                  title={compactToolbar ? "Prikaz tabele" : undefined}
+                >
+                  <Settings2 className="size-4" aria-hidden />
+                  {compactToolbar ? null : "Prikaz tabele"}
+                </summary>
+                <div className="fixed inset-x-4 top-20 z-[70] max-h-[70vh] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-2xl border border-border/70 bg-surface p-4 shadow-xl md:absolute md:inset-x-auto md:right-0 md:top-11 md:z-50 md:w-[min(92vw,420px)]">
+                  <section>
+                    <div className="mb-3 flex items-center gap-2">
+                      <Settings2 className="size-4 text-ink-500" aria-hidden />
+                      <h2 className="text-sm font-medium text-ink-900">Kolone</h2>
+                    </div>
+                    <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                      {columnOrder
+                        .map((key) =>
+                          module.columns.find((column) => column.key === key),
+                        )
+                        .filter((column): column is ErpColumn => Boolean(column))
+                        .map((column, index, columns) => (
+                          <div
+                            key={column.key}
+                            draggable
+                            onDragStart={() => setDraggedColumn(column.key)}
+                            onDragOver={(event) => event.preventDefault()}
+                            onDrop={(event) => {
+                              event.preventDefault();
+                              if (draggedColumn) {
+                                moveColumn(draggedColumn, column.key);
+                              }
+                              setDraggedColumn(null);
+                            }}
+                            onDragEnd={() => setDraggedColumn(null)}
+                            className={cn(
+                              "flex cursor-grab items-center gap-2 rounded-lg px-1 py-1 text-sm text-ink-700 transition hover:bg-muted-bg",
+                              draggedColumn === column.key && "opacity-40",
+                            )}
+                          >
+                            <GripVertical
+                              className="size-3.5 text-ink-300"
+                              aria-hidden
+                            />
+                            <Checkbox
+                              id={`grid-column-${module.slug}-${column.key}`}
+                              aria-label={`Prikaži kolonu ${column.label}`}
+                              checked={visibleColumns.includes(column.key)}
+                              onCheckedChange={() => toggleColumn(column.key)}
+                            />
+                            <label htmlFor={`grid-column-${module.slug}-${column.key}`} className="min-w-0 flex-1 cursor-pointer">{column.label}</label>
+                            <button type="button" className="inline-flex size-11 shrink-0 items-center justify-center rounded border border-border disabled:opacity-30" aria-label={`Pomeri kolonu ${column.label} ulevo`} disabled={index === 0} onClick={() => moveColumn(column.key, columns[index - 1].key)}><ArrowUp className="size-4" aria-hidden /></button>
+                            <button type="button" className="inline-flex size-11 shrink-0 items-center justify-center rounded border border-border disabled:opacity-30" aria-label={`Pomeri kolonu ${column.label} udesno`} disabled={index === columns.length - 1} onClick={() => moveColumn(column.key, columns[index + 1].key)}><ArrowDown className="size-4" aria-hidden /></button>
+                          </div>
+                        ))}
+                    </div>
+                  </section>
+
+                  <section className="mt-4 border-t border-border/60 pt-4">
+                    <div className="mb-3 flex items-center gap-2">
+                      <Eye className="size-4 text-ink-500" aria-hidden />
+                      <h2 className="text-sm font-medium text-ink-900">Pogledi</h2>
+                    </div>
+                    {views.length ? (
+                      <div className="space-y-2">
+                        {views.map((view, viewIndex) => (
+                          <div
+                            key={view.id ?? view.name}
+                            className="flex overflow-hidden rounded-lg border border-border/60"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => applyView(view)}
+                              className="min-w-0 flex-1 px-3 py-2 text-left text-sm text-ink-700 transition hover:bg-muted-bg"
+                            >
+                              {view.name}
+                            </button>
+                            {view.id ? <>
+                              <button type="button" disabled={savingView || viewIndex === 0} className="px-1 disabled:opacity-30" aria-label={`Pomeri gore: ${view.name}`} onClick={() => void changeView(view, { move: "up" })}><ArrowUp className="size-4" /></button>
+                              <button type="button" disabled={savingView || viewIndex === views.length - 1} className="px-1 disabled:opacity-30" aria-label={`Pomeri dole: ${view.name}`} onClick={() => void changeView(view, { move: "down" })}><ArrowDown className="size-4" /></button>
+                              <button type="button" className="px-2" aria-label={`Uredi pogled: ${view.name}`} onClick={() => { setEditingView(view); setEditViewName(view.name); setCommandMessage(null); }}><Pencil className="size-4" /></button>
+                            </> : null}
+                            {view.id ? (
+                              <button
+                                type="button"
+                                aria-label={
+                                  pendingDeleteViewId === view.id
+                                    ? `Potvrdi brisanje pogleda ${view.name}`
+                                    : `Obriši pogled ${view.name}`
+                                }
+                                onClick={() => {
+                                  if (pendingDeleteViewId === view.id) {
+                                    void deleteView(view);
+                                  } else {
+                                    setPendingDeleteViewId(view.id ?? null);
+                                  }
+                                }}
+                                className="border-l border-border/60 px-2 text-danger transition hover:bg-danger/5"
+                              >
+                                {pendingDeleteViewId === view.id ? (
+                                  <span className="text-xs">Potvrdi</span>
+                                ) : (
+                                  <Trash2 className="size-4" aria-hidden />
+                                )}
+                              </button>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-ink-500">
+                        Snimite kombinaciju filtera i kolona kao lični pogled.
+                      </p>
+                    )}
+                  </section>
+
+                  {module.notes?.length ? (
+                    <section className="mt-4 border-t border-border/60 pt-4">
+                      <h2 className="text-sm font-medium text-ink-900">
+                        Napomene iz specifikacije
+                      </h2>
+                      <ul className="mt-3 space-y-2 text-sm text-ink-600">
+                        {module.notes.map((note) => (
+                          <li key={note}>{note}</li>
+                        ))}
+                      </ul>
+                    </section>
+                  ) : null}
+                </div>
+              </details>
+            </div>
+  );
+
   return (
     <div
       className="space-y-5"
@@ -1520,7 +1695,9 @@ function ErpGridContent({
             </div>
           </div>
 
-          <div className={compactToolbar ? "flex flex-wrap gap-2 xl:flex-nowrap xl:justify-end" : "flex flex-wrap gap-2 2xl:justify-end"}>
+          <div className={compactToolbar ? "flex flex-wrap items-center gap-2 xl:flex-nowrap xl:justify-end" : "flex flex-wrap gap-2 2xl:justify-end"}>
+            {compactToolbar ? viewActions : null}
+            {compactToolbar ? <span aria-hidden="true" className="mx-1 hidden h-6 w-px bg-border xl:block" /> : null}
             {module.commands.map((command) => {
               const isEditCommand = command.clientAction === "edit";
               const disabled =
@@ -1741,8 +1918,8 @@ function ErpGridContent({
 
       <div>
         <div className="min-w-0 rounded-2xl border border-border/60 bg-surface shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
-            <div className="space-y-1">
+          <div className={cn("flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4", compactToolbar ? "py-2" : "py-3")}>
+            <div className={compactToolbar ? "flex flex-wrap items-baseline gap-x-3 gap-y-1" : "space-y-1"}>
               {activeView ? <p className="text-sm font-medium text-walnut">Pogled: {activeView.name}</p> : null}
               <p className="text-sm text-ink-500">
                 {loadingRows
@@ -1759,162 +1936,7 @@ function ErpGridContent({
                 </p>
               ) : null}
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setSaveAsNew(true);
-                  setSaveViewName("");
-                  setShowInSidebar(true);
-                  setShowSaveViewForm(true);
-                  setCommandMessage(null);
-                }}
-              >
-                <Save className="size-4" aria-hidden />
-                {activeView ? "Sačuvaj kao novi" : "Sačuvaj pogled"}
-              </Button>
-              {activeView ? <Button type="button" variant="outline" onClick={() => {
-                setSaveAsNew(false); setSaveViewName(activeView.name);
-                setShowInSidebar(activeView.showInSidebar ?? false); setShowSaveViewForm(true);
-              }}>Sačuvaj izmene</Button> : null}
-              <Button type="button" variant="outline" onClick={resetColumns}>
-                Reset kolona
-              </Button>
-              <details
-                ref={tableSettingsRef}
-                open={tableSettingsOpen}
-                onToggle={(event) =>
-                  setTableSettingsOpen(event.currentTarget.open)
-                }
-                className="group relative"
-              >
-                <summary className="inline-flex h-9 cursor-pointer list-none items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm font-medium transition hover:bg-muted [&::-webkit-details-marker]:hidden">
-                  <Settings2 className="size-4" aria-hidden />
-                  Prikaz tabele
-                </summary>
-                <div className="fixed inset-x-4 top-20 z-[70] max-h-[70vh] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-2xl border border-border/70 bg-surface p-4 shadow-xl md:absolute md:inset-x-auto md:right-0 md:top-11 md:z-50 md:w-[min(92vw,420px)]">
-                  <section>
-                    <div className="mb-3 flex items-center gap-2">
-                      <Settings2 className="size-4 text-ink-500" aria-hidden />
-                      <h2 className="text-sm font-medium text-ink-900">Kolone</h2>
-                    </div>
-                    <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
-                      {columnOrder
-                        .map((key) =>
-                          module.columns.find((column) => column.key === key),
-                        )
-                        .filter((column): column is ErpColumn => Boolean(column))
-                        .map((column, index, columns) => (
-                          <div
-                            key={column.key}
-                            draggable
-                            onDragStart={() => setDraggedColumn(column.key)}
-                            onDragOver={(event) => event.preventDefault()}
-                            onDrop={(event) => {
-                              event.preventDefault();
-                              if (draggedColumn) {
-                                moveColumn(draggedColumn, column.key);
-                              }
-                              setDraggedColumn(null);
-                            }}
-                            onDragEnd={() => setDraggedColumn(null)}
-                            className={cn(
-                              "flex cursor-grab items-center gap-2 rounded-lg px-1 py-1 text-sm text-ink-700 transition hover:bg-muted-bg",
-                              draggedColumn === column.key && "opacity-40",
-                            )}
-                          >
-                            <GripVertical
-                              className="size-3.5 text-ink-300"
-                              aria-hidden
-                            />
-                            <Checkbox
-                              id={`grid-column-${module.slug}-${column.key}`}
-                              aria-label={`Prikaži kolonu ${column.label}`}
-                              checked={visibleColumns.includes(column.key)}
-                              onCheckedChange={() => toggleColumn(column.key)}
-                            />
-                            <label htmlFor={`grid-column-${module.slug}-${column.key}`} className="min-w-0 flex-1 cursor-pointer">{column.label}</label>
-                            <button type="button" className="inline-flex size-11 shrink-0 items-center justify-center rounded border border-border disabled:opacity-30" aria-label={`Pomeri kolonu ${column.label} ulevo`} disabled={index === 0} onClick={() => moveColumn(column.key, columns[index - 1].key)}><ArrowUp className="size-4" aria-hidden /></button>
-                            <button type="button" className="inline-flex size-11 shrink-0 items-center justify-center rounded border border-border disabled:opacity-30" aria-label={`Pomeri kolonu ${column.label} udesno`} disabled={index === columns.length - 1} onClick={() => moveColumn(column.key, columns[index + 1].key)}><ArrowDown className="size-4" aria-hidden /></button>
-                          </div>
-                        ))}
-                    </div>
-                  </section>
-
-                  <section className="mt-4 border-t border-border/60 pt-4">
-                    <div className="mb-3 flex items-center gap-2">
-                      <Eye className="size-4 text-ink-500" aria-hidden />
-                      <h2 className="text-sm font-medium text-ink-900">Pogledi</h2>
-                    </div>
-                    {views.length ? (
-                      <div className="space-y-2">
-                        {views.map((view, viewIndex) => (
-                          <div
-                            key={view.id ?? view.name}
-                            className="flex overflow-hidden rounded-lg border border-border/60"
-                          >
-                            <button
-                              type="button"
-                              onClick={() => applyView(view)}
-                              className="min-w-0 flex-1 px-3 py-2 text-left text-sm text-ink-700 transition hover:bg-muted-bg"
-                            >
-                              {view.name}
-                            </button>
-                            {view.id ? <>
-                              <button type="button" disabled={savingView || viewIndex === 0} className="px-1 disabled:opacity-30" aria-label={`Pomeri gore: ${view.name}`} onClick={() => void changeView(view, { move: "up" })}><ArrowUp className="size-4" /></button>
-                              <button type="button" disabled={savingView || viewIndex === views.length - 1} className="px-1 disabled:opacity-30" aria-label={`Pomeri dole: ${view.name}`} onClick={() => void changeView(view, { move: "down" })}><ArrowDown className="size-4" /></button>
-                              <button type="button" className="px-2" aria-label={`Uredi pogled: ${view.name}`} onClick={() => { setEditingView(view); setEditViewName(view.name); setCommandMessage(null); }}><Pencil className="size-4" /></button>
-                            </> : null}
-                            {view.id ? (
-                              <button
-                                type="button"
-                                aria-label={
-                                  pendingDeleteViewId === view.id
-                                    ? `Potvrdi brisanje pogleda ${view.name}`
-                                    : `Obriši pogled ${view.name}`
-                                }
-                                onClick={() => {
-                                  if (pendingDeleteViewId === view.id) {
-                                    void deleteView(view);
-                                  } else {
-                                    setPendingDeleteViewId(view.id ?? null);
-                                  }
-                                }}
-                                className="border-l border-border/60 px-2 text-danger transition hover:bg-danger/5"
-                              >
-                                {pendingDeleteViewId === view.id ? (
-                                  <span className="text-xs">Potvrdi</span>
-                                ) : (
-                                  <Trash2 className="size-4" aria-hidden />
-                                )}
-                              </button>
-                            ) : null}
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-ink-500">
-                        Snimite kombinaciju filtera i kolona kao lični pogled.
-                      </p>
-                    )}
-                  </section>
-
-                  {module.notes?.length ? (
-                    <section className="mt-4 border-t border-border/60 pt-4">
-                      <h2 className="text-sm font-medium text-ink-900">
-                        Napomene iz specifikacije
-                      </h2>
-                      <ul className="mt-3 space-y-2 text-sm text-ink-600">
-                        {module.notes.map((note) => (
-                          <li key={note}>{note}</li>
-                        ))}
-                      </ul>
-                    </section>
-                  ) : null}
-                </div>
-              </details>
-            </div>
+            {compactToolbar ? null : viewActions}
           </div>
 
           <Dialog open={showSaveViewForm} onOpenChange={setShowSaveViewForm}>
