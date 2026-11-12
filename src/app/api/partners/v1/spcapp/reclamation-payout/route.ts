@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { authenticatePartner, partnerRateLimitHeaders } from '@/lib/partners/auth';
 import { confirmReclamationPayout } from '@/lib/admin/reclamation-refund.server';
+import { enqueueBackgroundJob } from '@/lib/background-jobs';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +18,9 @@ const input = z.object({
 /**
  * SPC Analytics (Marko, 12.11.2026): kad je uplata kupcu nađena na izvodu, ERP evidentira isplatu kao dugme
  * „Novac je vraćen kupcu · reši reklamaciju“ (datum uplate, broj izvoda, potvrda) i reklamacija postaje Rešeno.
- * Isti uslovi kao u ERP-u: fiskalna refundacija mora biti izdata; Ananas reklamacije se ne diraju; kupcu se ne šalje mejl.
+ * Isti uslovi kao u ERP-u: fiskalna refundacija mora biti izdata; Ananas reklamacije se ne diraju.
+ * Prihvaćeno umanjenje cene (Marko, 13.11.2026): uplata kupcu na izvodu => Rešeno, bez fiskalne refundacije.
+ * Kupac u oba slučaja dobija mejl „Reklamacija je rešena“.
  */
 export async function POST(request: Request) {
   const requestId = randomUUID();
@@ -31,11 +34,35 @@ export async function POST(request: Request) {
   const parsed = input.safeParse(body);
   if (!parsed.success) return Response.json({ ok: false, error: 'Expected id, paidAt (YYYY-MM-DD) and statementNumber.', requestId }, { status: 400, headers });
   const q = parsed.data;
-  const claim = await db.reclamation.findUnique({ where: { id: q.id }, select: { id: true, status: true, order: { select: { channel: true } } } });
+  const claim = await db.reclamation.findUnique({ where: { id: q.id }, select: { id: true, status: true, decision: true, resolution: true, order: { select: { channel: true } } } });
   if (!claim) return Response.json({ ok: false, error: 'Reklamacija nije pronađena u ERP-u.', requestId }, { status: 404, headers });
   const audit = (result: string, error?: string) => db.auditLog.create({ data: { action: 'partner.spcapp.reclamation.payout', entity: 'Reclamation', entityId: claim.id, diff: { clientId: auth.client.id, result, paidAt: q.paidAt, statementNumber: q.statementNumber, ...(q.cents ? { cents: q.cents } : {}), ...(error ? { error } : {}) } } });
   if (claim.order.channel === 'ANANAS') return Response.json({ ok: false, result: 'skipped', error: 'Ananas reklamacija se ne rešava iz SPC Analytics.', requestId }, { status: 422, headers });
   if (claim.status === 'RESENO') return Response.json({ ok: true, result: 'already', requestId }, { headers });
+  if (claim.decision === 'PRIHVACENA' && claim.resolution === 'POPUST' && claim.status !== 'ODBIJENO') {
+    const resolved = await db.$transaction(async (tx) => {
+      const updated = await tx.reclamation.updateMany({
+        where: { id: claim.id, decision: 'PRIHVACENA', resolution: 'POPUST', status: { notIn: ['RESENO', 'ODBIJENO'] } },
+        data: { status: 'RESENO', resolvedAt: new Date() },
+      });
+      if (!updated.count) return false;
+      const event = await tx.reclamationStatusEvent.create({
+        data: {
+          reclamationId: claim.id, status: 'RESENO', actorId: null,
+          note: `Umanjenje cene uplaćeno kupcu ${q.paidAt}${q.cents ? `, ${(q.cents / 100).toFixed(2)} RSD` : ''}. Referenca: Izvod br. ${q.statementNumber}. Evidentirao SPC Analytics sa izvoda.`,
+        },
+        select: { id: true },
+      });
+      await enqueueBackgroundJob({
+        kind: 'RECLAMATION_STATUS_EMAIL',
+        payload: { reclamationId: claim.id, eventId: event.id },
+        idempotencyKey: `reclamation-status-email:${event.id}`,
+      }, tx);
+      return true;
+    });
+    await audit(resolved ? 'resolved' : 'already');
+    return Response.json({ ok: true, result: resolved ? 'resolved' : 'already', requestId }, { headers });
+  }
   try {
     await confirmReclamationPayout({
       id: claim.id, paidAt: q.paidAt, reference: `Izvod br. ${q.statementNumber}`, actorId: null, confirmed: true,
