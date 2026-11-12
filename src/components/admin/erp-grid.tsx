@@ -398,22 +398,35 @@ function ErpGridContent({
   const [tableBoxHeight, setTableBoxHeight] = useState<number | null>(null);
   useEffect(() => {
     if (!compactToolbar) return;
+    // Višak koji je stranica imala ispod tabele; pamti se da se visina ne bi klackala.
+    let extra = 0;
     const update = () => {
       const box = tableBoxRef.current;
       if (!box) return;
+      const root = document.documentElement;
       const rect = box.getBoundingClientRect();
       const top = rect.top + window.scrollY;
       // Ispod tabele je samo donja ivica kartice; stranica nema donji razmak.
       const cardBottom = box.parentElement?.getBoundingClientRect().bottom ?? rect.bottom;
       const below = Math.max(0, cardBottom - rect.bottom);
-      setTableBoxHeight(Math.max(320, Math.floor(window.innerHeight - top - below)));
+      // clientHeight ne računa traku za skrol pregledača (innerHeight je računa).
+      // Ako stranica ipak ima vertikalni skrol, skrati tabelu za taj višak.
+      const overflow = root.scrollHeight - root.clientHeight;
+      if (overflow > 0 && rect.height > 320) extra += overflow;
+      setTableBoxHeight(Math.max(320, Math.floor(root.clientHeight - top - below - extra)));
     };
     update();
-    window.addEventListener("resize", update);
+    const frame = window.requestAnimationFrame(update);
+    void document.fonts?.ready.then(update);
+    window.addEventListener("load", update);
+    const onResize = () => { extra = 0; update(); };
+    window.addEventListener("resize", onResize);
     const observer = new ResizeObserver(update);
     observer.observe(document.body);
     return () => {
-      window.removeEventListener("resize", update);
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("load", update);
+      window.removeEventListener("resize", onResize);
       observer.disconnect();
     };
   }, [compactToolbar]);
