@@ -393,46 +393,6 @@ function ErpGridContent({
   compactToolbar = false, selectedViewId, pagePath, routeSearch,
 }: ErpGridProps & { selectedViewId: string; pagePath: string; routeSearch: string }) {
   const router = useRouter();
-  // compactToolbar: tabela se pruža tačno do dna prozora (izmereno, ne procenjeno).
-  const tableBoxRef = useRef<HTMLDivElement>(null);
-  const [tableBoxHeight, setTableBoxHeight] = useState<number | null>(null);
-  useEffect(() => {
-    if (!compactToolbar) return;
-    // Višak koji je stranica imala ispod tabele; pamti se da se visina ne bi klackala.
-    let extra = 0;
-    const update = () => {
-      const box = tableBoxRef.current;
-      if (!box) return;
-      const root = document.documentElement;
-      const rect = box.getBoundingClientRect();
-      const top = rect.top + window.scrollY;
-      // Ispod tabele je samo donja ivica kartice; stranica nema donji razmak.
-      const cardBottom = box.parentElement?.getBoundingClientRect().bottom ?? rect.bottom;
-      const below = Math.max(0, cardBottom - rect.bottom);
-      // clientHeight ne računa traku za skrol pregledača (innerHeight je računa).
-      // Sadržaj ispod kartice (ako ga ima) meri se samo kad stranica ima skrol,
-      // nezavisno od trenutne visine tabele, pa se ne računa pogrešno dok se visina tek postavlja.
-      if (root.scrollHeight > root.clientHeight) {
-        const tail = root.scrollHeight - (top + rect.height + below);
-        if (tail > extra) extra = tail;
-      }
-      setTableBoxHeight(Math.max(320, Math.floor(root.clientHeight - top - below - extra)));
-    };
-    update();
-    const frame = window.requestAnimationFrame(update);
-    void document.fonts?.ready.then(update);
-    window.addEventListener("load", update);
-    const onResize = () => { extra = 0; update(); };
-    window.addEventListener("resize", onResize);
-    const observer = new ResizeObserver(update);
-    observer.observe(document.body);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.removeEventListener("load", update);
-      window.removeEventListener("resize", onResize);
-      observer.disconnect();
-    };
-  }, [compactToolbar]);
   const [navigationReady, setNavigationReady] = useState(false);
   const restoredSnapshot = useRef(false);
   const navigationKey = useRef("");
@@ -2030,11 +1990,7 @@ function ErpGridContent({
             </DialogContent>
           </Dialog>
 
-          <div
-            ref={tableBoxRef}
-            style={compactToolbar && tableBoxHeight ? { height: tableBoxHeight } : undefined}
-            className={compactToolbar ? "h-[calc(100dvh-18rem)] min-h-80 overflow-auto" : "max-h-[calc(100vh-14rem)] overflow-auto"}
-          >
+          <div className={compactToolbar ? "overflow-x-auto" : "max-h-[calc(100vh-14rem)] overflow-auto"}>
             <table className="min-w-full text-sm">
               <thead className="sticky top-0 z-20 bg-muted-bg text-xs uppercase tracking-[0.12em] text-ink-500 shadow-[0_1px_0_0_var(--color-border)]">
                 <tr>
