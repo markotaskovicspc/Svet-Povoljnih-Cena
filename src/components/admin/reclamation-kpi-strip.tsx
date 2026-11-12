@@ -40,7 +40,8 @@ export function ReclamationKpiStrip({ totals }: { totals: ReclamationMetrics }) 
         title={`${integer(totals.total)} reklamacija na ${integer(totals.deliveredItems)} isporučenih artikala`}
       >
         {integer(totals.total)}
-        <span className="text-xs font-semibold text-ink-500">{rate}</span>
+        <span className="text-ink-500">·</span>
+        {rate}
       </Item>
       <Item label="Rešene / nerešene" title="Rešene uključuju i odbijene; nerešene su primljene i u obradi">
         <span className="text-success">{integer(totals.resolved)}</span>
