@@ -41,6 +41,8 @@ export type ErpColumn = {
   options?: string[];
   /** Human-readable labels for compact stored option values. */
   optionLabels?: Record<string, string>;
+  /** Show the option label (not the stored code) inside the status badge. */
+  showOptionLabel?: boolean;
   /** Explicit, serializable visual meaning for status values. */
   statusToneByValue?: Record<string, ErpStatusTone>;
   defaultVisible?: boolean;

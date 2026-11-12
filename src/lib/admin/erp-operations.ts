@@ -1089,6 +1089,7 @@ export const operationalErpModules: ErpModule[] = [
           REPLACEMENT_RECEIVED: "neutral",
         }),
         optionLabels: RECLAMATION_WAREHOUSE_STATUS_LABELS,
+        showOptionLabel: true,
       },
       date("respondedAt", "Odgovoreno"),
       date("resolvedAt", "Rešeno"),

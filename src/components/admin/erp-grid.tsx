@@ -2261,7 +2261,7 @@ function ErpGridContent({
                                     "Polje je samo za čitanje")
                               }
                             >
-                              {formatValue(value, column)}
+                              {(column.showOptionLabel && column.optionLabels?.[textValue(value)]) || formatValue(value, column)}
                             </span>
                           ) : column.key === "photo" ? (
                             module.slug === "artikli" && typeof value === "string" && value ? (
