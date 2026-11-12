@@ -8,7 +8,6 @@ export function PageHeader({
   crumbs,
   actions,
   compact = false,
-  children,
 }: {
   title: string;
   description?: React.ReactNode;
@@ -16,8 +15,6 @@ export function PageHeader({
   actions?: React.ReactNode;
   /** Manje vertikalnog prostora (py-3 umesto py-6), naslov i akcije poravnati po sredini. */
   compact?: boolean;
-  /** Dodatni red ispod naslova i akcija (npr. traka pokazatelja). */
-  children?: React.ReactNode;
 }) {
   return (
     <header data-admin-page-header className="border-b border-border/60 bg-surface/80 backdrop-blur">
@@ -50,7 +47,6 @@ export function PageHeader({
         </div>
         {actions ? <div className="flex gap-2">{actions}</div> : null}
       </div>
-      {children ? <div className={compact ? "px-3 pb-3" : "px-8 pb-6"}>{children}</div> : null}
     </header>
   );
 }

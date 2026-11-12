@@ -2,24 +2,13 @@ import type { ReclamationMetrics } from "@/lib/admin/reclamation-analytics";
 
 const integer = (value: number) => value.toLocaleString("sr-Latn-RS");
 
-function Cell({
-  label,
-  value,
-  hint,
-  tone = "text-ink-900",
-  className = "",
-}: {
-  label: string;
-  value: React.ReactNode;
-  hint?: string;
-  tone?: string;
-  className?: string;
-}) {
+function Item({ label, children, title }: { label: string; children: React.ReactNode; title?: string }) {
   return (
-    <div className={`flex min-w-0 flex-col gap-0.5 border-border/60 px-4 py-2.5 ${className}`}>
-      <span className="text-[10.5px] uppercase tracking-[0.14em] text-ink-500">{label}</span>
-      <span className={`text-[22px] font-bold leading-tight tabular-nums ${tone}`}>{value}</span>
-      {hint ? <span className="truncate text-[11.5px] text-ink-500">{hint}</span> : null}
+    <div className="flex min-w-0 flex-col justify-center gap-0.5 px-3 py-1" title={title}>
+      <span className="whitespace-nowrap text-[10px] uppercase tracking-[0.12em] text-ink-500">{label}</span>
+      <span className="flex items-baseline gap-1.5 whitespace-nowrap text-base font-bold leading-tight tabular-nums text-ink-900">
+        {children}
+      </span>
     </div>
   );
 }
@@ -31,67 +20,50 @@ function AgeChip({ days, count, danger }: { days: number; count: number; danger?
       ? "bg-danger/15 text-danger"
       : "bg-warning/15 text-warning";
   return (
-    <span className={`inline-flex h-[26px] items-center gap-1.5 rounded-md px-2.5 text-xs font-semibold ${tone}`}>
-      {days} dana <span className="tabular-nums text-ink-900">{integer(count)}</span>
+    <span className={`inline-flex h-5 items-center gap-1 rounded px-1.5 text-[11px] font-semibold ${tone}`}>
+      {days}d <span className="tabular-nums text-ink-900">{integer(count)}</span>
     </span>
   );
 }
 
-/** Kompaktni ukupni pokazatelji (isti kao na stranici Reklamacije – izveštaji) za zaglavlje dnevnika. */
+/** Sažeti ukupni pokazatelji (isti kao na stranici Reklamacije – izveštaji) u redu sa naslovom dnevnika. */
 export function ReclamationKpiStrip({ totals }: { totals: ReclamationMetrics }) {
   const average = totals.averageResolutionDays;
+  const rate = `${totals.reclamationRate.toLocaleString("sr-Latn-RS", { minimumFractionDigits: 1, maximumFractionDigits: 2 })}%`;
   return (
     <section
       aria-label="Pokazatelji reklamacija"
-      className="flex flex-wrap overflow-hidden rounded-xl border border-border/60 bg-surface"
+      className="flex flex-wrap items-stretch divide-x divide-border/60 rounded-lg border border-border/60 bg-surface"
     >
-      <Cell
-        className="flex-[1_1_150px] border-r"
-        label="Ukupno"
-        value={integer(totals.total)}
-        hint={`${integer(totals.deliveredItems)} isporučenih art.`}
-      />
-      <Cell
-        className="flex-[1_1_130px] border-r"
-        label="% reklamacija"
-        value={`${totals.reclamationRate.toLocaleString("sr-Latn-RS", { minimumFractionDigits: 1, maximumFractionDigits: 2 })}%`}
-        hint="rekl. / isporučeno"
-      />
-      <Cell
-        className="flex-[1_1_130px] border-r"
-        label="Rešene"
-        value={integer(totals.resolved)}
-        tone="text-success"
-        hint="uklj. odbijene"
-      />
-      <div className="flex min-w-0 flex-[3_1_380px] flex-wrap items-center gap-x-5 border-r border-border/60 bg-muted/30">
-        <Cell
-          label="Nerešene"
-          value={integer(totals.unresolved)}
-          tone={totals.unresolved > 0 ? "text-warning" : "text-ink-900"}
-          hint="primljene i u obradi"
-        />
-        <div className="flex min-w-0 flex-col gap-1.5 px-4 py-2.5">
-          <span className="text-[10.5px] uppercase tracking-[0.14em] text-ink-500">Otvorene duže od</span>
-          <div className="flex flex-wrap gap-1.5">
-            <AgeChip days={5} count={totals.unresolvedOver5Days} />
-            <AgeChip days={10} count={totals.unresolvedOver10Days} />
-            <AgeChip days={20} count={totals.unresolvedOver20Days} danger />
-            <AgeChip days={30} count={totals.unresolvedOver30Days} danger />
-          </div>
-        </div>
+      <Item
+        label="Reklamacije · %"
+        title={`${integer(totals.total)} reklamacija na ${integer(totals.deliveredItems)} isporučenih artikala`}
+      >
+        {integer(totals.total)}
+        <span className="text-xs font-semibold text-ink-500">{rate}</span>
+      </Item>
+      <Item label="Rešene / nerešene" title="Rešene uključuju i odbijene; nerešene su primljene i u obradi">
+        <span className="text-success">{integer(totals.resolved)}</span>
+        <span className="text-xs font-semibold text-ink-500">/</span>
+        <span className={totals.unresolved > 0 ? "text-warning" : undefined}>{integer(totals.unresolved)}</span>
+      </Item>
+      <div className="flex min-w-0 flex-col justify-center gap-1 px-3 py-1" title="Nerešene reklamacije otvorene duže od 5, 10, 20 i 30 dana">
+        <span className="whitespace-nowrap text-[10px] uppercase tracking-[0.12em] text-ink-500">Otvorene duže od</span>
+        <span className="flex flex-wrap gap-1">
+          <AgeChip days={5} count={totals.unresolvedOver5Days} />
+          <AgeChip days={10} count={totals.unresolvedOver10Days} />
+          <AgeChip days={20} count={totals.unresolvedOver20Days} danger />
+          <AgeChip days={30} count={totals.unresolvedOver30Days} danger />
+        </span>
       </div>
-      <Cell
-        className="flex-[1_1_150px]"
-        label="Prosečno rešavanje"
-        value={average === null ? "—" : (
+      <Item label="Prosek rešavanja" title="Od prijema do zatvaranja reklamacije">
+        {average === null ? "—" : (
           <>
-            {average.toLocaleString("sr-Latn-RS", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}{" "}
-            <span className="text-sm font-semibold text-ink-500">dana</span>
+            {average.toLocaleString("sr-Latn-RS", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+            <span className="text-xs font-semibold text-ink-500">dana</span>
           </>
         )}
-        hint="od prijema do zatvaranja"
-      />
+      </Item>
     </section>
   );
 }
