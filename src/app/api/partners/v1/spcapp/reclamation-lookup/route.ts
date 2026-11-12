@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { authenticatePartner, partnerRateLimitHeaders } from '@/lib/partners/auth';
+import { reclamationReturnReceiptsWhere } from '@/lib/admin/reclamation-refund-notice.server';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 const input=z.object({id:z.string().min(1).max(100).optional(),number:z.string().min(3).max(100).optional(),emails:z.array(z.email().max(254)).max(10).optional()}).strict().refine(v=>v.id||v.number||v.emails?.length);
@@ -25,8 +26,11 @@ export async function POST(request:Request){
     paymentRefunds:{where:{status:{in:['PENDING','COMPLETED','NEEDS_REVIEW']}},select:{id:true,status:true,amount:true}},
    }},
   }});
+  // Primljeni komadi u magacin (proknjiženi prijem reklamacije): SPC Analytics pravi QR za povrat tek kad je primljena cela količina (Marko, 12.11.2026).
+  const received=await Promise.all(rows.slice(0,20).map(row=>db.stockMovement.aggregate({where:reclamationReturnReceiptsWhere(row.id),_sum:{qty:true}})));
+  const items=rows.slice(0,20).map((row,i)=>({...row,receivedQty:Math.max(0,received[i]._sum.qty??0)}));
   await db.auditLog.create({data:{action:'partner.spcapp.reclamation.lookup',entity:'PartnerApiClient',entityId:auth.client.id,diff:{rows:Math.min(rows.length,20),by:q.id?'id':q.number?'number':'email'}}});
-  return Response.json({ok:true,apiVersion:'1',items:rows.slice(0,20),hasMore:rows.length>20,requestId},{headers});
+  return Response.json({ok:true,apiVersion:'1',items,hasMore:rows.length>20,requestId},{headers});
  }catch{
   return Response.json({ok:false,error:'Reclamation lookup failed.',requestId},{status:502,headers});
  }

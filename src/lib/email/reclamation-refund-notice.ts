@@ -6,6 +6,9 @@ import { needsReclamationRefundNotice, reclamationRefundNoticeKey, reclamationRe
 import { getEmailConfig } from "./config";
 import { trackedDispatch } from "./tracking";
 
+/** Marko, 12.11.2026: obaveštenje o proknjiženom prijemu ide samo na placanja@ — SPC Analytics iz njega pokreće isplatu (QR tek posle prijema robe). */
+export const RECLAMATION_REFUND_PAYMENTS_TO = "placanja@svetpovoljnihcena.rs";
+
 export async function sendReclamationRefundOfficeNotice(reclamationId: string) {
   const claim = await db.reclamation.findUnique({
     where: { id: reclamationId },
@@ -36,7 +39,7 @@ export async function sendReclamationRefundOfficeNotice(reclamationId: string) {
     ["Magacin", warehouse], ["Prijem robe", receivedAt],
   ];
   const result = await trackedDispatch({
-    kind: "reclamation_refund_office", to: cfg.reclamationRefundNotificationTo,
+    kind: "reclamation_refund_office", to: RECLAMATION_REFUND_PAYMENTS_TO,
     subject: `Povrat primljen — proverite da li je novac već vraćen · ${claim.number}`,
     html: `<!doctype html><html lang="sr-Latn"><body style="font-family:Arial,sans-serif;color:#1a1714;padding:24px"><h1 style="font-size:24px;color:#d7263d">Provera isplate kupcu</h1><p>${instruction}</p><table>${details.map(([label, value]) => `<tr><th style="text-align:left;padding:8px">${escapeHtml(label)}</th><td style="padding:8px">${escapeHtml(value)}</td></tr>`).join("")}</table><p><a href="${escapeHtml(url)}">Otvori reklamaciju u ERP-u</a></p></body></html>`,
     text: `${instruction}\n\n${details.map(([label, value]) => `${label}: ${value}`).join("\n")}\n\nERP: ${url}`,
