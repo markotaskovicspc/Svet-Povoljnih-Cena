@@ -27,7 +27,7 @@ const RESOLUTION_COPY: Record<ReclamationAcceptedResolution, { label: string; bo
   },
   POPUST: {
     label: "Umanjenje cene",
-    body: "Naš tim će Vas kontaktirati u vezi sa umanjenjem cene.",
+    body: "Iznos umanjenja cene vraćamo na Vaš račun. Artikal ne morate da vraćate.",
   },
 };
 
