@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-export function ReclamationCustomerLink() {
+export function ReclamationCustomerLink({ embedded = false }: { embedded?: boolean } = {}) {
   const [number, setNumber] = useState("");
   const [suggestions, setSuggestions] = useState<{ number: string }[]>([]);
   const [link, setLink] = useState("");
@@ -32,10 +32,12 @@ export function ReclamationCustomerLink() {
     } catch (error) { setMessage(error instanceof Error ? error.message : "Pokušajte ponovo."); }
     finally { setBusy(false); }
   }
-  return <section className="rounded-xl border border-border bg-surface p-5">
-    <h2 className="text-lg font-semibold">Pošalji kupcu obrazac za reklamaciju</h2>
-    <p className="mt-1 text-sm text-ink-500">Izaberite porudžbinu, napravite link i pošaljite ga kupcu preko mejla, Facebooka ili druge poruke. Kupac sam unosi problem i fotografije, a prijava stiže u ovaj dnevnik.</p>
-    <form onSubmit={generate} className="mt-4 flex flex-wrap items-end gap-3">
+  return <section className={embedded ? "" : "rounded-xl border border-border bg-surface p-5"}>
+    {embedded ? null : <>
+      <h2 className="text-lg font-semibold">Pošalji kupcu obrazac za reklamaciju</h2>
+      <p className="mt-1 text-sm text-ink-500">Izaberite porudžbinu, napravite link i pošaljite ga kupcu preko mejla, Facebooka ili druge poruke. Kupac sam unosi problem i fotografije, a prijava stiže u ovaj dnevnik.</p>
+    </>}
+    <form onSubmit={generate} className={`${embedded ? "" : "mt-4 "}flex flex-wrap items-end gap-3`}>
       <label className="grid min-w-0 flex-1 gap-1 text-sm">Broj porudžbine ili fiskalnog računa
         <Input required minLength={3} maxLength={80} list="reclamation-link-orders" placeholder="npr. SPC-2026-001202" value={number} onChange={event => { setNumber(event.target.value); setLink(""); setMessage(""); setSuggestions([]); }} />
       </label>

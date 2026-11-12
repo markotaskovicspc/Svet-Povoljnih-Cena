@@ -593,7 +593,7 @@ test.describe("bezbedna izmena WEB porudžbine", () => {
       waitUntil: "domcontentloaded",
     });
     await page
-      .getByText("+ Ručno evidentiraj reklamaciju", { exact: false })
+      .getByRole("button", { name: "Ručno evidentiraj reklamaciju" })
       .click();
     const partialOrderDigits = runId.split("-").at(-1)!;
     await page

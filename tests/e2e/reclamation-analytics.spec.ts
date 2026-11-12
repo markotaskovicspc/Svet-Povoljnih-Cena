@@ -741,7 +741,7 @@ test.describe("Admin analitika reklamacija", () => {
       });
 
       await page
-        .getByText("+ Ručno evidentiraj reklamaciju", { exact: false })
+        .getByRole("button", { name: "Ručno evidentiraj reklamaciju" })
         .click();
       const form = page.getByTestId("manual-reclamation-form");
       await expect(form).toBeVisible();

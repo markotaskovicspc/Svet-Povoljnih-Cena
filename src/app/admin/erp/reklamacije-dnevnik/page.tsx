@@ -1,4 +1,4 @@
-import { ReclamationCustomerLink } from "@/components/admin/reclamation-customer-link";
+import { ReclamationActionDialogs } from "@/components/admin/reclamation-action-dialogs";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -19,7 +19,7 @@ import {
 } from "@/lib/api/uploads";
 import { db } from "@/lib/db";
 import { logOperationalError } from "@/lib/monitoring";
-import { Card, CardTitle } from "@/components/admin/card";
+import { Card } from "@/components/admin/card";
 import { ErpGrid } from "@/components/admin/erp-grid";
 import { Field } from "@/components/admin/field";
 import { PageHeader } from "@/components/admin/page-header";
@@ -216,6 +216,73 @@ export default async function ReclamationsPage({
     items.flatMap((reclamation) => reclamation.photos.map((photo) => photo.url)),
   );
 
+  const manualForm = (
+    <AdminActionForm
+      action={createManualReclamation}
+      refreshOnSuccess
+      className="grid gap-4 lg:grid-cols-2"
+      testId="manual-reclamation-form"
+    >
+      <ReclamationOrderFields />
+      <Field label="Tip reklamacije">
+        <select
+          name="type"
+          defaultValue=""
+          className="h-10 w-full rounded-lg border border-input bg-transparent px-3 text-sm"
+        >
+          <option value="">Nije uneto</option>
+          {Object.values(ReclamationType).map((type) => (
+            <option key={type} value={type}>
+              {TYPE_LABELS[type] ?? type}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field label="Zahtev kupca">
+        <select
+          name="request"
+          defaultValue=""
+          className="h-10 w-full rounded-lg border border-input bg-transparent px-3 text-sm"
+        >
+          <option value="">Nije uneto</option>
+          {Object.values(ReclamationRequest).map((request) => (
+            <option key={request} value={request}>
+              {REQUEST_LABELS[request]}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <div className="lg:col-span-2">
+        <Field label="Opis prijave">
+          <Textarea
+            name="description"
+            minLength={5}
+            maxLength={250}
+            rows={3}
+            required
+            placeholder="Unesite opis problema tačno kako ga je kupac prijavio."
+          />
+        </Field>
+      </div>
+      <div className="lg:col-span-2">
+        <Field label="Fotografije" hint="Do 5 JPG, PNG ili WebP fotografija, najviše 2 MB po fajlu.">
+          <input
+            name="photos"
+            type="file"
+            accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+            multiple
+            className="block w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm"
+          />
+        </Field>
+      </div>
+      <div className="flex justify-end lg:col-span-2">
+        <SubmitButton pendingLabel="Evidentiram…">
+          Evidentiraj reklamaciju
+        </SubmitButton>
+      </div>
+    </AdminActionForm>
+  );
+
   return (
     <>
       <PageHeader
@@ -226,85 +293,9 @@ export default async function ReclamationsPage({
           { href: "/admin/erp", label: "ERP" },
           { label: "Dnevnik reklamacija" },
         ]}
-        actions={<div className="flex flex-wrap gap-2"><Link href="/admin/erp/preuzimanja/povrati" className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Povrati za prijem</Link><Link href="/admin/erp/reklamacije-izvestaji" className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Reklamacije – izveštaji</Link><a href="/api/admin/erp/reklamacije-dnevnik/export" download className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Preuzmi XLSX</a></div>}
+        actions={<div className="flex flex-wrap items-center gap-2"><ReclamationActionDialogs manualForm={manualForm} /><span aria-hidden="true" className="mx-1 hidden h-6 w-px bg-border sm:block" /><Link href="/admin/erp/preuzimanja/povrati" className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Povrati za prijem</Link><Link href="/admin/erp/reklamacije-izvestaji" className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Reklamacije – izveštaji</Link><a href="/api/admin/erp/reklamacije-dnevnik/export" download className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted">Preuzmi XLSX</a></div>}
       />
       <div className="space-y-10 px-8 py-6">
-        <ReclamationCustomerLink />
-        <details className="group rounded-xl border border-border bg-surface">
-          <summary className="cursor-pointer list-none px-5 py-4 font-semibold text-ink-900 marker:hidden">
-            + Ručno evidentiraj reklamaciju
-            <span className="ml-2 text-sm font-normal text-ink-500">Forma je sakrivena dok je ne otvorite.</span>
-          </summary>
-        <Card className="rounded-t-none border-x-0 border-b-0">
-          <CardTitle description="Za telefonsku, prodajnu ili drugu prijavu koju operater evidentira u ime kupca. Možete izabrati porudžbinu bez obzira na njen status, uključujući ponovne prijave već reklamiranih artikala.">
-            Ručni unos reklamacije
-          </CardTitle>
-          <AdminActionForm
-            action={createManualReclamation}
-            refreshOnSuccess
-            className="mt-4 grid gap-4 lg:grid-cols-2"
-            testId="manual-reclamation-form"
-          >
-            <ReclamationOrderFields />
-            <Field label="Tip reklamacije">
-              <select
-                name="type"
-                defaultValue=""
-                className="h-10 w-full rounded-lg border border-input bg-transparent px-3 text-sm"
-              >
-                <option value="">Nije uneto</option>
-                {Object.values(ReclamationType).map((type) => (
-                  <option key={type} value={type}>
-                    {TYPE_LABELS[type] ?? type}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Zahtev kupca">
-              <select
-                name="request"
-                defaultValue=""
-                className="h-10 w-full rounded-lg border border-input bg-transparent px-3 text-sm"
-              >
-                <option value="">Nije uneto</option>
-                {Object.values(ReclamationRequest).map((request) => (
-                  <option key={request} value={request}>
-                    {REQUEST_LABELS[request]}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <div className="lg:col-span-2">
-              <Field label="Opis prijave">
-                <Textarea
-                  name="description"
-                  minLength={5}
-                  maxLength={250}
-                  rows={3}
-                  required
-                  placeholder="Unesite opis problema tačno kako ga je kupac prijavio."
-                />
-              </Field>
-            </div>
-            <div className="lg:col-span-2">
-              <Field label="Fotografije" hint="Do 5 JPG, PNG ili WebP fotografija, najviše 2 MB po fajlu.">
-                <input
-                  name="photos"
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
-                  multiple
-                  className="block w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm"
-                />
-              </Field>
-            </div>
-            <div className="flex justify-end lg:col-span-2">
-              <SubmitButton pendingLabel="Evidentiram…">
-                Evidentiraj reklamaciju
-              </SubmitButton>
-            </div>
-          </AdminActionForm>
-        </Card>
-        </details>
         {erpModule ? (
           <section aria-labelledby="reclamation-grid" className="space-y-3">
             <div>

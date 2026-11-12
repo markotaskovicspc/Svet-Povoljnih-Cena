@@ -406,7 +406,7 @@ test.describe("kupac i gost prijavljuju reklamaciju", () => {
     await page.getByLabel("Lozinka").fill(customerPassword);
     await page.getByRole("button", { name: "Prijavi se", exact: true }).click();
     await expect(page).toHaveURL(/\/admin\/erp\/reklamacije-dnevnik$/, { timeout: 90_000 });
-    await page.locator("summary").filter({ hasText: "Ručno evidentiraj reklamaciju" }).click();
+    await page.getByRole("button", { name: "Ručno evidentiraj reklamaciju" }).click();
     const form = page.getByTestId("manual-reclamation-form");
     await form.locator('[name="orderNumberOrFiscal"]').fill(pendingOrderNumber);
     await form.getByRole("option", { name: new RegExp(pendingOrderNumber) }).click();
