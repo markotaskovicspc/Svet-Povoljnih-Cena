@@ -410,9 +410,12 @@ function ErpGridContent({
       const cardBottom = box.parentElement?.getBoundingClientRect().bottom ?? rect.bottom;
       const below = Math.max(0, cardBottom - rect.bottom);
       // clientHeight ne računa traku za skrol pregledača (innerHeight je računa).
-      // Ako stranica ipak ima vertikalni skrol, skrati tabelu za taj višak.
-      const overflow = root.scrollHeight - root.clientHeight;
-      if (overflow > 0 && rect.height > 320) extra += overflow;
+      // Sadržaj ispod kartice (ako ga ima) meri se samo kad stranica ima skrol,
+      // nezavisno od trenutne visine tabele, pa se ne računa pogrešno dok se visina tek postavlja.
+      if (root.scrollHeight > root.clientHeight) {
+        const tail = root.scrollHeight - (top + rect.height + below);
+        if (tail > extra) extra = tail;
+      }
       setTableBoxHeight(Math.max(320, Math.floor(root.clientHeight - top - below - extra)));
     };
     update();
