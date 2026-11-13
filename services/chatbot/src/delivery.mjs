@@ -52,6 +52,8 @@ export function preserveCityDistrict(shipping,history){
 export function orderErrorMessage(code) {
   const reasons={
     DELIVERY_ADDRESS_INVALID:'Koje je tačno naselje i opština za dostavu?',
+    HOUSE_NUMBER_INVALID:'Koji je tačan kućni broj (npr. 12, 12A, 12/3 ili bb)?',
+    INVALID_INPUT:'Proverimo podatke za dostavu.',
     DELIVERY_UNAVAILABLE:'Izabrana dostava nije dostupna za ovu adresu ili artikle.',
     QUOTE_EXPIRED:'Ponuda je istekla. Potrebno je pripremiti novu ponudu za potvrdu.',
     PRICE_CHANGED:'Ukupan iznos se promenio. Potrebna je nova ponuda i vaša potvrda nove cene.',
