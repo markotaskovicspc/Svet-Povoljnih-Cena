@@ -3499,6 +3499,10 @@ model Reclamation {
   purchaseDate              DateTime?
   type                      ReclamationType?
   request                   ReclamationRequest?
+  /// Račun kupca za povraćaj, odustanak ili umanjenje cene (18 cifara, bez crtica).
+  refundAccount             String?                    @db.VarChar(18)
+  /// Procenat umanjenja cene koji kupac traži (1–99).
+  requestedDiscountPct      Int?
   decision                  ReclamationDecision        @default(CEKA)
   respondedAt               DateTime?
   resolution                ReclamationResolution?

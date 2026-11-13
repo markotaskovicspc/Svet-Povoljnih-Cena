@@ -29,6 +29,7 @@ import { signReclamationPhotoUrls } from "@/lib/api/uploads";
 import { updateReclamationStatus } from "@/lib/api/reclamation-status";
 import { db } from "@/lib/db";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
+import { formatRefundAccount } from "@/lib/reclamation-refund-details";
 import { queueReclamationRefundNotice, queueReclamationFiscalRefund } from "@/lib/admin/reclamation-refund-notice.server";
 import { ReclamationShipmentStatus } from "@/components/admin/reclamation-shipment-status";
 import { SHIPMENT_STATUS_LABEL } from "@/lib/courier/status";
@@ -383,6 +384,8 @@ export default async function ReclamationDetailPage({ params }: { params: Promis
             <Info label="Kontakt" value={`${reclamation.customerEmail ?? "bez email-a"} · ${reclamation.customerPhone ?? "bez telefona"}`} />
             <Info label="Primljeno" value={formatDate(reclamation.createdAt)} />
             <Info label="Zahtev kupca" value={reclamation.request ?? "Nije unet"} />
+            {reclamation.refundAccount ? <Info label="Račun kupca" value={formatRefundAccount(reclamation.refundAccount)} /> : null}
+            {reclamation.requestedDiscountPct ? <Info label="Traženo umanjenje" value={`${reclamation.requestedDiscountPct}%`} /> : null}
           </dl>
           <p className="mt-4 rounded-lg bg-muted-bg p-4 text-sm text-ink-800">{reclamation.description}</p>
           {reclamation.photos.length ? <div className="mt-4 flex flex-wrap gap-3">{reclamation.photos.map((photo) => <a key={photo.id} href={signedPhotos.get(photo.url) ?? photo.url} target="_blank" rel="noreferrer" className="relative block size-28 overflow-hidden rounded-lg border border-border"><Image src={signedPhotos.get(photo.url) ?? photo.url} alt="Fotografija uz reklamaciju" fill sizes="112px" className="object-cover" /></a>)}</div> : null}

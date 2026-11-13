@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ReclamationHistory } from "@/components/reclamation-history";
 import { ReclamationRefundAccountNotice } from "@/components/reclamation-refund-account-notice";
+import { needsDiscountPct, needsRefundAccount, normalizeRefundAccount } from "@/lib/reclamation-refund-details";
 import { formatReclamationDate, type ReclamationItemOption } from "@/lib/reclamation-options";
 import { createReclamationPhotoFile } from "@/lib/reclamation-photo-file";
 
@@ -41,6 +42,8 @@ const FIELD_ERROR_MESSAGES: Record<string, string> = {
   quantity: "Količina mora biti od 1 do kupljene količine (najviše 999).",
   description: "Opis mora imati bar 5, a najviše 250 karaktera.",
   photos: "Proverite priložene fotografije.",
+  refundAccount: "Upišite ispravan broj računa (18 cifara), npr. 160-0000000000000-00.",
+  requestedDiscountPct: "Upišite procenat umanjenja od 1 do 99.",
 };
 
 export function ReclamationForm({
@@ -58,6 +61,10 @@ export function ReclamationForm({
   const [quantity, setQuantity] = useState(1);
   const [type, setType] = useState("");
   const [request, setRequest] = useState("");
+  const [refundAccount, setRefundAccount] = useState("");
+  const [discountPct, setDiscountPct] = useState("");
+  const showAccount = needsRefundAccount(request);
+  const showDiscount = needsDiscountPct(request);
   const [description, setDescription] = useState("");
   const [photos, setPhotos] = useState<PendingPhoto[]>([]);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -74,7 +81,7 @@ export function ReclamationForm({
 
   function resetForm() {
     setDescription("");
-    setType(""); setRequest("");
+    setType(""); setRequest(""); setRefundAccount(""); setDiscountPct("");
     setQuantity(1);
     clearPhotos();
     setFieldErrors({});
@@ -219,6 +226,14 @@ export function ReclamationForm({
       setFieldErrors({ quantity: FIELD_ERROR_MESSAGES.quantity });
       return;
     }
+    const refundErrors: Record<string, string> = {};
+    if (showAccount && !normalizeRefundAccount(refundAccount)) refundErrors.refundAccount = FIELD_ERROR_MESSAGES.refundAccount;
+    const pct = Number(discountPct);
+    if (showDiscount && (!Number.isInteger(pct) || pct < 1 || pct > 99)) refundErrors.requestedDiscountPct = FIELD_ERROR_MESSAGES.requestedDiscountPct;
+    if (Object.keys(refundErrors).length) {
+      setFieldErrors(refundErrors);
+      return;
+    }
     if (photos.some((p) => p.status === "uploading")) {
       setFormError("Sačekajte da se fotografije završe sa slanjem.");
       return;
@@ -245,6 +260,8 @@ export function ReclamationForm({
           description,
           ...(type ? { type } : {}),
           ...(request ? { request } : {}),
+          ...(showAccount ? { refundAccount } : {}),
+          ...(showDiscount ? { requestedDiscountPct: Number(discountPct) } : {}),
           photos: photos
             .filter((p) => p.status === "done" && p.publicUrl)
             .map((p) => ({
@@ -432,6 +449,44 @@ export function ReclamationForm({
           </select>
           <ReclamationRefundAccountNotice request={request} />
         </div>
+        {showAccount ? (
+          <div className="grid gap-2">
+            <Label htmlFor="reclamation-refund-account">Broj računa za uplatu</Label>
+            <input
+              id="reclamation-refund-account"
+              value={refundAccount}
+              onChange={event => setRefundAccount(event.target.value)}
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder="160-0000000000000-00"
+              aria-invalid={!!fieldErrors.refundAccount}
+              aria-describedby="reclamation-refund-account-hint"
+              className="h-11 w-full rounded-lg border border-input bg-white px-2.5 text-sm"
+            />
+            <span id="reclamation-refund-account-hint" className="text-xs text-ink-500">
+              {fieldErrors.refundAccount ?? "Tekući račun na koji vraćamo novac, 18 cifara."}
+            </span>
+          </div>
+        ) : null}
+        {showDiscount ? (
+          <div className="grid gap-2">
+            <Label htmlFor="reclamation-discount-pct">Koliko umanjenje cene tražite (%)</Label>
+            <input
+              id="reclamation-discount-pct"
+              value={discountPct}
+              onChange={event => setDiscountPct(event.target.value.replace(/\D/g, "").slice(0, 2))}
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder="npr. 20"
+              aria-invalid={!!fieldErrors.requestedDiscountPct}
+              aria-describedby="reclamation-discount-pct-hint"
+              className="h-11 w-full rounded-lg border border-input bg-white px-2.5 text-sm"
+            />
+            <span id="reclamation-discount-pct-hint" className="text-xs text-ink-500">
+              {fieldErrors.requestedDiscountPct ?? "Procenat od cene artikla, od 1 do 99."}
+            </span>
+          </div>
+        ) : null}
       </div>
 
       <div className="grid min-w-0 grid-cols-1 gap-2">

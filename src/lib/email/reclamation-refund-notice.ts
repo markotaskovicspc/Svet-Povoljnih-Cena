@@ -1,4 +1,5 @@
 import "server-only";
+import { formatRefundAccount } from "@/lib/reclamation-refund-details";
 import { isUnpaidCodReturn } from "@/lib/admin/reclamation-refund";
 import { num } from "@/lib/api/_helpers";
 import { db } from "@/lib/db";
@@ -37,6 +38,7 @@ export async function sendReclamationRefundOfficeNotice(reclamationId: string) {
     ["Iznos za proveru isplate", payout ? `${num(payout.amount).toFixed(2)} RSD` : "Proverite u ERP-u nakon fiskalne obrade"],
     ["Evidencija isplate", payout?.status === "COMPLETED" ? "Već potvrđena u ERP-u — ne ponavljati uplatu" : "Potrebna provera da li je novac već vraćen"],
     ["Magacin", warehouse], ["Prijem robe", receivedAt],
+    ...(claim.refundAccount ? [["Račun kupca (iz prijave)", formatRefundAccount(claim.refundAccount)]] : []),
   ];
   const result = await trackedDispatch({
     kind: "reclamation_refund_office", to: RECLAMATION_REFUND_PAYMENTS_TO,

@@ -1,4 +1,5 @@
 import "server-only";
+import { needsDiscountPct, needsRefundAccount, normalizeRefundAccount } from "@/lib/reclamation-refund-details";
 import type {
   OrderStatus,
   ReclamationRequest,
@@ -50,6 +51,22 @@ export const createReclamationSchema = z.object({
   type: z.enum(["FIZICKO_OSTECENJE", "KVAR", "POGRESNO_ISPORUCENO", "NIJE_ISPORUCENO", "ODUSTANAK"]).optional(),
   request: z.enum(["POPRAVKA", "ZAMENA", "ZAMENA_DELA", "POVRACAJ_NOVCA", "UMANJENJE_CENE", "ODUSTANAK"]).optional(),
   photos: z.array(photoSchema).max(5).default([]),
+  /** Broj računa: obavezan u javnoj formi za povraćaj, odustanak i umanjenje cene. */
+  refundAccount: z.string().trim().max(30).optional(),
+  /** Procenat umanjenja: obavezan u javnoj formi za umanjenje cene. */
+  requestedDiscountPct: z.int().min(1).max(99).optional(),
+});
+
+/** Javna forma: polja koja se pojavljuju uz izabrano rešenje moraju biti popunjena. */
+export const createPublicReclamationSchema = createReclamationSchema.superRefine((value, ctx) => {
+  if (needsRefundAccount(value.request)) {
+    if (!value.refundAccount || !normalizeRefundAccount(value.refundAccount)) {
+      ctx.addIssue({ code: "custom", path: ["refundAccount"], message: "Upišite ispravan broj računa (18 cifara)." });
+    }
+  }
+  if (needsDiscountPct(value.request) && !value.requestedDiscountPct) {
+    ctx.addIssue({ code: "custom", path: ["requestedDiscountPct"], message: "Upišite procenat umanjenja (1–99)." });
+  }
 });
 
 export type CreateReclamationInput = z.infer<typeof createReclamationSchema>;
@@ -300,6 +317,9 @@ async function createReclamationRecord(
           purchaseDate: options.actorId ? order.createdAt : undefined,
           type: options.type ?? undefined,
           request: options.request ?? undefined,
+          // Samo uz rešenje kojem pripadaju; ostalo se ne čuva.
+          refundAccount: needsRefundAccount(options.request) && input.refundAccount ? normalizeRefundAccount(input.refundAccount) : null,
+          requestedDiscountPct: needsDiscountPct(options.request) ? input.requestedDiscountPct ?? null : null,
           userId: order.userId,
           photos: input.photos.length
             ? {
