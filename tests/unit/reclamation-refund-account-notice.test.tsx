@@ -40,9 +40,9 @@ describe("reclamation refund details", () => {
     expect(needsDiscountPct("POVRACAJ_NOVCA")).toBe(false);
   });
 
-  it("keeps the account as typed, without checking it", () => {
-    expect(cleanRefundAccount("  160-123-45 ")).toBe("160-123-45");
-    expect(cleanRefundAccount("   ")).toBeNull();
+  it("keeps only the digits of the account, without checking it", () => {
+    expect(cleanRefundAccount("  160-123-45 ")).toBe("16012345");
+    expect(cleanRefundAccount(" - ")).toBeNull();
   });
 
   it("allows a discount of at most 70 percent", () => {

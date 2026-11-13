@@ -10,10 +10,10 @@ export function needsDiscountPct(request: string | null | undefined) {
   return request === "UMANJENJE_CENE";
 }
 
-/** Broj računa se ne proverava (Marko, 13.11.2026); samo se uklanjaju suvišni razmaci. */
+/** Broj računa se ne proverava (Marko, 13.11.2026); čuvaju se samo cifre, najviše 20. */
 export function cleanRefundAccount(value: string | null | undefined): string | null {
-  const text = (value ?? "").trim().replace(/\s+/g, " ");
-  return text ? text.slice(0, 40) : null;
+  const digits = (value ?? "").replace(/\D/g, "").slice(0, 20);
+  return digits || null;
 }
 
 export function isValidDiscountPct(value: unknown): value is number {

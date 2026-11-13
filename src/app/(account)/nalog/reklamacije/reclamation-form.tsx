@@ -434,7 +434,7 @@ export function ReclamationForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid gap-2">
           <Label htmlFor="reclamation-type">Vrsta problema (opciono)</Label>
-          <select id="reclamation-type" value={type} onChange={event => setType(event.target.value)} className="h-11 w-full rounded-lg border border-input bg-white px-2.5 text-sm">
+          <select id="reclamation-type" value={type} onChange={event => { setType(event.target.value); if (event.target.value === "ODUSTANAK") setRequest("POVRACAJ_NOVCA"); }} className="h-11 w-full rounded-lg border border-input bg-white px-2.5 text-sm">
             <option value="">Izaberite ili opišite ispod</option>
             <option value="FIZICKO_OSTECENJE">Fizičko oštećenje</option><option value="KVAR">Kvar</option>
             <option value="POGRESNO_ISPORUCENO">Pogrešno isporučeno</option>
@@ -455,15 +455,17 @@ export function ReclamationForm({
             <input
               id="reclamation-refund-account"
               value={refundAccount}
-              onChange={event => setRefundAccount(event.target.value)}
+              onChange={event => setRefundAccount(event.target.value.replace(/\D/g, "").slice(0, 20))}
+              inputMode="numeric"
+              pattern="[0-9]*"
               autoComplete="off"
-              placeholder="160-0000000000000-00"
+              placeholder="npr. 160000000012345678"
               aria-invalid={!!fieldErrors.refundAccount}
               aria-describedby="reclamation-refund-account-hint"
               className="h-11 w-full rounded-lg border border-input bg-white px-2.5 text-sm"
             />
             <span id="reclamation-refund-account-hint" className="text-xs text-ink-500">
-              {fieldErrors.refundAccount ?? "Tekući račun na koji vraćamo novac."}
+              {fieldErrors.refundAccount ?? "Tekući račun na koji vraćamo novac, samo cifre."}
             </span>
           </div>
         ) : null}
