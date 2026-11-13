@@ -146,7 +146,7 @@ describe("executed payments and receipt snapshots", () => {
     expect(summary).toMatchObject({ count: 2, totalAmount: "1000.00", totalRsd: "117700.00" });
     await saveInboundInvoice({ id: receiptId, number: prefix, receiptDate: new Date(), purchaseOrderId: poId,
       warehouseId, currency: "RSD", exchangeRate: 1, invoiceValue: 117700, invoiceValueRsd: 117700,
-      customsValueRsd: 100, transportValueRsd: 200, otherRelatedCostsRsd: 300, notes: null,
+      customsValueRsd: 100, transportValueRsd: 200, otherRelatedCostsRsd: 300, notes: null, importerCompany: null,
       paymentVersion: summary.version });
     const saved = await db.inboundInvoice.findUniqueOrThrow({ where: { id: receiptId } });
     expect(Number(saved.invoiceValueRsd)).toBe(117700);
