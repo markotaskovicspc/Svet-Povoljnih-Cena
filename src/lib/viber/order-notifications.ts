@@ -18,9 +18,13 @@ export async function queueOrderViberNotification(orderId: string, event: "confi
   const templateId = envValue(event === "confirmation" ? "NTH_ORDER_CONFIRMATION_TEMPLATE_ID" : "NTH_ORDER_STATUS_TEMPLATE_ID");
   if (!templateId) return; // Enable each template only after provider approval.
   const order = await db.order.findUnique({
-    where: { id: orderId }, select: { number: true, shipPhone: true, status: true },
+    where: { id: orderId },
+    select: { number: true, shipPhone: true, status: true, guestEmail: true, user: { select: { email: true } } },
   });
   if (!order?.shipPhone) return;
+  // Buyers with an email already receive the receipt and status emails. Viber is
+  // the fallback channel for orders without any email, unless explicitly widened.
+  if (envValue("VIBER_ORDER_NOTIFICATIONS_SCOPE") !== "all" && hasOrderEmail(order)) return;
   const effectiveStatus = status ?? order.status;
   const result = await queueNthMessage({
     to: order.shipPhone, text: "", kind: "transaction",
@@ -31,4 +35,8 @@ export async function queueOrderViberNotification(orderId: string, event: "confi
     },
   }, cfg);
   if (!result.ok) throw new Error(result.error);
+}
+
+export function hasOrderEmail(order: { guestEmail?: string | null; user?: { email?: string | null } | null }) {
+  return Boolean(order.guestEmail?.trim() || order.user?.email?.trim());
 }
