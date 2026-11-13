@@ -7,3 +7,7 @@ The signed social integration action `delivery_quote` validates published SKUs a
 Email draft behavior is unchanged. Automated shipping totals do not include assembly or the merchandise total; those remain in the final order quote.
 
 Checks: `node --test test/delivery-quote.test.mjs`; synthetic real-model checks: `node --env-file=.env.local scripts/delivery-quote-smoke.mjs`. The smoke script mocks ERP and never sends customer messages or writes orders. ERP tests are in `tests/unit/social-delivery.test.ts` and `social-route.test.ts`.
+
+## Loose locality resolution (13.11.2026)
+
+When the exact matchers find no courier town, `src/locality.mjs` tries once more before asking the buyer: it removes leading words such as „opština“/„selo“, reads Serbian genitive after „kod“ (Velike Plane → Velika Plana, Trstenika → Trstenik), suffixes („Petrovac na Mlavi“, „Rača Kragujevačka“), plural „Rudnici“, and uses the buyer's postcode, the postcode prefix or the municipality of another named place to choose between same-named records. „Beograd, X“ is limited to Belgrade municipalities; Belgrade neighbourhoods without their own record (Krnjača, Kotež, Cerak, Železnik, Jajinci, Mirijevo, MML…) map to the borough record. An unknown neighbourhood of a known town („Zabela, Požarevac“) uses the town when the postcode confirms it. A city split into boroughs (Niš) is never guessed: its boroughs are offered as candidates. Only unique real records are returned. Test: `node --test test/locality.test.mjs` (27 addresses the chatbot rejected 14.10.–13.11.2026).
