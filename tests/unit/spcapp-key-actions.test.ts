@@ -11,7 +11,7 @@ it('creates only a scoped random hash in the DB, returns the secret once and exc
  const result=await createSpcappKey({ok:false,message:''},form) as unknown as {result:{token:string},diff:unknown};
  expect(mocks.guard).toHaveBeenCalledWith(expect.objectContaining({allowed:['SUPER']}));
  const data=mocks.create.mock.calls[0][0].data;
- expect(data.scopes).toEqual(['spcapp:read']);expect(data.keyHash).toBe(createHash('sha256').update(result.result.token).digest('hex'));
+ expect(data.scopes).toEqual(['spcapp:read','spcapp:reclamation-payout']);expect(data.keyHash).toBe(createHash('sha256').update(result.result.token).digest('hex'));
  expect(result.result.token).toMatch(/^spcapp_[a-f0-9]{64}$/);
  expect(JSON.stringify(data)).not.toContain(result.result.token);expect(JSON.stringify(result.diff)).not.toContain(result.result.token);
 });

@@ -6,7 +6,7 @@ import { withAdminState, type AdminActionState } from "@/lib/admin";
 import { normalizeAffiliateCode } from "@/lib/affiliate/shared";
 const meta = { allowed: ["ADS", "OPS"] as const, module: "/admin/affiliate", entity: "AffiliatePartner" };
 export async function createAffiliate(_state: AdminActionState, form: FormData) {
-  return withAdminState({ ...meta, action: "affiliate.create" }, async () => {
+  return withAdminState({ ...meta, module: "/admin/affiliate", action: "affiliate.create" }, async () => {
     const name = String(form.get("name") ?? "").trim();
     const code = normalizeAffiliateCode(form.get("code"));
     if (!name || name.length > 100 || !code) return { ok: false, error: "Unesite ime (do 100 znakova) i kod (3–40 malih slova, brojeva ili crtica)." };
@@ -21,7 +21,7 @@ export async function createAffiliate(_state: AdminActionState, form: FormData) 
   })();
 }
 export async function toggleAffiliate(_state: AdminActionState, form: FormData) {
-  return withAdminState({ ...meta, action: "affiliate.access" }, async () => {
+  return withAdminState({ ...meta, module: "/admin/affiliate", action: "affiliate.access" }, async () => {
     const id = String(form.get("id") ?? "");
     const enabled = form.get("enabled") === "true";
     const result = await db.affiliatePartner.updateMany({ where: { id }, data: { enabled } });
