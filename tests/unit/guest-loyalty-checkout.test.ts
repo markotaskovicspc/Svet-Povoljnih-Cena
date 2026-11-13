@@ -41,18 +41,18 @@ describe("guest loyalty checkout trust boundary", () => {
     const member = { email: null, consentVersion: "v3", consentAt: new Date() };
     mocks.member.mockResolvedValue(member);
     await POST(request({ guestEmail: "A@B.COM", guestLoyalty: true }));
-    expect(mocks.createOrder).toHaveBeenCalledWith(expect.objectContaining({ guestLoyalty: true }), null, { ...member, email: "a@b.com" });
+    expect(mocks.createOrder).toHaveBeenCalledWith(expect.objectContaining({ guestLoyalty: true }), null, { ...member, email: "a@b.com" }, expect.anything());
   });
   it("keeps ordinary guests eligible for checkout without membership", async () => {
     await POST(request({ guestEmail: "a@b.com" }));
     expect(mocks.member).not.toHaveBeenCalled();
-    expect(mocks.createOrder).toHaveBeenCalledWith(expect.anything(), null, null);
+    expect(mocks.createOrder).toHaveBeenCalledWith(expect.anything(), null, null, expect.anything());
   });
   it("does not apply a guest identity on top of an authenticated account", async () => {
     mocks.user.mockResolvedValue({ id: "customer", userType: "customer" });
     await POST(request({ guestLoyalty: true }));
     expect(mocks.member).not.toHaveBeenCalled();
-    expect(mocks.createOrder).toHaveBeenCalledWith(expect.anything(), "customer", null);
+    expect(mocks.createOrder).toHaveBeenCalledWith(expect.anything(), "customer", null, expect.anything());
   });
   it("applies 15% after the loyalty price and excludes shipping from this discount", () => {
     const totals = computeTotals({ itemsFull: 10_000, itemsSale: 7_000,

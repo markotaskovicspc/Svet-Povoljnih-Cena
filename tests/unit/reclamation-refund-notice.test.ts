@@ -87,7 +87,7 @@ describe("office refund email", () => {
   it("sends the actual intake quantity, ERP link and escaped item name to support with a stable email key", async () => {
     await sendReclamationRefundOfficeNotice(claim.id);
     expect(mocks.dispatch).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
-      to: "podrska@svetpovoljnihcena.rs", idempotencyKey: "reclamation-refund-support:claim-1",
+      to: "placanja@svetpovoljnihcena.rs", idempotencyKey: "reclamation-refund-support:claim-1",
       html: expect.stringContaining("&lt;Sto &amp; stolica&gt;"),
       text: expect.stringContaining("Primljeno komada: 2"),
       metadata: { reclamationId: claim.id, orderId: "order-1", receiptId: "receipt-1", receiptIds: ["receipt-1"] },

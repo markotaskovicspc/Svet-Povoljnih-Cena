@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest";
-const m = vi.hoisted(() => ({ claim: vi.fn(), payout: vi.fn(), create: vi.fn(), update: vi.fn(), lines: vi.fn(), documents: vi.fn(), receipts: vi.fn(), receipt: vi.fn(), job: vi.fn(), others: vi.fn(), issue: vi.fn(), close: vi.fn(), event: vi.fn(), tx: vi.fn() }));
+const m = vi.hoisted(() => ({ claim: vi.fn(), payout: vi.fn(), create: vi.fn(), update: vi.fn(), lines: vi.fn(), documents: vi.fn(), receipts: vi.fn(), receipt: vi.fn(), job: vi.fn(), others: vi.fn(), issue: vi.fn(), close: vi.fn(), event: vi.fn(), tx: vi.fn(), enqueue: vi.fn() }));
 vi.mock("@/lib/db", () => ({ db: {
   reclamation: { findUnique: m.claim, update: m.close }, paymentRefund: { findUnique: m.payout, create: m.create, update: m.update, findMany: m.others },
   fiscalDocumentLine: { findMany: m.lines }, fiscalDocument: { findMany: m.documents }, stockMovement: { findMany: m.receipts, findFirst: m.receipt },
@@ -7,6 +7,7 @@ vi.mock("@/lib/db", () => ({ db: {
 } }));
 vi.mock("@/lib/fiscal/return-lock", () => ({ withOrderReturnLock: async (_id: string, fn: () => Promise<unknown>) => fn() }));
 vi.mock("@/lib/fiscal/issue", () => ({ issueFiscalRefundUnderLock: m.issue }));
+vi.mock("@/lib/background-jobs", () => ({ enqueueBackgroundJob: m.enqueue }));
 import { db } from "@/lib/db";
 import { issueReclamationRefund, confirmReclamationPayout, issueReceivedReclamationRefund } from "@/lib/admin/reclamation-refund.server";
 const evidence = { source: "COD_DELIVERY", ids: ["shipment"] };
@@ -64,8 +65,10 @@ it("rejects payout confirmation without the exact issued fiscal quantity", async
 });
 it("closes the claim only after an explicit confirmed bank transfer", async () => {
   m.payout.mockResolvedValue(payout);
+  m.event.mockResolvedValue({ id: "event" });
   m.documents.mockResolvedValue([{ status: "ISSUED", totalGross: 5998, lines: [{ originalSaleLineId: "sale", qty: 2 }] }]);
   await confirmReclamationPayout({ id: "claim", actorId: "marko", paidAt: "2026-01-01", reference: "nalog-1", confirmed: true });
+  expect(m.enqueue).toHaveBeenCalledWith(expect.objectContaining({ kind: "RECLAMATION_STATUS_EMAIL", payload: { reclamationId: "claim", eventId: "event" } }), expect.anything());
   expect(m.update).toHaveBeenCalledWith({ where: { id: "payout" }, data: expect.objectContaining({ status: "COMPLETED", providerRef: "nalog-1" }) });
   expect(m.close).toHaveBeenCalledWith({ where: { id: "claim" }, data: expect.objectContaining({ status: "RESENO" }) });
 });

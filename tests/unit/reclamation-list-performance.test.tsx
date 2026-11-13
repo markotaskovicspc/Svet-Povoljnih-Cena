@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ list: vi.fn(), sign: vi.fn(), module: vi.fn() }));
-vi.mock("@/lib/db", () => ({ db: { reclamation: { findMany: mocks.list } } }));
+vi.mock("@/lib/db", () => ({ db: { reclamation: { findMany: mocks.list }, $queryRaw: vi.fn(async () => []) } }));
 vi.mock("@/lib/admin", () => ({ requireAdminAction: vi.fn(), withAdminState: vi.fn() }));
 vi.mock("@/lib/admin/erp", () => ({ getErpModule: mocks.module }));
 vi.mock("@/lib/api/uploads", () => ({ signReclamationPhotoUrls: mocks.sign }));
