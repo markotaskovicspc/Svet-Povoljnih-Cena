@@ -125,6 +125,7 @@ const schemas = {
     eventId: z.string().min(1).optional(),
   }),
   RECLAMATION_ACCEPTED_EMAIL: z.object({ reclamationId: z.string().min(1) }),
+  RECLAMATION_AUTO_ACCEPT: z.object({ reclamationId: z.string().min(1) }),
   RABALUX_MEDIA_PRODUCT: z.object({
     productId: z.string().min(1),
     assetId: z.string().min(1).optional(),
@@ -178,6 +179,7 @@ const HIGH_PRIORITY_BACKGROUND_JOB_KINDS: BackgroundJobKind[] = [
   "RECLAMATION_NOTIFICATION",
   "RECLAMATION_STATUS_EMAIL",
   "RECLAMATION_ACCEPTED_EMAIL",
+  "RECLAMATION_AUTO_ACCEPT",
   "SUPPLIER_ORDER_EMAIL",
   "SUPPLIER_SHIPPING_DOCUMENTS_EMAIL",
   "SUPPLIER_CANCEL_EMAIL",
@@ -998,6 +1000,11 @@ async function dispatchJob(job: JobRow) {
         ).eventId ?? loaded.reclamation.status}`,
       });
       if (!result.ok) throw new Error(result.error);
+      return;
+    }
+    case "RECLAMATION_AUTO_ACCEPT": {
+      const { autoAcceptReclamation } = await import("@/lib/admin/reclamation-auto-accept.server");
+      await autoAcceptReclamation((payload as z.infer<typeof schemas.RECLAMATION_AUTO_ACCEPT>).reclamationId);
       return;
     }
     case "RECLAMATION_ACCEPTED_EMAIL": {
