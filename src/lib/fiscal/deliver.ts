@@ -64,6 +64,13 @@ export async function issueAndDeliverFiscalReceipt(
 
   const loaded = await loadOrderForEmail(orderId);
   if (!loaded?.recipient) {
+    // Buyers without e-mail get a Viber notice with a link to their documents.
+    if (loaded) {
+      const { queueFiscalReceiptViber } = await import("@/lib/viber/order-notifications");
+      await queueFiscalReceiptViber(orderId).catch((err) => {
+        console.error(`[fiscal] viber receipt notice failed for ${orderId}`, err);
+      });
+    }
     return { outcome, emailed: false, emailError: "no_recipient" };
   }
 
@@ -73,63 +80,7 @@ export async function issueAndDeliverFiscalReceipt(
     return { outcome, emailed: false, emailError: "no_fiscal_documents" };
   }
 
-  const cfg = getFiscalConfig();
-  const buyerAddress = resolveDocumentBuyerAddress(
-    loaded.order.shippingAddress,
-    loaded.order.billingAddress,
-  );
-  const attachments = await Promise.all(receiptDocuments.map(async (document) => {
-    // Prefer the provider-issued official PDF (QR + Tax Authority
-    // signature); the locally rendered slip is the fallback.
-    if (document.pdfObjectKey) {
-      try {
-        const official = await downloadFiscalPdf(document.pdfObjectKey);
-        if (official) {
-          return {
-            filename: `fiskalni-racun-${document.receiptNumber}.pdf`,
-            content: official.toString("base64"),
-            contentType: "application/pdf",
-          };
-        }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error(`[fiscal] official PDF download failed for ${document.id}: ${message}`);
-      }
-    }
-    const pdf = buildFiscalReceiptPdf({
-      orderNumber: loaded.order.id,
-      receiptNumber: document.receiptNumber!,
-      fiscalizedAt: document.issuedAt!,
-      merchant: {
-        name: MERCHANT_LEGAL_INFO.name,
-        tin: cfg.tin,
-        locationId: cfg.locationId,
-      },
-      buyer: {
-        name:
-          buyerAddress.companyName ??
-          `${buyerAddress.firstName} ${buyerAddress.lastName}`,
-        tin: buyerAddress.pib,
-        address: `${buyerAddress.street}, ${buyerAddress.postalCode} ${buyerAddress.city}`,
-      },
-      items: document.lines.map((line) => ({
-        sku: line.sku,
-        name: line.shortName,
-        qty: line.qty,
-        unitPrice: num(line.unitPriceGross),
-      })),
-      total: document.lines.reduce((sum, line) => sum + num(line.totalGross), 0),
-      paymentMethodLabel: paymentMethodLabel(
-        document.paymentMethod ?? mapBackPaymentMethod(loaded.order.paymentMethod),
-      ),
-      qrUrl: document.qrUrl,
-    });
-    return {
-      filename: `fiskalni-racun-${document.receiptNumber}.pdf`,
-      content: pdf.toString("base64"),
-      contentType: "application/pdf",
-    };
-  }));
+  const attachments = await renderFiscalReceiptAttachments(loaded.order, receiptDocuments);
 
   const fiscalReceiptNumbers = receiptDocuments.map(
     (document) => document.receiptNumber!,
@@ -234,6 +185,73 @@ export async function issueAndDeliverFiscalReceipt(
     });
   }
   return { outcome, emailed: true };
+}
+
+
+type LoadedEmailOrder = NonNullable<Awaited<ReturnType<typeof loadOrderForEmail>>>["order"];
+type IssuedSaleDocument = Awaited<ReturnType<typeof getIssuedSaleDocumentsForOrder>>[number];
+
+/** Official provider PDF when stored, otherwise the locally rendered slip. Shared by e-mail and the customer documents page. */
+export async function renderFiscalReceiptAttachments(order: LoadedEmailOrder, receiptDocuments: IssuedSaleDocument[]) {
+  const loaded = { order };
+  const cfg = getFiscalConfig();
+  const buyerAddress = resolveDocumentBuyerAddress(
+    loaded.order.shippingAddress,
+    loaded.order.billingAddress,
+  );
+  return Promise.all(receiptDocuments.map(async (document) => {
+    // Prefer the provider-issued official PDF (QR + Tax Authority
+    // signature); the locally rendered slip is the fallback.
+    if (document.pdfObjectKey) {
+      try {
+        const official = await downloadFiscalPdf(document.pdfObjectKey);
+        if (official) {
+          return {
+            filename: `fiskalni-racun-${document.receiptNumber}.pdf`,
+            content: official.toString("base64"),
+            contentType: "application/pdf",
+          };
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`[fiscal] official PDF download failed for ${document.id}: ${message}`);
+      }
+    }
+    const pdf = buildFiscalReceiptPdf({
+      orderNumber: loaded.order.id,
+      receiptNumber: document.receiptNumber!,
+      fiscalizedAt: document.issuedAt!,
+      merchant: {
+        name: MERCHANT_LEGAL_INFO.name,
+        tin: cfg.tin,
+        locationId: cfg.locationId,
+      },
+      buyer: {
+        name:
+          buyerAddress.companyName ??
+          `${buyerAddress.firstName} ${buyerAddress.lastName}`,
+        tin: buyerAddress.pib,
+        address: `${buyerAddress.street}, ${buyerAddress.postalCode} ${buyerAddress.city}`,
+      },
+      items: document.lines.map((line) => ({
+        sku: line.sku,
+        name: line.shortName,
+        qty: line.qty,
+        unitPrice: num(line.unitPriceGross),
+      })),
+      total: document.lines.reduce((sum, line) => sum + num(line.totalGross), 0),
+      paymentMethodLabel: paymentMethodLabel(
+        document.paymentMethod ?? mapBackPaymentMethod(loaded.order.paymentMethod),
+      ),
+      qrUrl: document.qrUrl,
+    });
+    return {
+      filename: `fiskalni-racun-${document.receiptNumber}.pdf`,
+      content: pdf.toString("base64"),
+      contentType: "application/pdf",
+    };
+  }));
+
 }
 
 async function markEmailStatus(documentIds: string[], emailedAt: Date | null, emailError: string | null) {
