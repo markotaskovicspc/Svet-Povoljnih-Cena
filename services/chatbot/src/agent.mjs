@@ -117,17 +117,20 @@ export async function answer({event,state,spc,pause,model}) {
         state.pending = {...result,selectionChecked:true,productNames:Object.fromEntries([...products].map(([sku,p])=>[sku,p.name])),code:randomBytes(3).toString('hex').toUpperCase()}; quoteCreated = true; }
       return result.ok ? {ok:true,totals:result.totals,message:'Sistem će prikazati tačan sažetak i zahtev za potvrdu. Porudžbina još nije napravljena.'} : result;
     }}),
-    tool({name:'order_status',description:'Proveri porudžbinu. Za porudžbinu iz ovog razgovora pošalji njen broj. Za ostale pošalji broj u formatu SPC-2026-… ILI ime i prezime na koje je kupac poručio (fullName). Drugi brojevi (kurirski, telefon) nisu broj porudžbine.',parameters:z.object({number:z.string().max(80).nullable(),fullName:z.string().max(150).nullable()}),execute:async({number,fullName})=>{
+    tool({name:'order_status',description:'Proveri porudžbinu. Za porudžbinu iz ovog razgovora pošalji njen broj. Za ostale pošalji broj koji kupac navede (SPC-2026-… ili drugi, npr. kurirski broj) ILI ime i prezime (fullName) zajedno sa adresom (address) ili telefonom (phone) sa porudžbine.',parameters:z.object({number:z.string().max(80).nullable(),fullName:z.string().max(150).nullable(),phone:z.string().max(40).nullable(),address:z.string().max(200).nullable()}),execute:async({number,fullName,phone,address})=>{
       const order=number?state.orders.find(o=>o.number===number):null;
       if(order)return spc({action:'order_status',number,accessToken:order.accessToken});
       const day=new Date().toISOString().slice(0,10);
       state.orderLookups=state.orderLookups?.day===day?state.orderLookups:{day,count:0};
       if(state.orderLookups.count>=6)return {ok:false,error:'Previše provera danas u ovom razgovoru; ponudi korisničku podršku.'};
       state.orderLookups.count++;
-      const result=await spc({action:'order_lookup',number:number||null,fullName:fullName||null});
+      const result=await spc({action:'order_lookup',number:number||null,fullName:fullName||null,phone:phone||null,address:address||null});
+      if(result?.ok===false&&result.error==='INVALID_ORDER_NUMBER')return {ok:false,error:'Broj nije prepoznat. Prosledi upit korisničkoj podršci (handoff) i u razlogu navedi taj broj, da u ERP-u pronađe pravi broj porudžbine.'};
+      if(result?.ok===false&&result.error==='ADDRESS_OR_PHONE_REQUIRED')return {ok:false,error:'Uz ime i prezime traži adresu ili broj telefona sa porudžbine.'};
       const labels={KREIRANO:'primljena',POTVRDJENO:'potvrđena',U_PRIPREMI:'u pripremi',SPREMNO_ZA_ISPORUKU:'spremna za slanje',U_ISPORUCI:'predata kurirskoj službi',ISPORUCENO:'isporučena',OTKAZANO:'otkazana',VRACENO:'vraćena'};
       if(result?.ok)result.orders=result.orders.map(o=>({...o,statusText:labels[o.status]??o.status}));
-      if(result?.ok&&!result.orders.length)return {ok:true,orders:[],message:'Nema porudžbine za te podatke u poslednjih godinu dana. Zamoli kupca da proveri broj (SPC-2026-…) ili ime i prezime sa porudžbine.'};
+      if(result?.ok&&!result.orders.length&&result.matchedBy==='shipment')return {ok:true,orders:[],message:'Broj nije pronađen među pošiljkama. Prosledi upit korisničkoj podršci (handoff) i u razlogu navedi taj broj, da u ERP-u pronađe pravi broj porudžbine.'};
+      if(result?.ok&&!result.orders.length)return {ok:true,orders:[],message:'Nema porudžbine za te podatke u poslednjih godinu dana. Zamoli kupca da proveri broj ili ime, prezime i adresu/telefon sa porudžbine.'};
       return result;
     }}),
     tool({name:'verify_reclamation_order',description:'Za reklamaciju porudžbine van ovog chata, uz saglasnost kupca pošalji kod na mejl koji navede i koji mora odgovarati porudžbini. Ne koristiti za novu kupovinu. Kod unosi kupac; nikad ga ne izmišljaj.',parameters:z.object({number:z.string(),email:z.email()}),execute:async({number,email})=>{

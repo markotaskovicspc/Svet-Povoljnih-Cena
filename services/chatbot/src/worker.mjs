@@ -317,7 +317,7 @@ export class Worker {
           }
           if(state.supportRequest){
             const question=requestSupportContact({state,event});
-            const handoffMessage=appendSupportContact(message,question);
+            const handoffMessage=appendSupportContact(message,question,{channel:event.channel});
             if(handoffMessage!==message){message=handoffMessage;images=[];}
           }
           message=guardSupportContact({channel:event.channel,text:message,state});

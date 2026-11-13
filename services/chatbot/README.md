@@ -47,10 +47,15 @@ ID. Existing `SalesChannel` remains WEB to preserve ERP behavior. A dedicated ER
 social-source filter is a subsequent schema/UI change, not included here.
 
 Order status (client request 13.11.2026): besides orders created in the same
-conversation, the bot checks any SPC order by its number (SPC-YYYY-NNNNNN, loosely typed)
-or by the exact first and last name used on the order (last 365 days, non-Ananas, at most
-three results). It returns only number, date, status and item names — never address,
-phone, email or payment data — and allows six lookups per conversation per day.
+conversation, the bot checks any SPC order by its number (SPC-YYYY-NNNNNN, loosely typed),
+by another number the customer gives (courier tracking/parcel number, resolved to the real
+SPC order through Shipment; unknown numbers go to support so staff can find the order in
+ERP), or by the exact first and last name together with the delivery address or phone from
+the order (last 365 days, non-Ananas, at most three results). It returns only number, date,
+status and item names — never address, phone, email or payment data — and allows six
+lookups per conversation per day.
+Support emails: at most one email to podrska@ per conversation (idempotency key per chat);
+later handoffs are visible in ERP → Razgovori.
 Cancellation and complaints still require an order from this conversation or the
 email-code check.
 

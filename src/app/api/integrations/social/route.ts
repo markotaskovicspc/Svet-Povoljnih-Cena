@@ -73,9 +73,11 @@ export async function POST(req: Request) {
       const result=await acceptChannelLoyalty(body.challenge,body,secret);
       return NextResponse.json(result?{ok:true,...result}:{ok:false,error:{code:'LOYALTY_CONSENT_EXPIRED'}});
     }
+    // Client rule (13.11.2026): at most one email to podrska@ per chat. Later handoffs
+    // in the same conversation return ok without a new email; staff see them in ERP → Razgovori.
     if (body.action === "support_handoff") {
       if (getEmailConfig().provider === "none") return NextResponse.json({ ok: false, error: "EMAIL_NOT_CONFIGURED" }, { status: 503 });
-      const result = await trackedDispatch({ kind: "social_support_handoff", to: "podrska@svetpovoljnihcena.rs", ...supportEmail(body), idempotencyKey: `social-support:${createHash('sha256').update(body.conversationId+':'+body.id).digest('hex')}` });
+      const result = await trackedDispatch({ kind: "social_support_handoff", to: "podrska@svetpovoljnihcena.rs", ...supportEmail(body), idempotencyKey: `social-support-chat:${createHash('sha256').update(body.channel+':'+body.conversationId).digest('hex')}` });
       return NextResponse.json({ ok: result.ok && result.provider !== "none" });
     }
     if (body.action === "search") {
