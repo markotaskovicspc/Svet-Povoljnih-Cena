@@ -1,4 +1,5 @@
 import { selectTown,resolveQualifiedTown } from './delivery.mjs';
+import { resolveLooseTown } from './locality.mjs';
 import { signRequest } from './security.mjs';
 export function createSpcClient(base, secret) {
   const url = new URL('/api/integrations/social',base);
@@ -29,7 +30,11 @@ export function createSpcClient(base, secret) {
         town=selectTown(items,{...shipping,postalCode:null});
       }
       if(!town)town=await resolveQualifiedTown(shipping.city,lookup);
-      if(!town) return {ok:false,error:{code:'DELIVERY_ADDRESS_INVALID',message:'Pitaj samo za tačno naselje/opštinu da razjasniš mesto. Sačuvaj poštanski broj koji je kupac naveo; ako ga nije naveo, popunjava ga sistem. Ne izmišljaj ga i ne biraj proizvoljno među istoimenim mestima.',candidates:items.slice(0,8).map(t=>({name:t.name,postalCode:t.postalCode}))}};
+      // Last resort: genitive/suffix forms, "opština", Belgrade boroughs and
+      // neighbourhoods, unknown suburb of a known town. Unique records only.
+      let loose=null;
+      if(!town){loose=await resolveLooseTown(shipping,lookup);town=loose.town;}
+      if(!town) return {ok:false,error:{code:'DELIVERY_ADDRESS_INVALID',message:'Pitaj samo za tačno naselje/opštinu da razjasniš mesto. Sačuvaj poštanski broj koji je kupac naveo; ako ga nije naveo, popunjava ga sistem. Ne izmišljaj ga i ne biraj proizvoljno među istoimenim mestima.',candidates:(loose?.candidates?.length?loose.candidates:items).slice(0,8).map(t=>({name:t.name,postalCode:t.postalCode}))}};
       payload={...payload,input:{...payload.input,guestEmail:payload.input.guestEmail||undefined,shipping:{...shipping,city:town.name,postalCode:shipping.postalCode?.trim()||town.postalCode,xExpressTownId:town.townId}}};
     }
     const body = JSON.stringify(payload);
