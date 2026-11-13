@@ -20,7 +20,7 @@ import { handleSocialReclamation, socialReclamationActions } from "@/lib/social/
 import {prepareChannelLoyalty,acceptChannelLoyalty,channelLoyalty,existingChannelLoyalty} from '@/lib/loyalty/channel.server';
 import {socialProductDetails} from '@/lib/social/product-details';
 import {socialDeliveryRequest,socialDeliveryQuote} from '@/lib/social/delivery';
-import { socialOrderLookup, socialOrderLookupRequest } from '@/lib/social/order-lookup';
+import { socialOrderLookup, socialOrderLookupRequest, view as orderView, orderViewSelect } from '@/lib/social/order-lookup';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -168,9 +168,10 @@ export async function POST(req: Request) {
     }
     if (body.action === "order_lookup") return NextResponse.json(await socialOrderLookup(body, secret));
     if (body.action === "order_status") {
-      const order = await db.order.findUnique({ where: { number: body.number }, select: { number: true, status: true, publicAccessTokenHash: true } });
+      const order = await db.order.findUnique({ where: { number: body.number }, select: { ...orderViewSelect, publicAccessTokenHash: true } });
       if (!order || !verifyOrderAccessToken({ token: body.accessToken, tokenHash: order.publicAccessTokenHash })) return new Response(null, { status: 403 });
-      return NextResponse.json({ ok: true, number: order.number, status: order.status });
+      const details = orderView(order);
+      return NextResponse.json({ ok: true, ...details });
     }
     if (body.action === "reclamation") return NextResponse.json(await createGuestReclamation(body.input, body.accessToken));
     return NextResponse.json(await handleSocialReclamation(body, secret));

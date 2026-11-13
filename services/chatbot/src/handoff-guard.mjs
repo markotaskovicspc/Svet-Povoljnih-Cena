@@ -29,3 +29,27 @@ export function guardHandoff(reason,latestCustomerText=''){
  const rule=RULES.find(x=>x.test(r));
  return rule?{topic:rule.topic,message:rule.message}:null;
 }
+
+export const ORDER_STATUS_LABELS={KREIRANO:'primljena',POTVRDJENO:'potvrđena',U_PRIPREMI:'u pripremi',SPREMNO_ZA_ISPORUKU:'spremna za slanje',U_ISPORUCI:'predata kurirskoj službi',ISPORUCENO:'isporučena',OTKAZANO:'otkazana',VRACENO:'vraćena'};
+export const ORDER_STATUS_ANSWER='Odgovori sam: status (statusText), kurirska služba i broj za praćenje (shipment.courier, shipment.trackingNo) i poslednji događaj kurira (shipment.lastEvent) ako postoje, i očekivani rok isporuke (expectedBy, srpski format datuma). Ako je late=false, ne prosleđuj podršci: rok još nije prošao. Ako je late=true ili je pošiljka vraćena/neuspešna, izvini se i prosledi handoff sa brojem porudžbine.';
+// Remember checked orders briefly; a status handoff for an order that is not
+// late yet is refused (the seller already has the answer).
+export function rememberOrderStatus(state,orders){
+ state.checkedOrders??={};const at=Date.now();
+ for(const o of orders??[])if(o?.number)state.checkedOrders[o.number]={late:Boolean(o.late),status:o.status,expectedBy:o.expectedBy??null,at};
+ for(const [n,v] of Object.entries(state.checkedOrders))if(at-v.at>6*3600000)delete state.checkedOrders[n];
+}
+const STATUS_QUESTION=/status|termin|kada stize|kad stize|stize li|isporuk|kasn|nije stigl|ceka|cekam|poslat|poslata|krenul|kurir/;
+const PROBLEM=/ostecen|polomljen|pogresn|nedostaj|ne radi|reklamac|otkaz|izmen|uplat|naplat|platil|vracen|nije dosao|nije zvao|adres|telefon|dvostruk|dva paketa|vikao/;
+export function guardStatusHandoff(reason,latestCustomerText='',state={}){
+ if(ASKS_FOR_PERSON.test(fold(latestCustomerText)))return null;
+ const r=fold(reason);
+ if(!STATUS_QUESTION.test(r)||PROBLEM.test(r)||PROBLEM.test(fold(latestCustomerText)))return null;
+ const checked=state.checkedOrders??{};
+ const fresh=Object.entries(checked).filter(([,v])=>Date.now()-v.at<2*3600000);
+ const named=fresh.filter(([n])=>r.includes(fold(n))||r.includes(n.slice(-6)));
+ const relevant=named.length?named:(fresh.length===1?fresh:[]);
+ if(!relevant.length||relevant.some(([,v])=>v.late||['VRACENO'].includes(v.status)))return null;
+ const [[number,v]]=relevant;
+ return {topic:'status_not_late',message:`Ne prosleđuj. Porudžbina ${number} još ne kasni (očekivani rok ${v.expectedBy??'3 radna dana'}). Kupcu reci status, kurira i broj za praćenje ako postoje i očekivani rok. Prosledi tek kada rok prođe ili kupac prijavi konkretan problem.`};
+}

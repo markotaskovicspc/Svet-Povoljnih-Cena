@@ -77,15 +77,63 @@ const select = {
   billFirstName: true,
   billLastName: true,
   items: { select: { name: true, qty: true } },
+  shipments: {
+    where: { purpose: "ORDER_DELIVERY" as const },
+    orderBy: { createdAt: "desc" as const },
+    take: 1,
+    select: {
+      provider: true, trackingNo: true, status: true, shippedAt: true, deliveredAt: true,
+      events: { orderBy: { occurredAt: "desc" as const }, take: 1, select: { status: true, message: true, occurredAt: true } },
+    },
+  },
 } as const;
 
-type Row = { number: string; createdAt: Date; status: string; items: { name: string; qty: number }[] };
-const view = (order: Row) => ({
-  number: order.number,
-  createdAt: order.createdAt.toISOString().slice(0, 10),
-  status: order.status,
-  items: order.items.map((item) => ({ name: item.name, qty: item.qty })),
-});
+// Standard delivery term: 3 working days from the order (Uslovi isporuke).
+export const DELIVERY_WORKING_DAYS = 3;
+export function addWorkingDays(from: Date, days: number) {
+  const date = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate()));
+  let left = days;
+  while (left > 0) {
+    date.setUTCDate(date.getUTCDate() + 1);
+    const day = date.getUTCDay();
+    if (day !== 0 && day !== 6) left--;
+  }
+  return date;
+}
+const courierName = (provider: string | null | undefined) => {
+  const p = String(provider ?? "").toUpperCase();
+  return p.includes("GLS") ? "GLS" : p.includes("X") ? "X Express" : null;
+};
+type ShipmentRow = { provider: string | null; trackingNo: string | null; status: string; shippedAt: Date | null; deliveredAt: Date | null;
+  events?: { status: string; message: string | null; occurredAt: Date }[] };
+type Row = { number: string; createdAt: Date; status: string; items: { name: string; qty: number }[]; shipments?: ShipmentRow[] };
+const CLOSED = new Set(["ISPORUCENO", "OTKAZANO", "VRACENO"]);
+// Status, courier and the latest courier event, so the chatbot answers "where
+// is my parcel" itself and hands off only when the order is really late.
+export const view = (order: Row, now = new Date()) => {
+  const shipment = order.shipments?.[0] ?? null;
+  const event = shipment?.events?.[0] ?? null;
+  const expectedBy = addWorkingDays(order.createdAt, DELIVERY_WORKING_DAYS);
+  const deliveryProblem = shipment ? ["FAILED", "RETURNED"].includes(shipment.status) : false;
+  const late = !CLOSED.has(order.status) && (deliveryProblem || now.getTime() > expectedBy.getTime() + 86400000);
+  return {
+    number: order.number,
+    createdAt: order.createdAt.toISOString().slice(0, 10),
+    status: order.status,
+    items: order.items.map((item) => ({ name: item.name, qty: item.qty })),
+    expectedBy: expectedBy.toISOString().slice(0, 10),
+    late,
+    shipment: shipment ? {
+      courier: courierName(shipment.provider),
+      trackingNo: shipment.trackingNo,
+      status: shipment.status,
+      shippedAt: shipment.shippedAt?.toISOString().slice(0, 10) ?? null,
+      deliveredAt: shipment.deliveredAt?.toISOString().slice(0, 10) ?? null,
+      lastEvent: event ? { status: event.status, message: event.message?.slice(0, 200) ?? null, at: event.occurredAt.toISOString().slice(0, 16) } : null,
+    } : null,
+  };
+};
+export const orderViewSelect = select;
 
 export async function socialOrderLookup(body: z.infer<typeof socialOrderLookupRequest>, secret?: string) {
   const number = looseOrderNumber(body.number);
@@ -104,7 +152,7 @@ export async function socialOrderLookup(body: z.infer<typeof socialOrderLookupRe
     const orders = shipments.length
       ? await db.order.findMany({ where: { id: { in: shipments.map((row) => row.orderId) }, channel: { not: "ANANAS" } }, orderBy: { createdAt: "desc" }, take: 3, select })
       : [];
-    return { ok: true as const, matchedBy: "shipment" as const, orders: orders.map(view) };
+    return { ok: true as const, matchedBy: "shipment" as const, orders: orders.map((o) => view(o)) };
   }
   if (body.number && !body.fullName) return { ok: false as const, error: "INVALID_ORDER_NUMBER" };
   const tokens = fold(body.fullName ?? "").split(" ").filter((token) => token.length > 1);
@@ -128,7 +176,7 @@ export async function socialOrderLookup(body: z.infer<typeof socialOrderLookupRe
     .filter((order) => sameName(name, order.shipFirstName, order.shipLastName) || sameName(name, order.billFirstName, order.billLastName))
     .filter((order) => samePhone(body.phone, order.shipPhone) || sameAddress(body.address, order.shipStreet, order.shipCity))
     .slice(0, 3);
-  const orders = matched.map(view);
+  const orders = matched.map((o) => view(o));
   // Same proof as reclamation_verify_finish (2 h, bound to this chat). Only for
   // name + phone/address matches, never for a bare order or parcel number.
   if (secret && secret.length >= 32 && body.channel && body.conversationId && matched.length) {
