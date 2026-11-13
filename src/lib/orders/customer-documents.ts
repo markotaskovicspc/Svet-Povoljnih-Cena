@@ -45,6 +45,16 @@ export function orderDocumentsUrl(orderNumber: string) {
   return `${base}/porudzbina/dokumenti?order=${encodeURIComponent(orderNumber)}&t=${signOrderDocumentsToken(orderNumber)}`;
 }
 
+/**
+ * Short form for Viber template parameters: no scheme, query string or "&"
+ * (Viber rejects those in template variables). /d/<order>/<token> redirects
+ * to the documents page.
+ */
+export function orderDocumentsShortLink(orderNumber: string) {
+  const host = new URL(getEmailConfig().baseUrl).host;
+  return `${host}/d/${encodeURIComponent(orderNumber)}/${signOrderDocumentsToken(orderNumber)}`;
+}
+
 export interface CustomerDocumentLink {
   kind: CustomerDocumentKind;
   index?: number;

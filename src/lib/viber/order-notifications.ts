@@ -30,8 +30,8 @@ async function loadOrderForViber(orderId: string) {
 }
 
 async function documentsLink(orderNumber: string) {
-  const { orderDocumentsUrl } = await import("@/lib/orders/customer-documents");
-  return orderDocumentsUrl(orderNumber);
+  const { orderDocumentsShortLink } = await import("@/lib/orders/customer-documents");
+  return orderDocumentsShortLink(orderNumber);
 }
 
 export async function queueOrderViberNotification(orderId: string, event: "confirmation" | "status", status?: OrderStatus) {
