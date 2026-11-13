@@ -3,18 +3,28 @@ import { Field } from "@/components/admin/field";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { loadReclamationRefund } from "@/lib/admin/reclamation-refund.server";
-import { issueClaimRefundAction, confirmClaimPayoutAction } from "./refund-actions";
+import { issueClaimRefundAction, confirmClaimPayoutAction, approveRefundWithoutReturnAction } from "./refund-actions";
+import { db } from "@/lib/db";
 
 const inputClass = "h-10 rounded-lg border border-input bg-transparent px-3 text-sm";
 export async function ReclamationRefundCard({ id, quantity }: { id: string; quantity: number }) {
-  const state = await loadReclamationRefund(id);
+  const [state, claim] = await Promise.all([
+    loadReclamationRefund(id),
+    db.reclamation.findUnique({ where: { id }, select: { type: true, refundWithoutReturnAt: true } }),
+  ]);
   if (state.legacyResolved) return null;
+  const waivedLabel = claim?.type === "NIJE_ISPORUCENO" ? "Artikal nije isporučen: QR za uplatu se pravi bez čekanja robe."
+    : claim?.refundWithoutReturnAt ? `Uplata odobrena bez vraćene robe ${claim.refundWithoutReturnAt.toLocaleString("sr-Latn-RS", { timeZone: "Europe/Belgrade" })}. QR za uplatu se pravi bez čekanja robe.` : null;
   const processing = Boolean(state.automationJob && ["QUEUED", "RUNNING", "RETRY"].includes(state.automationJob.status));
   const complete = state.payout?.status === "COMPLETED";
   const amount = state.amount == null ? "—" : new Intl.NumberFormat("sr-Latn-RS", { style: "currency", currency: "RSD" }).format(state.amount);
   return <Card>
     <CardTitle description={`${quantity} kom · primljeno u magacin ${state.received} kom · ${amount}`}>Povrat novca na račun kupca</CardTitle>
     <p className="mb-4 text-sm text-ink-600">Refundira se samo količina ove reklamacije, bez dostave. Već primljena roba se ne dodaje ponovo na lager. Kada je primljena cela odobrena količina, ERP automatski pokreće fiskalnu refundaciju i šalje podršci mejl sa linkom do reklamacije radi provere isplate. Novac u banci šaljete ručno.</p>
+    {waivedLabel ? <p className="mb-4 rounded-lg bg-muted-bg p-3 text-sm">{waivedLabel} Fiskalna refundacija i dalje čeka prijem robe.</p> : state.received < quantity && state.payout?.status !== "COMPLETED" ? <AdminActionForm action={approveRefundWithoutReturnAction} className="mb-4">
+      <input type="hidden" name="id" value={id} />
+      <SubmitButton variant="outline" className="h-auto min-h-10 max-w-full whitespace-normal" pendingLabel="Odobravanje…" confirm="Odobriti uplatu kupcu iako roba nije vraćena? SPC Analytics će pripremiti QR bez čekanja prijema.">Odobri uplatu bez vraćene robe</SubmitButton>
+    </AdminActionForm> : null}
     {!state.fiscalComplete && processing && <p role="status" className="mb-4 text-sm">Automatska fiskalna refundacija je u obradi. Osvežite pregled za status.</p>}
     {!state.fiscalComplete && state.automationJob?.lastError && <p role="alert" className="mb-4 text-sm text-destructive">{state.automationJob.lastError}</p>}
     {state.problem && <p role="alert" className="mb-4 text-sm text-destructive">{state.problem}</p>}

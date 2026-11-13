@@ -100,3 +100,6 @@ Form follow-up (Marko, 13.11.2026): choosing „Odustanak“ as problem type pre
 ## Posle svake objave (Marko, 13.11.2026)
 Proveri sam, bez podsećanja: Vercel produkcijski build, GitHub CI „verify“ na objavljenom commitu i četbot (status „SPC Chat Prodaja - spc-chatbot“ na istom commitu; Railway gradi services/chatbot iz main). Pre objave otvori PR sa grane, da CI pokrene sve testove.
 
+## Refund notice on approval and refund without return (2026-11-13)
+Marko explicitly requested. The background-jobs cron queues RECLAMATION_REFUND_APPROVED_EMAIL once per accepted open POVRAT_NOVCA claim (non-ANANAS, existing ones included): placanja@ gets „Povrat novca odobren — reklamacija R-…“ immediately, saying whether the QR waits for stock receipt. The later „Povrat primljen“ notice is unchanged. QR waits for receipt except when type is NIJE_ISPORUCENO or an OPS user clicks „Odobri uplatu bez vraćene robe“ (migration 20261113220000: refundWithoutReturnAt/ById). reclamation-lookup items carry type and refundWithoutReturn; SPC Analytics skips the receipt check for them. Fiscal refund still requires stock receipt (issuing it would restock the item), so such claims are not auto-resolved from the statement until the fiscal refund exists.
+

@@ -2,6 +2,16 @@ import "server-only";
 import { isUnpaidCodReturn } from "./reclamation-refund";
 import type { Prisma, Reclamation } from "@prisma/client";
 
+/**
+ * QR za povrat ne čeka prijem robe (Marko, 13.11.2026) kada artikal nije isporučen ili je uplata ručno odobrena
+ * bez vraćene robe. Fiskalna refundacija i dalje čeka prijem.
+ */
+export function refundReturnWaived(claim: { type?: string | null; refundWithoutReturnAt?: Date | null }) {
+  return claim.type === "NIJE_ISPORUCENO" || Boolean(claim.refundWithoutReturnAt);
+}
+
+export const reclamationRefundApprovedKey = (id: string) => `reclamation-refund-approved:${id}`;
+
 export function needsReclamationRefundNotice(claim: Pick<Reclamation, "decision" | "resolution" | "status">) {
   return claim.decision === "PRIHVACENA" && claim.resolution === "POVRAT_NOVCA"
     && claim.status !== "ODBIJENO" && claim.status !== "RESENO";
@@ -55,6 +65,7 @@ export async function queueReclamationFiscalRefund(tx: Prisma.TransactionClient,
     select: { decision: true, resolution: true, status: true, quantity: true, orderItemId: true, order: { select: { channel: true } } },
   });
   if (!claim || !needsReclamationRefundNotice(claim) || !claim.orderItemId || claim.order.channel === "ANANAS") return null;
+  // Fiskalna refundacija i dalje čeka prijem robe: bez prijema bi refundacija vratila artikal na lager.
   const receipts = await tx.stockMovement.findMany({ where: reclamationReturnReceiptsWhere(reclamationId), select: { qty: true } });
   if (claim.quantity <= 0 || receipts.reduce((sum, row) => sum + row.qty, 0) < claim.quantity) return null;
   const idempotencyKey = reclamationFiscalRefundKey(reclamationId);
@@ -66,3 +77,15 @@ export async function queueReclamationFiscalRefund(tx: Prisma.TransactionClient,
   }
   return job?.id ?? null;
 }
+
+/** Odobren povrat novca: placanja@ dobija obaveštenje odmah, bez čekanja robe (Marko, 13.11.2026). */
+export async function queueReclamationRefundApprovedNotice(tx: Prisma.TransactionClient, reclamationId: string) {
+  const claim = await tx.reclamation.findUnique({ where: { id: reclamationId }, select: { decision: true, resolution: true, status: true, order: { select: { channel: true } } } });
+  if (!claim || !needsReclamationRefundNotice(claim) || claim.order.channel === "ANANAS") return null;
+  await tx.backgroundJob.createMany({
+    data: { kind: "RECLAMATION_REFUND_APPROVED_EMAIL", payload: { reclamationId }, idempotencyKey: reclamationRefundApprovedKey(reclamationId) },
+    skipDuplicates: true,
+  });
+  return reclamationRefundApprovedKey(reclamationId);
+}
+

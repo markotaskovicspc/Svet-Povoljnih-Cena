@@ -36,3 +36,19 @@ export async function confirmClaimPayoutAction(_state: AdminActionState, data: F
     } finally { refresh(id); }
   })(data);
 }
+
+/** Marko, 13.11.2026: ručno odobrenje uplate povrata iako roba nije vraćena (SPC Analytics tada pravi QR). */
+export async function approveRefundWithoutReturnAction(_state: AdminActionState, data: FormData) {
+  return withAdminState({ module: "/admin/erp/reklamacije-dnevnik", allowed: ["OPS"], action: "reclamation.refundWithoutReturn", entity: "Reclamation" }, async (actorId, form: FormData) => {
+    const id = String(form.get("id") ?? "");
+    try {
+      const updated = await db.reclamation.updateMany({
+        where: { id, decision: "PRIHVACENA", resolution: "POVRAT_NOVCA", status: { notIn: ["ODBIJENO", "RESENO"] }, refundWithoutReturnAt: null },
+        data: { refundWithoutReturnAt: new Date(), refundWithoutReturnById: actorId },
+      });
+      if (!updated.count) return { ok: false as const, error: "Uplata se može odobriti samo za prihvaćen povrat novca koji još nije rešen." };
+      return { ok: true as const, entityId: id, diff: { refundWithoutReturn: true }, message: "Uplata je odobrena bez vraćene robe. SPC Analytics u narednih 10 minuta priprema QR. Fiskalnu refundaciju ERP i dalje radi tek po prijemu robe." };
+    } finally { refresh(id); }
+  })(data);
+}
+

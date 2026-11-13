@@ -3,7 +3,7 @@ import { formatRefundAccount } from "@/lib/reclamation-refund-details";
 import { isUnpaidCodReturn } from "@/lib/admin/reclamation-refund";
 import { num } from "@/lib/api/_helpers";
 import { db } from "@/lib/db";
-import { needsReclamationRefundNotice, reclamationRefundNoticeKey, reclamationReturnReceiptsWhere } from "@/lib/admin/reclamation-refund-notice.server";
+import { needsReclamationRefundNotice, reclamationRefundApprovedKey, reclamationRefundNoticeKey, reclamationReturnReceiptsWhere, refundReturnWaived } from "@/lib/admin/reclamation-refund-notice.server";
 import { getEmailConfig } from "./config";
 import { trackedDispatch } from "./tracking";
 
@@ -84,6 +84,41 @@ export async function sendReclamationDiscountOfficeNotice(reclamationId: string)
     text: `${instruction}\n\n${details.map(([label, value]) => `${label}: ${value}`).join("\n")}\n\nERP: ${url}`,
     tags: { kind: "reclamation_discount_office", reclamation: claim.number },
     idempotencyKey: `reclamation-discount-office:${claim.id}`,
+  });
+  if (!result.ok) throw new Error(result.error);
+}
+
+/**
+ * Marko, 13.11.2026: odobren povrat novca ide na placanja@ odmah. SPC Analytics pravi QR tek po prijemu robe,
+ * osim kad artikal nije isporučen ili je uplata u ERP-u ručno odobrena bez vraćene robe.
+ */
+export async function sendReclamationRefundApprovedOfficeNotice(reclamationId: string) {
+  const claim = await db.reclamation.findUnique({
+    where: { id: reclamationId },
+    include: { order: { select: { number: true, channel: true } }, product: { select: { name: true } } },
+  });
+  if (!claim || !needsReclamationRefundNotice(claim) || claim.order.channel === "ANANAS") return;
+  const cfg = getEmailConfig();
+  if (cfg.provider === "none") throw new Error("Email provider nije podešen za obaveštenje o povratu novca.");
+  const url = `${cfg.baseUrl.replace(/\/$/, "")}/admin/erp/reklamacije-dnevnik/${encodeURIComponent(claim.id)}`;
+  const waived = refundReturnWaived(claim);
+  const intake = claim.type === "NIJE_ISPORUCENO" ? "Ne čeka se — artikal nije isporučen"
+    : claim.refundWithoutReturnAt ? "Ne čeka se — uplata ručno odobrena bez vraćene robe"
+    : "Čeka se — QR za uplatu tek posle prijema robe u magacin";
+  const instruction = `Odobren je povrat novca po reklamaciji. ${waived ? "Roba se ne vraća, uplata se može pripremiti." : "Uplata se priprema tek kada roba stigne u magacin; tada stiže i mejl „Povrat primljen“."} Pre uplate proverite da kupcu novac već nije vraćen. Ovo obaveštenje ne potvrđuje da je novac isplaćen.`;
+  const details: Array<[string, string]> = [
+    ["Reklamacija", claim.number], ["Porudžbina", claim.order.number],
+    ["Artikal", `${claim.product?.name ?? claim.sku} · ${claim.sku}`], ["Reklamirano komada", String(claim.quantity)],
+    ["Prijem robe", intake],
+    ["Račun kupca (iz prijave)", claim.refundAccount ? formatRefundAccount(claim.refundAccount) : "Nije upisan"],
+  ];
+  const result = await trackedDispatch({
+    kind: "reclamation_refund_approved_office", to: RECLAMATION_REFUND_PAYMENTS_TO,
+    subject: `Povrat novca odobren — reklamacija ${claim.number} · ${waived ? "uplata bez vraćanja robe" : "QR posle prijema robe"}`,
+    html: `<!doctype html><html lang="sr-Latn"><body style="font-family:Arial,sans-serif;color:#1a1714;padding:24px"><h1 style="font-size:24px;color:#d7263d">Povrat novca odobren</h1><p>${escapeHtml(instruction)}</p><table>${details.map(([label, value]) => `<tr><th style="text-align:left;padding:8px">${escapeHtml(label)}</th><td style="padding:8px">${escapeHtml(value)}</td></tr>`).join("")}</table><p><a href="${escapeHtml(url)}">Otvori reklamaciju u ERP-u</a></p></body></html>`,
+    text: `${instruction}\n\n${details.map(([label, value]) => `${label}: ${value}`).join("\n")}\n\nERP: ${url}`,
+    tags: { kind: "reclamation_refund_approved_office" },
+    idempotencyKey: reclamationRefundApprovedKey(claim.id),
   });
   if (!result.ok) throw new Error(result.error);
 }

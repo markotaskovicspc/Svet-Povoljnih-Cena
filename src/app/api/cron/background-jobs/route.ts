@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { processPendingBackgroundJobs } from "@/lib/background-jobs";
-import { sweepReclamationAutoAccept } from "@/lib/admin/reclamation-auto-accept.server";
+import { sweepReclamationAutoAccept, sweepReclamationRefundApprovedNotices } from "@/lib/admin/reclamation-auto-accept.server";
 import { isAuthorizedCronRequest } from "@/lib/security/bearer";
 
 export const runtime = "nodejs";
@@ -15,6 +15,7 @@ async function run(req: Request) {
   // Reklamacije sa sajta koje čekaju odluku dobijaju posao automatskog prihvatanja (jednom po reklamaciji).
   let autoAcceptQueued = 0;
   try { autoAcceptQueued = await sweepReclamationAutoAccept(); } catch (error) { console.error("reclamation auto-accept sweep failed", error); }
+  try { await sweepReclamationRefundApprovedNotices(); } catch (error) { console.error("reclamation refund notice sweep failed", error); }
   const summary = await processPendingBackgroundJobs(limit);
   return NextResponse.json({ ok: true, summary, autoAcceptQueued });
 }

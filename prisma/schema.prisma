@@ -3503,6 +3503,9 @@ model Reclamation {
   refundAccount             String?                    @db.VarChar(40)
   /// Procenat umanjenja cene koji kupac traži (1–70); koristi se za iznos QR uplate.
   requestedDiscountPct      Int?
+  /// Ručno odobrena uplata povrata bez vraćene robe (Marko, 13.11.2026).
+  refundWithoutReturnAt     DateTime?
+  refundWithoutReturnById   String?
   decision                  ReclamationDecision        @default(CEKA)
   respondedAt               DateTime?
   resolution                ReclamationResolution?

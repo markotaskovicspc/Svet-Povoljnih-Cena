@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { envValue } from "@/lib/env";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
-import { queueReclamationFiscalRefund, queueReclamationRefundNotice } from "@/lib/admin/reclamation-refund-notice.server";
+import { queueReclamationFiscalRefund, queueReclamationRefundNotice, reclamationRefundApprovedKey } from "@/lib/admin/reclamation-refund-notice.server";
 
 /**
  * Automatsko prihvatanje (Marko, 13.11.2026): svaka reklamacija sa sajta koja čeka odluku prihvata se
@@ -102,3 +102,18 @@ export async function autoAcceptReclamation(reclamationId: string) {
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 10_000, timeout: 30_000 });
   return { result: accepted ? "accepted" as const : "skipped" as const };
 }
+
+/** Odobren povrat novca (ručno ili automatski, i ranije odobreni) → jednom obaveštenje na placanja@. */
+export async function sweepReclamationRefundApprovedNotices(limit = 50) {
+  const claims = await db.reclamation.findMany({
+    where: { decision: "PRIHVACENA", resolution: "POVRAT_NOVCA", status: { in: ["PRIMLJENO", "U_OBRADI"] }, order: { channel: { not: "ANANAS" } } },
+    select: { id: true }, orderBy: { createdAt: "asc" }, take: limit,
+  });
+  if (!claims.length) return 0;
+  const result = await db.backgroundJob.createMany({
+    data: claims.map((claim) => ({ kind: "RECLAMATION_REFUND_APPROVED_EMAIL", payload: { reclamationId: claim.id }, idempotencyKey: reclamationRefundApprovedKey(claim.id) })),
+    skipDuplicates: true,
+  });
+  return result.count;
+}
+
