@@ -9,6 +9,13 @@ export const bankEntrySchema=z.object({
 });
 export type BankEntry=z.infer<typeof bankEntrySchema>;
 export function bankEntryKey(entry:BankEntry){return `bank-credit:${entry.account}:${entry.bankReference}`;}
+/** Credit without a readable PBO order number: support review only, never an automatic payment. */
+export const bankUnmatchedSchema=bankEntrySchema.omit({orderNumber:true}).extend({
+ reason:z.enum(['SPC_UNREADABLE','SPC_MISSING','SPC_NOT_IN_REFERENCE']),
+ suggestedOrderNumber:z.string().regex(/^SPC-\d{4}-\d{6}$/).optional(),
+});
+export type BankUnmatched=z.infer<typeof bankUnmatchedSchema>;
+export function bankUnmatchedKey(entry:BankUnmatched){return `bank-unmatched:${entry.account}:${entry.bankReference}`;}
 export function bankPaymentDecision(order:null|{paymentMethod:string;status:string;totalMinor:number;stockRestoredAt:unknown;cancelledAt:unknown;payments:Array<{status:string}>},entry:BankEntry){
  if(!order)return 'ORDER_NOT_FOUND';
  if(order.paymentMethod!=='UPLATA_NA_RACUN')return 'PAYMENT_METHOD_MISMATCH';

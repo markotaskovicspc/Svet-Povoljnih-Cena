@@ -2,7 +2,7 @@ import 'server-only';
 import {db} from '@/lib/db';
 import {loadOrderForEmail} from './adapt';
 import {trackedDispatch} from './tracking';
-import type {BankEntry} from '@/lib/payments/bank-statements';
+import type {BankEntry,BankUnmatched} from '@/lib/payments/bank-statements';
 import type {PaymentConfirmation} from '@/lib/payments/payment-confirmation';
 import {getEmailConfig} from './config';
 import {orderLinkForEmail} from './order-link';
@@ -49,4 +49,29 @@ export async function sendBankStatementReview(input:{sourceHash:string;reason:st
  const reasons:Record<string,string>={BANK_SENDER_NOT_VERIFIED:'Autentičnost poruke banke nije potvrđena DKIM potpisom.',BANK_CREDIT_TOTAL_MISMATCH:'Zbir pročitanih priliva se ne poklapa sa ukupnim prilivom na izvodu.',BANK_REFERENCE_AMBIGUOUS:'Nije moguće pouzdano povezati broj porudžbine, referencu banke i iznos.',BANK_STATEMENT_WRONG_ACCOUNT:'Prilog nema očekivani račun firme, PIB, valutu ili zaglavlje banke.',BANK_ATTACHMENTS_INVALID:'Poruka nema podržan PDF prilog ili ih ima previše.',BANK_PDF_INVALID:'Prilog nije podržan PDF ili prelazi dozvoljenu veličinu.'};
  const text=`Bankarski izvod nije automatski obrađen.\n\nRazlog provere: ${reasons[input.reason]??'Format bankarskog priloga nije pouzdano pročitan.'}\nKod: ${input.reason}\n\nOtvorite poslednji mejl banke u sandučetu podrške i proverite PDF prilog. Nijedna uplata iz ovog priloga nije automatski evidentirana.\nIdentifikator: ${input.sourceHash.slice(0,12)}`;
  return trackedDispatch({kind:'bank_statement_review',to:SUPPORT,subject:'Bankarski izvod — potrebna provera',text,html:html(text),idempotencyKey:`bank-statement-review:${input.sourceHash}`});
+}
+const UNMATCHED:Record<BankUnmatched['reason'],string>={
+ SPC_UNREADABLE:'U pozivu na broj ili svrsi piše SPC, ali broj porudžbine nije čitljiv.',
+ SPC_NOT_IN_REFERENCE:'Broj porudžbine nije u pozivu na broj, već na drugom mestu u uplati (npr. svrha).',
+ SPC_MISSING:'Uplata nema broj porudžbine.',
+};
+const dateSr=(d:Date)=>d.toLocaleDateString('sr-Latn-RS',{timeZone:'Europe/Belgrade'});
+export async function sendBankUnmatchedReview(entry:BankUnmatched){
+ const {bankUnmatchedSuggestions}=await import('@/lib/payments/bank-statements.server');
+ const {candidates,suggested}=await bankUnmatchedSuggestions(entry);
+ // Other credits without any SPC mention (courier payouts, card settlements…) are only
+ // reported when an unpaid bank-transfer order has exactly the same total.
+ if(entry.reason==='SPC_MISSING'&&!candidates.length)return {skipped:'NO_CANDIDATES' as const};
+ const lines=[
+  'Uplata na račun nije automatski povezana sa porudžbinom.','',
+  `Uplata: ${money(entry.amountMinor)}`,`Izvod: ${entry.statement}, ${entry.date}`,`Referenca banke: ${entry.bankReference}`,'',
+  `Razlog: ${UNMATCHED[entry.reason]}`,
+ ];
+ if(entry.suggestedOrderNumber)lines.push(`Broj pronađen u uplati: ${entry.suggestedOrderNumber} — ${suggested==='MATCHED'?'iznos i način plaćanja se poklapaju.':REASONS[suggested??'']??suggested}`);
+ lines.push('',candidates.length
+  ?`Neplaćene porudžbine sa uplatom na račun i istim iznosom (poslednjih 60 dana):\n${candidates.slice(0,5).map(c=>`- ${c.number} (kreirana ${dateSr(c.createdAt)})`).join('\n')}${candidates.length>5?'\n- … i još porudžbina sa istim iznosom':''}`
+  :'Nema neplaćene porudžbine sa uplatom na račun i istim iznosom u poslednjih 60 dana.');
+ lines.push('','Ovo je samo predlog. Plaćanje nije evidentirano i kupcu nije poslata potvrda. Uporedite uplatioca na izvodu sa porudžbinom i potvrdite uplatu ručno u ERP-u.');
+ const text=lines.join('\n');
+ return trackedDispatch({kind:'bank_unmatched_review',to:SUPPORT,subject:`Uplata bez broja porudžbine — ${money(entry.amountMinor)}`,text,html:html(text),idempotencyKey:`bank-unmatched-review:${entry.account}:${entry.bankReference}`,tags:{kind:'bank_unmatched_review'}});
 }

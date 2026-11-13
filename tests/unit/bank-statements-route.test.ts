@@ -2,7 +2,7 @@ import {beforeEach,expect,it,vi} from 'vitest';
 import {createHmac} from 'node:crypto';
 const mocks=vi.hoisted(()=>({inspect:vi.fn(),existing:vi.fn(),receipt:vi.fn(),enqueue:vi.fn(),process:vi.fn(),after:vi.fn()}));
 vi.mock('next/server',()=>({NextResponse:{json:(body:unknown,init?:ResponseInit)=>Response.json(body,init)},after:mocks.after}));
-vi.mock('@/lib/payments/bank-statements.server',()=>({inspectBankEntry:mocks.inspect}));
+vi.mock('@/lib/payments/bank-statements.server',()=>({inspectBankEntry:mocks.inspect,bankUnmatchedSuggestions:vi.fn()}));
 vi.mock('@/lib/db',()=>({db:{backgroundJob:{findUnique:mocks.existing},payment:{findFirst:mocks.receipt}}}));
 vi.mock('@/lib/background-jobs',()=>({enqueueBackgroundJob:mocks.enqueue,processBackgroundJob:mocks.process}));
 import {POST} from '@/app/api/integrations/bank-statements/route';
@@ -23,3 +23,11 @@ it('completed legacy ledger is validated against payment receipt without another
  mocks.receipt.mockResolvedValue(null);expect((await POST(request(body))).status).toBe(409);
 });
 it('unreadable PDF submits an internal review only',async()=>{expect((await POST(request({sourceHash:body.sourceHash,rejectedReason:'BANK_CREDIT_TOTAL_MISMATCH'}))).status).toBe(200);expect(mocks.enqueue).toHaveBeenCalledWith(expect.objectContaining({kind:'BANK_STATEMENT_REVIEW_EMAIL'}));expect(mocks.inspect).not.toHaveBeenCalled();});
+it('credits without a readable order number queue only a support review',async()=>{
+ const unmatched={account:row.account,statement:row.statement,date:row.date,bankReference:'FT20999TEST2',amountMinor:365200,currency:'RSD',reason:'SPC_UNREADABLE'};
+ expect((await POST(request({...body,entries:[],unmatched:[unmatched]}))).status).toBe(200);
+ expect(mocks.enqueue).toHaveBeenCalledTimes(1);
+ expect(mocks.enqueue).toHaveBeenCalledWith(expect.objectContaining({kind:'BANK_UNMATCHED_CREDIT_REVIEW',idempotencyKey:`bank-unmatched:${row.account}:FT20999TEST2`}));
+ expect(mocks.inspect).not.toHaveBeenCalled();
+});
+it('older chatbot payload without unmatched credits stays valid',async()=>{expect((await POST(request(body))).status).toBe(200);expect(mocks.enqueue).toHaveBeenCalledWith(expect.objectContaining({kind:'BANK_TRANSFER_RECONCILE'}));});

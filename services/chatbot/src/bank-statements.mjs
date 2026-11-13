@@ -4,8 +4,12 @@ import {signRequest} from './security.mjs';
 import {dkimVerify} from 'mailauth/lib/dkim/verify.js';
 
 const ACCOUNT='340000100028300451';
-// Banks preserve either the printed order number or its compact payment reference.
-const orderNumbers=text=>[...new Set([...text.matchAll(/\bSPC(?:-(\d{4})-(\d{6})|(\d{4})(\d{6}))\b/g)].map(m=>`SPC-${m[1]??m[3]}-${m[2]??m[4]}`))];
+// Customers type the order number loosely: lower case, spaces, dots, slashes, missing
+// dashes or missing leading zeros. All of them map to the canonical SPC-YYYY-NNNNNN.
+// A wrong number still cannot confirm anything: ERP requires the exact order total.
+const SPC_NUMBER=/(?<![A-Z0-9])SPC[\s\-_/.]*(20\d{2})[\s\-_/.]*(\d{1,6})(?!\d)/gi;
+export const orderNumbers=text=>[...new Set([...String(text??'').normalize('NFKC').matchAll(SPC_NUMBER)].map(m=>`SPC-${m[1]}-${m[2].padStart(6,'0')}`))];
+const mentionsSpc=text=>/(?<![A-Z0-9])SPC/i.test(String(text??'').normalize('NFKC'));
 export function rsdMinor(value){
   if(!/^\d{1,3}(?:\.\d{3})*,\d{2}$|^\d+,\d{2}$/.test(value))throw Error('BANK_AMOUNT_INVALID');
   const minor=Number(value.replaceAll('.','').replace(',',''));
@@ -32,7 +36,7 @@ export async function parseErsteStatement(buffer){
     const statement=match[1],date=`${match[4]}-${match[3]}-${match[2]}`;
     const summary=header.match(/Ukupno u korist\s*([\d.,]+)\s*RSD/);
     if(!summary)throw Error('BANK_STATEMENT_TOTAL_MISSING');
-    const expectedCredit=rsdMinor(summary[1]);let totalCredit=0;const entries=[];
+    const expectedCredit=rsdMinor(summary[1]);let totalCredit=0;const entries=[],unmatched=[];
     for(const items of pages){
       const anchors=items.filter(x=>x.x<0.08&&/^\d+$/.test(x.text)&&items.some(d=>d.x>0.08&&d.x<0.17&&Math.abs(d.y-x.y)<3&&/^\d{2}\.\d{2}\.\d{4}\.$/.test(d.text))).sort((a,b)=>b.y-a.y);
       const nearest=item=>anchors.reduce((best,a)=>!best||Math.abs(a.y-item.y)<Math.abs(best.y-item.y)?a:best,null);
@@ -43,21 +47,33 @@ export async function parseErsteStatement(buffer){
         if(!amounts.length)continue;
         const amountMinor=rsdMinor(amounts[0].text);totalCredit+=amountMinor;
         const referenceItems=row.filter(x=>x.x>0.63&&x.x<0.78);
-        if(referenceItems.some(x=>/\bSPC(?:-|\d)|\bFT[A-Z0-9]/.test(x.text)&&Math.abs(x.y-anchor.y)>30))throw Error('BANK_REFERENCE_AMBIGUOUS');
+        if(referenceItems.some(x=>(/(?<![A-Z0-9])SPC[\s\-_/.]*\d/i.test(x.text)||/\bFT[A-Z0-9]/.test(x.text))&&Math.abs(x.y-anchor.y)>30))throw Error('BANK_REFERENCE_AMBIGUOUS');
         const refs=referenceItems.sort((a,b)=>b.y-a.y||a.x-b.x).map(x=>x.text).join(' ');
         const orders=orderNumbers(refs);
-        if(!orders.length)continue;
+        const bankRefs=[...refs.matchAll(/\bFT[A-Z0-9]{8,30}\b/g)].map(x=>x[0]);
+        if(!orders.length){
+          // No readable order number in PBO/PBZ: never applied automatically. Support gets a
+          // review (with same-amount order suggestions from ERP). Only the order number seen
+          // elsewhere in the row is forwarded, never the payer name or purpose text.
+          if(bankRefs.length===1){
+            const rowText=row.map(x=>x.text).join(' '),elsewhere=orderNumbers(rowText);
+            unmatched.push({account:ACCOUNT,statement,date,bankReference:bankRefs[0],amountMinor,currency:'RSD',
+              reason:elsewhere.length===1?'SPC_NOT_IN_REFERENCE':mentionsSpc(rowText)?'SPC_UNREADABLE':'SPC_MISSING',
+              ...(elsewhere.length===1?{suggestedOrderNumber:elsewhere[0]}:{})});
+          }
+          continue;
+        }
         const pbo=refs.match(/\bPBO:\s*(.*?)(?=\bPBZ:|\bFT[A-Z0-9]|$)/)?.[1]??'';
         const pboOrders=orderNumbers(pbo);
-        const bankRefs=[...refs.matchAll(/\bFT[A-Z0-9]{8,30}\b/g)].map(x=>x[0]);
         // Repeated PBO/PBZ values are one order; conflicting values still reject the PDF.
         if(orders.length!==1||pboOrders.length!==1||pboOrders[0]!==orders[0]||bankRefs.length!==1)throw Error('BANK_REFERENCE_AMBIGUOUS');
         entries.push({account:ACCOUNT,statement,date,bankReference:bankRefs[0],orderNumber:orders[0],amountMinor,currency:'RSD'});
       }
     }
     if(totalCredit!==expectedCredit)throw Error('BANK_CREDIT_TOTAL_MISMATCH');
-    if(new Set(entries.map(x=>x.bankReference)).size!==entries.length)throw Error('BANK_DUPLICATE_REFERENCE');
-    return {sourceHash:createHash('sha256').update(buffer).digest('hex'),account:ACCOUNT,statement,date,entries};
+    const references=[...entries,...unmatched].map(x=>x.bankReference);
+    if(new Set(references).size!==references.length)throw Error('BANK_DUPLICATE_REFERENCE');
+    return {sourceHash:createHash('sha256').update(buffer).digest('hex'),account:ACCOUNT,statement,date,entries,unmatched};
   }finally{await task.destroy();}
 }
 

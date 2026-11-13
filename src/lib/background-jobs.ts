@@ -2,7 +2,7 @@ import "server-only";
 
 import { Prisma, type ShipmentStatus } from "@prisma/client";
 import { z } from "zod";
-import {bankEntrySchema} from '@/lib/payments/bank-statements';
+import {bankEntrySchema,bankUnmatchedSchema} from '@/lib/payments/bank-statements';
 import { paymentConfirmationSchema } from '@/lib/payments/payment-confirmation';
 import { db } from "@/lib/db";
 import { SefApiError } from "@/lib/sef/client";
@@ -24,6 +24,7 @@ const schemas = {
   BANK_TRANSFER_RECONCILE: bankEntrySchema,
   BANK_PAYMENT_EMAIL: paymentConfirmationSchema,
   BANK_PAYMENT_REVIEW_EMAIL: bankEntrySchema.extend({reason:z.string().min(1).max(100)}),
+  BANK_UNMATCHED_CREDIT_REVIEW: bankUnmatchedSchema,
   BANK_STATEMENT_REVIEW_EMAIL:z.object({sourceHash:z.string().regex(/^[a-f0-9]{64}$/),reason:z.string().regex(/^BANK_[A-Z_]{1,80}$/)}),
   CHECKOUT_POST_COMMIT: z.object({
     orderId: z.string().min(1), accessToken: z.string().min(20),
@@ -919,6 +920,12 @@ async function dispatchJob(job: JobRow) {
     case 'BANK_PAYMENT_REVIEW_EMAIL': {
       const {sendBankPaymentReview}=await import('@/lib/email/bank-payment');
       const result=await sendBankPaymentReview(schemas.BANK_PAYMENT_REVIEW_EMAIL.parse(payload));
+      if(!result.ok)throw new Error(result.error);return;
+    }
+    case 'BANK_UNMATCHED_CREDIT_REVIEW': {
+      const {sendBankUnmatchedReview}=await import('@/lib/email/bank-payment');
+      const result=await sendBankUnmatchedReview(schemas.BANK_UNMATCHED_CREDIT_REVIEW.parse(payload));
+      if('skipped' in result)return;
       if(!result.ok)throw new Error(result.error);return;
     }
     case 'BANK_STATEMENT_REVIEW_EMAIL': {

@@ -2,7 +2,7 @@ import 'server-only';
 import {Prisma} from '@prisma/client';
 import {db} from '@/lib/db';
 import {enqueueBackgroundJob} from '@/lib/background-jobs';
-import {bankEntryKey,bankPaymentDecision,type BankEntry} from './bank-statements';
+import {bankEntryKey,bankPaymentDecision,type BankEntry,type BankUnmatched} from './bank-statements';
 
 export async function inspectBankEntry(entry:BankEntry){
  const order=await db.order.findUnique({where:{number:entry.orderNumber},include:{payments:{select:{status:true}}}});
@@ -36,4 +36,21 @@ export async function reconcileBankEntry(entry:BankEntry){
   for(const fulfillment of order.supplierFulfillments)await enqueueBackgroundJob({kind:'SUPPLIER_SHIPPING_DOCUMENTS_EMAIL',payload:{fulfillmentId:fulfillment.id,dispatchKey:`bank-${entry.bankReference}`},idempotencyKey:`bank-supplier:${entry.bankReference}:${fulfillment.id}`},tx);
   return [emailJob.id];
  },{maxWait:10000,timeout:30000});
+}
+
+const OPEN_ORDER_DAYS=60;
+/**
+ * Suggestions for a credit without a readable order number: unpaid, active bank-transfer
+ * orders from the last 60 days with exactly the same total. Read-only; support decides.
+ */
+export async function bankUnmatchedSuggestions(entry:BankUnmatched){
+ const since=new Date(Date.parse(`${entry.date}T00:00:00Z`)-OPEN_ORDER_DAYS*86400000);
+ const candidates=await db.order.findMany({
+  where:{paymentMethod:'UPLATA_NA_RACUN',total:new Prisma.Decimal(entry.amountMinor).div(100),cancelledAt:null,stockRestoredAt:null,
+   status:{notIn:['OTKAZANO','VRACENO']},createdAt:{gte:since},
+   payments:{none:{status:{in:['PAID','REFUNDED','PARTIAL_REFUND','AUTHORIZED']}}}},
+  select:{number:true,createdAt:true},orderBy:{createdAt:'desc'},take:6,
+ });
+ const suggested=entry.suggestedOrderNumber?(await inspectBankEntry({...entry,orderNumber:entry.suggestedOrderNumber})).decision:null;
+ return {candidates,suggested};
 }

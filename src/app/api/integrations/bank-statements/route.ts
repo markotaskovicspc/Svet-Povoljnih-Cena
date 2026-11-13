@@ -1,13 +1,13 @@
 import {after,NextResponse} from 'next/server';
 import {z} from 'zod';
 import {verifySocialRequest} from '@/lib/social/security';
-import {bankEntrySchema,bankEntryKey} from '@/lib/payments/bank-statements';
-import {inspectBankEntry} from '@/lib/payments/bank-statements.server';
+import {bankEntrySchema,bankEntryKey,bankUnmatchedSchema,bankUnmatchedKey} from '@/lib/payments/bank-statements';
+import {inspectBankEntry,bankUnmatchedSuggestions} from '@/lib/payments/bank-statements.server';
 import {enqueueBackgroundJob,processBackgroundJob} from '@/lib/background-jobs';
 import {db} from '@/lib/db';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
-const schema=z.object({sourceHash:z.string().regex(/^[a-f0-9]{64}$/),entries:z.array(bankEntrySchema.omit({sourceHash:true})).max(100),dryRun:z.boolean().default(false)});
+const schema=z.object({sourceHash:z.string().regex(/^[a-f0-9]{64}$/),entries:z.array(bankEntrySchema.omit({sourceHash:true})).max(100),unmatched:z.array(bankUnmatchedSchema.omit({sourceHash:true})).max(100).default([]),dryRun:z.boolean().default(false)});
 const rejectedSchema=z.object({sourceHash:z.string().regex(/^[a-f0-9]{64}$/),rejectedReason:z.string().regex(/^BANK_[A-Z_]{1,80}$/)});
 export async function POST(req:Request){
  const raw=await req.text();
@@ -35,6 +35,13 @@ export async function POST(req:Request){
   }
   const job=await enqueueBackgroundJob({kind:'BANK_TRANSFER_RECONCILE',payload:entry,idempotencyKey:key});jobIds.push(job.id);
   results.push({orderNumber:entry.orderNumber,status:job.status});
+ }
+ // Credits without a readable PBO order number: review mail with same-amount suggestions only.
+ for(const row of input.unmatched){
+  const entry={...row,sourceHash:input.sourceHash};
+  if(input.dryRun){const {candidates,suggested}=await bankUnmatchedSuggestions(entry);results.push({bankReference:entry.bankReference,reason:entry.reason,suggestedOrderNumber:entry.suggestedOrderNumber,suggestedDecision:suggested,candidates:candidates.map(c=>c.number)});continue;}
+  const job=await enqueueBackgroundJob({kind:'BANK_UNMATCHED_CREDIT_REVIEW',payload:entry,idempotencyKey:bankUnmatchedKey(entry)});jobIds.push(job.id);
+  results.push({bankReference:entry.bankReference,reason:entry.reason,status:job.status});
  }
  after(async()=>{for(const id of jobIds)await processBackgroundJob(id).catch(()=>console.error('bank.reconciliation_retry_pending'));});
  return NextResponse.json({ok:true,dryRun:input.dryRun,results},{headers:{'Cache-Control':'no-store'}});

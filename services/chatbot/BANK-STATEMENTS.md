@@ -16,9 +16,12 @@ proveru autentičnog mejla i objavu ERP API-ja i chatbot servisa.
    Proverava ukupni zbir priliva i izdvaja samo kolonu „U korist“,
    SPC broj iz PBO i bankarsku referencu FT. Drugi prilivi i svi odlivi
    se ne povezuju sa porudžbinama.
-   Broj `SPC2026001370` normalizuje u `SPC-2026-001370`. Isti broj ponovljen
-   u PBO/PBZ poljima predstavlja jednu porudžbinu; različiti SPC brojevi,
-   SPC broj samo u PBZ ili više FT referenci i dalje zaustavljaju obradu.
+   Broj se prepoznaje i kad je kupac piše slobodno: mala slova, razmaci,
+   tačke, kose crte, bez crta ili bez vodećih nula (`spc 2026 1370`,
+   `SPC2026-001370`, `SPC2026001370`) — sve postaje `SPC-2026-001370`.
+   Isti broj ponovljen u PBO/PBZ poljima predstavlja jednu porudžbinu;
+   različiti SPC brojevi, SPC broj samo u PBZ ili više FT referenci i dalje
+   zaustavljaju obradu.
 4. Potpisanim zahtevom dostavlja samo podatke izabrane uplate na
    `/api/integrations/bank-statements`. PDF, ime uplatioca i ostale
    transakcije ne šalje ERP API-ju ni dodatnim servisima.
@@ -32,6 +35,15 @@ proveru autentičnog mejla i objavu ERP API-ja i chatbot servisa.
 7. ERP šalje kupcu potvrdu i kopiju podršci. Ako kupac nema mejl,
    potvrda ide samo podršci. Potvrda uplate je automatska; postojeći
    nacrti odgovora kupcima i dalje zahtevaju zaposlenog da ih pošalje.
+
+Priliv bez čitljivog SPC broja u PBO/PBZ se nikad ne evidentira automatski.
+Parser ga šalje ERP-u kao neuparen (samo iznos, izvod, FT referenca i, ako
+postoji, SPC broj pročitan na drugom mestu u uplati, npr. u svrsi). ERP
+podršci šalje mejl „Uplata bez broja porudžbine“ sa razlogom i predlogom:
+neplaćene, aktivne porudžbine sa uplatom na račun iz poslednjih 60 dana sa
+tačno istim iznosom. Ako je SPC nečitljiv ili je broj van poziva na broj,
+mejl ide uvek; ako SPC uopšte ne postoji (npr. isplata kurira, kartice), mejl
+ide samo kada postoji porudžbina sa istim iznosom. Podrška potvrđuje ručno.
 
 Razlika iznosa, delimična/prevelika uplata, već plaćena/refundirana,
 otkazana/vraćena ili nepostojeća porudžbina ne menja status: podrška dobija
