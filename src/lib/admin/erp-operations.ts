@@ -1077,6 +1077,7 @@ export const operationalErpModules: ErpModule[] = [
       status("decision", "Odluka"),
       status("resolution", "Rešenje"),
       status("status", "Status"),
+      text("analyticsStatus", "SPC Analytics"),
       text("adminNote", "Interna napomena"),
       text("resolutionNote", "Napomena o rešenju"),
       text("warehouse", "Magacin"),
@@ -2697,6 +2698,9 @@ async function reclamationRows(take: number, skip = 0): Promise<ErpRow[]> {
       decision: row.decision,
       resolution: row.resolution,
       status: row.status,
+      analyticsStatus: row.analyticsStatus
+        ? `${row.analyticsStatus}${row.analyticsStatusNote ? ` · ${row.analyticsStatusNote}` : ""}`
+        : null,
       adminNote: row.adminNote,
       resolutionNote: row.resolutionNote,
       warehouse: row.warehouse

@@ -3506,6 +3506,10 @@ model Reclamation {
   /// Ručno odobrena uplata povrata bez vraćene robe (Marko, 13.11.2026).
   refundWithoutReturnAt     DateTime?
   refundWithoutReturnById   String?
+  /// Stanje iz SPC Analytics (Reklamacije i povrati), upisuje SPC Analytics (Marko, 13.11.2026).
+  analyticsStatus           String?                    @db.VarChar(80)
+  analyticsStatusNote       String?                    @db.VarChar(240)
+  analyticsStatusAt         DateTime?
   decision                  ReclamationDecision        @default(CEKA)
   respondedAt               DateTime?
   resolution                ReclamationResolution?
