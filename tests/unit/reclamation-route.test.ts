@@ -7,6 +7,7 @@ vi.mock("@/lib/api/reclamations", () => ({
   createGuestReclamation: mocks.guest,
   listReclamationsForUser: vi.fn(),
   createReclamationSchema: { safeParse: (data: unknown) => ({ success: true, data }) },
+  createPublicReclamationSchema: { safeParse: (data: unknown) => ({ success: true, data }) },
 }));
 vi.mock("@/lib/security/rate-limit", () => ({
   checkRateLimitForRequest: async () => ({ ok: true }), RATE_LIMITS: { reclamation: {} }, rateLimitJson: vi.fn(),
