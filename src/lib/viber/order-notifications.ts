@@ -44,7 +44,7 @@ export async function queueOrderViberNotification(orderId: string, event: "confi
   const order = await loadOrderForViber(orderId);
   if (!order) return;
   const effectiveStatus = status ?? order.status;
-  const parameters = event === "status"
+  const parameters: Record<string, string> = event === "status"
     ? { order_number: order.number, status: labels[effectiveStatus] }
     : docsTemplateId
       ? { order_number: order.number, link: await documentsLink(order.number) }
