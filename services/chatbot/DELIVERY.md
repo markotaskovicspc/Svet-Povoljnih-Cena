@@ -11,3 +11,10 @@ Checks: `node --test test/delivery-quote.test.mjs`; synthetic real-model checks:
 ## Loose locality resolution (13.11.2026)
 
 When the exact matchers find no courier town, `src/locality.mjs` tries once more before asking the buyer: it removes leading words such as „opština“/„selo“, reads Serbian genitive after „kod“ (Velike Plane → Velika Plana, Trstenika → Trstenik), suffixes („Petrovac na Mlavi“, „Rača Kragujevačka“), plural „Rudnici“, and uses the buyer's postcode, the postcode prefix or the municipality of another named place to choose between same-named records. „Beograd, X“ is limited to Belgrade municipalities; Belgrade neighbourhoods without their own record (Krnjača, Kotež, Cerak, Železnik, Jajinci, Mirijevo, MML…) map to the borough record. An unknown neighbourhood of a known town („Zabela, Požarevac“) uses the town when the postcode confirms it. A city split into boroughs (Niš) is never guessed: its boroughs are offered as candidates. Only unique real records are returned. Test: `node --test test/locality.test.mjs` (27 addresses the chatbot rejected 14.10.–13.11.2026).
+
+## Order preparation without needless handoffs (13.11.2026)
+
+- House number: „13 stan 1“ → 13/1, „28 ulaz 2“ → 28, „b.b.“ → bb before the ERP call; a number the ERP would still reject (e.g. „c/2“) returns HOUSE_NUMBER_INVALID so the seller asks only for the house number. An ERP 400 on quote returns INVALID_INPUT instead of throwing SPC_HTTP_400.
+- Image choice: the seller naming only the model („BON APPETIT“) counts as naming the catalog product, and any later customer text that does not reject it keeps the choice after a new image; checkCart still verifies the whole deal.
+- Cart check: one retry (20 s each) before CART_CHECK_UNAVAILABLE; quotes match ignoring case, diacritics and punctuation; „još jedan / isto kao u SPC-…“ followed by the seller naming the item is a valid choice.
+Test: `node --test test/order-prepare-fixes.test.mjs`.

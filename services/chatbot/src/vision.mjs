@@ -57,11 +57,27 @@ export function visualSelectionPresented(state,items){
  const visual=activeVisualContext(state);if(!visual)return true;
  const history=currentPurchaseHistory(state);
  return items.every(item=>history.some((m,index)=>{
-  if(m.role!=='assistant'||!(m.content.includes(item.sku)||m.content.toLowerCase().includes(item.name.toLowerCase())))return false;
+  if(m.role!=='assistant'||!namesProduct(m.content,item))return false;
   if(Number(m.timestamp)>=visual.createdAt)return true;
   // Another attachment does not erase a named choice already accepted by the
   // customer. checkCart still verifies the entire current purchase and changes.
+  // Any later customer text that does not reject it ("jeste", "taj", "ok,
+  // koliko košta") keeps the named product; checkCart verifies the deal.
   const next=history.slice(index+1).find(entry=>entry.role==='user'&&String(entry.content).trim()!=='[Prilog kupca]');
-  return next&&isOrderConfirmation(next.content);
+  return Boolean(next)&&(isOrderConfirmation(next.content)||!rejectsNamedProduct(next.content));
  }));
+}
+
+export function rejectsNamedProduct(text){
+ const t=String(text??'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+ return /^(?:ne\b|nije\b|nisam\b|ne taj|ne to|ne ovaj|drug[aiou]\b|neki drugi|a ne\b|pogres)/.test(t);
+}
+
+// The seller may name the model ("BON APPETIT") without the full catalog name
+// ("3u1 set za doručak BON APPETIT").
+export function namesProduct(text,item){
+ const content=String(text??'');const lower=content.toLowerCase();
+ if(content.includes(item.sku)||lower.includes(String(item.name??'').toLowerCase()))return true;
+ const model=(String(item.name??'').match(/\b[\p{Lu}\d][\p{Lu}\d-]{2,}(?:\s+[\p{Lu}\d][\p{Lu}\d-]+)*/gu)??[]).sort((a,b)=>b.length-a.length)[0];
+ return Boolean(model)&&model.length>=4&&lower.includes(model.toLowerCase());
 }
