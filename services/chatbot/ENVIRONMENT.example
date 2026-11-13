@@ -9,6 +9,9 @@ META_APP_ID=
 META_VERIFY_TOKEN=
 # Set supported Graph API version from the Meta app dashboard.
 META_GRAPH_VERSION=v25.0
+# true only after Meta approves the Human Agent permission: staff replies from the
+# SPC inbox may then be sent up to 7 days after the customer's last message.
+META_HUMAN_AGENT_ENABLED=false
 META_ACCOUNTS_JSON=[]
 SPC_BASE_URL=https://www.svetpovoljnihcena.rs
 SOCIAL_INTEGRATION_SECRET=

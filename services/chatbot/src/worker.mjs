@@ -7,7 +7,7 @@ import { orderErrorMessage } from './delivery.mjs';
 import { classifyOrderIntent } from './order-intent.mjs';
 import { randomUUID } from 'node:crypto';
 import { answer, quoteMessage } from './agent.mjs';
-import { inWindow, isConfirmation } from './security.mjs';
+import { inWindow, inHumanAgentWindow, isConfirmation } from './security.mjs';
 import {HISTORY_LIMIT,repeatsCompletedOrder,customerFromQuote,isOrderReceipt} from './conversation-context.mjs';
 import {checkCart} from './cart-check.mjs';
 import {readMetaHistory} from './meta-history.mjs';
@@ -479,7 +479,8 @@ export class Worker {
       const out=rows.rows[0]; if(!out) return;
       if(out.status==='sending') {await this.store.pause(row.id,'Nepotvrđen ishod slanja odgovora; proveriti Meta inbox');await c.query(`UPDATE spc_chat_outbox SET status='uncertain' WHERE id=$1`,[out.id]);return;}
       const message=this.store.decode(out.payload);
-      if((row.channel!=='web'&&!inWindow(Number(row.last_customer))) || (!this.allowed(row.sender) && !message.human) || (row.paused&&!message.allowPaused&&!message.human)) {
+      const humanTag=row.channel!=='web'&&message.human&&!inWindow(Number(row.last_customer))&&inHumanAgentWindow(Number(row.last_customer));
+      if((row.channel!=='web'&&!inWindow(Number(row.last_customer))&&!humanTag) || (!this.allowed(row.sender) && !message.human) || (row.paused&&!message.allowPaused&&!message.human)) {
         await c.query(`UPDATE spc_chat_outbox SET status='suppressed' WHERE id=$1`,[out.id]); return;
       }
       if(row.channel==='web'){await c.query("UPDATE spc_chat_outbox SET status='sent' WHERE id=$1",[out.id]);return;}
@@ -490,6 +491,7 @@ export class Worker {
         const {host,id:sendId}=metaSendTarget(account,this.accounts);
         const payload={recipient:{id:row.sender},message:message.imageUrl?{attachment:{type:'image',payload:{url:message.imageUrl}}}:{text:message.text.slice(0,1900)}};
         if(row.channel==='facebook'){payload.messaging_type='RESPONSE';payload.message.metadata='spc-bot';}
+        if(humanTag){payload.messaging_type='MESSAGE_TAG';payload.tag='HUMAN_AGENT';}
         const res=await fetch(`https://${host}/${this.graphVersion}/${sendId}/messages`,{method:'POST',headers:{authorization:`Bearer ${account.token}`,'content-type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(12000),redirect:'error'});
         const data=await res.json();
         if(message.imageUrl && res.status===400 && data.error?.code===100) {
@@ -504,7 +506,7 @@ export class Worker {
   }
   async humanReply(id,text) {
     await this.store.withConversation(id,async(row,state,c)=>{
-      if(!inWindow(Number(row.last_customer))) throw new Error('MESSAGE_WINDOW_CLOSED');
+      if(!inWindow(Number(row.last_customer))&&!inHumanAgentWindow(Number(row.last_customer))) throw new Error('MESSAGE_WINDOW_CLOSED');
       await this.store.pause(id,'Razgovor preuzeo zaposleni');
       state.history.push({role:'assistant',content:text,timestamp:Date.now(),source:'staff'}); await this.store.save(c,id,state);
       await this.store.enqueue(c,`human:${randomUUID()}`,id,{text,human:true});

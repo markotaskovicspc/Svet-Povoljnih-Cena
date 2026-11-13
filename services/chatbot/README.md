@@ -46,9 +46,22 @@ Facebook/Instagram source is recorded in the SPC order notes with the conversati
 ID. Existing `SalesChannel` remains WEB to preserve ERP behavior. A dedicated ERP
 social-source filter is a subsequent schema/UI change, not included here.
 
-For security, status/complaint access is limited to orders whose access token was
-created and retained in this conversation. The bot cannot retrieve arbitrary orders
-using only a guessed order number, telephone or email. Staff handle those cases.
+Order status (client request 13.11.2026): besides orders created in the same
+conversation, the bot checks any SPC order by its number (SPC-YYYY-NNNNNN, loosely typed),
+by another number the customer gives (courier tracking/parcel number, resolved to the real
+SPC order through Shipment; unknown numbers go to support so staff can find the order in
+ERP), or by the exact first and last name together with the delivery address or phone from
+the order (last 365 days, non-Ananas, at most three results). It returns only number, date,
+status and item names — never address, phone, email or payment data — and allows six
+lookups per conversation per day.
+Support emails: at most one email to podrska@ per conversation (idempotency key per chat);
+later handoffs are visible in ERP → Razgovori.
+Cancellation and complaints still require an order from this conversation or the
+email-code check.
+
+Staff replies from the SPC inbox after the 24-hour window use Meta's HUMAN_AGENT tag
+(up to 7 days) only when `META_HUMAN_AGENT_ENABLED=true`, which requires the Human Agent
+permission approved in Meta App Review. The bot itself never uses the tag.
 
 ## Local checks
 

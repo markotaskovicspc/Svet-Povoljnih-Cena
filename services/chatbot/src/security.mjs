@@ -50,3 +50,8 @@ export function parseEvents(body, accounts) {
   }
   return events;
 }
+
+// Meta HUMAN_AGENT tag: a person (never the bot) may answer up to 7 days after the
+// customer's last message. Needs the Human Agent permission approved in Meta App Review.
+export const humanAgentEnabled = () => process.env.META_HUMAN_AGENT_ENABLED === 'true';
+export function inHumanAgentWindow(timestamp, now = Date.now()) { return humanAgentEnabled() && timestamp <= now + 60_000 && now - timestamp < 7 * 24 * 60 * 60_000; }
