@@ -38,7 +38,7 @@ function AgeChip({ days, count, danger }: { days: number; count: number; danger?
 }
 
 /** Kompaktni ukupni pokazatelji (isti kao na stranici Reklamacije – izveštaji) za zaglavlje dnevnika. */
-export function ReclamationKpiStrip({ totals }: { totals: ReclamationMetrics }) {
+export function ReclamationKpiStrip({ totals, untasked }: { totals: ReclamationMetrics; untasked?: number }) {
   const average = totals.averageResolutionDays;
   return (
     <section
@@ -71,6 +71,14 @@ export function ReclamationKpiStrip({ totals }: { totals: ReclamationMetrics }) 
           tone={totals.unresolved > 0 ? "text-warning" : "text-ink-900"}
           hint="primljene i u obradi"
         />
+        {untasked === undefined ? null : (
+          <Cell
+            label="Neobrađene"
+            value={integer(untasked)}
+            tone={untasked > 0 ? "text-danger" : "text-ink-900"}
+            hint="bez naloga za rešavanje"
+          />
+        )}
         <div className="flex min-w-0 flex-col gap-1.5 px-4 py-2.5">
           <span className="text-[10.5px] uppercase tracking-[0.14em] text-ink-500">Otvorene duže od</span>
           <div className="flex flex-wrap gap-1.5">

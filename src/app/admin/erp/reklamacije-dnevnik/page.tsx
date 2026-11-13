@@ -20,6 +20,7 @@ import { Field } from "@/components/admin/field";
 import { PageHeader } from "@/components/admin/page-header";
 import { ReclamationKpiStrip } from "@/components/admin/reclamation-kpi-strip";
 import { loadReclamationAnalytics } from "@/lib/admin/reclamation-analytics.server";
+import { countUntaskedReclamations } from "@/lib/admin/reclamation-warehouse-status.server";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { Textarea } from "@/components/ui/textarea";
@@ -178,9 +179,10 @@ async function createManualReclamation(
 
 export default async function ReclamationsPage() {
   await requireAdminAction(["OPS"], "/admin/erp/reklamacije-dnevnik");
-  const [erpModule, analytics] = await Promise.all([
+  const [erpModule, analytics, untasked] = await Promise.all([
     getErpModule("reklamacije-dnevnik"),
     loadReclamationAnalytics(),
+    countUntaskedReclamations(),
   ]);
 
   const manualForm = (
@@ -262,7 +264,7 @@ export default async function ReclamationsPage() {
         ]}
         actions={<div className="flex flex-wrap items-center gap-2"><ReclamationActionDialogs manualForm={manualForm} /><span aria-hidden="true" className="mx-1 hidden h-6 w-px bg-border sm:block" /><Link href="/admin/erp/preuzimanja/povrati" className="inline-flex h-[30px] items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-xs font-medium hover:bg-muted">Povrati za prijem</Link><Link href="/admin/erp/reklamacije-izvestaji" className="inline-flex h-[30px] items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-xs font-medium hover:bg-muted"><svg aria-hidden="true" className="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg>Izveštaji</Link><a href="/api/admin/erp/reklamacije-dnevnik/export" download aria-label="Preuzmi XLSX" className="inline-flex h-[30px] items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-xs font-medium hover:bg-muted"><svg aria-hidden="true" className="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg>XLSX</a></div>}
       >
-        <ReclamationKpiStrip totals={analytics.totals} />
+        <ReclamationKpiStrip totals={analytics.totals} untasked={untasked} />
       </PageHeader>
       <div className="px-2 pt-2">
         {erpModule ? <ErpGrid module={erpModule} compactToolbar /> : null}

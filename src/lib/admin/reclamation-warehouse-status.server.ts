@@ -61,3 +61,17 @@ export async function reclamationWarehouseStatuses(claims: ReclamationWarehouseC
     return [claim.id, reclamationWarehouseStatus(claim, receipts?.aggregate ?? receipts?.parcels ?? 0)];
   }));
 }
+
+/**
+ * „Neobrađene“ (Marko, 14.11.2026): otvorene reklamacije kojima nije dat nalog za rešavanje, tj. stvarni status
+ * pripreme je „Nije zatraženo“. Umanjenje cene se ne broji jer ne traži magacinski nalog.
+ */
+export async function countUntaskedReclamations() {
+  const claims = await db.reclamation.findMany({
+    where: { status: { in: ["PRIMLJENO", "U_OBRADI"] }, OR: [{ resolution: null }, { resolution: { not: "POPUST" } }] },
+    select: { id: true, orderId: true, quantity: true, request: true, resolution: true, warehouseStatus: true },
+  });
+  const statuses = await reclamationWarehouseStatuses(claims);
+  return claims.filter((claim) => (statuses.get(claim.id) ?? claim.warehouseStatus) === "NOT_REQUESTED").length;
+}
+
