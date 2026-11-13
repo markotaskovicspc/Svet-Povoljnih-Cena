@@ -10,7 +10,7 @@ function renderNotice(request: string) {
 }
 
 describe("reclamation refund account notice", () => {
-  it.each(["POVRACAJ_NOVCA", "UMANJENJE_CENE"])(
+  it.each(["POVRACAJ_NOVCA", "UMANJENJE_CENE", "ODUSTANAK"])(
     "asks for a bank account when the customer chooses %s",
     (request) => {
       const html = renderNotice(request);
@@ -21,6 +21,14 @@ describe("reclamation refund account notice", () => {
       expect(html).toContain("Komentar / opis problema");
     },
   );
+
+  it("asks for the requested discount amount", () => {
+    expect(renderNotice("UMANJENJE_CENE")).toContain("iznos umanjenja");
+  });
+
+  it("asks which part and how many pieces for a part replacement", () => {
+    expect(renderNotice("ZAMENA_DELA")).toContain("koji deo");
+  });
 
   it.each(["", "POPRAVKA", "ZAMENA"])(
     "does not show the notice for %s",

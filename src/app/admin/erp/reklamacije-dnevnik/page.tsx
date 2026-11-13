@@ -48,10 +48,14 @@ const TYPE_LABELS: Record<string, string> = {
 
 const REQUEST_LABELS: Record<ReclamationRequest, string> = {
   POPRAVKA: "Popravka",
-  ZAMENA: "Zamena",
+  ZAMENA: "Zamena artikla",
+  ZAMENA_DELA: "Zamena dela",
   POVRACAJ_NOVCA: "Povraćaj novca",
   UMANJENJE_CENE: "Umanjenje cene",
+  ODUSTANAK: "Odustanak",
 };
+/** Izbori koje kupac vidi (Marko, 13.11.2026); Popravka ostaje samo za stare prijave. */
+const REQUEST_OPTIONS: ReclamationRequest[] = ["UMANJENJE_CENE", "ZAMENA_DELA", "ZAMENA", "POVRACAJ_NOVCA", "ODUSTANAK"];
 
 async function createManualReclamation(
   _state: AdminActionState,
@@ -208,7 +212,7 @@ export default async function ReclamationsPage() {
           className="h-10 w-full rounded-lg border border-input bg-transparent px-3 text-sm"
         >
           <option value="">Nije uneto</option>
-          {Object.values(ReclamationRequest).map((request) => (
+          {REQUEST_OPTIONS.map((request) => (
             <option key={request} value={request}>
               {REQUEST_LABELS[request]}
             </option>

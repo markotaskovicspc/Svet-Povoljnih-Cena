@@ -13,7 +13,9 @@ import { queueReclamationFiscalRefund, queueReclamationRefundNotice } from "@/li
  */
 const RESOLUTION_FOR_REQUEST: Record<ReclamationRequest, ReclamationResolution> = {
   ZAMENA: "ZAMENA_ARTIKLA",
+  ZAMENA_DELA: "ZAMENA_DELA",
   POVRACAJ_NOVCA: "POVRAT_NOVCA",
+  ODUSTANAK: "POVRAT_NOVCA",
   UMANJENJE_CENE: "POPUST",
   POPRAVKA: "ZAMENA_DELA",
 };

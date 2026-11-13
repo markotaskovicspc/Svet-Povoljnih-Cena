@@ -3,7 +3,7 @@ import {Agent,run} from '@openai/agents';
 import {z} from 'zod';
 import {randomUUID} from 'node:crypto';
 
-export const remedies={POPRAVKA:'popravka',ZAMENA:'zamena',POVRACAJ_NOVCA:'povraćaj novca',UMANJENJE_CENE:'umanjenje cene'};
+export const remedies={UMANJENJE_CENE:'umanjenje cene',ZAMENA_DELA:'zamena dela',ZAMENA:'zamena artikla',POVRACAJ_NOVCA:'povraćaj novca',ODUSTANAK:'odustanak',POPRAVKA:'popravka'};
 export const categories={KVAR:'kvar',FIZICKO_OSTECENJE:'fizičko oštećenje',NEDOSTAJE_ARTIKAL:'nedostaje artikal/deo',POGRESAN_ARTIKAL:'pogrešan artikal'};
 export function claimAuth(state,number) {
   const order=state.orders.find(o=>o.number===number);

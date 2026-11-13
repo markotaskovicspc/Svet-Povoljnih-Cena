@@ -13,7 +13,7 @@ import {prepareChannelLoyalty,acceptChannelLoyalty,channelLoyalty} from '@/lib/l
 
 const id=z.string().regex(/^[a-f0-9]{64}$/);
 const base=z.object({sender:z.email(),requestId:id});
-const claim=createReclamationSchema.extend({category:z.enum(['KVAR','FIZICKO_OSTECENJE','NEDOSTAJE_ARTIKAL','POGRESAN_ARTIKAL']),request:z.enum(['POPRAVKA','ZAMENA','POVRACAJ_NOVCA','UMANJENJE_CENE']).nullable()});
+const claim=createReclamationSchema.extend({category:z.enum(['KVAR','FIZICKO_OSTECENJE','NEDOSTAJE_ARTIKAL','POGRESAN_ARTIKAL']),request:z.enum(['POPRAVKA','ZAMENA','ZAMENA_DELA','POVRACAJ_NOVCA','UMANJENJE_CENE','ODUSTANAK']).nullable()});
 export const emailActionSchema=z.discriminatedUnion('action',[
  base.extend({action:z.literal('prepare_cancel'),number:z.string().max(80)}),
  base.extend({action:z.literal('reclamation_link'),number:z.string().max(80)}),
@@ -107,7 +107,7 @@ export async function handleEmailAction(body:z.infer<typeof emailActionSchema>,s
  const item=order.items.find(i=>i.sku===body.input.sku);if(!item||body.input.quantity>item.qty)return failure('ITEM_OR_QUANTITY_MISMATCH');
  if(body.input.photos.length)return failure('EMAIL_PHOTOS_REQUIRE_STAFF');
  const claimId=`email_${digest(body.requestId+JSON.stringify(body.input))}`;
- const requestLabels={POPRAVKA:'popravka',ZAMENA:'zamena',POVRACAJ_NOVCA:'povraćaj novca',UMANJENJE_CENE:'umanjenje cene'};
+ const requestLabels={POPRAVKA:'popravka',ZAMENA:'zamena artikla',ZAMENA_DELA:'zamena dela',POVRACAJ_NOVCA:'povraćaj novca',UMANJENJE_CENE:'umanjenje cene',ODUSTANAK:'odustanak'};
  const summary=`Da li potvrđujete podnošenje reklamacije za ${order.number}?\n${item.name} (${item.sku}) × ${body.input.quantity}\nProblem: ${body.input.description}\nŽeljeni ishod: ${body.input.request?requestLabels[body.input.request]:'dogovor sa podrškom'}\nOdgovorite na ovaj mejl sa „DA“. Prijem nije odobrenje zamene ili povraćaja. Zahtev važi 24 sata.`;
  return {ok:true,kind:'claim',summary,expiresAt,token:signSocialQuote({...common,kind:'claim',orderId:order.id,input:body.input,claimId},secret)};
 }

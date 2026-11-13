@@ -3449,6 +3449,8 @@ enum ReclamationRequest {
   ZAMENA
   POVRACAJ_NOVCA
   UMANJENJE_CENE
+  ZAMENA_DELA
+  ODUSTANAK
 }
 
 enum ReclamationDecision {

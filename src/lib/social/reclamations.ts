@@ -14,7 +14,7 @@ import sharp from "sharp";
 const identity = z.object({ channel: z.enum(["facebook", "instagram", "web"]), conversationId: z.string().min(3).max(200) });
 const owner = identity.extend({ number: z.string().trim().min(3).max(80), accessToken: z.string().max(200).optional(), proof: z.string().max(3000).optional() });
 const category = z.enum(["KVAR", "FIZICKO_OSTECENJE", "NEDOSTAJE_ARTIKAL", "POGRESAN_ARTIKAL"]);
-const remedy = z.enum(["POPRAVKA", "ZAMENA", "POVRACAJ_NOVCA", "UMANJENJE_CENE"]);
+const remedy = z.enum(["POPRAVKA", "ZAMENA", "ZAMENA_DELA", "POVRACAJ_NOVCA", "UMANJENJE_CENE", "ODUSTANAK"]);
 const draftInput = createReclamationSchema.extend({ category, request: remedy.nullable() });
 export const socialReclamationActions = [
   identity.extend({ action: z.literal("reclamation_verify_start"), number: z.string().trim().min(3).max(80), email: z.email() }),

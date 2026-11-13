@@ -48,7 +48,7 @@ export const createReclamationSchema = z.object({
   quantity: z.int().min(1).max(999),
   description: z.string().trim().min(5).max(250),
   type: z.enum(["FIZICKO_OSTECENJE", "KVAR", "POGRESNO_ISPORUCENO", "NIJE_ISPORUCENO", "ODUSTANAK"]).optional(),
-  request: z.enum(["POPRAVKA", "ZAMENA", "POVRACAJ_NOVCA", "UMANJENJE_CENE"]).optional(),
+  request: z.enum(["POPRAVKA", "ZAMENA", "ZAMENA_DELA", "POVRACAJ_NOVCA", "UMANJENJE_CENE", "ODUSTANAK"]).optional(),
   photos: z.array(photoSchema).max(5).default([]),
 });
 

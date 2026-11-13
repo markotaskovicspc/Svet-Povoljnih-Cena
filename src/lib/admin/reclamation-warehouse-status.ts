@@ -35,7 +35,7 @@ export type ReclamationWarehouseClaim = Pick<
 
 export function isReclamationMoneyReturn(claim: ReclamationWarehouseClaim) {
   return claim.resolution === "POVRAT_NOVCA"
-    || (!claim.resolution && claim.request === "POVRACAJ_NOVCA");
+    || (!claim.resolution && (claim.request === "POVRACAJ_NOVCA" || claim.request === "ODUSTANAK"));
 }
 
 /** A posted inventory receipt proves intake; preparation and courier status do not. */

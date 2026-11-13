@@ -428,7 +428,7 @@ export function ReclamationForm({
         <div className="grid gap-2">
           <Label htmlFor="reclamation-request">Šta želite kao rešenje? (opciono)</Label>
           <select id="reclamation-request" value={request} onChange={event => setRequest(event.target.value)} className="h-11 w-full rounded-lg border border-input bg-white px-2.5 text-sm">
-            <option value="">Izaberite</option><option value="POPRAVKA">Popravka</option><option value="ZAMENA">Zamena</option><option value="POVRACAJ_NOVCA">Povraćaj novca</option><option value="UMANJENJE_CENE">Umanjenje cene</option>
+            <option value="">Izaberite</option><option value="UMANJENJE_CENE">Umanjenje cene</option><option value="ZAMENA_DELA">Zamena dela</option><option value="ZAMENA">Zamena artikla</option><option value="POVRACAJ_NOVCA">Povraćaj novca</option><option value="ODUSTANAK">Odustanak</option>
           </select>
           <ReclamationRefundAccountNotice request={request} />
         </div>
