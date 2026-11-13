@@ -58,6 +58,14 @@ jobs:
         run: |
           docker exec "$POSTGRES_CONTAINER_ID" psql -U postgres -d spc_test -v ON_ERROR_STOP=1 \
             -c 'CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN;'
+      - name: Prepare Supabase storage stub in the isolated database
+        # Production storage.buckets is managed by Supabase. Migrations that
+        # register private buckets only need the table shape in plain PostgreSQL.
+        env:
+          POSTGRES_CONTAINER_ID: ${{ job.services.postgres.id }}
+        run: |
+          docker exec "$POSTGRES_CONTAINER_ID" psql -U postgres -d spc_test -v ON_ERROR_STOP=1 \
+            -c 'CREATE SCHEMA storage; CREATE TABLE storage.buckets (id text PRIMARY KEY, name text NOT NULL, public boolean DEFAULT false, file_size_limit bigint, allowed_mime_types text[], created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now());'
       - run: npm run db:deploy
       - name: Seed isolated role fixtures
         run: |
