@@ -20,7 +20,7 @@ export function claimAuth(state,number) {
 const identity=event=>({channel:event.channel,conversationId:event.conversation});
 export async function beginReclamation({number,sku,event,state,spc}) {
   const result=await spc({action:'reclamation_details',...identity(event),number,...claimAuth(state,number)});
-  if(!result.ok)return {ok:false,error:'Porudžbina nije povezana sa ovim razgovorom ili je pristup istekao. Traži mejl sa porudžbine i uz saglasnost kupca koristi verify_reclamation_order. Ako nema mejl, handoff; ne traži lozinku niti kod za Facebook prijavu.'};
+  if(!result.ok)return {ok:false,error:'Porudžbina nije povezana sa ovim razgovorom ili je pristup istekao. Prvo traži ime i prezime sa porudžbine i adresu ili telefon, pa pozovi order_status sa fullName i address/phone: kada se porudžbina pronađe, odmah ponovo pozovi begin_reclamation. Ako to ne uspe, traži mejl sa porudžbine i uz saglasnost kupca koristi verify_reclamation_order. Tek ako ni to ne uspe, handoff; ne traži lozinku niti kod za Facebook prijavu.'};
   const order=result.order;
   if(order.status!=='ISPORUCENO') {
     state.claimStatusNotice=`Porudžbina ${order.number} postoji, ali u sistemu još nije označena kao isporučena. Tek kada isporuka bude evidentirana mogu da otvorim tiket za reklamaciju i nastavim postupak ovde u chatu. Ako je roba već stigla, prijavljeni problem prosleđujem podršci da proveri status isporuke. Kada se status ažurira, javi se ovde da nastavimo.`;

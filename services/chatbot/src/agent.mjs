@@ -125,7 +125,9 @@ export async function answer({event,state,spc,pause,model}) {
       state.orderLookups=state.orderLookups?.day===day?state.orderLookups:{day,count:0};
       if(state.orderLookups.count>=6)return {ok:false,error:'Previše provera danas u ovom razgovoru; ponudi korisničku podršku.'};
       state.orderLookups.count++;
-      const result=await spc({action:'order_lookup',number:number||null,fullName:fullName||null,phone:phone||null,address:address||null});
+      const result=await spc({action:'order_lookup',channel:event.channel,conversationId:event.conversation,number:number||null,fullName:fullName||null,phone:phone||null,address:address||null});
+      // Name + phone/address proves ownership: keep the proof for a reclamation in this chat, never show it to the model.
+      if(result?.claimProofs){state.claimOrders??={};for(const [n,proof] of Object.entries(result.claimProofs))state.claimOrders[n]={...(state.claimOrders[n]??{}),proof};delete result.claimProofs;}
       if(result?.ok===false&&result.error==='INVALID_ORDER_NUMBER')return {ok:false,error:'Broj nije prepoznat. Prosledi upit korisničkoj podršci (handoff) i u razlogu navedi taj broj, da u ERP-u pronađe pravi broj porudžbine.'};
       if(result?.ok===false&&result.error==='ADDRESS_OR_PHONE_REQUIRED')return {ok:false,error:'Uz ime i prezime traži adresu ili broj telefona sa porudžbine.'};
       const labels={KREIRANO:'primljena',POTVRDJENO:'potvrđena',U_PRIPREMI:'u pripremi',SPREMNO_ZA_ISPORUKU:'spremna za slanje',U_ISPORUCI:'predata kurirskoj službi',ISPORUCENO:'isporučena',OTKAZANO:'otkazana',VRACENO:'vraćena'};

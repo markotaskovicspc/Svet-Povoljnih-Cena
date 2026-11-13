@@ -13,3 +13,13 @@ it('bounds descriptions, decodes entities and reports truncation',()=>{
  expect(productText('<b>Snaga&nbsp;2000&#32;W</b>')).toEqual({text:'Snaga 2000 W',truncated:false});
  expect(productText('abcdef',3)).toEqual({text:'abc',truncated:true});
 });
+
+it('lists manuals and assembly sheets for the chatbot', async () => {
+ const {socialProductDetails}=await import('@/lib/social/product-details');
+ const r=socialProductDetails({sku:'1',name:'Stolica',slug:'s',description:'',shortDescription:'',materials:[],attachments:[
+  {kind:'manual',section:'general',label:'Uputstvo',url:'https://x/u.pdf'},
+  {kind:'document',section:'assembly_instructions',label:'Montaža',url:'https://x/m.pdf'},
+  {kind:'energy_label',section:'general',label:'Energetska',url:'https://x/e.pdf'},
+ ]} as never);
+ expect(r.manuals).toEqual([{label:'Uputstvo',url:'https://x/u.pdf'},{label:'Montaža',url:'https://x/m.pdf'}]);
+});

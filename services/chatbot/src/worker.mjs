@@ -210,7 +210,8 @@ export class Worker {
               if(result.ok) {
                 state.reclamations??=[];if(!state.reclamations.some(r=>r.number===result.number))state.reclamations.push({number:result.number,orderNumber:pending.number,sku:pending.input.sku});
                 message=result.alreadyExists?'Za ovaj artikal već postoji reklamacija '+result.number+'. Dopunu prosleđujem korisničkoj podršci uz postojeću prijavu.':'Reklamacija '+result.number+' je zabeležena. Korisnička podrška će pregledati prijavu i javiti se o daljim koracima.';
-                state.supportRequest={reason:(result.alreadyExists?'Dopuna postojeće reklamacije ':'Nova reklamacija ')+result.number,reclamationId:result.id};
+                // A new claim is already in ERP (and auto-accepted there): no e-mail to podrska@.
+                if(result.alreadyExists)state.supportRequest={reason:'Dopuna postojeće reklamacije '+result.number,reclamationId:result.id};
                 delete state.reclamationContext;
               } else {
                 message='Reklamacija još nije upisana. Prikupljeni zahtev šaljem podršci da proveri porudžbinu i prijavu.';
