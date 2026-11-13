@@ -20,7 +20,7 @@ export async function POST(request:Request){
   const q=parsed.data;
   const where=q.id?{id:q.id}:q.number?{number:{equals:q.number,mode:'insensitive' as const}}:{OR:(q.emails??[]).map(email=>({customerEmail:{equals:email,mode:'insensitive' as const}}))};
   const rows=await db.reclamation.findMany({where,take:21,orderBy:{createdAt:'desc'},select:{
-   id:true,number:true,orderItemId:true,sku:true,quantity:true,customerFirst:true,customerLast:true,customerEmail:true,decision:true,resolution:true,status:true,createdAt:true,
+   id:true,number:true,orderItemId:true,sku:true,quantity:true,customerFirst:true,customerLast:true,customerEmail:true,decision:true,resolution:true,requestedDiscountPct:true,status:true,createdAt:true,
    order:{select:{id:true,number:true,status:true,total:true,shipping:true,voucherDiscount:true,firstPurchaseDiscount:true,savedCardDiscount:true,
     items:{select:{id:true,sku:true,name:true,qty:true,unitPriceSale:true,withAssembly:true,assemblyPrice:true}},
     paymentRefunds:{where:{status:{in:['PENDING','COMPLETED','NEEDS_REVIEW']}},select:{id:true,status:true,amount:true}},

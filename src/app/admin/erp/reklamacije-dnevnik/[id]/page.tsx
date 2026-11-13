@@ -197,6 +197,9 @@ async function saveDetailsAction(_state: AdminActionState, formData: FormData) {
           payload: { reclamationId: id },
           idempotencyKey: `reclamation-accepted-email:${id}:${resolution ?? "none"}`,
         }, tx);
+        if (resolution === "POPUST") {
+          await enqueueBackgroundJob({ kind: "RECLAMATION_DISCOUNT_OFFICE_EMAIL", payload: { reclamationId: id }, idempotencyKey: `reclamation-discount-office:${id}` }, tx);
+        }
       }
       refresh(id);
       return {

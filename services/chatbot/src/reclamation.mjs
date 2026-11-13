@@ -3,6 +3,12 @@ import {Agent,run} from '@openai/agents';
 import {z} from 'zod';
 import {randomUUID} from 'node:crypto';
 
+/** Marko, 13.11.2026: broj računa za povraćaj/odustanak/umanjenje (bez provere) i procenat umanjenja do 70%. */
+export function refundDetailsMissing({request,refundAccount,requestedDiscountPct}){
+  if(['POVRACAJ_NOVCA','ODUSTANAK','UMANJENJE_CENE'].includes(request)&&!String(refundAccount??'').trim())return 'Prijava nije pripremljena: pitaj kupca broj računa za uplatu.';
+  if(request==='UMANJENJE_CENE'&&!(Number.isInteger(requestedDiscountPct)&&requestedDiscountPct>=1&&requestedDiscountPct<=70))return 'Prijava nije pripremljena: pitaj kupca koliki procenat umanjenja traži (najviše 70%).';
+  return null;
+}
 export const remedies={UMANJENJE_CENE:'umanjenje cene',ZAMENA_DELA:'zamena dela',ZAMENA:'zamena artikla',POVRACAJ_NOVCA:'povraćaj novca',ODUSTANAK:'odustanak',POPRAVKA:'popravka'};
 export const categories={KVAR:'kvar',FIZICKO_OSTECENJE:'fizičko oštećenje',NEDOSTAJE_ARTIKAL:'nedostaje artikal/deo',POGRESAN_ARTIKAL:'pogrešan artikal'};
 export function claimAuth(state,number) {
@@ -55,8 +61,11 @@ export async function prepareReclamation({input,event,state,spc}) {
     const started=await beginReclamation({number:input.number,sku:input.sku,event,state,spc});
     if(!started.ok)return started;
   }
+  const missing=refundDetailsMissing(input);
+  if(missing)return {ok:false,error:missing};
   const ctx=state.reclamationContext;
-  const request={orderNumberOrFiscal:ctx.number,sku:ctx.sku,quantity:input.quantity,description:input.description,category:input.category,request:input.request,photos:ctx.photos};
+  const account=String(input.refundAccount??'').trim();
+  const request={orderNumberOrFiscal:ctx.number,sku:ctx.sku,quantity:input.quantity,description:input.description,category:input.category,request:input.request,...(account&&['POVRACAJ_NOVCA','ODUSTANAK','UMANJENJE_CENE'].includes(input.request)?{refundAccount:account}:{}),...(input.request==='UMANJENJE_CENE'?{requestedDiscountPct:input.requestedDiscountPct}:{}),photos:ctx.photos};
   const transcript=[...state.history.slice(-30),{role:'user',content:event.text}].map(m=>`${m.role==='user'?'Kupac':'SPC'}: ${m.content}`).join('\n').slice(-10000);
   const result=await spc({action:'prepare_reclamation',...identity(event),number:ctx.number,...claimAuth(state,ctx.number),requestId:randomUUID(),input:request,transcript});
   if(!result.ok) {
@@ -69,7 +78,7 @@ export async function prepareReclamation({input,event,state,spc}) {
 }
 export function reclamationMessage(pending) {
   const i=pending.input;
-  return `Da li potvrđujete slanje reklamacije za porudžbinu ${pending.number}?\n${pending.name} (${i.sku}) × ${i.quantity}\nProblem: ${i.description}\nŽeljeni ishod: ${remedies[i.request]??'dogovor sa podrškom'}\nFotografije: ${i.photos.length}\n\nDovoljno je „DA“ ili „Ne“. Prijem reklamacije nije odobrenje zamene ili povraćaja.`;
+  return `Da li potvrđujete slanje reklamacije za porudžbinu ${pending.number}?\n${pending.name} (${i.sku}) × ${i.quantity}\nProblem: ${i.description}\nŽeljeni ishod: ${remedies[i.request]??'dogovor sa podrškom'}${i.requestedDiscountPct?` (${i.requestedDiscountPct}%)`:''}${i.refundAccount?`\nRačun za uplatu: ${i.refundAccount}`:''}\nFotografije: ${i.photos.length}\n\nDovoljno je „DA“ ili „Ne“. O odluci ćete dobiti obaveštenje mejlom.`;
 }
 const decision=z.object({intent:z.enum(['confirm','decline','other','unclear'])});
 export async function classifyReclamation({text,history=[],pending,model}) {

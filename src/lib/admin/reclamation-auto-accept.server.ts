@@ -94,6 +94,9 @@ export async function autoAcceptReclamation(reclamationId: string) {
       payload: { reclamationId: claim.id },
       idempotencyKey: `reclamation-accepted-email:${claim.id}:${resolution}`,
     }, tx);
+    if (resolution === "POPUST") {
+      await enqueueBackgroundJob({ kind: "RECLAMATION_DISCOUNT_OFFICE_EMAIL", payload: { reclamationId: claim.id }, idempotencyKey: `reclamation-discount-office:${claim.id}` }, tx);
+    }
     await tx.auditLog.create({ data: { action: "reclamation.auto_accept", entity: "Reclamation", entityId: claim.id, diff: { result: "accepted", request: claim.request, resolution, replacementQty, resolutionNote } } });
     return true;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 10_000, timeout: 30_000 });

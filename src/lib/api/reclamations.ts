@@ -1,5 +1,5 @@
 import "server-only";
-import { needsDiscountPct, needsRefundAccount, normalizeRefundAccount } from "@/lib/reclamation-refund-details";
+import { MAX_DISCOUNT_PCT, cleanRefundAccount, isValidDiscountPct, needsDiscountPct, needsRefundAccount } from "@/lib/reclamation-refund-details";
 import type {
   OrderStatus,
   ReclamationRequest,
@@ -52,20 +52,20 @@ export const createReclamationSchema = z.object({
   request: z.enum(["POPRAVKA", "ZAMENA", "ZAMENA_DELA", "POVRACAJ_NOVCA", "UMANJENJE_CENE", "ODUSTANAK"]).optional(),
   photos: z.array(photoSchema).max(5).default([]),
   /** Broj računa: obavezan u javnoj formi za povraćaj, odustanak i umanjenje cene. */
-  refundAccount: z.string().trim().max(30).optional(),
+  refundAccount: z.string().trim().max(40).optional(),
   /** Procenat umanjenja: obavezan u javnoj formi za umanjenje cene. */
-  requestedDiscountPct: z.int().min(1).max(99).optional(),
+  requestedDiscountPct: z.int().min(1).max(MAX_DISCOUNT_PCT).optional(),
 });
 
 /** Javna forma: polja koja se pojavljuju uz izabrano rešenje moraju biti popunjena. */
 export const createPublicReclamationSchema = createReclamationSchema.superRefine((value, ctx) => {
   if (needsRefundAccount(value.request)) {
-    if (!value.refundAccount || !normalizeRefundAccount(value.refundAccount)) {
-      ctx.addIssue({ code: "custom", path: ["refundAccount"], message: "Upišite ispravan broj računa (18 cifara)." });
+    if (!cleanRefundAccount(value.refundAccount)) {
+      ctx.addIssue({ code: "custom", path: ["refundAccount"], message: "Upišite broj računa za uplatu." });
     }
   }
-  if (needsDiscountPct(value.request) && !value.requestedDiscountPct) {
-    ctx.addIssue({ code: "custom", path: ["requestedDiscountPct"], message: "Upišite procenat umanjenja (1–99)." });
+  if (needsDiscountPct(value.request) && !isValidDiscountPct(value.requestedDiscountPct)) {
+    ctx.addIssue({ code: "custom", path: ["requestedDiscountPct"], message: `Upišite procenat umanjenja od 1 do ${MAX_DISCOUNT_PCT}.` });
   }
 });
 
@@ -318,7 +318,7 @@ async function createReclamationRecord(
           type: options.type ?? undefined,
           request: options.request ?? undefined,
           // Samo uz rešenje kojem pripadaju; ostalo se ne čuva.
-          refundAccount: needsRefundAccount(options.request) && input.refundAccount ? normalizeRefundAccount(input.refundAccount) : null,
+          refundAccount: needsRefundAccount(options.request) ? cleanRefundAccount(input.refundAccount) : null,
           requestedDiscountPct: needsDiscountPct(options.request) ? input.requestedDiscountPct ?? null : null,
           userId: order.userId,
           photos: input.photos.length

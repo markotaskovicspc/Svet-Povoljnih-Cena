@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { ReclamationRefundAccountNotice } from "@/components/reclamation-refund-account-notice";
-import { needsDiscountPct, needsRefundAccount, normalizeRefundAccount } from "@/lib/reclamation-refund-details";
+import { cleanRefundAccount, isValidDiscountPct, needsDiscountPct, needsRefundAccount } from "@/lib/reclamation-refund-details";
 
 function renderNotice(request: string) {
   return renderToStaticMarkup(
@@ -40,8 +40,14 @@ describe("reclamation refund details", () => {
     expect(needsDiscountPct("POVRACAJ_NOVCA")).toBe(false);
   });
 
-  it("rejects accounts with a wrong length or check digits", () => {
-    expect(normalizeRefundAccount("160-123-45")).toBeNull();
-    expect(normalizeRefundAccount("160000000000000000")).toBeNull();
+  it("keeps the account as typed, without checking it", () => {
+    expect(cleanRefundAccount("  160-123-45 ")).toBe("160-123-45");
+    expect(cleanRefundAccount("   ")).toBeNull();
+  });
+
+  it("allows a discount of at most 70 percent", () => {
+    expect(isValidDiscountPct(70)).toBe(true);
+    expect(isValidDiscountPct(71)).toBe(false);
+    expect(isValidDiscountPct(0)).toBe(false);
   });
 });

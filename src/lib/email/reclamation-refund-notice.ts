@@ -55,3 +55,36 @@ export async function sendReclamationRefundOfficeNotice(reclamationId: string) {
 function escapeHtml(value: string) {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
 }
+
+/**
+ * Marko, 13.11.2026: prihvaćeno umanjenje cene ide na placanja@ odmah (roba se ne vraća).
+ * SPC Analytics iz ovog mejla pravi QR: traženi procenat × plaćena cena reklamiranih komada, bez dostave.
+ */
+export async function sendReclamationDiscountOfficeNotice(reclamationId: string) {
+  const claim = await db.reclamation.findUnique({
+    where: { id: reclamationId },
+    include: { order: { select: { number: true, channel: true } }, product: { select: { name: true } } },
+  });
+  if (!claim || claim.decision !== "PRIHVACENA" || claim.resolution !== "POPUST" || claim.status === "ODBIJENO" || claim.status === "RESENO") return;
+  if (claim.order.channel === "ANANAS") return;
+  const cfg = getEmailConfig();
+  if (cfg.provider === "none") throw new Error("Email provider nije podešen za obaveštenje o umanjenju cene.");
+  const url = `${cfg.baseUrl.replace(/\/$/, "")}/admin/erp/reklamacije-dnevnik/${encodeURIComponent(claim.id)}`;
+  const instruction = "Odobreno je umanjenje cene po reklamaciji; artikal se ne vraća. Pre uplate proverite da kupcu umanjenje već nije uplaćeno. Ovo obaveštenje ne potvrđuje da je novac isplaćen.";
+  const details: Array<[string, string]> = [
+    ["Reklamacija", claim.number], ["Porudžbina", claim.order.number],
+    ["Artikal", `${claim.product?.name ?? claim.sku} · ${claim.sku}`], ["Reklamirano komada", String(claim.quantity)],
+    ["Traženo umanjenje", claim.requestedDiscountPct ? `${claim.requestedDiscountPct}%` : "Nije upisano — upišite procenat pre uplate"],
+    ["Račun kupca (iz prijave)", claim.refundAccount ? formatRefundAccount(claim.refundAccount) : "Nije upisan"],
+  ];
+  const result = await trackedDispatch({
+    kind: "reclamation_discount_office", to: RECLAMATION_REFUND_PAYMENTS_TO,
+    subject: `Umanjenje cene odobreno — reklamacija ${claim.number} · proverite da li je već uplaćeno`,
+    html: `<!doctype html><html lang="sr-Latn"><body style="font-family:Arial,sans-serif;color:#1a1714;padding:24px"><h1 style="font-size:24px;color:#d7263d">Uplata umanjenja cene</h1><p>${instruction}</p><table>${details.map(([label, value]) => `<tr><th style="text-align:left;padding:8px">${escapeHtml(label)}</th><td style="padding:8px">${escapeHtml(value)}</td></tr>`).join("")}</table><p><a href="${escapeHtml(url)}">Otvori reklamaciju u ERP-u</a></p></body></html>`,
+    text: `${instruction}\n\n${details.map(([label, value]) => `${label}: ${value}`).join("\n")}\n\nERP: ${url}`,
+    tags: { kind: "reclamation_discount_office", reclamation: claim.number },
+    idempotencyKey: `reclamation-discount-office:${claim.id}`,
+  });
+  if (!result.ok) throw new Error(result.error);
+}
+

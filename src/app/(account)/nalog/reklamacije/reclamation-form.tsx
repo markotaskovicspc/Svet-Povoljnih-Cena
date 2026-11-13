@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ReclamationHistory } from "@/components/reclamation-history";
 import { ReclamationRefundAccountNotice } from "@/components/reclamation-refund-account-notice";
-import { needsDiscountPct, needsRefundAccount, normalizeRefundAccount } from "@/lib/reclamation-refund-details";
+import { MAX_DISCOUNT_PCT, cleanRefundAccount, needsDiscountPct, needsRefundAccount } from "@/lib/reclamation-refund-details";
 import { formatReclamationDate, type ReclamationItemOption } from "@/lib/reclamation-options";
 import { createReclamationPhotoFile } from "@/lib/reclamation-photo-file";
 
@@ -42,8 +42,8 @@ const FIELD_ERROR_MESSAGES: Record<string, string> = {
   quantity: "Količina mora biti od 1 do kupljene količine (najviše 999).",
   description: "Opis mora imati bar 5, a najviše 250 karaktera.",
   photos: "Proverite priložene fotografije.",
-  refundAccount: "Upišite ispravan broj računa (18 cifara), npr. 160-0000000000000-00.",
-  requestedDiscountPct: "Upišite procenat umanjenja od 1 do 99.",
+  refundAccount: "Upišite broj računa za uplatu.",
+  requestedDiscountPct: `Upišite procenat umanjenja od 1 do ${MAX_DISCOUNT_PCT}.`,
 };
 
 export function ReclamationForm({
@@ -227,9 +227,9 @@ export function ReclamationForm({
       return;
     }
     const refundErrors: Record<string, string> = {};
-    if (showAccount && !normalizeRefundAccount(refundAccount)) refundErrors.refundAccount = FIELD_ERROR_MESSAGES.refundAccount;
+    if (showAccount && !cleanRefundAccount(refundAccount)) refundErrors.refundAccount = FIELD_ERROR_MESSAGES.refundAccount;
     const pct = Number(discountPct);
-    if (showDiscount && (!Number.isInteger(pct) || pct < 1 || pct > 99)) refundErrors.requestedDiscountPct = FIELD_ERROR_MESSAGES.requestedDiscountPct;
+    if (showDiscount && (!Number.isInteger(pct) || pct < 1 || pct > MAX_DISCOUNT_PCT)) refundErrors.requestedDiscountPct = FIELD_ERROR_MESSAGES.requestedDiscountPct;
     if (Object.keys(refundErrors).length) {
       setFieldErrors(refundErrors);
       return;
@@ -456,7 +456,6 @@ export function ReclamationForm({
               id="reclamation-refund-account"
               value={refundAccount}
               onChange={event => setRefundAccount(event.target.value)}
-              inputMode="numeric"
               autoComplete="off"
               placeholder="160-0000000000000-00"
               aria-invalid={!!fieldErrors.refundAccount}
@@ -464,7 +463,7 @@ export function ReclamationForm({
               className="h-11 w-full rounded-lg border border-input bg-white px-2.5 text-sm"
             />
             <span id="reclamation-refund-account-hint" className="text-xs text-ink-500">
-              {fieldErrors.refundAccount ?? "Tekući račun na koji vraćamo novac, 18 cifara."}
+              {fieldErrors.refundAccount ?? "Tekući račun na koji vraćamo novac."}
             </span>
           </div>
         ) : null}
@@ -483,7 +482,7 @@ export function ReclamationForm({
               className="h-11 w-full rounded-lg border border-input bg-white px-2.5 text-sm"
             />
             <span id="reclamation-discount-pct-hint" className="text-xs text-ink-500">
-              {fieldErrors.requestedDiscountPct ?? "Procenat od cene artikla, od 1 do 99."}
+              {fieldErrors.requestedDiscountPct ?? `Procenat od cene artikla, najviše ${MAX_DISCOUNT_PCT}%.`}
             </span>
           </div>
         ) : null}
