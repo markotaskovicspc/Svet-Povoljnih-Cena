@@ -5,7 +5,7 @@ import { hasBearerSecret } from "@/lib/security/bearer";
 import { db } from "@/lib/db";
 import { isViberReady, isSmsReady } from "@/lib/viber/config";
 import { runDueCampaigns } from "@/lib/viber/campaign";
-import { claimNthMessage, completeNthMessage, queueFallbackForNthJob } from "@/lib/viber/outbox";
+import { claimNthMessage, completeNthMessage } from "@/lib/viber/outbox";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,8 +31,7 @@ export async function POST(req: Request) {
   }
   if (input.data.action === "delivery") {
     const { id, messageId, status } = input.data;
-    const changed = await db.backgroundJob.updateMany({ where: { id, kind: "NTH_VIBER_OUTBOUND", lastError: `NTH:${messageId}`, status: { in: status === "FAILED" ? ["VIBER_SENT"] : ["VIBER_SENT", "VIBER_DELIVERED"] } }, data: { status: `VIBER_${status}` } });
-    if (changed.count === 1 && status === "FAILED") await queueFallbackForNthJob(id);
+    await db.backgroundJob.updateMany({ where: { id, kind: "NTH_VIBER_OUTBOUND", lastError: `NTH:${messageId}`, status: { in: status === "FAILED" ? ["VIBER_SENT"] : ["VIBER_SENT", "VIBER_DELIVERED"] } }, data: { status: `VIBER_${status}` } });
     return NextResponse.json({ ok: true });
   }
   if (input.data.action === "campaigns") {
