@@ -16,6 +16,7 @@ import {
   verifyReclamationUploads,
 } from "@/lib/api/uploads";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
+import { isReclamationViberEnabled } from "@/lib/viber/reclamation-notifications";
 import { logOperationalError } from "@/lib/monitoring";
 import { formatProductDisplayName } from "@/lib/product-name";
 import { verifyReclamationLinkToken } from "@/lib/api/reclamation-link-token";
@@ -332,7 +333,7 @@ async function createReclamationRecord(
       }, tx);
       if (options.social) {
         // A lost HTTP response can recover the case without losing its receipt.
-        if (!options.customerReplyDraftOnly && (account?.email || order.guestEmail)) await enqueueBackgroundJob({ kind: "RECLAMATION_RECEIPT", payload: { reclamationId: created.id }, idempotencyKey: `reclamation-receipt:${created.id}` }, tx);
+        if (!options.customerReplyDraftOnly && (account?.email || order.guestEmail || isReclamationViberEnabled())) await enqueueBackgroundJob({ kind: "RECLAMATION_RECEIPT", payload: { reclamationId: created.id }, idempotencyKey: `reclamation-receipt:${created.id}` }, tx);
         if (item.supplierExternalSku) await enqueueBackgroundJob({ kind: "SUPPLIER_RECLAMATION_EMAIL", payload: { reclamationId: created.id }, idempotencyKey: `supplier-reclamation:${created.id}` }, tx);
       }
       return created;
@@ -349,7 +350,7 @@ async function createReclamationRecord(
 
   if (result.alreadyExists) return { ok: true, ...result };
   try {
-    if (!options.customerReplyDraftOnly && (account?.email || order.guestEmail)) await enqueueBackgroundJob({
+    if (!options.customerReplyDraftOnly && (account?.email || order.guestEmail || isReclamationViberEnabled())) await enqueueBackgroundJob({
       kind: "RECLAMATION_RECEIPT",
       payload: { reclamationId: result.id },
       idempotencyKey: `reclamation-receipt:${result.id}`,

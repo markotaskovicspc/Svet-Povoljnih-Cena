@@ -86,8 +86,17 @@ export async function claimNthMessage() {
 export async function completeNthMessage(id: string, outcome: "accepted" | "failed" | "unknown", messageId?: string) {
   const status = { accepted: "VIBER_SENT", failed: "VIBER_FAILED", unknown: "VIBER_UNKNOWN" }[outcome];
   // No body, phone number or provider description is logged or stored in errors.
-  await db.backgroundJob.updateMany({
+  const updated = await db.backgroundJob.updateMany({
     where: { id, kind: NTH_JOB_KIND, status: "VIBER_RUNNING" },
     data: { status, completedAt: new Date(), lockedAt: null, lastError: messageId ? `NTH:${messageId}` : outcome },
   });
+  if (updated.count === 1 && outcome !== "accepted") await queueFallbackForNthJob(id);
+}
+
+/** Reclamation notices that Viber could not deliver fall back to e-mail. */
+export async function queueFallbackForNthJob(id: string) {
+  const job = await db.backgroundJob.findUnique({ where: { id }, select: { kind: true, payload: true } });
+  if (job?.kind !== NTH_JOB_KIND) return false;
+  const { queueReclamationEmailFallback } = await import("./reclamation-notifications");
+  return queueReclamationEmailFallback((job.payload as { requestId?: unknown } | null)?.requestId);
 }

@@ -39,6 +39,8 @@ const schemas = {
   GUEST_RECLAMATION_LINK_EMAIL: z.object({
     orderId: z.string().min(1),
     accessToken: z.string().min(20),
+    /** Set when Viber was not delivered; send the e-mail fallback. */
+    viaEmail: z.boolean().optional(),
   }),
   BUYER_RECEIPT: z.object({
     orderId: z.string().min(1),
@@ -115,7 +117,7 @@ const schemas = {
     amount: z.number().positive(),
     actorId: z.string().min(1).nullable().optional(),
   }),
-  RECLAMATION_RECEIPT: z.object({ reclamationId: z.string().min(1) }),
+  RECLAMATION_RECEIPT: z.object({ reclamationId: z.string().min(1), viaEmail: z.boolean().optional() }),
   RETURN_REVIEW_OFFICE_EMAIL: z.object({ shipmentId: z.string().min(1), parcelNumber: z.string().regex(/^[A-Z0-9]{5,40}$/) }),
   RECLAMATION_FISCAL_REFUND: z.object({ reclamationId: z.string().min(1) }),
   RECLAMATION_REFUND_OFFICE_EMAIL: z.object({ reclamationId: z.string().min(1) }),
@@ -123,8 +125,9 @@ const schemas = {
   RECLAMATION_STATUS_EMAIL: z.object({
     reclamationId: z.string().min(1),
     eventId: z.string().min(1).optional(),
+    viaEmail: z.boolean().optional(),
   }),
-  RECLAMATION_ACCEPTED_EMAIL: z.object({ reclamationId: z.string().min(1) }),
+  RECLAMATION_ACCEPTED_EMAIL: z.object({ reclamationId: z.string().min(1), viaEmail: z.boolean().optional() }),
   RABALUX_MEDIA_PRODUCT: z.object({
     productId: z.string().min(1),
     assetId: z.string().min(1).optional(),
@@ -523,6 +526,29 @@ export async function processPendingBackgroundJobs(
   };
 }
 
+type ReclamationViberEvent = import("@/lib/viber/reclamation-notifications").ReclamationViberEvent;
+type ReclamationViberOutcome = import("@/lib/viber/reclamation-notifications").ReclamationViberOutcome;
+
+/** Customer reclamation notices: Viber first; `viaEmail` jobs are the e-mail fallback. */
+async function reclamationViberFirst(event: ReclamationViberEvent, viaEmail?: boolean): Promise<ReclamationViberOutcome | "fallback"> {
+  if (viaEmail) return "fallback";
+  const { queueReclamationViber } = await import("@/lib/viber/reclamation-notifications");
+  return queueReclamationViber(event);
+}
+
+/**
+ * Legacy flow e-mails only claims that chose e-mail. Once Viber is the primary
+ * channel, any stored e-mail is acceptable for the fallback.
+ */
+function reclamationEmailRecipient(
+  loaded: { recipient: string | null; reclamation: { customer: { email?: string } } } | null,
+  outcome: ReclamationViberOutcome | "fallback",
+) {
+  if (!loaded) return null;
+  if (outcome === "disabled") return loaded.recipient;
+  return loaded.recipient ?? loaded.reclamation.customer.email ?? null;
+}
+
 async function dispatchJob(job: JobRow) {
   if (!(job.kind in schemas)) throw new Error(`Unsupported background job: ${job.kind}`);
   const kind = job.kind as BackgroundJobKind;
@@ -626,6 +652,10 @@ async function dispatchJob(job: JobRow) {
         })
       ) {
         return;
+      }
+      if (!args.viaEmail) {
+        const { queueReclamationViber } = await import("@/lib/viber/reclamation-notifications");
+        if (await queueReclamationViber({ kind: "LINK", orderId: args.orderId, accessToken: args.accessToken }) === "queued") return;
       }
       const result = await sendGuestReclamationLink({
         order: loaded.order,
@@ -971,11 +1001,15 @@ async function dispatchJob(job: JobRow) {
     }
     case "RECLAMATION_RECEIPT": {
       const { loadReclamationForEmail, sendReclamationReceipt } = await import("@/lib/email");
-      const loaded = await loadReclamationForEmail((payload as z.infer<typeof schemas.RECLAMATION_RECEIPT>).reclamationId);
-      if (!loaded?.recipient) return;
+      const receiptArgs = payload as z.infer<typeof schemas.RECLAMATION_RECEIPT>;
+      const viber = await reclamationViberFirst({ kind: "RECEIPT", reclamationId: receiptArgs.reclamationId }, receiptArgs.viaEmail);
+      if (viber === "queued") return;
+      const loaded = await loadReclamationForEmail(receiptArgs.reclamationId);
+      const receiptTo = reclamationEmailRecipient(loaded, viber);
+      if (!loaded || !receiptTo) return;
       const result = await sendReclamationReceipt({
         reclamation: loaded.reclamation,
-        to: loaded.recipient,
+        to: receiptTo,
         guest: loaded.guest,
       });
       if (!result.ok) throw new Error(result.error);
@@ -983,15 +1017,19 @@ async function dispatchJob(job: JobRow) {
     }
     case "RECLAMATION_STATUS_EMAIL": {
       const { loadReclamationForEmail, sendReclamationStatusChanged } = await import("@/lib/email");
-      const statusClaimId = (payload as z.infer<typeof schemas.RECLAMATION_STATUS_EMAIL>).reclamationId;
+      const statusArgs = payload as z.infer<typeof schemas.RECLAMATION_STATUS_EMAIL>;
+      const statusClaimId = statusArgs.reclamationId;
+      const viber = await reclamationViberFirst({ kind: "STATUS", reclamationId: statusClaimId, eventKey: statusArgs.eventId }, statusArgs.viaEmail);
+      if (viber === "queued") return;
       const loaded = await loadReclamationForEmail(statusClaimId);
-      if (!loaded?.recipient) return;
+      const statusTo = reclamationEmailRecipient(loaded, viber);
+      if (!loaded || !statusTo) return;
       const decided = await db.reclamation.findUnique({ where: { id: statusClaimId }, select: { decision: true, resolution: true } });
       const result = await sendReclamationStatusChanged({
         reclamation: loaded.reclamation,
         status: loaded.reclamation.status,
         resolution: decided?.decision === "PRIHVACENA" ? decided.resolution : null,
-        to: loaded.recipient,
+        to: statusTo,
         guest: loaded.guest,
         idempotencyKey: `reclamation-status:${loaded.reclamation.id}:${(
           payload as z.infer<typeof schemas.RECLAMATION_STATUS_EMAIL>
@@ -1002,16 +1040,19 @@ async function dispatchJob(job: JobRow) {
     }
     case "RECLAMATION_ACCEPTED_EMAIL": {
       const { loadReclamationForEmail, sendReclamationAccepted } = await import("@/lib/email");
-      const { reclamationId } = payload as z.infer<typeof schemas.RECLAMATION_ACCEPTED_EMAIL>;
+      const { reclamationId, viaEmail } = payload as z.infer<typeof schemas.RECLAMATION_ACCEPTED_EMAIL>;
       const claim = await db.reclamation.findUnique({ where: { id: reclamationId }, select: { decision: true, resolution: true, status: true } });
       // Odluka je možda povučena pre slanja; tada kupcu ne javljamo ništa.
       if (!claim || claim.decision !== "PRIHVACENA" || claim.status === "ODBIJENO") return;
+      const viber = await reclamationViberFirst({ kind: "ACCEPTED", reclamationId }, viaEmail);
+      if (viber === "queued") return;
       const loaded = await loadReclamationForEmail(reclamationId);
-      if (!loaded?.recipient) return;
+      const acceptedTo = reclamationEmailRecipient(loaded, viber);
+      if (!loaded || !acceptedTo) return;
       const result = await sendReclamationAccepted({
         reclamation: loaded.reclamation,
         resolution: claim.resolution,
-        to: loaded.recipient,
+        to: acceptedTo,
         guest: loaded.guest,
         idempotencyKey: `reclamation-accepted:${reclamationId}:${claim.resolution ?? "none"}`,
       });

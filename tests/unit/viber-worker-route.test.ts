@@ -1,8 +1,8 @@
 import { afterEach, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ claim: vi.fn(), complete: vi.fn(), campaigns: vi.fn(), jobs: vi.fn(), update: vi.fn() }));
+const mocks = vi.hoisted(() => ({ claim: vi.fn(), complete: vi.fn(), campaigns: vi.fn(), jobs: vi.fn(), update: vi.fn(), fallback: vi.fn() }));
 vi.mock("@/lib/db", () => ({ db: { backgroundJob: { findMany: mocks.jobs, updateMany: mocks.update } } }));
 vi.mock("@/lib/viber/config", () => ({ isViberReady: () => true, isSmsReady: () => true }));
-vi.mock("@/lib/viber/outbox", () => ({ claimNthMessage: mocks.claim, completeNthMessage: mocks.complete }));
+vi.mock("@/lib/viber/outbox", () => ({ claimNthMessage: mocks.claim, completeNthMessage: mocks.complete, queueFallbackForNthJob: mocks.fallback }));
 vi.mock("@/lib/viber/campaign", () => ({ runDueCampaigns: mocks.campaigns }));
 import { POST } from "@/app/api/viber/worker/route";
 
@@ -41,10 +41,13 @@ it("acknowledges unknown outcomes without requesting a resend", async () => {
 it("tracks delivery monotonically and cannot downgrade a read/delivered message to failed", async () => {
   vi.stubEnv("NTH_WORKER_TOKEN", token);
   const id = "a8e4c54d-13ac-42d8-a1d8-1fee84248d7c";
+  mocks.update.mockResolvedValue({ count: 1 });
   await POST(request({ action: "delivery", id: "job1", messageId: id, status: "FAILED" }));
+  expect(mocks.fallback).toHaveBeenCalledWith("job1");
   expect(mocks.update.mock.calls[0][0].where).toMatchObject({ kind: "NTH_VIBER_OUTBOUND", lastError: `NTH:${id}`, status: { in: ["VIBER_SENT"] } });
   await POST(request({ action: "delivery", id: "job1", messageId: id, status: "SEEN" }));
   expect(mocks.update.mock.calls[1][0].data.status).toBe("VIBER_SEEN");
+  expect(mocks.fallback).toHaveBeenCalledTimes(1);
   expect((await POST(request({ action: "delivery", id: "job1", messageId: id, status: "arbitrary" }))).status).toBe(400);
 });
 
