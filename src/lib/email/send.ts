@@ -357,6 +357,9 @@ export async function sendFiscalReceipt(args: {
   });
 }
 
+/** Kopija svih mejlova kupcu o reklamacijama (Marko, 13.11.2026). */
+const RECLAMATION_BCC = "office@svetpovoljnihcena.rs";
+
 export async function sendReclamationReceipt(args: {
   reclamation: Reclamation;
   to: string;
@@ -377,7 +380,7 @@ export async function sendReclamationReceipt(args: {
     subject: `Reklamacija ${args.reclamation.id} — potvrda prijema`,
     html,
     text,
-    bcc: cfg.orderBcc,
+    bcc: RECLAMATION_BCC,
     tags: { kind: "reclamation_receipt", reclamation: args.reclamation.id },
     idempotencyKey: `reclamation:${args.reclamation.id}`,
   });
@@ -410,7 +413,7 @@ export async function sendReclamationStatusChanged(args: {
       : `Reklamacija ${args.reclamation.id} — promena statusa`,
     html,
     text,
-    bcc: cfg.orderBcc,
+    bcc: RECLAMATION_BCC,
     tags: {
       kind: "reclamation_status",
       reclamation: args.reclamation.id,
@@ -445,7 +448,7 @@ export async function sendReclamationAccepted(args: {
     subject: `Reklamacija ${args.reclamation.id} je prihvaćena`,
     html,
     text,
-    bcc: cfg.orderBcc,
+    bcc: RECLAMATION_BCC,
     tags: {
       kind: "reclamation_accepted",
       reclamation: args.reclamation.id,
