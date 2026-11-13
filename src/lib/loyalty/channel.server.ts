@@ -12,10 +12,12 @@ const tokenSchema=scopeSchema.extend({purpose:z.enum(['loyalty_invitation','loya
 const digest=(value:string)=>createHash('sha256').update(value).digest('hex');
 const normalized=(scope:Scope)=>({...scope,email:scope.email?.trim().toLowerCase()??null});
 const duration=30*24*60*60*1000;
+// Kept short on purpose (client feedback 13.11.2026): long consent text made
+// customers abandon the purchase. The full statement stays behind the link.
 export const loyaltySummary=(email:string|null)=>{
  const terms=commerceTermsAt();
- const firstPurchase=terms.guestFirstPurchaseAllowed?` Za prvu kupovinu dodatnih ${terms.firstPurchasePct}% na artikle, ako ERP potvrdi pravo; dostava se ne umanjuje.`:'';
- return `Loyalty pogodnosti${email?` za ${email}`:''}: 30% popusta na artikle koji nisu na aktivnoj akciji.${firstPurchase} Konačan iznos dobijate u ponudi.\nPristup je dobrovoljan. Čuvamo ${email?'mejl':'oznaku razgovora'}, vreme i verziju saglasnosti radi članstva i obračuna pogodnosti. Ovo nije prijava za reklamne poruke.\nIzjava i prava: https://www.svetpovoljnihcena.rs/loyalty/uslovi\nOdgovorite DA ako prihvatate izjavu i želite loyalty pogodnosti. Ovim ne potvrđujete porudžbinu. Za kupovinu bez članstva odgovorite NE.`;
+ const firstPurchase=terms.guestFirstPurchaseAllowed?` (prva kupovina još ${terms.firstPurchasePct}%)`:'';
+ return `Besplatno loyalty članstvo: 30% popusta na artikle koji nisu na akciji${firstPurchase}. Dobrovoljno je i bez reklamnih poruka; čuvamo samo ${email?'mejl':'oznaku razgovora'} i vreme pristanka. Uslovi: https://www.svetpovoljnihcena.rs/loyalty/uslovi\nOdgovorite DA za članstvo (to još nije porudžbina) ili NE za kupovinu bez njega.`;
 };
 export function prepareChannelLoyalty(raw:z.input<typeof scopeSchema>,secret:string){
  const scope=normalized(scopeSchema.parse(raw)),expiresAt=Date.now()+24*60*60*1000;

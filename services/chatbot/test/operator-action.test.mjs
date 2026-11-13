@@ -59,3 +59,12 @@ test('operator resume releases a stale Meta inbox marker',async()=>{const s=awai
  await s.act({action:'pause'});assert.equal((await s.act({action:'resume'})).status,200);
  assert.equal(s.store.decode((await s.row()).state).metaInboxControl,undefined);
  }finally{await s.store.close();}});
+test('with the approved Human Agent permission staff may reply up to 7 days with the HUMAN_AGENT tag',async()=>{const s=await setup('facebook');const prev=process.env.META_HUMAN_AGENT_ENABLED;const realFetch=globalThis.fetch;const sent=[];try{
+ process.env.META_HUMAN_AGENT_ENABLED='true';
+ assert.equal((await s.act({action:'reply',text:'Paket je predat kuriru.',requestId:randomUUID()})).status,200);
+ globalThis.fetch=async(url,init)=>{sent.push(JSON.parse(init.body));return {ok:true,status:200,json:async()=>({message_id:'mid-1'})};};
+ const worker=new Worker({store:s.store,accounts:[{channel:'facebook',id:'spc',token:'t'}],enabled:true,graphVersion:'v25.0'});await worker.flush();
+ assert.equal(sent.length,1);assert.equal(sent[0].messaging_type,'MESSAGE_TAG');assert.equal(sent[0].tag,'HUMAN_AGENT');
+ await s.store.pool.query('UPDATE spc_chat_conversations SET last_customer=$2 WHERE id=$1',[s.id,Date.now()-8*86400000]);
+ assert.equal((await s.act({action:'reply',text:'Kasno',requestId:randomUUID()})).data.error,'MESSAGE_WINDOW_CLOSED');
+ }finally{globalThis.fetch=realFetch;if(prev===undefined)delete process.env.META_HUMAN_AGENT_ENABLED;else process.env.META_HUMAN_AGENT_ENABLED=prev;await s.store.close();}});

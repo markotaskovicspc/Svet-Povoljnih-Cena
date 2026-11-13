@@ -11,7 +11,7 @@ export type Detail=Conversation&{history:Message[],context:{role:string,content:
 type Props={list:{items:Conversation[],nextOffset:number|null}|null,detail:Detail|null,error:boolean,selected:string,channel:string,listOffset:number,messageOffset:number};
 const channels=[['','Svi'],['facebook','Facebook'],['instagram','Instagram'],['web','Sajt']];
 const label=(c:string)=>c==='web'?'Sajt':c==='instagram'?'Instagram':'Facebook';
-const names:Record<string,string>={sent:'Poslato',done:'Obrađeno',pending:'Na čekanju',failed:'Neuspešno',skipped:'Preskočeno',suppressed:'Nije poslato',uncertain:'Ishod slanja nije potvrđen',sending:'Slanje u toku',recorded:'Zabeleženo bez novog mejla',superseded:'Rešeno / zamenjeno'};
+const names:Record<string,string>={sent:'Poslato',done:'Obrađeno',pending:'Na čekanju',failed:'Neuspešno',skipped:'Preskočeno',botPaused:'Bot nije odgovarao (razgovor vodi zaposleni)',suppressed:'Nije poslato',uncertain:'Ishod slanja nije potvrđen',sending:'Slanje u toku',recorded:'Zabeleženo bez novog mejla',superseded:'Rešeno / zamenjeno'};
 const date=(t:number)=>new Date(t).toLocaleDateString('sr-Latn-RS',{timeZone:'Europe/Belgrade',day:'numeric',month:'long',year:'numeric'});
 const time=(t:number)=>new Date(t).toLocaleTimeString('sr-Latn-RS',{timeZone:'Europe/Belgrade',hour:'2-digit',minute:'2-digit'});
 const name=(c:Conversation)=>c.name||label(c.channel)+' kupac '+c.id.split(':').at(-1)?.slice(-8);

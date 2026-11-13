@@ -9,58 +9,39 @@ export function wantsHuman(text){
  if(/ne (?:zelim|treba mi|trazim) (?:coveka|operatera|kolegu|podrsku)/.test(t))return false;
  return /(?:prav[auoe]+ (?:osob|podrsk)|pomoc prave osobe|(?:zelim|hocu|trazim|treba mi|potrebna mi je|dajte mi|spojite me|razgovaram sa).{0,40}(?:covek|coveka|osob|operater|koleg|zaposlen)|(?:human|real person|live agent)|(?:стварн|прав).{0,15}(?:особ|подршк)|(?:желим|хоћу|треба ми).{0,30}(?:човек|оператер))/.test(t);
 }
-export function requestSupportContact({state,event}){
- if(event.channel!=='web'){
-  if(state.supportContact?.waiting)state.supportContact={...state.supportContact,waiting:false};
-  return null;
- }
- if(state.supportContact?.email||state.supportContact?.declined||state.supportContact?.askedAt)return null;
- const email=customerEmail(event.text)||state.customer?.guestEmail||[...(state.history??[])].reverse().filter(m=>m.role==='user').map(m=>customerEmail(m.content)).find(Boolean);
- if(email&&emailSchema.safeParse(email).success){
-  state.supportContact={email:email.toLowerCase()};
-  return null;
- }
- state.supportContact={askedAt:Date.now(),waiting:true};
- return 'Ako želite odgovor mejlom, na koju adresu korisnička podrška može da Vam se javi? Možete nastaviti i ovde u razgovoru.';
+// Client request (13.11.2026): never ask for a callback email on any channel —
+// customer support answers in the same conversation.
+export function requestSupportContact({state}){
+ if(state.supportContact?.waiting)state.supportContact={...state.supportContact,waiting:false};
+ return null;
 }
 export function receiveSupportContact({state,event}){
- // Old social conversations may still be waiting for the former callback question.
- if(event.channel!=='web'&&state.supportContact?.waiting)state.supportContact={...state.supportContact,waiting:false};
+ // Old conversations may still be waiting for the former callback question.
+ if(state.supportContact?.waiting)state.supportContact={...state.supportContact,waiting:false};
  // Do not interrupt reconciliation of an ERP write with an ordinary lead flow.
  if(state.confirming||state.cancelling||state.submittingReclamation||state.reclamationInFlight||state.operatorOrder)return null;
- if(state.supportContact?.waiting){
-  const email=customerEmail(event.text);
-  if(email){
-   state.supportContact={...state.supportContact,email,waiting:false};
-   state.supportRequest={reason:state.lastSupportRequest?.reason??'Kupac traži pomoć zaposlenog',contactUpdate:true};
-   return 'Hvala, zabeležio sam mejl uz Vaš upit za korisničku podršku. Odgovor možete dobiti na toj adresi.';
-  }
-  if(/^(?:ne|не|ne zelim|ne bih|ne hvala|necu)[.!\s]*$|ne (?:zelim|dajem|bih|mogu).{0,30}(?:mejl|email|adres)|nemam (?:mejl|email)|bez (?:mejla|emaila)/.test(normalize(event.text))){
-   state.supportContact={...state.supportContact,waiting:false,declined:true};
-   return 'U redu, mejl nije obavezan. Upit ostaje zabeležen za korisničku podršku, a odgovor možete proveriti ovde u razgovoru.';
-  }
- }
  if(!wantsHuman(event.text))return null;
  delete state.pending;delete state.loyaltyPending;delete state.cancellation;delete state.reclamation;
  if(!state.lastSupportRequest)state.supportRequest={reason:'Kupac izričito traži pomoć zaposlenog: '+event.text.slice(0,140)};
- return requestSupportContact({state,event})??'Razumem. Upit je zabeležen za korisničku podršku; odgovor možete proveriti ovde u razgovoru.';
+ return 'Razumem. Upit je zabeležen za korisničku podršku; odgovor možete proveriti ovde u razgovoru.';
 }
 
 // The worker owns the optional callback question. Remove only duplicate email
 // questions from model prose, keeping the actual answer and other questions.
-export function appendSupportContact(message,question,{channel='web'}={}){
- if(!question&&channel==='web')return message;
+export function appendSupportContact(message,question){
  const sentences=String(message??'').split(/(?<=[.!?])\s+/);
- const answer=sentences.filter(s=>{
+ const kept=sentences.filter(s=>{
   const text=normalize(s);
   const email=/(?:mejl|e-?mail|e-post)/.test(text);
   const request=/\?/.test(s)||/(?:posaljite|napisite|navedite|dostavite|ostavite)[^.!?\n]{0,80}(?:mejl|e-?mail|e-post)/.test(text);
   return !(email&&request);
- }).join(' ').trim();
+ });
+ if(!question&&kept.length===sentences.length&&String(message??'').trim())return message;
+ const answer=kept.join(' ').trim();
  return [answer,question].filter(Boolean).join('\n\n')||'Prosledio sam Vaš upit korisničkoj podršci. Odgovor možete proveriti ovde u razgovoru.';
 }
 
-export function guardSupportContact({channel,text,state}){
- if(!['facebook','instagram'].includes(channel)||!(state.supportRequest||state.lastSupportRequest)||state.claimVerification||state.reclamation||state.loyaltyPending)return text;
- return appendSupportContact(text,null,{channel});
+export function guardSupportContact({text,state}){
+ if(!(state.supportRequest||state.lastSupportRequest)||state.claimVerification||state.reclamation||state.loyaltyPending)return text;
+ return appendSupportContact(text,null);
 }

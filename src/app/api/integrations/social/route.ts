@@ -20,6 +20,7 @@ import { handleSocialReclamation, socialReclamationActions } from "@/lib/social/
 import {prepareChannelLoyalty,acceptChannelLoyalty,channelLoyalty,existingChannelLoyalty} from '@/lib/loyalty/channel.server';
 import {socialProductDetails} from '@/lib/social/product-details';
 import {socialDeliveryRequest,socialDeliveryQuote} from '@/lib/social/delivery';
+import { socialOrderLookup, socialOrderLookupRequest } from '@/lib/social/order-lookup';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,6 +31,7 @@ const quotePayload = identity.extend({ input: channelOrderSchema, total: z.numbe
 const cancellationPayload = identity.extend({ purpose: z.literal("cancel_order"), number: z.string(), expiresAt: z.number() });
 const requestSchema = z.discriminatedUnion("action", [
   socialDeliveryRequest,
+  socialOrderLookupRequest,
   ...socialReclamationActions,
   identity.extend({ action: z.literal("support_handoff"), id: z.string().min(1).max(300), callbackEmail:z.email().optional(), contactUpdate:z.boolean().optional(), reason: z.string().max(200), transcript: z.string().max(10000), customerName:z.string().max(150).optional(), inboxUrl:z.url().max(1000).refine(value=>{const u=new URL(value);return u.origin==='https://business.facebook.com'&&u.pathname==='/latest/inbox/all/'&&!u.username&&!u.password&&!u.searchParams.has('selected_item_id');}).optional(), reclamationId: z.string().regex(/^[A-Za-z0-9_-]{1,100}$/).optional(), conversationLink: z.url().max(1000).refine(value=>{const u=new URL(value);return u.origin==='https://business.facebook.com'&&u.pathname==='/latest/inbox/all/'&&!u.username&&!u.password;}).optional() }),
   z.object({ action: z.literal("search"), query: z.string().trim().min(1).max(100), quantity: z.number().int().positive().max(1000).default(1) }),
@@ -162,6 +164,7 @@ export async function POST(req: Request) {
         throw error;
       }
     }
+    if (body.action === "order_lookup") return NextResponse.json(await socialOrderLookup(body));
     if (body.action === "order_status") {
       const order = await db.order.findUnique({ where: { number: body.number }, select: { number: true, status: true, publicAccessTokenHash: true } });
       if (!order || !verifyOrderAccessToken({ token: body.accessToken, tokenHash: order.publicAccessTokenHash })) return new Response(null, { status: 403 });

@@ -1,4 +1,4 @@
-import {inWindow} from './security.mjs';
+import {inWindow,inHumanAgentWindow} from './security.mjs';
 import {isOrderCommandText} from './staff-order.mjs';
 export async function operatorAction({store,worker,body}){
  if(typeof body?.id!=='string'||body.id.length>200||!['pause','resume','reply'].includes(body.action))return {status:400,data:{error:'INVALID_ACTION'}};
@@ -13,7 +13,7 @@ export async function operatorAction({store,worker,body}){
    if(prior.rows.length){result=command&&store.decode(prior.rows[0].payload).text===body.text.trim()?{status:200,data:{ok:true,command:true,messageId:outId,delivery:prior.rows[0].status}}:{status:409,data:{error:'MESSAGE_CONFLICT'}};return;}
    const sent=await c.query('SELECT payload,status FROM spc_chat_outbox WHERE id=$1 AND conversation=$2',[outId,row.id]);
    if(sent.rows.length){const prior=store.decode(sent.rows[0].payload);result=prior.text===body.text.trim()?{status:200,data:{ok:true,messageId:outId,delivery:sent.rows[0].status}}:{status:409,data:{error:'MESSAGE_CONFLICT'}};return;}
-   if(row.channel!=='web'&&!inWindow(Number(row.last_customer))){result={status:409,data:{error:'MESSAGE_WINDOW_CLOSED'}};return;}
+   if(row.channel!=='web'&&!inWindow(Number(row.last_customer))&&(command||!inHumanAgentWindow(Number(row.last_customer)))){result={status:409,data:{error:'MESSAGE_WINDOW_CLOSED'}};return;}
   }
   if(body.action==='resume'&&(state.confirming||state.cancelling||state.submittingReclamation||state.reclamationInFlight||state.operatorOrder||state.staffOrder?.status==='creating')){result={status:409,data:{error:'RECONCILIATION_REQUIRED'}};return;}
   await c.query('BEGIN');
