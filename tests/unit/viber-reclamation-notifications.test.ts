@@ -40,7 +40,7 @@ it("queues transactional templates for buyers without e-mail", async () => {
   expect(await resolveReclamationChannel({ kind: "ACCEPTED", reclamationId: "r1" })).toEqual({ channel: "queued" });
   expect(await resolveReclamationChannel({ kind: "STATUS", reclamationId: "r1", eventKey: "ev9" })).toEqual({ channel: "queued" });
   const calls = mocks.queue.mock.calls.map(c => c[0]);
-  expect(calls[0]).toEqual({ to: "381631234567", text: "", kind: "transaction", requestId: "reclamation:r1:receipt", template: { id: "rcl-receipt", lang: "sr", parameters: { reclamation_number: "RCL-7", order_number: "SPC-1" } } });
+  expect(calls[0]).toEqual({ to: "381631234567", text: "", kind: "transaction", requestId: "reclamation:r1:receipt", template: { id: "rcl-receipt", lang: "sr", parameters: { reclamation_number: "RCL-7" } } });
   expect(calls[1]).toMatchObject({ requestId: "reclamation:r1:accepted:POVRAT_NOVCA", template: { parameters: { resolution: "povraćaj novca" } } });
   expect(calls[2]).toMatchObject({ requestId: "reclamation:r1:status:ev9", template: { parameters: { status: "u obradi" } } });
 });

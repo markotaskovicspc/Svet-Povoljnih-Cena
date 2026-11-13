@@ -80,7 +80,7 @@ export async function resolveReclamationChannel(event: ReclamationViberEvent): P
   let parameters: Record<string, string>;
   let requestId: string;
   if (event.kind === "RECEIPT") {
-    parameters = { reclamation_number: claim.number, order_number: claim.order.number };
+    parameters = { reclamation_number: claim.number };
     requestId = `reclamation:${event.reclamationId}:receipt`;
   } else if (event.kind === "ACCEPTED") {
     if (!claim.resolution) return { channel: "none" };
