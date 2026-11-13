@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { signSocialQuote } from "./security";
 
 // Customer order check from the chat (client request 13.11.2026): the customer
 // gives the SPC order number, another number (courier tracking/parcel number,
@@ -13,6 +14,10 @@ export const socialOrderLookupRequest = z.object({
   fullName: z.string().trim().max(150).nullable().default(null),
   phone: z.string().trim().max(40).nullable().default(null),
   address: z.string().trim().max(200).nullable().default(null),
+  // Chat identity: a name match with phone/address proves ownership like the
+  // e-mail code does, so a reclamation can be opened in this same chat.
+  channel: z.enum(["facebook", "instagram", "web"]).optional(),
+  conversationId: z.string().min(3).max(200).optional(),
 });
 
 const fold = (value: string) =>
@@ -59,6 +64,7 @@ const likePattern = (token: string) =>
   `%${token.replace(/[\\%_]/g, "").replace(/dj/g, "%").replace(/[cszd]/g, "_")}%`;
 
 const select = {
+  id: true,
   number: true,
   channel: true,
   createdAt: true,
@@ -81,7 +87,7 @@ const view = (order: Row) => ({
   items: order.items.map((item) => ({ name: item.name, qty: item.qty })),
 });
 
-export async function socialOrderLookup(body: z.infer<typeof socialOrderLookupRequest>) {
+export async function socialOrderLookup(body: z.infer<typeof socialOrderLookupRequest>, secret?: string) {
   const number = looseOrderNumber(body.number);
   if (number) {
     const order = await db.order.findUnique({ where: { number }, select });
@@ -118,10 +124,19 @@ export async function socialOrderLookup(body: z.infer<typeof socialOrderLookupRe
     select,
   });
   const name = tokens.join(" ");
-  const orders = candidates
+  const matched = candidates
     .filter((order) => sameName(name, order.shipFirstName, order.shipLastName) || sameName(name, order.billFirstName, order.billLastName))
     .filter((order) => samePhone(body.phone, order.shipPhone) || sameAddress(body.address, order.shipStreet, order.shipCity))
-    .slice(0, 3)
-    .map(view);
+    .slice(0, 3);
+  const orders = matched.map(view);
+  // Same proof as reclamation_verify_finish (2 h, bound to this chat). Only for
+  // name + phone/address matches, never for a bare order or parcel number.
+  if (secret && secret.length >= 32 && body.channel && body.conversationId && matched.length) {
+    const expiresAt = Date.now() + 2 * 3600000;
+    const claimProofs = Object.fromEntries(matched.map((order) => [order.number, signSocialQuote({
+      channel: body.channel, conversationId: body.conversationId, purpose: "reclamation_owner", orderId: order.id, number: order.number, expiresAt,
+    }, secret)]));
+    return { ok: true as const, orders, claimProofs };
+  }
   return { ok: true as const, orders };
 }

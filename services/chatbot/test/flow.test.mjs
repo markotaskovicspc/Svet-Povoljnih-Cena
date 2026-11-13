@@ -529,13 +529,13 @@ async function setupReclamation() {
  ctx.worker.reclamationIntentFn=async()=> 'confirm';ctx.worker.answerFn=async()=>({text:'Kako mogu da pomognem?'});
  return ctx;
 }
-test('claim confirmation writes once, queues linked support email and leaves conversation usable',async()=>{
+test('claim confirmation writes once, sends no support email for a new claim and leaves conversation usable',async()=>{
  const {store,worker,event}=await setupReclamation();const calls=[];
  worker.spc=async p=>{calls.push(p);return p.action==='submit_reclamation'?{ok:true,id:'case-id',number:'R-1-SPC-TEST-1'}:{ok:true};};
  try {
   await worker.tick();await store.accept({...event,id:'fb:second-yes',text:'da'});await worker.tick();
   assert.equal(calls.filter(c=>c.action==='submit_reclamation').length,1);
-  const support=calls.find(c=>c.action==='support_handoff');assert.equal(support.reclamationId,'case-id');
+  assert.equal(calls.some(c=>c.action==='support_handoff'),false);
   const row=(await store.pool.query('SELECT * FROM spc_chat_conversations')).rows[0];assert.equal(row.paused,false);assert.equal(store.decode(row.state).reclamation,undefined);
   await store.accept({...event,id:'fb:other-product',text:'A peglu drugu?'});await worker.tick();assert.equal((await store.pool.query('SELECT * FROM spc_chat_outbox')).rows.length,3);
  } finally {await store.close();}

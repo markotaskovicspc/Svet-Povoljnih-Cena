@@ -23,5 +23,7 @@ export function socialProductDetails(p:Product){
   technicalSpecs:(p.technicalSpecs??[]).slice(0,80).map(s=>({label:productText(s.label,150).text,value:productText(s.value,600).text})),
   warrantyYears:p.warrantyYears??null,countryOfOrigin:p.countryOfOrigin??null,
   maintenance:productText(p.pdpInfo?.maintenance,2000).text,assemblyInstructions:productText(p.pdpInfo?.assemblyInstructions,2000).text,
+  // Manuals and assembly sheets on the product page, so the chatbot can send them.
+  manuals:(p.attachments??[]).filter(a=>a.kind==='manual'||a.section==='assembly_instructions'||a.section==='maintenance').slice(0,5).map(a=>({label:productText(a.label,150).text,url:a.url})),
  };
 }

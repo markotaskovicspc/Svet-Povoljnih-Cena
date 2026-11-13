@@ -80,3 +80,23 @@ it("finds orders by full name only together with the address or phone from the o
   const wrongPhone = await lookup({ fullName: "kada saitovic", phone: "0601112222" });
   expect(wrongPhone).toEqual({ ok: true, orders: [] });
 });
+
+it("issues a chat-bound reclamation proof only for a name + phone/address match", async () => {
+  const secret = "s".repeat(40);
+  const { readSocialQuote } = await import("@/lib/social/security");
+  mocks.queryRaw.mockResolvedValue([{ id: "o1" }]);
+  mocks.findMany.mockResolvedValue([order({ id: "o1" })]);
+  const result = await socialOrderLookup(socialOrderLookupRequest.parse({ action: "order_lookup", fullName: "kada saitovic", phone: "0613256656", channel: "facebook", conversationId: "fb:123" }), secret);
+  expect(result).toMatchObject({ ok: true, orders: [{ number: "SPC-2026-002639" }] });
+  const proof = (result as { claimProofs: Record<string, string> }).claimProofs["SPC-2026-002639"];
+  expect(readSocialQuote(proof, secret)).toMatchObject({ channel: "facebook", conversationId: "fb:123", purpose: "reclamation_owner", orderId: "o1", number: "SPC-2026-002639" });
+  expect(JSON.stringify(result.orders)).not.toMatch(/o1|Saitovi/);
+
+  mocks.findUnique.mockResolvedValue(order({ id: "o1" }));
+  const byNumber = await socialOrderLookup(socialOrderLookupRequest.parse({ action: "order_lookup", number: "SPC-2026-002639", channel: "facebook", conversationId: "fb:123" }), secret);
+  expect(byNumber).not.toHaveProperty("claimProofs");
+  mocks.queryRaw.mockResolvedValue([{ id: "o1" }]);
+  mocks.findMany.mockResolvedValue([order({ id: "o1" })]);
+  const wrongPhone = await socialOrderLookup(socialOrderLookupRequest.parse({ action: "order_lookup", fullName: "kada saitovic", phone: "0601112222", channel: "facebook", conversationId: "fb:123" }), secret);
+  expect(wrongPhone).not.toHaveProperty("claimProofs");
+});

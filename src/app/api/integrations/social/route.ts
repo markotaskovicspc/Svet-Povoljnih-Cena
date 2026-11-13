@@ -166,7 +166,7 @@ export async function POST(req: Request) {
         throw error;
       }
     }
-    if (body.action === "order_lookup") return NextResponse.json(await socialOrderLookup(body));
+    if (body.action === "order_lookup") return NextResponse.json(await socialOrderLookup(body, secret));
     if (body.action === "order_status") {
       const order = await db.order.findUnique({ where: { number: body.number }, select: { number: true, status: true, publicAccessTokenHash: true } });
       if (!order || !verifyOrderAccessToken({ token: body.accessToken, tokenHash: order.publicAccessTokenHash })) return new Response(null, { status: 403 });
