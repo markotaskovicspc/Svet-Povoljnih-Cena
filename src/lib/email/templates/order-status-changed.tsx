@@ -5,7 +5,6 @@ import {
   EmailLayout,
   EmailParagraph,
 } from "./_layout";
-import { CHAT_FOOTER_NOTE } from "./chat-note";
 
 const STATUS_COPY: Record<OrderStatus, { title: string; body: string }> = {
   kreirano: {
@@ -34,7 +33,7 @@ const STATUS_COPY: Record<OrderStatus, { title: string; body: string }> = {
   },
   otkazano: {
     title: "Porudžbina je otkazana",
-    body: "Vaša porudžbina je otkazana. Ako mislite da je ovo greška ili i dalje želite artikle, poručite ih ponovo na sajtu ili nam pišite u chat na sajtu.",
+    body: "Vaša porudžbina je otkazana. Ako mislite da je ovo greška ili i dalje želite artikle, možete ih ponovo poručiti na sajtu.",
   },
   vraceno: {
     title: "Pošiljka se vraća",
@@ -50,7 +49,6 @@ export interface OrderStatusChangedProps {
   /** Link ka porudžbini, i za kupce bez naloga (potpisan link iz orderLinkForEmail). */
   orderUrl?: string | null;
 }
-
 
 export function OrderStatusChanged({
   order,
@@ -69,7 +67,7 @@ export function OrderStatusChanged({
       ? "Kurir je preuzeo paket. Vaša porudžbina je na putu ka vama."
       : copy.body;
   return (
-    <EmailLayout preview={`${copy.title} — ${order.id}`} footerNote={CHAT_FOOTER_NOTE}>
+    <EmailLayout preview={`${copy.title} — ${order.id}`}>
       <EmailHeading>{copy.title}</EmailHeading>
       <EmailParagraph>{body}</EmailParagraph>
       <EmailParagraph>
