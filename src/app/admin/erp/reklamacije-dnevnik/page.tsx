@@ -21,6 +21,7 @@ import { PageHeader } from "@/components/admin/page-header";
 import { ReclamationKpiStrip } from "@/components/admin/reclamation-kpi-strip";
 import { loadReclamationAnalytics } from "@/lib/admin/reclamation-analytics.server";
 import { countUntaskedReclamations } from "@/lib/admin/reclamation-warehouse-status.server";
+import { reclamationKpiFilters } from "@/lib/admin/reclamation-kpi-views";
 import { SubmitButton } from "@/components/admin/submit-button";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { Textarea } from "@/components/ui/textarea";
@@ -177,8 +178,10 @@ async function createManualReclamation(
   )(formData);
 }
 
-export default async function ReclamationsPage() {
+export default async function ReclamationsPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> } = {}) {
   await requireAdminAction(["OPS"], "/admin/erp/reklamacije-dnevnik");
+  const prikaz = (await searchParams)?.prikaz;
+  const kpiView = reclamationKpiFilters(typeof prikaz === "string" ? prikaz : undefined);
   const [erpModule, analytics, untasked] = await Promise.all([
     getErpModule("reklamacije-dnevnik"),
     loadReclamationAnalytics(),
@@ -267,7 +270,11 @@ export default async function ReclamationsPage() {
         <ReclamationKpiStrip totals={analytics.totals} untasked={untasked} />
       </PageHeader>
       <div className="px-2 pt-2">
-        {erpModule ? <ErpGrid module={erpModule} compactToolbar /> : null}
+        {erpModule ? <ErpGrid
+          module={erpModule}
+          compactToolbar
+          initialView={kpiView ? { query: "", filters: kpiView.filters, sorting: kpiView.sorting, visibleColumns: [], columnOrder: [], columnWidths: {} } : undefined}
+        /> : null}
       </div>
     </>
   );

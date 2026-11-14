@@ -6,7 +6,7 @@ import {
   type ShipmentStatus,
   type Shipment,
 } from "@prisma/client";
-import { reclamationWarehouseStatuses } from "@/lib/admin/reclamation-warehouse-status.server";
+import { isUntaskedReclamation, reclamationWarehouseStatuses } from "@/lib/admin/reclamation-warehouse-status.server";
 import { RECLAMATION_WAREHOUSE_STATUS_LABELS } from "@/lib/admin/reclamation-warehouse-status";
 import { ananasOrderRows } from "@/lib/ananas/order-rows";
 import { databaseIdentifier, db } from "@/lib/db";
@@ -1092,6 +1092,7 @@ export const operationalErpModules: ErpModule[] = [
         optionLabels: RECLAMATION_WAREHOUSE_STATUS_LABELS,
         showOptionLabel: true,
       },
+      text("untasked", "Nalog", false),
       date("respondedAt", "Odgovoreno"),
       date("resolvedAt", "Rešeno"),
       date("createdAt", "Primljeno"),
@@ -2707,6 +2708,7 @@ async function reclamationRows(take: number, skip = 0): Promise<ErpRow[]> {
         ? `${row.warehouse.code} · ${row.warehouse.name}`
         : null,
       warehouseStatus: warehouseStatuses.get(row.id) ?? row.warehouseStatus,
+      untasked: isUntaskedReclamation(row, warehouseStatuses.get(row.id)) ? "Bez naloga" : null,
       respondedAt: dateTime(row.respondedAt),
       resolvedAt: dateTime(row.resolvedAt),
       createdAt: dateTime(row.createdAt),

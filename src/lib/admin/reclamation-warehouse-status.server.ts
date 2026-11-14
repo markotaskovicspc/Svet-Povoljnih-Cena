@@ -69,12 +69,22 @@ export async function reclamationWarehouseStatuses(claims: ReclamationWarehouseC
 export async function countUntaskedReclamations() {
   const claims = await db.reclamation.findMany({
     where: { status: { in: ["PRIMLJENO", "U_OBRADI"] }, OR: [{ resolution: null }, { resolution: { not: "POPUST" } }] },
-    select: { id: true, orderId: true, quantity: true, request: true, resolution: true, warehouseStatus: true },
+    select: { id: true, orderId: true, quantity: true, request: true, resolution: true, warehouseStatus: true, status: true },
   });
   const statuses = await reclamationWarehouseStatuses(claims);
   // Nalog = zahtev magacinu/kuriru (sačuvan status pripreme). Za povrat novca prikaz piše „Čeka prijem“ i bez naloga,
   // pa se gleda sačuvani status; roba koja je ipak stigla više nije neobrađena.
-  return claims.filter((claim) => claim.warehouseStatus === "NOT_REQUESTED"
-    && !["DELIVERED", "PARTIALLY_RECEIVED"].includes(statuses.get(claim.id) ?? "")).length;
+  return claims.filter((claim) => isUntaskedReclamation(claim, statuses.get(claim.id))).length;
+}
+
+/** Otvorena reklamacija (ne umanjenje cene) bez naloga magacinu/kuriru, a roba još nije stigla. */
+export function isUntaskedReclamation(
+  claim: { status: string; resolution: string | null; warehouseStatus: string },
+  effectiveWarehouseStatus: string | undefined,
+) {
+  return ["PRIMLJENO", "U_OBRADI"].includes(claim.status)
+    && claim.resolution !== "POPUST"
+    && claim.warehouseStatus === "NOT_REQUESTED"
+    && !["DELIVERED", "PARTIALLY_RECEIVED"].includes(effectiveWarehouseStatus ?? "");
 }
 
