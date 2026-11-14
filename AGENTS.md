@@ -106,3 +106,6 @@ Marko explicitly requested. The background-jobs cron queues RECLAMATION_REFUND_A
 ## SPC Analytics status column (2026-11-13)
 Marko explicitly requested. Migration 20261113230000 adds Reclamation.analyticsStatus/analyticsStatusNote/analyticsStatusAt. SPC Analytics posts its „Reklamacije i povrati“ label and one-line reason per claim to POST /api/partners/v1/spcapp/reclamation-analytics-status (scope spcapp:reclamation-payout, ≤200 items, only when the set changes, every 10 minutes after the payout check). The reclamations grid shows it as column „SPC Analytics“. Display only; no decision, status or money changes. Audited as partner.spcapp.reclamation.analytics_status.
 
+
+## Payment notice recipients (Marko, 14.11.2026)
+„Uplata evidentirana“ (bank import and manual receipts) goes only to the customer: no podrska@ bcc, and nothing is sent when the order has no customer email. Bank review notices („Provera uplate“, „Uplata bez broja porudžbine“, „Bankarski izvod — potrebna provera“) go to office@svetpovoljnihcena.rs instead of podrska@. Refund notices stay on placanja@ (SPC Analytics reads that mailbox).
