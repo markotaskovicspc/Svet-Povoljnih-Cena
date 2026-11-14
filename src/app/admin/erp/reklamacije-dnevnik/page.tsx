@@ -26,6 +26,7 @@ import { SubmitButton } from "@/components/admin/submit-button";
 import { AdminActionForm } from "@/components/admin/action-form";
 import { Textarea } from "@/components/ui/textarea";
 import { getErpModule } from "@/lib/admin/erp";
+import { db } from "@/lib/db";
 import {
   createAdminReclamation,
   createReclamationSchema,
@@ -179,14 +180,32 @@ async function createManualReclamation(
 }
 
 export default async function ReclamationsPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> } = {}) {
-  await requireAdminAction(["OPS"], "/admin/erp/reklamacije-dnevnik");
+  const admin = await requireAdminAction(["OPS"], "/admin/erp/reklamacije-dnevnik");
   const prikaz = (await searchParams)?.prikaz;
   const kpiView = reclamationKpiFilters(typeof prikaz === "string" ? prikaz : undefined);
-  const [erpModule, analytics, untasked] = await Promise.all([
+  const [erpModule, analytics, untasked, layoutView] = await Promise.all([
     getErpModule("reklamacije-dnevnik"),
     loadReclamationAnalytics(),
     countUntaskedReclamations(),
+    // Pogledi iz zaglavlja preuzimaju raspored kolona iz korisnikovog sačuvanog pogleda (podrazumevani, inače poslednji menjani).
+    kpiView && admin?.id
+      ? db.adminSavedView.findFirst({
+          where: { adminUserId: admin.id, module: "reklamacije-dnevnik" },
+          orderBy: [{ isDefault: "desc" }, { updatedAt: "desc" }],
+          select: { columns: true },
+        })
+      : Promise.resolve(null),
   ]);
+  const layout = layoutView?.columns && typeof layoutView.columns === "object" && !Array.isArray(layoutView.columns)
+    ? (layoutView.columns as Record<string, unknown>)
+    : {};
+  const stringArray = (value: unknown) =>
+    Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  const columnWidths = layout.columnWidths && typeof layout.columnWidths === "object" && !Array.isArray(layout.columnWidths)
+    ? Object.fromEntries(Object.entries(layout.columnWidths).filter(
+        (entry): entry is [string, number] => typeof entry[1] === "number" && Number.isFinite(entry[1]),
+      ))
+    : {};
 
   const manualForm = (
     <AdminActionForm
@@ -273,7 +292,7 @@ export default async function ReclamationsPage({ searchParams }: { searchParams?
         {erpModule ? <ErpGrid
           module={erpModule}
           compactToolbar
-          initialView={kpiView ? { query: "", filters: kpiView.filters, sorting: kpiView.sorting, visibleColumns: [], columnOrder: [], columnWidths: {} } : undefined}
+          initialView={kpiView ? { query: "", filters: kpiView.filters, sorting: kpiView.sorting, visibleColumns: stringArray(layout.visibleColumns), columnOrder: stringArray(layout.columnOrder), columnWidths } : undefined}
         /> : null}
       </div>
     </>

@@ -53,6 +53,13 @@ function AgeChip({ days, count, danger }: { days: number; count: number; danger?
   );
 }
 
+function untaskedSuffix(count: number) {
+  const lastTwo = count % 100;
+  if (count % 10 === 1 && lastTwo !== 11) return "a";
+  if (count % 10 >= 2 && count % 10 <= 4 && (lastTwo < 12 || lastTwo > 14)) return "e";
+  return "ih";
+}
+
 /** Kompaktni ukupni pokazatelji (isti kao na stranici Reklamacije – izveštaji) za zaglavlje dnevnika. */
 export function ReclamationKpiStrip({ totals, untasked }: { totals: ReclamationMetrics; untasked?: number }) {
   const average = totals.averageResolutionDays;
@@ -92,13 +99,13 @@ export function ReclamationKpiStrip({ totals, untasked }: { totals: ReclamationM
             <span className="text-[10.5px] uppercase tracking-[0.14em] text-ink-500">Nerešene</span>
             <span className={`text-[22px] font-bold leading-tight tabular-nums ${totals.unresolved > 0 ? "text-warning" : "text-ink-900"}`}>{integer(totals.unresolved)}</span>
           </ReclamationKpiLink>
-          {untasked ? (
-            <ReclamationKpiLink href={reclamationKpiHref("neobradjene")} title="Otvorene reklamacije bez naloga magacinu ili kuriru" className="truncate text-[11.5px] font-semibold text-danger hover:underline">
-              {integer(untasked)} neobrađen{untasked === 1 ? "a" : "e"}
-            </ReclamationKpiLink>
-          ) : (
-            <span className="truncate text-[11.5px] text-ink-500">primljene i u obradi</span>
-          )}
+          <ReclamationKpiLink
+            href={reclamationKpiHref("neobradjene")}
+            title="Otvorene reklamacije bez naloga magacinu ili kuriru"
+            className={`truncate text-[11.5px] hover:underline ${untasked ? "font-semibold text-danger" : "text-ink-500"}`}
+          >
+            {integer(untasked ?? 0)} neobrađen{untaskedSuffix(untasked ?? 0)}
+          </ReclamationKpiLink>
         </div>
 
         <div className="flex min-w-0 flex-col gap-1.5 px-4 py-2.5">
