@@ -71,7 +71,7 @@ export function ReclamationKpiStrip({ totals, untasked }: { totals: ReclamationM
           tone={totals.unresolved > 0 ? "text-warning" : "text-ink-900"}
           hint={untasked ? (
             <>
-              <span className="font-semibold text-danger">{integer(untasked)} neobrađen{untasked === 1 ? "a" : "e"}</span> · bez naloga
+              <span className="font-semibold text-danger" title="Otvorene reklamacije bez naloga magacinu ili kuriru">{integer(untasked)} neobrađen{untasked === 1 ? "a" : "e"}</span>
             </>
           ) : "primljene i u obradi"}
         />
