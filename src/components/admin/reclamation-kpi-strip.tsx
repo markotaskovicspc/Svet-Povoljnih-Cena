@@ -64,6 +64,15 @@ export function ReclamationKpiStrip({ totals, untasked }: { totals: ReclamationM
         tone="text-success"
         hint="uklj. odbijene"
       />
+      {untasked === undefined ? null : (
+        <Cell
+          className="flex-[1_1_130px] border-r"
+          label="Neobrađene"
+          value={integer(untasked)}
+          tone={untasked > 0 ? "text-danger" : "text-ink-900"}
+          hint="bez naloga"
+        />
+      )}
       <div className="flex min-w-0 flex-[3_1_380px] flex-wrap items-center gap-x-5 border-r border-border/60 bg-muted/30">
         <Cell
           label="Nerešene"
@@ -71,14 +80,7 @@ export function ReclamationKpiStrip({ totals, untasked }: { totals: ReclamationM
           tone={totals.unresolved > 0 ? "text-warning" : "text-ink-900"}
           hint="primljene i u obradi"
         />
-        {untasked === undefined ? null : (
-          <Cell
-            label="Neobrađene"
-            value={integer(untasked)}
-            tone={untasked > 0 ? "text-danger" : "text-ink-900"}
-            hint="bez naloga za rešavanje"
-          />
-        )}
+
         <div className="flex min-w-0 flex-col gap-1.5 px-4 py-2.5">
           <span className="text-[10.5px] uppercase tracking-[0.14em] text-ink-500">Otvorene duže od</span>
           <div className="flex flex-wrap gap-1.5">
