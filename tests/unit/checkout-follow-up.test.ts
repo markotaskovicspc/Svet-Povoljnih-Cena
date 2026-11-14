@@ -76,7 +76,8 @@ it("queues the Viber confirmation without letting a Viber failure block buyer an
   mocks.viber.mockRejectedValue(new Error("nth outbox down"));
   const log = vi.spyOn(console, "error").mockImplementation(() => {});
   mocks.order.mockResolvedValue({ id: "o1", number: "SPC-TEST", guestEmail: null, user: null, total: 3398, shipping: 399, paymentMethod: "POUZECE_GOTOVINA", shippingMethod: "KURIR", supplierFulfillments: [], items: [] });
-  await expect(prepareCheckoutFollowUp("o1", "access-token-1234567890", false)).resolves.toBeUndefined();
+  // ERP import / chatbot orders without e-mail run with customerReplyDraftOnly=true.
+  await expect(prepareCheckoutFollowUp("o1", "access-token-1234567890", true)).resolves.toBeUndefined();
   expect(mocks.viber).toHaveBeenCalledWith("o1", "confirmation");
   expect(mocks.process).toHaveBeenCalled();
   log.mockRestore();
