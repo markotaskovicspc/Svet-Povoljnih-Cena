@@ -438,6 +438,7 @@ async function notifyShipmentSideEffects(
           order: loaded.order,
           status: orderStatus ? lowerOrderStatus(orderStatus) : loaded.order.status,
           to: loaded.recipient,
+          orderDbId: orderId,
         });
       }
     } catch (err) {

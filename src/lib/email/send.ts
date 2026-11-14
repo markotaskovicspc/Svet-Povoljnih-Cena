@@ -29,6 +29,7 @@ import {
   guaranteeItemsForOrder,
 } from "./guarantee-pdf";
 import { trackedDispatch } from "./tracking";
+import { orderLinkForEmail } from "./order-link";
 import { type EmailUnsubscribePayload, buildEmailUnsubscribeUrl } from "./unsubscribe";
 
 /**
@@ -134,15 +135,26 @@ export async function sendOrderStatusChanged(args: {
   status: OrderStatus;
   to: string;
   trackingUrl?: string;
+  /** DB id porudžbine: omogućava potpisan link i kupcima bez naloga. */
+  orderDbId?: string;
 }): Promise<DispatchResult> {
   if (!args.to) return NULL;
   const cfg = getEmailConfig();
+  let orderUrl: string | null = null;
+  if (args.orderDbId && !args.order.userId) {
+    try {
+      orderUrl = await orderLinkForEmail(args.orderDbId, args.order, cfg.baseUrl);
+    } catch {
+      orderUrl = null;
+    }
+  }
   const { html, text } = await renderEmail(
     OrderStatusChanged({
       order: args.order,
       status: args.status,
       baseUrl: cfg.baseUrl,
       trackingUrl: args.trackingUrl,
+      orderUrl,
     }),
   );
   return trackedDispatch({
@@ -301,7 +313,7 @@ const STATUS_SUBJECT: Record<OrderStatus, string> = {
   u_isporuci: "u isporuci",
   isporuceno: "isporučena",
   otkazano: "otkazana",
-  vraceno: "vraćena",
+  vraceno: "pošiljka se vraća",
 };
 
 export async function sendFiscalReceipt(args: {
