@@ -10,7 +10,7 @@ it("escapes buyer data and renders the receipt's currency in the shared layout",
   expect(html).toContain("&lt;img src=x"); expect(html).not.toContain('<img src="x"');
   expect(text).toContain("98,76 EUR"); expect(text).not.toContain("98,76 din");
   expect(html).toContain("/documents/garantni-list-logo.jpeg");
-  expect(html).toContain("mailto:podrska@svetpovoljnihcena.rs");
+  expect(html).toContain("chat na sajtu");
   expect(html).not.toContain("Pogledaj porudžbinu");
   expect(text).not.toContain("Uplatite");
 });

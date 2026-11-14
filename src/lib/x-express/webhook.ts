@@ -298,6 +298,7 @@ async function notifyShipmentSideEffects(result: ApplyEventResult) {
           order: loaded.order,
           status: loaded.order.status,
           to: loaded.recipient,
+          orderDbId: result.orderId,
         });
       }
     } catch (err) {

@@ -15,11 +15,11 @@ export type ReclamationAcceptedResolution =
 const RESOLUTION_COPY: Record<ReclamationAcceptedResolution, { label: string; body: string }> = {
   POVRAT_NOVCA: {
     label: "Povraćaj novca",
-    body: "Novac vraćamo na Vaš račun nakon što vraćeni artikal stigne u naš magacin.",
+    body: "Novac vraćamo na Vaš račun nakon što vraćeni artikal stigne u naš magacin. Kada novac bude uplaćen, dobićete mejl „Reklamacija je rešena“ — do tada ne morate ništa da radite.",
   },
   ZAMENA_ARTIKLA: {
     label: "Zamena artikla",
-    body: "Poslaćemo Vam ispravan artikal kao zamenu.",
+    body: "Poslaćemo Vam ispravan artikal kao zamenu. Kada krene, dobićete obaveštenje o slanju.",
   },
   ZAMENA_DELA: {
     label: "Zamena dela",
@@ -27,7 +27,7 @@ const RESOLUTION_COPY: Record<ReclamationAcceptedResolution, { label: string; bo
   },
   POPUST: {
     label: "Umanjenje cene",
-    body: "Iznos umanjenja cene vraćamo na Vaš račun. Artikal ne morate da vraćate.",
+    body: "Iznos umanjenja cene vraćamo na Vaš račun. Artikal ne morate da vraćate. Kada novac bude uplaćen, dobićete mejl „Reklamacija je rešena“.",
   },
 };
 

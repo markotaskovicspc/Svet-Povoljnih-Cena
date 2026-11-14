@@ -867,6 +867,7 @@ async function dispatchJob(job: JobRow) {
         order: loaded.order,
         status: args.status ? lowerOrderStatus(args.status) : loaded.order.status,
         to: loaded.recipient,
+        orderDbId: args.orderId,
       });
       if (!result.ok) throw new Error(result.error);
       return;

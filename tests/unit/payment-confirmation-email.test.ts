@@ -46,7 +46,8 @@ it("uses the shared branded layout, working order links and support copy without
   expect(sent.html).toContain("/documents/garantni-list-logo.jpeg");
   expect(sent.html).toContain("Pogledaj porudžbinu");
   expect(sent.html).toContain('href="https://www.svetpovoljnihcena.rs/checkout/potvrda?order=MP-2026-000123&amp;token=test-token"');
-  expect(sent.html).toContain("mailto:podrska@svetpovoljnihcena.rs");
+  expect(sent.html).not.toContain("mailto:podrska@svetpovoljnihcena.rs");
+  expect(sent.html).toContain("chat na sajtu");
   expect(sent.text).toContain("Pregled porudžbine: https://www.svetpovoljnihcena.rs/checkout/potvrda?order=MP-2026-000123&token=test-token");
   expect(mocks.payment).toHaveBeenCalledWith({ where: { id: manual.paymentId }, select: {
     orderId: true, status: true, method: true, provider: true, amount: true, currency: true,
