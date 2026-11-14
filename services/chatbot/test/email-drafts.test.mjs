@@ -17,7 +17,7 @@ test('draft is a MIME reply to original sender; malicious Reply-To cannot redire
 });
 function fixture(){
  const key='ab'.repeat(32);const calls=[];
- const worker=new EmailDraftWorker({store:{key,decode:v=>unseal(v,key)},env:{}});
+ const worker=new EmailDraftWorker({store:{key,decode:v=>unseal(v,key)},env:{EMAIL_CUSTOMER_DRAFTS_ENABLED:'true'}});
  const c={query:async(sql,args)=>{calls.push({sql,args});return {rows:[]};}};
  worker.drafts='Drafts';worker.sent='Sent';
  worker.client={mailboxOpen:async(...args)=>{calls.push({open:args});},search:async()=>[],append:async(...args)=>{calls.push({append:args});}};
@@ -28,6 +28,12 @@ test('prepared draft only uses IMAP APPEND with Draft flag and records success',
  await worker.process(c,{id:'one',status:'prepared',payload:seal({sender:'buyer@example.com'},key),draft:seal({mime:Buffer.from('synthetic MIME').toString('base64')},key)});
  const appendIndex=calls.findIndex(c=>c.append);assert.deepEqual(calls[appendIndex-1].open,['Drafts',{readOnly:false}]);
  assert.equal(calls.filter(c=>c.append).length,1);assert.deepEqual(calls.find(c=>c.append).append[2],['\\Draft']);assert(calls.some(c=>c.sql?.includes("status='appending'")));assert(calls.some(c=>c.sql?.includes("status='drafted'")));
+});
+test('customer reply drafts are off unless EMAIL_CUSTOMER_DRAFTS_ENABLED is true',async()=>{
+ const {worker,c,calls,key}=fixture();worker.env={};
+ await worker.process(c,{id:'one',status:'pending',payload:seal({sender:'buyer@example.com',messageId:'<m@example.com>'},key)});
+ await worker.process(c,{id:'two',status:'prepared',payload:seal({sender:'buyer@example.com'},key),draft:seal({mime:'eA=='},key)});
+ assert.equal(calls.filter(c=>c.sql?.includes('customer_drafts_disabled')).length,2);assert(!calls.some(c=>c.append||c.open));
 });
 test('uncertain append never blindly duplicates even when draft was moved or deleted',async()=>{
  const {worker,c,calls}=fixture();await worker.process(c,{id:'one',status:'appending'});

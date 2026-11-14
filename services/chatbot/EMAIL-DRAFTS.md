@@ -1,5 +1,7 @@
 # Support email drafts
 
+**Turned off (Marko, 14.11.2026):** no reply drafts or email actions are made for customer mail. Every customer message is recorded as `skipped / customer_drafts_disabled`. The IMAP worker keeps running only for bank statements (`BANK_STATEMENTS_ENABLED`). To turn drafts back on, set `EMAIL_CUSTOMER_DRAFTS_ENABLED=true` in Railway.
+
 This worker uses IMAP TLS on mail.svetpovoljnihcena.rs:993 for podrska@svetpovoljnihcena.rs. It never opens an SMTP transport. Drafts use the mailbox's existing special-use Drafts folder and the IMAP Draft flag. No existing draft is overwritten or removed, and source mail is read without setting Seen.
 
 Set EMAIL_DRAFTS_ENABLED=true and enter EMAIL_IMAP_PASSWORD directly in Railway Variables. Existing DATABASE_URL, CHAT_DATA_KEY, OPENAI_API_KEY, SPC_BASE_URL and SOCIAL_INTEGRATION_SECRET are reused. Never put the mailbox password in chat or source control. Missing password leaves email in waiting_for_password; Messenger remains available. Disable with EMAIL_DRAFTS_ENABLED=false.

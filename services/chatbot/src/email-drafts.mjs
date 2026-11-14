@@ -138,6 +138,12 @@ export class EmailDraftWorker {
   async process(c,row){
     if(row.status==='appending')return this.reconcile(c,row);
     const message=this.store.decode(row.payload);
+    // Client decision (Marko, 14.11.2026): no AI reply drafts for customer mail.
+    // The same IMAP worker still ingests bank statements. Re-enable only with
+    // EMAIL_CUSTOMER_DRAFTS_ENABLED=true in Railway.
+    if(!message?.bankStatements&&this.env.EMAIL_CUSTOMER_DRAFTS_ENABLED!=='true'){
+      await c.query("UPDATE spc_email_drafts SET status='skipped',reason='customer_drafts_disabled',draft=NULL,updated_at=now() WHERE id=$1",[row.id]);return;
+    }
     if(message.bankStatements){
       await c.query('UPDATE spc_email_drafts SET attempts=attempts+1,updated_at=now() WHERE id=$1',[row.id]);
       if(message.bankError)await submitBankStatement({sourceHash:message.sourceHash,rejectedReason:message.bankError},this.env);
