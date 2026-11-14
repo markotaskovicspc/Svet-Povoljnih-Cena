@@ -1,13 +1,19 @@
 import { beforeEach, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ order: vi.fn(), enqueue: vi.fn(), process: vi.fn(), internalMail:vi.fn() }));
+const mocks = vi.hoisted(() => ({ order: vi.fn(), enqueue: vi.fn(), process: vi.fn(), internalMail:vi.fn(), viber: vi.fn() }));
+vi.mock("@/lib/viber/order-notifications", () => ({ queueOrderViberNotification: mocks.viber }));
 vi.mock('@/lib/checkout/internal-order-email',()=>({notifyOrderWithoutEmail:mocks.internalMail}));
 vi.mock("@/lib/db", () => ({ db: { order: { findUniqueOrThrow: mocks.order } } }));
 vi.mock("@/lib/background-jobs", () => ({ enqueueBackgroundJob: mocks.enqueue, processBackgroundJob: mocks.process }));
 import { prepareCheckoutFollowUp } from "@/lib/checkout/follow-up";
+import { afterEach } from "vitest";
+
+// The production build runs these tests with production env; keep them independent of it.
+afterEach(() => vi.unstubAllEnvs());
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.stubEnv("VIBER_ORDER_NOTIFICATIONS_ENABLED", "false");
   mocks.order.mockResolvedValue({
     number: "SPC-TEST", paymentMethod: "POUZECE_GOTOVINA", shippingMethod: "KURIR",
     supplierFulfillments: [{ id: "supplier1" }],
@@ -63,4 +69,15 @@ it("queues admin push for orders without buyer email and processes it independen
   await prepareCheckoutFollowUp("o1", "access-token-1234567890");
   expect(mocks.enqueue).toHaveBeenCalledWith({ kind: "ADMIN_ORDER_PUSH", payload: { orderId: "o1" }, idempotencyKey: "admin-order-push:o1" });
   expect(mocks.process).toHaveBeenCalledWith("admin-order-push:o1");
+});
+
+it("queues the Viber confirmation without letting a Viber failure block buyer and staff jobs", async () => {
+  vi.stubEnv("VIBER_ORDER_NOTIFICATIONS_ENABLED", "true");
+  mocks.viber.mockRejectedValue(new Error("nth outbox down"));
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  mocks.order.mockResolvedValue({ id: "o1", number: "SPC-TEST", guestEmail: null, user: null, total: 3398, shipping: 399, paymentMethod: "POUZECE_GOTOVINA", shippingMethod: "KURIR", supplierFulfillments: [], items: [] });
+  await expect(prepareCheckoutFollowUp("o1", "access-token-1234567890", false)).resolves.toBeUndefined();
+  expect(mocks.viber).toHaveBeenCalledWith("o1", "confirmation");
+  expect(mocks.process).toHaveBeenCalled();
+  log.mockRestore();
 });
