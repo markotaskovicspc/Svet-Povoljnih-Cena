@@ -35,7 +35,7 @@ beforeEach(() => {
 it("uses the shared branded layout, working order links and support copy without fabricated bank references", async () => {
   await sendBankPaymentConfirmation(paymentConfirmationSchema.parse(manual));
   expect(mocks.dispatch).toHaveBeenCalledWith(expect.objectContaining({
-    to: "buyer@example.test", bcc: ["podrska@svetpovoljnihcena.rs"],
+    to: "buyer@example.test",
     subject: "Uplata evidentirana — MP-2026-000123",
     text: expect.stringContaining("1.234,56 din"),
     idempotencyKey: "bank-payment:manual:receipt",
@@ -72,12 +72,13 @@ it("prints the actual foreign currency of manual INO receipts", async () => {
   expect(mocks.dispatch.mock.calls[0][0].text).not.toContain(" din");
 });
 
-it("keeps the existing support-only fallback for a customer without email", async () => {
-  mocks.load.mockResolvedValue({ recipient: null, order: {} });
+it("sends the confirmation only to the customer, without a support copy", async () => {
   await sendBankPaymentConfirmation(manual);
-  expect(mocks.dispatch).toHaveBeenCalledWith(expect.objectContaining({
-    to: "podrska@svetpovoljnihcena.rs", bcc: undefined,
-  }));
+  expect(mocks.dispatch.mock.calls[0][0].bcc).toBeUndefined();
+  mocks.dispatch.mockClear();
+  mocks.load.mockResolvedValue({ recipient: null, order: {} });
+  expect(await sendBankPaymentConfirmation(manual)).toEqual({ skipped: "NO_CUSTOMER_EMAIL" });
+  expect(mocks.dispatch).not.toHaveBeenCalled();
 });
 
 it("requires a real manual receipt identity and still rejects malformed legacy bank entries", () => {

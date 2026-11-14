@@ -20,7 +20,7 @@ it('suggests only unpaid active bank-transfer orders with the exact total, witho
  expect(where.total).toEqual(new Prisma.Decimal('3652'));
  expect(where.createdAt.gte).toEqual(new Date('2026-09-14T00:00:00Z'));
  const mail=mocks.dispatch.mock.calls[0][0];
- expect(mail.to).toBe('podrska@svetpovoljnihcena.rs');expect(mail.text).toContain('SPC-2026-002340');expect(mail.text).toContain('FT26317ABCDE');expect(mail.text).toContain('nije evidentirano');
+ expect(mail.to).toBe('office@svetpovoljnihcena.rs');expect(mail.text).toContain('SPC-2026-002340');expect(mail.text).toContain('FT26317ABCDE');expect(mail.text).toContain('nije evidentirano');
 });
 it('credits with no SPC mention and no same-amount order send nothing',async()=>{
  expect(await sendBankUnmatchedReview({...entry,reason:'SPC_MISSING'})).toEqual({skipped:'NO_CANDIDATES'});expect(mocks.dispatch).not.toHaveBeenCalled();
