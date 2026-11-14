@@ -56,7 +56,12 @@ export async function prepareCheckoutFollowUp(orderId: string, accessToken: stri
     const { notifyOrderWithoutEmail } = await import('./internal-order-email');
     await notifyOrderWithoutEmail(order);
   }
-  if (process.env.VIBER_ORDER_NOTIFICATIONS_ENABLED === "true" && !customerReplyDraftOnly) {
+  // ERP import and chatbot orders use customerReplyDraftOnly to skip the automatic
+  // e-mail receipt (staff replies by hand). Orders without any e-mail come only
+  // from those flows, and for them Viber is the buyer's only confirmation, so it
+  // is not gated by that flag; queueOrderViberNotification itself skips buyers
+  // that have an e-mail.
+  if (process.env.VIBER_ORDER_NOTIFICATIONS_ENABLED === "true") {
     // Viber is an optional channel: a provider/outbox failure must never hold
     // back the buyer, staff or supplier jobs below.
     try {
