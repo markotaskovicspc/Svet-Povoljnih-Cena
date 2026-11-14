@@ -531,6 +531,12 @@ export async function processPendingBackgroundJobs(
   };
 }
 
+/** Buyers with an e-mail get e-mail; buyers without one get Viber (when enabled). */
+async function reclamationChannel(event: import("@/lib/viber/reclamation-notifications").ReclamationViberEvent) {
+  const { resolveReclamationChannel } = await import("@/lib/viber/reclamation-notifications");
+  return resolveReclamationChannel(event);
+}
+
 async function dispatchJob(job: JobRow) {
   if (!(job.kind in schemas)) throw new Error(`Unsupported background job: ${job.kind}`);
   const kind = job.kind as BackgroundJobKind;
@@ -989,11 +995,14 @@ async function dispatchJob(job: JobRow) {
     }
     case "RECLAMATION_RECEIPT": {
       const { loadReclamationForEmail, sendReclamationReceipt } = await import("@/lib/email");
-      const loaded = await loadReclamationForEmail((payload as z.infer<typeof schemas.RECLAMATION_RECEIPT>).reclamationId);
-      if (!loaded?.recipient) return;
+      const receiptClaimId = (payload as z.infer<typeof schemas.RECLAMATION_RECEIPT>).reclamationId;
+      const route = await reclamationChannel({ kind: "RECEIPT", reclamationId: receiptClaimId });
+      const loaded = route.channel === "legacy" || route.channel === "email" ? await loadReclamationForEmail(receiptClaimId) : null;
+      const receiptTo = route.channel === "email" ? route.to : loaded?.recipient;
+      if (!loaded || !receiptTo) return;
       const result = await sendReclamationReceipt({
         reclamation: loaded.reclamation,
-        to: loaded.recipient,
+        to: receiptTo,
         guest: loaded.guest,
       });
       if (!result.ok) throw new Error(result.error);
@@ -1001,15 +1010,18 @@ async function dispatchJob(job: JobRow) {
     }
     case "RECLAMATION_STATUS_EMAIL": {
       const { loadReclamationForEmail, sendReclamationStatusChanged } = await import("@/lib/email");
-      const statusClaimId = (payload as z.infer<typeof schemas.RECLAMATION_STATUS_EMAIL>).reclamationId;
-      const loaded = await loadReclamationForEmail(statusClaimId);
-      if (!loaded?.recipient) return;
+      const statusArgs = payload as z.infer<typeof schemas.RECLAMATION_STATUS_EMAIL>;
+      const statusClaimId = statusArgs.reclamationId;
+      const route = await reclamationChannel({ kind: "STATUS", reclamationId: statusClaimId, eventKey: statusArgs.eventId });
+      const loaded = route.channel === "legacy" || route.channel === "email" ? await loadReclamationForEmail(statusClaimId) : null;
+      const statusTo = route.channel === "email" ? route.to : loaded?.recipient;
+      if (!loaded || !statusTo) return;
       const decided = await db.reclamation.findUnique({ where: { id: statusClaimId }, select: { decision: true, resolution: true } });
       const result = await sendReclamationStatusChanged({
         reclamation: loaded.reclamation,
         status: loaded.reclamation.status,
         resolution: decided?.decision === "PRIHVACENA" ? decided.resolution : null,
-        to: loaded.recipient,
+        to: statusTo,
         guest: loaded.guest,
         idempotencyKey: `reclamation-status:${loaded.reclamation.id}:${(
           payload as z.infer<typeof schemas.RECLAMATION_STATUS_EMAIL>
@@ -1047,12 +1059,14 @@ async function dispatchJob(job: JobRow) {
       const claim = await db.reclamation.findUnique({ where: { id: reclamationId }, select: { decision: true, resolution: true, status: true } });
       // Odluka je možda povučena pre slanja; tada kupcu ne javljamo ništa.
       if (!claim || claim.decision !== "PRIHVACENA" || claim.status === "ODBIJENO") return;
-      const loaded = await loadReclamationForEmail(reclamationId);
-      if (!loaded?.recipient) return;
+      const route = await reclamationChannel({ kind: "ACCEPTED", reclamationId });
+      const loaded = route.channel === "legacy" || route.channel === "email" ? await loadReclamationForEmail(reclamationId) : null;
+      const acceptedTo = route.channel === "email" ? route.to : loaded?.recipient;
+      if (!loaded || !acceptedTo) return;
       const result = await sendReclamationAccepted({
         reclamation: loaded.reclamation,
         resolution: claim.resolution,
-        to: loaded.recipient,
+        to: acceptedTo,
         guest: loaded.guest,
         idempotencyKey: `reclamation-accepted:${reclamationId}:${claim.resolution ?? "none"}`,
       });
