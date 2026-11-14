@@ -18,6 +18,7 @@ import { db } from "@/lib/db";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { X_EXPRESS_PROVIDER } from "@/lib/x-express/config";
 import { isXExpressRecipientRedirect } from "@/lib/x-express/status";
+import { keepsReturnedOrder, orderStatusForEvent } from "./order-transition";
 import { isMyGlsNotification } from "@/lib/mygls/status";
 import {
   announceXExpressShipment,
@@ -455,27 +456,6 @@ async function processShipmentForOrder(
   });
 }
 
-/**
- * Map a shipment status to the canonical `OrderStatus` we surface in the
- * customer timeline. Returning `null` means "no order-level transition".
- */
-function orderStatusFor(status: ShipmentStatus): OrderStatus | null {
-  switch (status) {
-    case "PICKED_UP":
-      return "SPREMNO_ZA_ISPORUKU";
-    case "IN_TRANSIT":
-    case "OUT_FOR_DELIVERY":
-      return "U_ISPORUCI";
-    case "DELIVERED":
-      return "ISPORUCENO";
-    case "RETURNED":
-      return "VRACENO";
-    case "FAILED":
-    case "CREATED":
-      return null;
-  }
-}
-
 export interface ApplyEventResult {
   shipmentId: string;
   orderId: string;
@@ -532,8 +512,6 @@ export async function applyShipmentEvent(
   if (!shipment) return null;
 
   const occurredAt = event.occurredAt ?? new Date();
-  const newOrderStatus = orderStatusFor(event.status);
-  let appliedOrderStatus = newOrderStatus;
   const message = event.message ?? SHIPMENT_STATUS_LABEL[event.status];
   const selectedSmallProvider =
     service === "COURIER_SMALL"
@@ -546,6 +524,8 @@ export async function applyShipmentEvent(
         ? MYGLS_PROVIDER
         : X_EXPRESS_PROVIDER
       : null);
+  const newOrderStatus = orderStatusForEvent(appliedProvider, event);
+  let appliedOrderStatus = newOrderStatus;
   let eventCreated = false;
   let stateApplied = false;
 
@@ -718,6 +698,15 @@ export async function applyShipmentEvent(
         },
       });
       if (otherOpenShipments > 0) appliedOrderStatus = "U_ISPORUCI";
+    }
+    if (shipment.purpose === "ORDER_DELIVERY" && appliedOrderStatus) {
+      const currentOrder = await tx.order.findUniqueOrThrow({
+        where: { id: shipment.orderId },
+        select: { status: true },
+      });
+      if (keepsReturnedOrder(currentOrder.status, appliedOrderStatus)) {
+        appliedOrderStatus = null;
+      }
     }
     if (shipment.purpose === "ORDER_DELIVERY" && appliedOrderStatus) {
       await tx.order.update({

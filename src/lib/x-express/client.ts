@@ -9,7 +9,7 @@ import {
   type XExpressConfig,
   XExpressProviderError,
 } from "./config";
-import { inferXExpressShipmentStatus, orderStatusForXExpressStatus } from "./status";
+import { inferXExpressShipmentStatus, isXExpressReturnCode, orderStatusForXExpressStatus } from "./status";
 import type {
   XExpressCreateOrderPayload,
   XExpressCreateOrderResponse,
@@ -398,7 +398,7 @@ function parseStatus(value: unknown): XExpressStatusCode {
     label,
     labelEn,
     shipmentStatus,
-    orderStatus: orderStatusForXExpressStatus(shipmentStatus),
+    orderStatus: isXExpressReturnCode(code) ? "VRACENO" : orderStatusForXExpressStatus(shipmentStatus),
     raw: value,
   };
 }

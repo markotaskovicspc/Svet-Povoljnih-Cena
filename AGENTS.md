@@ -109,3 +109,6 @@ Marko explicitly requested. Migration 20261113230000 adds Reclamation.analyticsS
 
 ## Payment notice recipients (Marko, 14.11.2026)
 „Uplata evidentirana“ (bank import and manual receipts) goes only to the customer: no podrska@ bcc, and nothing is sent when the order has no customer email. Bank review notices („Provera uplate“, „Uplata bez broja porudžbine“, „Bankarski izvod — potrebna provera“) go to office@svetpovoljnihcena.rs instead of podrska@. Refund notices stay on placanja@ (SPC Analytics reads that mailbox).
+
+## X Express povrat → porudžbina VRAĆENO (2026-11-14)
+Marko je izričito tražio. Kada X Express javi „Kreiran povrat“ (RETURNING, RET_ASSIGNED, REVERSE_RETURN, REVERSE_RETURNING), pošiljka ostaje IN_TRANSIT (lista vraćenih porudžbina i prijem povrata rade kao do sada), ali porudžbina prelazi u VRACENO sa događajem statusa i uobičajenim obaveštenjem kupcu. Kasnija tranzitna skeniranja ne vraćaju porudžbinu u U_ISPORUCI/SPREMNO_ZA_ISPORUKU; isporuka (DELIVERED) i dalje postavlja ISPORUCENO. Logika u src/lib/courier/order-transition.ts. Bez promene šeme.

@@ -5,6 +5,20 @@ export function isXExpressRecipientRedirect(code: string | null | undefined) {
   return code?.trim().toUpperCase() === "RCP_DLV_TO_PUDO";
 }
 
+// X Express started returning the parcel to the sender. The shipment is still
+// moving (IN_TRANSIT), but the order is no longer on its way to the customer.
+export const X_EXPRESS_RETURN_CODES = [
+  "RETURNING",
+  "RET_ASSIGNED",
+  "REVERSE_RETURN",
+  "REVERSE_RETURNING",
+] as const;
+
+export function isXExpressReturnCode(code: string | null | undefined) {
+  const normalized = code?.trim().toUpperCase() ?? "";
+  return (X_EXPRESS_RETURN_CODES as readonly string[]).includes(normalized);
+}
+
 function normalize(value: string) {
   return value
     .toLowerCase()
@@ -47,12 +61,7 @@ export function inferXExpressShipmentStatus(
   ) {
     return "DELIVERED";
   }
-  if (
-    normalizedCode === "RETURNING" ||
-    normalizedCode === "RET_ASSIGNED" ||
-    normalizedCode === "REVERSE_RETURN" ||
-    normalizedCode === "REVERSE_RETURNING"
-  ) {
+  if (isXExpressReturnCode(normalizedCode)) {
     return "IN_TRANSIT";
   }
   if (
