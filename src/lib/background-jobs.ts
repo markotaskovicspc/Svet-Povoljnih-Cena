@@ -128,6 +128,8 @@ const schemas = {
   }),
   RECLAMATION_ACCEPTED_EMAIL: z.object({ reclamationId: z.string().min(1) }),
   RECLAMATION_AUTO_ACCEPT: z.object({ reclamationId: z.string().min(1) }),
+  UNPAID_TRANSFER_REMINDER_EMAIL: z.object({ orderId: z.string().min(1) }),
+  UNPAID_TRANSFER_AUTO_CANCEL: z.object({ orderId: z.string().min(1) }),
   RABALUX_MEDIA_PRODUCT: z.object({
     productId: z.string().min(1),
     assetId: z.string().min(1).optional(),
@@ -1014,6 +1016,24 @@ async function dispatchJob(job: JobRow) {
         ).eventId ?? loaded.reclamation.status}`,
       });
       if (!result.ok) throw new Error(result.error);
+      return;
+    }
+    case "UNPAID_TRANSFER_REMINDER_EMAIL": {
+      const { sendUnpaidTransferReminderJob } = await import("@/lib/orders/unpaid-transfer.server");
+      const result = await sendUnpaidTransferReminderJob(schemas.UNPAID_TRANSFER_REMINDER_EMAIL.parse(payload).orderId);
+      if ("ok" in result && !result.ok) throw new Error(result.error);
+      return;
+    }
+    case "UNPAID_TRANSFER_AUTO_CANCEL": {
+      const { autoCancelUnpaidTransferJob } = await import("@/lib/orders/unpaid-transfer.server");
+      const { OrderCancellationError } = await import("@/lib/orders/cancellation");
+      try {
+        await autoCancelUnpaidTransferJob(schemas.UNPAID_TRANSFER_AUTO_CANCEL.parse(payload).orderId);
+      } catch (error) {
+        // Plaćena, fiskalizovana ili već kod kurira: ne otkazujemo, posao je završen.
+        if (error instanceof OrderCancellationError && error.code !== "IN_PROGRESS") return;
+        throw error;
+      }
       return;
     }
     case "RECLAMATION_AUTO_ACCEPT": {

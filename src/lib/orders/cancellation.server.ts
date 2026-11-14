@@ -17,6 +17,8 @@ export async function cancelWebOrderByCustomer(input: {
   requestedByUserId?: string | null;
   requestedViaSocial?: "facebook" | "instagram" | "email" | "web";
   customerReplyDraftOnly?: boolean;
+  /** Automatsko otkazivanje predračuna bez uplate; mora ostati neplaćen. */
+  unpaidTransferTimeout?: boolean;
 }) {
   const result = await db.$transaction(async (tx) => {
     await tx.$queryRaw(Prisma.sql`
@@ -96,6 +98,14 @@ export async function cancelWebOrderByCustomer(input: {
     if (order.reshipments?.length) {
       throw new OrderCancellationError("Za ovu porudžbinu već je pokrenuto ponovno slanje nove robe. Kontaktirajte podršku radi usaglašavanja pošiljki i povrata.", "NOT_ALLOWED");
     }
+    if (
+      input.unpaidTransferTimeout &&
+      (order.paymentMethod !== "UPLATA_NA_RACUN" ||
+        order.status !== "KREIRANO" ||
+        (order.payments[0] && ["AUTHORIZED", "PAID", "PARTIAL_REFUND"].includes(order.payments[0].status)))
+    ) {
+      throw new OrderCancellationError("Porudžbina je plaćena ili više ne čeka uplatu.", "NOT_ALLOWED");
+    }
     await assertOrderCancellationBeforeCourier(tx, order.id);
 
     const fiscalJobKeys = [
@@ -121,7 +131,7 @@ export async function cancelWebOrderByCustomer(input: {
         status: "COMPLETED",
         completedAt: new Date(),
         lockedAt: null,
-        lastError: "Otkazano na zahtev kupca pre fiskalizacije.",
+        lastError: input.unpaidTransferTimeout ? "Automatski otkazano: predračun nije plaćen." : "Otkazano na zahtev kupca pre fiskalizacije.",
       },
     });
 
@@ -150,7 +160,9 @@ export async function cancelWebOrderByCustomer(input: {
         orderId: order.id,
         status: "OTKAZANO",
         actorId: null,
-        note: input.requestedViaSocial
+        note: input.unpaidTransferTimeout
+          ? "Automatski otkazano: uplata po predračunu nije stigla u roku (podsetnik je poslat)."
+          : input.requestedViaSocial
           ? `Kupac je potvrdio otkazivanje kroz ${input.requestedViaSocial} razgovor pre fiskalizacije.`
           : input.requestedByUserId
           ? "Kupac je otkazao porudžbinu kroz Moj nalog pre fiskalizacije."
