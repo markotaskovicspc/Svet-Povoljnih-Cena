@@ -5,6 +5,7 @@ import {
   EmailLayout,
   EmailParagraph,
 } from "./_layout";
+import { CHAT_FOOTER_NOTE } from "./chat-note";
 
 export type ReclamationAcceptedResolution =
   | "POVRAT_NOVCA"
@@ -47,7 +48,7 @@ export function ReclamationAccepted({
   const copy = resolution ? RESOLUTION_COPY[resolution] : null;
   const url = `${baseUrl}/nalog/reklamacije`;
   return (
-    <EmailLayout preview={`Reklamacija je prihvaćena — ${reclamation.id}`}>
+    <EmailLayout preview={`Reklamacija je prihvaćena — ${reclamation.id}`} footerNote={CHAT_FOOTER_NOTE}>
       <EmailHeading>Reklamacija je prihvaćena</EmailHeading>
       <EmailParagraph>
         Proverili smo Vašu reklamaciju i prihvatili je.
