@@ -33,3 +33,19 @@ for(const reason of forwarded)test(`forwarded: ${reason.slice(0,40)}`,()=>assert
 test('an explicit request for a person is always forwarded',()=>{
  assert.equal(guardHandoff('Kupac pita kojom kurirskom službom šaljemo.','Hoću da razgovaram sa čovekom'),null);
 });
+
+import {guardStatusHandoff,rememberOrderStatus} from '../src/handoff-guard.mjs';
+test('a status handoff for an order that is not late is refused',()=>{
+ const state={};
+ rememberOrderStatus(state,[{number:'SPC-2026-003287',status:'U_ISPORUCI',late:false,expectedBy:'2026-11-18'}]);
+ const r=guardStatusHandoff('Kupac traži tačan termin isporuke za porudžbinu SPC-2026-003287, da li stiže danas ili sutra.','kad stiže?',state);
+ assert.equal(r?.topic,'status_not_late');assert.match(r.message,/2026-11-18/);
+ assert.equal(guardStatusHandoff('Kupac kaže da kurir nije došao, porudžbina SPC-2026-003287.','kurir nije došao',state),null);
+ assert.equal(guardStatusHandoff('Kupac traži termin isporuke za SPC-2026-003287.','hoću da pričam sa čovekom',state),null);
+});
+test('a late or returned order is forwarded',()=>{
+ const state={};
+ rememberOrderStatus(state,[{number:'SPC-2026-003338',status:'SPREMNO_ZA_ISPORUKU',late:true,expectedBy:'2026-11-10'}]);
+ assert.equal(guardStatusHandoff('Kupac za SPC-2026-003338 navodi kašnjenje, proveriti termin.','gde je paket',state),null);
+ assert.equal(guardStatusHandoff('Kupac pita kada stiže porudžbina.','kad stiže',{}),null);
+});

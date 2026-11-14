@@ -2,7 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 const mocks = vi.hoisted(() => ({ findUnique: vi.fn(), findMany: vi.fn(), queryRaw: vi.fn() }));
 vi.mock("@/lib/db", () => ({ db: { order: { findUnique: mocks.findUnique, findMany: mocks.findMany }, $queryRaw: mocks.queryRaw } }));
-import { looseOrderNumber, sameAddress, sameName, samePhone, socialOrderLookup, socialOrderLookupRequest } from "@/lib/social/order-lookup";
+import { addWorkingDays, looseOrderNumber, sameAddress, sameName, samePhone, socialOrderLookup, socialOrderLookupRequest, view } from "@/lib/social/order-lookup";
 
 const order = (over: Record<string, unknown> = {}) => ({
   number: "SPC-2026-002639",
@@ -39,7 +39,7 @@ it("returns status and items by order number without contact data", async () => 
   mocks.findUnique.mockResolvedValue(order());
   const result = await lookup({ number: "spc-2026-2639" });
   expect(mocks.findUnique.mock.calls[0][0].where).toEqual({ number: "SPC-2026-002639" });
-  expect(result).toEqual({ ok: true, orders: [{ number: "SPC-2026-002639", createdAt: "2026-11-10", status: "U_ISPORUCI", items: [{ name: "Friteza FRY SMART 6L", qty: 1 }] }] });
+  expect(result).toMatchObject({ ok: true, orders: [{ number: "SPC-2026-002639", createdAt: "2026-11-10", status: "U_ISPORUCI", items: [{ name: "Friteza FRY SMART 6L", qty: 1 }], expectedBy: "2026-11-13" }] });
   expect(JSON.stringify(result)).not.toMatch(/Saitovi|Kada/);
 });
 
@@ -99,4 +99,20 @@ it("issues a chat-bound reclamation proof only for a name + phone/address match"
   mocks.findMany.mockResolvedValue([order({ id: "o1" })]);
   const wrongPhone = await socialOrderLookup(socialOrderLookupRequest.parse({ action: "order_lookup", fullName: "kada saitovic", phone: "0601112222", channel: "facebook", conversationId: "fb:123" }), secret);
   expect(wrongPhone).not.toHaveProperty("claimProofs");
+});
+
+it("adds working days, skipping the weekend", () => {
+  expect(addWorkingDays(new Date("2026-11-13T15:00:00Z"), 3).toISOString().slice(0, 10)).toBe("2026-11-18");
+  expect(addWorkingDays(new Date("2026-11-10T10:00:00Z"), 3).toISOString().slice(0, 10)).toBe("2026-11-13");
+});
+
+it("reports courier, last event and lateness without contact data", () => {
+  const shipment = { provider: "X_EXPRESS", trackingNo: "9002942839", status: "IN_TRANSIT", shippedAt: new Date("2026-11-11T08:00:00Z"), deliveredAt: null,
+    events: [{ status: "IN_TRANSIT", message: "Pošiljka je u centru Niš", occurredAt: new Date("2026-11-12T09:30:00Z") }] };
+  const onTime = view(order({ shipments: [shipment] }) as never, new Date("2026-11-13T12:00:00Z"));
+  expect(onTime).toMatchObject({ expectedBy: "2026-11-13", late: false, shipment: { courier: "X Express", trackingNo: "9002942839", lastEvent: { message: "Pošiljka je u centru Niš" } } });
+  expect(view(order({ shipments: [shipment] }) as never, new Date("2026-11-17T12:00:00Z")).late).toBe(true);
+  expect(view(order({ shipments: [{ ...shipment, status: "RETURNED" }] }) as never, new Date("2026-11-11T12:00:00Z")).late).toBe(true);
+  expect(view(order({ status: "ISPORUCENO", shipments: [shipment] }) as never, new Date("2026-12-01T12:00:00Z")).late).toBe(false);
+  expect(JSON.stringify(onTime)).not.toMatch(/Saitovi|Ilindenska|0613256656/);
 });
