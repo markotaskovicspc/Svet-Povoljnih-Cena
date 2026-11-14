@@ -28,8 +28,5 @@ export function BankPaymentConfirmation({ orderNumber, amountMinor, currency, fi
     </> : null}
     <EmailDivider />
     <EmailParagraph>Hvala vam na kupovini i poverenju!</EmailParagraph>
-    <EmailParagraph>
-      O sledećim koracima porudžbine javljamo vam se mejlom. Za pitanja o porudžbini najbrže odgovara chat na sajtu (ikonica u donjem desnom uglu), dostupan non-stop.
-    </EmailParagraph>
   </EmailLayout>;
 }
