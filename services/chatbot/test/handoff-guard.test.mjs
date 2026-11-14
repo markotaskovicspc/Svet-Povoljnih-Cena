@@ -13,6 +13,10 @@ const answeredBySeller=[
  ['Kupac pita da li je moguće lično preuzimanje friteze u Beogradu umesto dostave.','pickup'],
  ['Kupac želi 1 POWER MOP 110055 isključivo u crnoj boji. Opis navodi crnu, a polje boje ljubičastu.','colour'],
  ['Kupac traži broj telefona kako bi pozvao SPC. Molim korisničku podršku da dostavi važeći kontakt telefon.','phone'],
+ ['Kupac želi 2 URBAN SEAT stolice i traži dostavu u subotu pre podne.','delivery_date'],
+ ['Kupac pita da li može željeni termin dostave za novu porudžbinu, četvrtak posle 16h.','delivery_date'],
+ ['Kupac pita da li može da plati karticom ili na rate.','payment_method'],
+ ['Kupac želi predračun i uplatu na račun umesto pouzeća.','payment_method'],
  ['Kupac ukazuje da reklama za ERGO LUX 110081 navodi 1.999 RSD, dok je aktuelna cena 4.284/loyalty 2.999 din.','ad_price'],
 ];
 for(const [reason,topic] of answeredBySeller)test(`refused: ${topic}`,()=>assert.equal(guardHandoff(reason)?.topic,topic));
@@ -27,6 +31,9 @@ const forwarded=[
  'Kupac traži cenu šarene patchwork fotelje sa visokim naslonom iz objave i priložene slike. Vizuelna provera nema poklapanje.',
  'Aleksandra Vasilic traži kontakt zbog polomljenog seta BON APPETIT, porudžbina SPC-2026-002673.',
  'Komentar zahteva podršku zaposlenog',
+ 'Kupac je uplatio na račun za SPC-2026-003239, a porudžbina nije poslata.',
+ 'Kupac traži da se dostava za SPC-2026-003100 pomeri na subotu.',
+
 ];
 for(const reason of forwarded)test(`forwarded: ${reason.slice(0,40)}`,()=>assert.equal(guardHandoff(reason),null));
 

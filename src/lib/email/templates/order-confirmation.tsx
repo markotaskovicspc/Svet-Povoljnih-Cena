@@ -11,6 +11,7 @@ import {
   EmailParagraph,
   EmailSectionHeading,
 } from "./_layout";
+import { CHAT_FOOTER_NOTE } from "./chat-note";
 
 const INK = "#172B36";
 const MUTED = "#5F6F78";
@@ -88,7 +89,7 @@ export function OrderConfirmation({
   const hasValidDate = !Number.isNaN(createdAt.getTime());
 
   return (
-    <EmailLayout preview={`Porudžbina ${order.id} je uspešno primljena`}>
+    <EmailLayout preview={`Porudžbina ${order.id} je uspešno primljena`} footerNote={CHAT_FOOTER_NOTE}>
       <EmailEyebrow>Porudžbina je primljena</EmailEyebrow>
       <EmailHeading>Hvala vam na kupovini!</EmailHeading>
       {previewMode ? (

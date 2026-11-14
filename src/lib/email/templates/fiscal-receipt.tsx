@@ -5,6 +5,7 @@ import {
   EmailLayout,
   EmailParagraph,
 } from "./_layout";
+import { CHAT_FOOTER_NOTE } from "./chat-note";
 
 export interface FiscalReceiptProps {
   order: Order;
@@ -25,7 +26,7 @@ export function FiscalReceiptEmail({
     ? `${baseUrl}/nalog/porudzbine/${encodeURIComponent(order.id)}`
     : null;
   return (
-    <EmailLayout preview={`Fiskalni račun ${receiptNumber}`}>
+    <EmailLayout preview={`Fiskalni račun ${receiptNumber}`} footerNote={CHAT_FOOTER_NOTE}>
       <EmailHeading>Fiskalni račun je izdat</EmailHeading>
       <EmailParagraph>
         U prilogu se nalazi fiskalni račun broj <strong>{receiptNumber}</strong>{" "}

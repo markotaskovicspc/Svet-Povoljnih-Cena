@@ -6,6 +6,7 @@ import {
   EmailLayout,
   EmailParagraph,
 } from "./_layout";
+import { CHAT_FOOTER_NOTE } from "./chat-note";
 
 export interface ReclamationReceiptProps {
   reclamation: Reclamation;
@@ -20,7 +21,7 @@ export function ReclamationReceipt({
 }: ReclamationReceiptProps) {
   const url = `${baseUrl}/nalog/reklamacije`;
   return (
-    <EmailLayout preview={`Reklamacija ${reclamation.id} je primljena`}>
+    <EmailLayout preview={`Reklamacija ${reclamation.id} je primljena`} footerNote={CHAT_FOOTER_NOTE}>
       <EmailHeading>Reklamacija je primljena</EmailHeading>
       <EmailParagraph>
         Poštovani/a {reclamation.customer.firstName}, primili smo vašu

@@ -5,6 +5,7 @@ import {
   EmailLayout,
   EmailParagraph,
 } from "./_layout";
+import { CHAT_FOOTER_NOTE } from "./chat-note";
 
 const STATUS_COPY: Record<OrderStatus, { title: string; body: string }> = {
   kreirano: {
@@ -50,9 +51,6 @@ export interface OrderStatusChangedProps {
   orderUrl?: string | null;
 }
 
-/** Većina pitanja („gde je paket“, „kada stiže“) chat na sajtu reši odmah. */
-const CHAT_NOTE =
-  "Za pitanja o porudžbini najbrže odgovara chat na sajtu (ikonica u donjem desnom uglu): dostupan je non-stop i vidi status vaše porudžbine.";
 
 export function OrderStatusChanged({
   order,
@@ -71,7 +69,7 @@ export function OrderStatusChanged({
       ? "Kurir je preuzeo paket. Vaša porudžbina je na putu ka vama."
       : copy.body;
   return (
-    <EmailLayout preview={`${copy.title} — ${order.id}`} footerNote={CHAT_NOTE}>
+    <EmailLayout preview={`${copy.title} — ${order.id}`} footerNote={CHAT_FOOTER_NOTE}>
       <EmailHeading>{copy.title}</EmailHeading>
       <EmailParagraph>{body}</EmailParagraph>
       <EmailParagraph>
