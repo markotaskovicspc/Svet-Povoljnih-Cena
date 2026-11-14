@@ -64,7 +64,7 @@ export async function reclamationWarehouseStatuses(claims: ReclamationWarehouseC
 
 /**
  * „Neobrađene“ (Marko, 14.11.2026): otvorene reklamacije kojima nije dat nalog za rešavanje, tj. stvarni status
- * pripreme je „Nije zatraženo“. Umanjenje cene se ne broji jer ne traži magacinski nalog.
+ * zahtev magacinu ili kuriru još nije poslat. Umanjenje cene se ne broji jer ne traži magacinski nalog.
  */
 export async function countUntaskedReclamations() {
   const claims = await db.reclamation.findMany({
@@ -72,6 +72,9 @@ export async function countUntaskedReclamations() {
     select: { id: true, orderId: true, quantity: true, request: true, resolution: true, warehouseStatus: true },
   });
   const statuses = await reclamationWarehouseStatuses(claims);
-  return claims.filter((claim) => (statuses.get(claim.id) ?? claim.warehouseStatus) === "NOT_REQUESTED").length;
+  // Nalog = zahtev magacinu/kuriru (sačuvan status pripreme). Za povrat novca prikaz piše „Čeka prijem“ i bez naloga,
+  // pa se gleda sačuvani status; roba koja je ipak stigla više nije neobrađena.
+  return claims.filter((claim) => claim.warehouseStatus === "NOT_REQUESTED"
+    && !["DELIVERED", "PARTIALLY_RECEIVED"].includes(statuses.get(claim.id) ?? "")).length;
 }
 
