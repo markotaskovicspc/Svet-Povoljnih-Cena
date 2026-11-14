@@ -86,7 +86,7 @@ test('a new product question reaches an existing bot conversation; staff takeove
   await worker.accept({...event(),id:'facebook:123:123_11',commentId:'123_11'});await worker.tick();assert.equal(sends.length,2);
   assert.equal((await store.pool.query("SELECT reason FROM spc_comment_events WHERE comment_id='123_11'")).rows[0].reason,'Razgovor je preuzeo zaposleni');
   worker.prepare=async()=>({kind:'support',text:''});
-  await worker.accept({...event(),id:'facebook:123:123_12',commentId:'123_12',sender:'457',text:'Stiglo polomljeno'});await worker.tick();await worker.tick();await worker.tick();assert.equal(support.length,1);assert.equal(support[0].action,'support_handoff');assert.equal(sends.length,2);
+  await worker.accept({...event(),id:'facebook:123:123_12',commentId:'123_12',sender:'457',text:'Stiglo polomljeno'});await worker.tick();await worker.tick();await worker.tick();assert.equal(support.length,0);assert.equal(sends.length,4);assert.equal((await store.pool.query("SELECT status FROM spc_comment_events WHERE comment_id='123_12'")).rows[0].status,'sent');
  }finally{await store.close();}
 });
 test('definite DM rejection has no public claim; public failure never resends a successful DM',async()=>{

@@ -6,6 +6,9 @@ import {deliveryQuoteTool,deliveryQuoteInstructions} from './delivery-quote.mjs'
 setTracingDisabled(true);
 const WEEK=7*86400000;
 const PUBLIC_REPLY='Poslali smo Vam detalje u privatnoj poruci 😊';
+// Marko, 13.11.2026: support comments move to a private conversation where the
+// seller checks the order or opens the reclamation itself; no e-mail to podrska@.
+export const SUPPORT_PRIVATE_REPLY='Žao nam je zbog problema. Pišite nam ovde broj porudžbine (ili ime i prezime uz adresu ili telefon sa porudžbine) i ukratko šta se desilo, pa ćemo odmah proveriti i pomoći.';
 export function parseComments(body,accounts,now=Date.now()){
  const channel=body?.object==='page'?'facebook':body?.object==='instagram'?'instagram':null;
  if(!channel)return [];
@@ -131,8 +134,9 @@ export class CommentWorker{
    if(!prepared){
     const post=await this.post(account,event);
     prepared={...await this.prepare({event,post,spc:this.spc,model:this.model}),post};
-    if(prepared.kind!=='sales'){
-     await c.query("UPDATE spc_comment_events SET status=$2,reason=$3 WHERE id=$1",[row.id,prepared.kind==='support'?'support':'ignored',prepared.kind==='support'?'Zahtev za podršku':'Nema prodajnog pitanja']);return;
+    if(prepared.kind==='support')prepared={...prepared,sku:null,product:null,text:SUPPORT_PRIVATE_REPLY};
+    else if(prepared.kind!=='sales'){
+     await c.query("UPDATE spc_comment_events SET status='ignored',reason='Nema prodajnog pitanja' WHERE id=$1",[row.id]);return;
     }
     await c.query("UPDATE spc_comment_events SET status='prepared',response=$2 WHERE id=$1",[row.id,this.store.encode(prepared)]);
    }
