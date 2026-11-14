@@ -57,8 +57,14 @@ export async function prepareCheckoutFollowUp(orderId: string, accessToken: stri
     await notifyOrderWithoutEmail(order);
   }
   if (process.env.VIBER_ORDER_NOTIFICATIONS_ENABLED === "true" && !customerReplyDraftOnly) {
-    const { queueOrderViberNotification } = await import("@/lib/viber/order-notifications");
-    await queueOrderViberNotification(orderId, "confirmation");
+    // Viber is an optional channel: a provider/outbox failure must never hold
+    // back the buyer, staff or supplier jobs below.
+    try {
+      const { queueOrderViberNotification } = await import("@/lib/viber/order-notifications");
+      await queueOrderViberNotification(orderId, "confirmation");
+    } catch (error) {
+      console.error(`[checkout] Viber confirmation not queued for ${order.number}`, error);
+    }
   }
   // These are independent jobs with their own retries. A broken supplier PDF
   // cannot prevent the buyer job from running. Documents retain their existing
