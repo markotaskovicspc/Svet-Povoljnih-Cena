@@ -33,7 +33,7 @@ const STATUS_COPY: Record<OrderStatus, { title: string; body: string }> = {
   },
   otkazano: {
     title: "Porudžbina je otkazana",
-    body: "Vaša porudžbina je otkazana. Ako mislite da je ovo greška ili i dalje želite artikle, poručite ih ponovo na sajtu ili nam pišite u chat na sajtu.",
+    body: "Vaša porudžbina je otkazana. Ako mislite da je ovo greška ili i dalje želite artikle, možete ih ponovo poručiti na sajtu.",
   },
   vraceno: {
     title: "Pošiljka se vraća",
@@ -49,10 +49,6 @@ export interface OrderStatusChangedProps {
   /** Link ka porudžbini, i za kupce bez naloga (potpisan link iz orderLinkForEmail). */
   orderUrl?: string | null;
 }
-
-/** Većina pitanja („gde je paket“, „kada stiže“) chat na sajtu reši odmah. */
-const CHAT_NOTE =
-  "Za pitanja o porudžbini najbrže odgovara chat na sajtu (ikonica u donjem desnom uglu): dostupan je non-stop i vidi status vaše porudžbine.";
 
 export function OrderStatusChanged({
   order,
@@ -71,7 +67,7 @@ export function OrderStatusChanged({
       ? "Kurir je preuzeo paket. Vaša porudžbina je na putu ka vama."
       : copy.body;
   return (
-    <EmailLayout preview={`${copy.title} — ${order.id}`} footerNote={CHAT_NOTE}>
+    <EmailLayout preview={`${copy.title} — ${order.id}`}>
       <EmailHeading>{copy.title}</EmailHeading>
       <EmailParagraph>{body}</EmailParagraph>
       <EmailParagraph>
