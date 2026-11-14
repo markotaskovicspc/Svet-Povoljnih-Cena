@@ -17,7 +17,7 @@ const RULES=[
  {topic:'colour',test:r=>/\bboj[aeiu]\b|colorprimary|nijans/.test(r)&&!/reklamac|stigl|pogresn|poslali|prepare_order|priprem\w* ponud/.test(r),
   message:'Ne prosleđuj. Govori samo o osnovnoj boji pod kojom je artikal u katalogu (polje boje); ako nisi siguran koju varijantu kupac želi, prikaži je alatom show_product i pitaj „Da li je ovo taj artikal?“.'},
  {topic:'phone',test:r=>/(?:trazi|zeli|dostav\w*|potreban|moli)[^.]{0,40}(?:broj telefona|kontakt telefon|telefonski kontakt|telefon (?:spc|prodavnic)|da (?:pozove|nazove))/.test(r)&&!/ne uspeva|nije stigl|ne moze da (?:posalje|zavrsi)/.test(r),
-  message:'Ne prosleđuj. Ne dajemo broj telefona: kupac dobija pomoć ovde u razgovoru, a za porudžbinu ti prikupi podatke i pripremi ponudu.'},
+  message:'Ne prosleđuj. Ne dajemo broj telefona: kupac dobija pomoć ovde u razgovoru, a korisničkoj podršci može da piše na podrska@svetpovoljnihcena.rs. Za porudžbinu ti prikupi podatke i pripremi ponudu.'},
  {topic:'ad_price',test:r=>!UNIDENTIFIED.test(r)&&/(?:oglas|reklami\b|reklama\b|reklamu\b|objav)[^;]{0,80}(?:cen|din|rsd)|cen[^;]{0,60}(?:oglas|reklami\b|reklama\b|reklamu\b|objav)/.test(r),
   message:'Ne prosleđuj. Važi aktuelna cena sa sajta i iz kataloga; oglas može biti stariji ili prikazivati loyalty cenu. Navedi aktuelnu cenu (i loyalty cenu ako je niža) i ponudi da poruči.'},
 ];

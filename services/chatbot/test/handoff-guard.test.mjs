@@ -49,3 +49,7 @@ test('a late or returned order is forwarded',()=>{
  assert.equal(guardStatusHandoff('Kupac za SPC-2026-003338 navodi kašnjenje, proveriti termin.','gde je paket',state),null);
  assert.equal(guardStatusHandoff('Kupac pita kada stiže porudžbina.','kad stiže',{}),null);
 });
+
+test('the phone answer gives the support e-mail',()=>{
+ assert.match(guardHandoff('Kupac traži broj telefona kako bi pozvao SPC.')?.message??'',/podrska@svetpovoljnihcena\.rs/);
+});
