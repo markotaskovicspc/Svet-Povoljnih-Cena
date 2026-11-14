@@ -6,7 +6,6 @@ import {
   EmailLayout,
   EmailParagraph,
 } from "./_layout";
-import { CHAT_FOOTER_NOTE } from "./chat-note";
 
 const STATUS_COPY: Record<ReclamationStatus, { title: string; body: string }> = {
   primljeno: {
@@ -55,7 +54,7 @@ export function ReclamationStatusChanged({
   const copy = status === "reseno" && resolution ? { ...base, body: RESOLVED_COPY[resolution] } : base;
   const url = `${baseUrl}/nalog/reklamacije`;
   return (
-    <EmailLayout preview={`${copy.title} — ${reclamation.id}`} footerNote={CHAT_FOOTER_NOTE}>
+    <EmailLayout preview={`${copy.title} — ${reclamation.id}`}>
       <EmailHeading>{copy.title}</EmailHeading>
       <EmailParagraph>{copy.body}</EmailParagraph>
       <EmailParagraph>
