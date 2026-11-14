@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({ list: vi.fn(), sign: vi.fn(), module: vi.fn() 
 vi.mock("@/lib/db", () => ({ db: { reclamation: { findMany: mocks.list }, $queryRaw: vi.fn(async () => []) } }));
 vi.mock("@/lib/admin", () => ({ requireAdminAction: vi.fn(), withAdminState: vi.fn() }));
 vi.mock("@/lib/admin/erp", () => ({ getErpModule: mocks.module }));
+// „Neobrađene“ broji samo otvorene reklamacije u posebnom upitu; ovde se ne učitava spisak.
+vi.mock("@/lib/admin/reclamation-warehouse-status.server", () => ({ countUntaskedReclamations: vi.fn(async () => 0) }));
 vi.mock("@/lib/api/uploads", () => ({ signReclamationPhotoUrls: mocks.sign }));
 vi.mock("@/lib/api/reclamations", () => ({}));
 vi.mock("@/components/admin/erp-grid", () => ({ ErpGrid: () => null }));
